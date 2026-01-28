@@ -1,0 +1,22 @@
+{
+  "name": "@heaven/platform",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/api.ts",
+  "types": "./src/api.ts",
+  "exports": {
+    ".": "./src/api.ts",
+    "./web": "./src/web.ts",
+    "./tauri": "./src/tauri.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "solid-js": "^1.9.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "@tauri-apps/api": "^2.0.0"
+  }
+}

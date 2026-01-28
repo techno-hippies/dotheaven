@@ -1,0 +1,20 @@
+{
+  "name": "heaven",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev": "bun --filter @heaven/frontend dev",
+    "dev:web": "bun --filter @heaven/frontend dev:web",
+    "dev:tauri": "bun --filter @heaven/frontend tauri dev",
+    "build": "bun --filter @heaven/frontend build",
+    "build:web": "bun --filter @heaven/frontend build:web",
+    "build:tauri": "bun --filter @heaven/frontend tauri build",
+    "storybook": "bun --filter @heaven/ui storybook",
+    "check": "bun --filter '*' check"
+  },
+  "devDependencies": {
+    "@tauri-apps/api": "2.9.1",
+    "@tauri-apps/plugin-shell": "2.3.4"
+  }
+}
