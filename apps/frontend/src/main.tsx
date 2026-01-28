@@ -1,13 +1,21 @@
 /* @refresh reload */
+import { Buffer } from 'buffer'
+// Polyfill Buffer for Lit SDK (web only)
+if (typeof window !== 'undefined' && !window.Buffer) {
+  ;(window as any).Buffer = Buffer
+}
+
 import { render } from 'solid-js/web'
-import { PlatformProvider } from '@heaven/platform'
-import { platform } from '@heaven/platform'
-import '@heaven/ui/styles'
+import { Router, Route } from '@solidjs/router'
+import { PlatformProvider, platform } from 'virtual:heaven-platform'
+import { AuthProvider } from './providers'
+import './styles/index.css'
 import '@fontsource/geist/400.css'
 import '@fontsource/geist/500.css'
 import '@fontsource/geist/600.css'
 import '@fontsource/geist/700.css'
 import { App } from './App'
+import { AuthPage } from './pages/AuthPage'
 
 const root = document.getElementById('root')
 
@@ -18,7 +26,12 @@ if (!root) {
 render(
   () => (
     <PlatformProvider platform={platform}>
-      <App />
+      <AuthProvider>
+        <Router>
+          <Route path="/" component={App} />
+          <Route path="/auth" component={AuthPage} />
+        </Router>
+      </AuthProvider>
     </PlatformProvider>
   ),
   root

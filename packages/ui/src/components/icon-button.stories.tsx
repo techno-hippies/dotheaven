@@ -8,11 +8,11 @@ const meta: Meta<typeof IconButton> = {
   argTypes: {
     variant: {
       control: 'select',
-      options: ['ghost', 'soft', 'default', 'play'],
+      options: ['ghost', 'soft', 'default', 'play', 'send'],
     },
     size: {
       control: 'select',
-      options: ['md', 'lg'],
+      options: ['md', 'lg', 'xl'],
     },
   },
 }
@@ -43,6 +43,20 @@ const HeartIcon = () => (
 const PlusIcon = () => (
   <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
     <path d="M12 5v14M5 12h14" />
+  </svg>
+)
+
+const SendIcon = () => (
+  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+  </svg>
+)
+
+const MenuIcon = () => (
+  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+    <circle cx="12" cy="5" r="2" />
+    <circle cx="12" cy="12" r="2" />
+    <circle cx="12" cy="19" r="2" />
   </svg>
 )
 
@@ -79,6 +93,34 @@ export const Play: Story = {
     size: 'lg',
     'aria-label': 'Play',
     children: <PlayIcon />,
+  },
+}
+
+export const Send: Story = {
+  args: {
+    variant: 'send',
+    size: 'xl',
+    'aria-label': 'Send message',
+    children: <SendIcon />,
+  },
+}
+
+export const SendDisabled: Story = {
+  args: {
+    variant: 'send',
+    size: 'xl',
+    'aria-label': 'Send message',
+    disabled: true,
+    children: <SendIcon />,
+  },
+}
+
+export const Menu: Story = {
+  args: {
+    variant: 'ghost',
+    size: 'md',
+    'aria-label': 'Open menu',
+    children: <MenuIcon />,
   },
 }
 
@@ -127,6 +169,12 @@ export const AllVariants: Story = {
           <PlayIcon />
         </IconButton>
         <span class="text-xs text-[var(--text-muted)]">Play</span>
+      </div>
+      <div class="flex flex-col items-center gap-2">
+        <IconButton variant="send" size="xl" aria-label="Send">
+          <SendIcon />
+        </IconButton>
+        <span class="text-xs text-[var(--text-muted)]">Send</span>
       </div>
     </div>
   ),

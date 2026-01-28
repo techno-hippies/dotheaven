@@ -10,6 +10,7 @@ export default mergeConfig(
     resolve: {
       alias: {
         '@heaven/platform': resolve(__dirname, '../../packages/platform/src/tauri.ts'),
+        'virtual:heaven-platform': resolve(__dirname, '../../packages/platform/src/tauri.ts'),
       },
     },
     define: {

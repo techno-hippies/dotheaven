@@ -17,6 +17,7 @@ const config: StorybookConfig = {
       docgen: false,
     },
   },
+  staticDirs: ['../public'],
   async viteFinal(config) {
     return mergeConfig(config, {
       plugins: [solid(), tailwindcss()],

@@ -1,22 +1,47 @@
-import { defineConfig, mergeConfig } from 'vite'
-import baseConfig from './vite.config'
+import { defineConfig } from 'vite'
+import solid from 'vite-plugin-solid'
+import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'path'
 
-// Web-specific configuration
-// Aliases @heaven/platform to the web implementation
-export default mergeConfig(
-  baseConfig,
-  defineConfig({
-    resolve: {
-      alias: {
-        '@heaven/platform': resolve(__dirname, '../../packages/platform/src/web.ts'),
+const webPlatformPath = resolve(__dirname, '../../packages/platform/src/web.ts')
+console.log('[vite.web.ts] @heaven/platform alias ->', webPlatformPath)
+
+// Web-specific configuration - standalone (not merging) to ensure aliases work
+export default defineConfig({
+  plugins: [
+    solid(),
+    tailwindcss(),
+    {
+      name: 'log-resolve',
+      configResolved(config) {
+        console.log('[vite.web] resolved aliases:', JSON.stringify(config.resolve.alias, null, 2))
       },
     },
-    define: {
-      'import.meta.env.VITE_PLATFORM': JSON.stringify('web'),
-    },
-    build: {
-      outDir: 'dist-web',
-    },
-  })
-)
+  ],
+  resolve: {
+    alias: [
+      { find: '@', replacement: resolve(__dirname, './src') },
+      { find: '@heaven/ui/styles', replacement: resolve(__dirname, '../../packages/ui/src/styles/index.css') },
+      { find: '@heaven/ui', replacement: resolve(__dirname, '../../packages/ui/src') },
+      { find: '@heaven/core', replacement: resolve(__dirname, '../../packages/core/src') },
+      { find: /^@heaven\/platform$/, replacement: webPlatformPath },
+      { find: 'virtual:heaven-platform', replacement: webPlatformPath },
+    ],
+  },
+  optimizeDeps: {
+    force: true,
+    exclude: ['@heaven/platform', '@tauri-apps/api', '@tauri-apps/plugin-dialog', '@tauri-apps/plugin-shell'],
+  },
+  define: {
+    'import.meta.env.VITE_PLATFORM': JSON.stringify('web'),
+  },
+  clearScreen: false,
+  server: {
+    port: 5173,
+    strictPort: true,
+  },
+  build: {
+    target: ['es2021', 'chrome100', 'safari13'],
+    outDir: 'dist-web',
+  },
+})

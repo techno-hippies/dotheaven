@@ -19,8 +19,8 @@ export const ListItem: Component<ListItemProps> = (props) => {
     <button
       type="button"
       class={cn(
-        'flex items-center gap-3 w-full p-2.5 px-3 rounded-sm text-left cursor-pointer',
-        'hover:bg-[var(--bg-highlight)] transition-colors',
+        'flex items-center gap-3 w-full p-2.5 px-3 rounded-lg text-left cursor-pointer',
+        'hover:bg-[var(--bg-highlight-hover)] transition-colors',
         props.active && 'bg-[var(--bg-highlight)]',
         props.class
       )}

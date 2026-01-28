@@ -3,7 +3,7 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '../lib/utils'
 
 const avatarVariants = cva(
-  'relative flex items-center justify-center bg-[var(--bg-highlight)] overflow-hidden',
+  'relative flex items-center justify-center bg-[var(--bg-elevated)] overflow-hidden',
   {
     variants: {
       size: {
@@ -17,7 +17,7 @@ const avatarVariants = cva(
       },
       shape: {
         circle: 'rounded-full',      // For people/profiles
-        square: 'rounded-sm',        // For albums/songs (Spotify-style)
+        square: 'rounded-lg',        // For albums/songs
       },
     },
     defaultVariants: {

@@ -1,6 +1,8 @@
 import type { PlatformAPI } from './api.tsx'
 export { PlatformProvider, usePlatform, type PlatformAPI } from './api.tsx'
 
+console.log('[Platform] Loading web.ts')
+
 export const platform: PlatformAPI = {
   platform: 'web',
   isTauri: false,

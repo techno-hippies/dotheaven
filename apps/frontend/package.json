@@ -13,11 +13,18 @@
     "tauri": "bunx tauri"
   },
   "dependencies": {
-    "solid-js": "^1.9.3",
-    "@heaven/ui": "workspace:*",
+    "@fontsource/geist": "^5.2.8",
     "@heaven/core": "workspace:*",
     "@heaven/platform": "workspace:*",
-    "@fontsource/geist": "^5.2.8"
+    "@heaven/ui": "workspace:*",
+    "@lit-protocol/auth": "8.2.2",
+    "@lit-protocol/lit-client": "8.3.0",
+    "@lit-protocol/networks": "8.4.0",
+    "@solidjs/router": "0.15.4",
+    "@tauri-apps/plugin-dialog": "2.6.0",
+    "buffer": "6.0.3",
+    "solid-js": "^1.9.3",
+    "viem": "2.44.4"
   },
   "devDependencies": {
     "vite": "^7.2.6",

@@ -21,7 +21,7 @@ export const Header: Component<HeaderProps> = (props) => {
     >
       {/* Left: Logo */}
       <div class="flex items-center gap-4">
-        {props.logo || <AppLogo />}
+        {props.logo || <AppLogo size={36} />}
       </div>
 
       {/* Center: Search */}
@@ -37,11 +37,21 @@ export const Header: Component<HeaderProps> = (props) => {
   )
 }
 
-const AppLogo: Component = () => (
-  <a href="/" class="flex items-center gap-2 cursor-pointer">
-    <div class="w-8 h-8 bg-[var(--bg-highlight)] rounded-lg flex items-center justify-center hover:bg-[var(--bg-highlight-hover)] transition-colors">
-      <span class="text-lg font-bold text-[var(--text-primary)]">H</span>
-    </div>
+export interface AppLogoProps {
+  /** Path to logo image (defaults to /images/heaven.png) */
+  logoSrc?: string
+  /** Logo size in pixels (defaults to 32) */
+  size?: number
+}
+
+export const AppLogo: Component<AppLogoProps> = (props) => (
+  <a href="/" class="flex items-center gap-2 cursor-pointer group">
+    <img
+      src={props.logoSrc || "/images/heaven.png"}
+      alt="Heaven logo"
+      class="object-contain hover:opacity-90 transition-opacity"
+      style={{ width: `${props.size || 32}px`, height: `${props.size || 32}px` }}
+    />
   </a>
 )
 
@@ -55,7 +65,7 @@ export interface SearchInputProps {
 export const SearchInput: Component<SearchInputProps> = (props) => (
   <div
     class={cn(
-      'flex items-center gap-3 bg-[var(--bg-highlight)] rounded-full px-4 py-2.5 w-full',
+      'flex items-center gap-3 bg-[var(--bg-highlight)] rounded-lg px-4 py-2.5 w-full',
       props.class
     )}
   >

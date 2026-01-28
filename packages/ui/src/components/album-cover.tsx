@@ -3,7 +3,7 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '../lib/utils'
 
 const albumCoverVariants = cva(
-  'relative flex items-center justify-center bg-[var(--bg-highlight)] overflow-hidden rounded-sm',
+  'relative flex items-center justify-center bg-[var(--bg-elevated)] overflow-hidden rounded-lg',
   {
     variants: {
       size: {

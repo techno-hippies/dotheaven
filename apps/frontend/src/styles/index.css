@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @plugin "tailwindcss-animate";
 
+/* Tell Tailwind to scan UI package components */
+@source "../../../../packages/ui/src/**/*.tsx";
+@source "../**/*.tsx";
+
 /* Corvu drawer transitioning variant */
 @custom-variant corvu-transitioning (&[data-transitioning]);
 
