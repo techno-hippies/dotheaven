@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+**/dist/
+storybook-static/
+
+# Tauri build output
+**/src-tauri/target/
+**/target/
+
+# Environment
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+**/.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.claude/
+**/.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+**/.DS_Store
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Bun
+bun.lockb
+**/bun.lockb
+
+# Rust
+Cargo.lock
+**/Cargo.lock
+
+# Lock files (keep package-lock.json and yarn.lock if used)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml

@@ -1,0 +1,160 @@
+@import "tailwindcss";
+@plugin "tailwindcss-animate";
+
+/* Corvu drawer transitioning variant */
+@custom-variant corvu-transitioning (&[data-transitioning]);
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+
+  --radius: 0.75rem;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  /* Color theme variables */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+}
+
+:root {
+  /* Heaven Dark Theme - Pastel Blue Edition
+   * Inspired by legacy website (#1a1625)
+   * Deep purple-blue background with soft pastel blue accents
+   */
+
+  /* Background colors - deep purple-blue tones */
+  --background: oklch(0.18 0.04 280);        /* Deep purple-blue #1a1625 inspired */
+  --foreground: oklch(0.95 0.01 260);        /* Soft white with slight blue tint */
+
+  /* Card colors - slightly lighter than background */
+  --card: oklch(0.22 0.035 280);             /* Elevated purple-blue surface */
+  --card-foreground: oklch(0.95 0.01 260);   /* Soft white text on cards */
+
+  /* Primary - Pastel blue accent */
+  --primary: oklch(0.65 0.12 240);           /* Soft pastel blue */
+  --primary-foreground: oklch(0.98 0.005 280); /* Near white for text on primary */
+
+  /* Secondary - Muted purple-blue */
+  --secondary: oklch(0.28 0.03 280);         /* Darker elevated surface */
+  --secondary-foreground: oklch(0.85 0.02 260); /* Lighter text */
+
+  /* Muted - Very subtle purple-blue */
+  --muted: oklch(0.25 0.025 280);            /* Subtle background variation */
+  --muted-foreground: oklch(0.60 0.03 260);  /* Muted text with blue hint */
+
+  /* Accent - Brighter pastel blue for highlights */
+  --accent: oklch(0.55 0.15 240);            /* Vibrant pastel blue */
+  --accent-foreground: oklch(0.98 0.005 260); /* White text on accent */
+
+  /* Destructive - Soft coral/rose for errors */
+  --destructive: oklch(0.60 0.18 15);        /* Soft coral-red */
+  --destructive-foreground: oklch(0.98 0 0); /* White text */
+
+  /* Borders and inputs - subtle purple-blue tones */
+  --border: oklch(0.30 0.03 280);            /* Subtle border */
+  --ring: oklch(0.65 0.12 240);              /* Pastel blue focus ring */
+
+  /* Legacy compatibility - keeping existing hex values for gradual migration */
+  --bg-page: #1a1625;        /* Original dark purple-blue */
+  --bg-surface: #1f1b2e;     /* Slightly lighter surface */
+  --bg-elevated: #252139;    /* Elevated surface */
+  --bg-highlight: #2d2645;   /* Highlight/hover state */
+
+  --text-primary: #f0f0f5;   /* Soft white with blue tint */
+  --text-secondary: #b8b8d0; /* Muted blue-gray */
+  --text-muted: #7878a0;     /* Muted purple-blue */
+
+  --border-default: #2d2645; /* Border color */
+  --border-subtle: #252139;  /* Subtle border */
+
+  /* Accent colors */
+  --accent-blue: oklch(0.65 0.12 240);      /* Pastel blue accent */
+  --accent-blue-hover: oklch(0.70 0.14 240); /* Lighter blue on hover */
+  --accent-purple: oklch(0.60 0.15 290);    /* Soft purple accent */
+  --accent-coral: oklch(0.65 0.18 15);      /* Warm coral accent */
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+  }
+}
+
+/* Custom animations */
+@keyframes pulse-soft {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out forwards;
+}
+
+/* Hide scrollbars */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
