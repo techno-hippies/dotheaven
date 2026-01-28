@@ -1,22 +1,21 @@
 import { type Component, Show } from 'solid-js'
 import { usePlatform } from 'virtual:heaven-platform'
 import {
-  AppShell,
   Sidebar,
   SidebarSection,
   RightPanel,
-  Header,
-  MusicPlayer,
   ListItem,
   Avatar,
   AlbumCover,
   IconButton,
   Button,
-  VerticalVideoFeed,
-  VideoPlaybackProvider,
-  type VideoPostData,
+  AppShell,
+  Header,
+  MusicPlayer,
 } from '@heaven/ui'
+import { VerticalVideoFeed, VideoPlaybackProvider, type VideoPostData } from './components/feed'
 import { useAuth } from './providers'
+import { useNavigate } from '@solidjs/router'
 
 const ChatCircleIcon = () => (
   <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
@@ -104,6 +103,7 @@ const feedVideos: VideoPostData[] = [
 export const App: Component = () => {
   const platform = usePlatform()
   const auth = useAuth()
+  const navigate = useNavigate()
 
   // Tauri: Open folder picker dialog
   const handleAddFolders = async () => {
@@ -198,7 +198,7 @@ export const App: Component = () => {
                   <BellIcon />
                 </IconButton>
                 <button
-                  onClick={handleLogout}
+                  onClick={() => navigate('/profile')}
                   class="flex items-center gap-2 hover:opacity-80 transition-opacity"
                   title={`Signed in as ${auth.pkpAddress()?.slice(0, 6)}...${auth.pkpAddress()?.slice(-4)}`}
                 >

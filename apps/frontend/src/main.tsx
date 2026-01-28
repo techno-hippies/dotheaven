@@ -6,7 +6,7 @@ if (typeof window !== 'undefined' && !window.Buffer) {
 }
 
 import { render } from 'solid-js/web'
-import { Router, Route } from '@solidjs/router'
+import { HashRouter, Route } from '@solidjs/router'
 import { PlatformProvider, platform } from 'virtual:heaven-platform'
 import { AuthProvider } from './providers'
 import './styles/index.css'
@@ -16,6 +16,7 @@ import '@fontsource/geist/600.css'
 import '@fontsource/geist/700.css'
 import { App } from './App'
 import { AuthPage } from './pages/AuthPage'
+import { MyProfilePage } from './pages/ProfilePage'
 
 const root = document.getElementById('root')
 
@@ -27,10 +28,11 @@ render(
   () => (
     <PlatformProvider platform={platform}>
       <AuthProvider>
-        <Router>
+        <HashRouter>
           <Route path="/" component={App} />
           <Route path="/auth" component={AuthPage} />
-        </Router>
+          <Route path="/profile" component={MyProfilePage} />
+        </HashRouter>
       </AuthProvider>
     </PlatformProvider>
   ),

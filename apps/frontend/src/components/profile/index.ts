@@ -1,0 +1,5 @@
+export { ProfileHeader, type ProfileHeaderProps } from './profile-header'
+export { ProfileTabs, type ProfileTabsProps, type ProfileTab } from './profile-tabs'
+export { ProfilePage, type ProfilePageProps } from './profile-page'
+export { VideoGrid, type VideoGridProps, type VideoGridItem } from './video-grid'
+export { VideoThumbnail, type VideoThumbnailProps } from './video-thumbnail'

@@ -1,0 +1,16 @@
+[15:47:25.223] [INFO] storybook v10.2.1
+[15:47:26.600] [DEBUG] Getting package.json info for /media/t42/th42/Code/dotheaven/packages/ui/package.json...
+[15:47:26.689] [ERROR] [38;2;241;97;97mError: Failed to load static files, no such directory: ./public
+Make sure this directory exists.[39m
+    at parseStaticDir (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+0999b94b31b45d93/node_modules/storybook/dist/_node-chunks/chunk-KNMEGL7N.js:116:11)
+    at file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+0999b94b31b45d93/node_modules/storybook/dist/core-server/presets/common-preset.js:1706:48
+    at Array.map (<anonymous>)
+    at Object.favicon (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+0999b94b31b45d93/node_modules/storybook/dist/core-server/presets/common-preset.js:1701:193)
+    at async useStatics (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+0999b94b31b45d93/node_modules/storybook/dist/_node-chunks/chunk-KNMEGL7N.js:72:83)
+    at async Promise.all (index 2)
+    at async storybookDevServer (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+0999b94b31b45d93/node_modules/storybook/dist/core-server/index.js:7194:141)
+    at async buildOrThrow (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+0999b94b31b45d93/node_modules/storybook/dist/core-server/index.js:4504:12)
+    at async buildDevStandalone (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+0999b94b31b45d93/node_modules/storybook/dist/core-server/index.js:7577:66)
+    at async withTelemetry (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+0999b94b31b45d93/node_modules/storybook/dist/_node-chunks/chunk-KNMEGL7N.js:218:12)
+[15:47:26.695] [WARN] Broken build, fix the error above.
+You may need to refresh the browser.

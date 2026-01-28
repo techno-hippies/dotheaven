@@ -22,10 +22,5 @@
       "@heaven/platform": ["../../packages/platform/src"]
     }
   },
-  "include": ["src"],
-  "references": [
-    { "path": "../../packages/ui" },
-    { "path": "../../packages/core" },
-    { "path": "../../packages/platform" }
-  ]
+  "include": ["src"]
 }

@@ -7,7 +7,7 @@
  */
 
 import { Component, createSignal, onMount } from 'solid-js'
-import { AuthCard, type AuthStatus } from '@heaven/ui'
+import { AuthCard, type AuthStatus } from '../components/shell'
 import { registerWithWebAuthn, authenticateWithWebAuthn } from '../lib/lit'
 import type { PKPInfo, AuthData } from '../lib/lit'
 
