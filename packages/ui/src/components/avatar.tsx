@@ -14,6 +14,7 @@ const avatarVariants = cva(
         xl: 'w-16 h-16',
         '2xl': 'w-24 h-24',
         '3xl': 'w-[100px] h-[100px]',
+        '4xl': 'w-32 h-32',
       },
       shape: {
         circle: 'rounded-full',      // For people/profiles

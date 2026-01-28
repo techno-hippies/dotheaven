@@ -35,8 +35,6 @@ const AuthContext = createContext<AuthContextType>()
 export const AuthProvider: ParentComponent = (props) => {
   const platform = usePlatform()
 
-  console.log('[Auth] Platform:', platform.platform, 'isTauri:', platform.isTauri)
-
   const [pkpInfo, setPkpInfo] = createSignal<PKPInfo | null>(null)
   const [authData, setAuthData] = createSignal<AuthData | null>(null)
   const [isAuthenticating, setIsAuthenticating] = createSignal(false)

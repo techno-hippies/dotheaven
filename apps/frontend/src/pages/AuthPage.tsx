@@ -6,11 +6,10 @@
  * 2. Web flow redirect - when no callback, redirects to main app (auth handled by AuthContext)
  */
 
-import { Component, createSignal, onMount, Switch, Match, Show } from 'solid-js'
+import { Component, createSignal, onMount } from 'solid-js'
+import { AuthCard, type AuthStatus } from '@heaven/ui'
 import { registerWithWebAuthn, authenticateWithWebAuthn } from '../lib/lit'
 import type { PKPInfo, AuthData } from '../lib/lit'
-
-type AuthStatus = 'idle' | 'authenticating' | 'success' | 'error'
 
 export const AuthPage: Component = () => {
   const [status, setStatus] = createSignal<AuthStatus>('idle')
@@ -113,7 +112,6 @@ export const AuthPage: Component = () => {
   // Redirect to main app if not a Tauri callback
   onMount(() => {
     if (!isTauriCallback) {
-      // Web users hitting /auth directly should go to main app
       window.location.href = '/'
     }
   })
@@ -129,106 +127,16 @@ export const AuthPage: Component = () => {
 
   return (
     <div class="min-h-screen flex items-center justify-center p-6 bg-[var(--bg-page)]">
-      <div class="w-full max-w-md">
-        <div class="bg-[var(--bg-surface)] border border-[var(--bg-highlight)] rounded-2xl p-8 shadow-xl">
-          <Switch>
-            {/* Authenticating */}
-            <Match when={status() === 'authenticating'}>
-              <div class="text-center space-y-6">
-                <div class="w-16 h-16 mx-auto">
-                  <svg class="animate-spin w-full h-full text-[var(--accent-blue)]" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                </div>
-                <div>
-                  <h2 class="text-2xl font-bold text-[var(--text-primary)]">
-                    {authMode() === 'register' ? 'Creating Account...' : 'Signing In...'}
-                  </h2>
-                  <p class="text-[var(--text-secondary)] mt-2">
-                    Complete the passkey prompt
-                  </p>
-                </div>
-              </div>
-            </Match>
-
-            {/* Success */}
-            <Match when={status() === 'success'}>
-              <div class="text-center space-y-6">
-                <div class="w-20 h-20 rounded-full bg-green-500/10 flex items-center justify-center mx-auto">
-                  <svg class="w-10 h-10 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <div>
-                  <h2 class="text-2xl font-bold text-[var(--text-primary)]">Success!</h2>
-                  <p class="text-[var(--text-secondary)] mt-2">You can close this window.</p>
-                </div>
-              </div>
-            </Match>
-
-            {/* Error */}
-            <Match when={status() === 'error'}>
-              <div class="text-center space-y-6">
-                <div class="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto">
-                  <svg class="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                </div>
-                <div>
-                  <h2 class="text-2xl font-bold text-[var(--text-primary)]">Authentication Failed</h2>
-                  <p class="text-red-500 mt-2">{error()}</p>
-                </div>
-                <div class="space-y-3">
-                  <button
-                    onClick={() => authMode() === 'register' ? performRegister() : performSignIn()}
-                    class="w-full py-3 px-4 bg-[oklch(0.65_0.12_240)] hover:opacity-90 text-white font-semibold rounded-lg transition-opacity"
-                  >
-                    Try Again
-                  </button>
-                  <button
-                    onClick={() => setStatus('idle')}
-                    class="w-full py-3 px-4 bg-[var(--bg-highlight)] hover:bg-[var(--bg-highlight-hover)] text-[var(--text-primary)] font-semibold rounded-lg transition-colors"
-                  >
-                    Back
-                  </button>
-                </div>
-              </div>
-            </Match>
-
-            {/* Idle */}
-            <Match when={status() === 'idle'}>
-              <div class="text-center space-y-6">
-                <img
-                  src="/images/heaven.png"
-                  alt="Heaven"
-                  class="w-20 h-20 mx-auto"
-                  onError={(e) => (e.currentTarget.style.display = 'none')}
-                />
-                <div>
-                  <h2 class="text-2xl font-bold text-[var(--text-primary)]">Heaven</h2>
-                  <p class="text-[var(--text-secondary)] mt-2">Sign in with your passkey</p>
-                </div>
-                <div class="space-y-3">
-                  <button
-                    onClick={performSignIn}
-                    class="w-full py-3 px-4 bg-[oklch(0.65_0.12_240)] hover:opacity-90 text-white font-semibold rounded-lg transition-opacity"
-                  >
-                    Sign In with Passkey
-                  </button>
-                  <button
-                    onClick={performRegister}
-                    class="w-full py-3 px-4 bg-[var(--bg-highlight)] hover:bg-[var(--bg-highlight-hover)] text-[var(--text-primary)] font-semibold rounded-lg transition-colors"
-                  >
-                    Create New Account
-                  </button>
-                </div>
-                <p class="text-[var(--text-muted)] text-xs">Matches are made in Heaven</p>
-              </div>
-            </Match>
-          </Switch>
-        </div>
-      </div>
+      <AuthCard
+        status={status()}
+        authMode={authMode()}
+        error={error()}
+        logoSrc="/images/heaven.png"
+        onSignIn={performSignIn}
+        onRegister={performRegister}
+        onRetry={() => authMode() === 'register' ? performRegister() : performSignIn()}
+        onBack={() => setStatus('idle')}
+      />
     </div>
   )
 }

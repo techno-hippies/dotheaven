@@ -159,3 +159,11 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* Mobile viewport height fix (100vh doesn't account for mobile browser chrome)
+ * Sets --vh-screen CSS variable via JS: document.documentElement.style.setProperty('--vh-screen', `${window.innerHeight}px`)
+ * Usage: h-[var(--vh-screen,100vh)] - falls back to 100vh if not set
+ */
+:root {
+  --vh-screen: 100vh;
+}

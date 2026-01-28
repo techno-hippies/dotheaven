@@ -1,5 +1,3 @@
-console.log('[Platform] Loading tauri.ts')
-
 import type { PlatformAPI } from './api.tsx'
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-shell'

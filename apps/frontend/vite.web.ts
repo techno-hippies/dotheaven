@@ -4,20 +4,10 @@ import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'path'
 
 const webPlatformPath = resolve(__dirname, '../../packages/platform/src/web.ts')
-console.log('[vite.web.ts] @heaven/platform alias ->', webPlatformPath)
 
-// Web-specific configuration - standalone (not merging) to ensure aliases work
+// Web-specific configuration
 export default defineConfig({
-  plugins: [
-    solid(),
-    tailwindcss(),
-    {
-      name: 'log-resolve',
-      configResolved(config) {
-        console.log('[vite.web] resolved aliases:', JSON.stringify(config.resolve.alias, null, 2))
-      },
-    },
-  ],
+  plugins: [solid(), tailwindcss()],
   resolve: {
     alias: [
       { find: '@', replacement: resolve(__dirname, './src') },
@@ -29,7 +19,6 @@ export default defineConfig({
     ],
   },
   optimizeDeps: {
-    force: true,
     exclude: ['@heaven/platform', '@tauri-apps/api', '@tauri-apps/plugin-dialog', '@tauri-apps/plugin-shell'],
   },
   define: {

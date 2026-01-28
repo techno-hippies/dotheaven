@@ -7,12 +7,14 @@ import {
   RightPanel,
   Header,
   MusicPlayer,
-  WelcomeScreen,
   ListItem,
   Avatar,
   AlbumCover,
   IconButton,
   Button,
+  VerticalVideoFeed,
+  VideoPlaybackProvider,
+  type VideoPostData,
 } from '@heaven/ui'
 import { useAuth } from './providers'
 
@@ -63,11 +65,45 @@ const UploadIcon = () => (
   </svg>
 )
 
+// Placeholder feed videos
+const feedVideos: VideoPostData[] = [
+  {
+    id: '1',
+    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    thumbnailUrl: 'https://picsum.photos/seed/heaven1/450/800',
+    username: 'synthwave_dreams',
+    userAvatar: 'https://picsum.photos/seed/user1/100/100',
+    caption: 'Late night coding sessions hit different with this track 🎵✨',
+    trackTitle: 'Neon Dreams',
+    trackArtist: 'Synthwave Collective',
+    trackCoverUrl: 'https://picsum.photos/seed/album1/100/100',
+    likes: 4200,
+    comments: 89,
+    shares: 23,
+    isLiked: false,
+    canInteract: true,
+  },
+  {
+    id: '2',
+    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+    thumbnailUrl: 'https://picsum.photos/seed/heaven2/450/800',
+    username: 'lofi_producer',
+    userAvatar: 'https://picsum.photos/seed/user2/100/100',
+    caption: 'New beat dropping soon 🔥 What do you think?',
+    trackTitle: 'Midnight Rain',
+    trackArtist: 'Lo-Fi Beats',
+    trackCoverUrl: 'https://picsum.photos/seed/album2/100/100',
+    likes: 1850,
+    comments: 42,
+    shares: 15,
+    isLiked: true,
+    canInteract: true,
+  },
+]
+
 export const App: Component = () => {
   const platform = usePlatform()
   const auth = useAuth()
-
-  console.log('[App] Platform:', platform.platform, 'isTauri:', platform.isTauri)
 
   // Tauri: Open folder picker dialog
   const handleAddFolders = async () => {
@@ -248,18 +284,16 @@ export const App: Component = () => {
         />
       }
     >
-      <WelcomeScreen
-        onAction={handleWelcomeAction}
-        actionLabel={platform.isTauri ? 'Add Folders' : 'Upload Files'}
-        actionIcon={platform.isTauri ? <FolderPlusIcon /> : <UploadIcon />}
-        subtitle={
-          platform.isTauri
-            ? 'Add your music folders to start listening'
-            : 'Upload your music files to start listening'
-        }
-        logoSrc="/images/heaven.png"
-        class="rounded-xl"
-      />
+      <VideoPlaybackProvider>
+        <VerticalVideoFeed
+          videos={feedVideos}
+          onLikeClick={(id) => console.log('Like:', id)}
+          onCommentClick={(id) => console.log('Comment:', id)}
+          onShareClick={(id) => console.log('Share:', id)}
+          onProfileClick={(username) => console.log('Profile:', username)}
+          onTrackClick={(id) => console.log('Track:', id)}
+        />
+      </VideoPlaybackProvider>
     </AppShell>
   )
 }
