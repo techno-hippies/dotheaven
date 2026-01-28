@@ -33,7 +33,7 @@ export function useVideoPlayback(options: UseVideoPlaybackOptions = {}): UseVide
   const [isMuted, setIsMuted] = createSignal(false)
   const [currentTime, setCurrentTime] = createSignal(0)
   // Track if user has manually controlled this video (to prevent effect from overriding)
-  const [userControlled, setUserControlled] = createSignal(false)
+  const [_userControlled, setUserControlled] = createSignal(false)
 
   // Sync playing state with autoplay prop - only when autoplay changes, not on user interaction
   // This effect handles: scroll to new video (autoplay changes), initial load

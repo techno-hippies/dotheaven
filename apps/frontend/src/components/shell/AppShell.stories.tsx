@@ -1,8 +1,5 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite'
-import { AppShell } from './AppShell'
-import { Sidebar, SidebarSection } from './Sidebar'
-import { RightPanel } from './RightPanel'
-import { Header, ListItem, MusicPlayer, AlbumCover, Avatar, IconButton } from '@/components'
+import { AppShell, Sidebar, SidebarSection, RightPanel, Header, ListItem, MusicPlayer, AlbumCover, Avatar, IconButton } from '@heaven/ui'
 
 // Chat circle icon (Phosphor-style)
 const ChatCircleIcon = () => (

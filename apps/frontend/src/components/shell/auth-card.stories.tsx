@@ -14,7 +14,7 @@ const meta: Meta<typeof AuthCard> = {
     },
   },
   decorators: [
-    (Story) => (
+    (Story: any) => (
       <div class="p-8 min-h-[600px] flex items-center justify-center bg-[var(--bg-page)]">
         <Story />
       </div>

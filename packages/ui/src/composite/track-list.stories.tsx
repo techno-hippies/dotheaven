@@ -3,7 +3,7 @@ import { TrackList } from './track-list'
 import { MediaHeader } from './media-header'
 
 const meta = {
-  title: 'UI/TrackList',
+  title: 'Components/TrackList',
   component: TrackList,
   parameters: {
     layout: 'fullscreen',

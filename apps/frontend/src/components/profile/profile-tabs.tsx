@@ -1,4 +1,4 @@
-import type { Component, JSX } from 'solid-js'
+import type { Component } from 'solid-js'
 import { Tabs, type TabItem } from '@heaven/ui'
 
 export type ProfileTab = 'activity' | 'videos' | 'music' | 'health'

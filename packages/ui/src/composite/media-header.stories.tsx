@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { MediaHeader } from './media-header'
 
 const meta = {
-  title: 'UI/MediaHeader',
+  title: 'Components/MediaHeader',
   component: MediaHeader,
   parameters: {
     layout: 'fullscreen',

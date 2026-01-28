@@ -55,7 +55,7 @@ export const Empty: Story = {
   args: {
     videos: [],
   },
-  render: (args) => (
+  render: (args: any) => (
     <div class="min-h-[400px] bg-[var(--bg-page)] p-6 rounded-lg">
       <VideoGrid {...args} />
       <div class="text-center text-[var(--text-secondary)] mt-8">

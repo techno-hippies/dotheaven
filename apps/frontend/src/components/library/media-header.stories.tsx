@@ -8,7 +8,7 @@ const meta = {
     layout: 'fullscreen',
   },
   decorators: [
-    (Story) => (
+    (Story: any) => (
       <div class="min-h-screen bg-gradient-to-b from-[#3a4a5a] to-[var(--bg-page)] p-0">
         <Story />
       </div>

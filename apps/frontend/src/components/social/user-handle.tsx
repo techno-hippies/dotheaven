@@ -1,5 +1,4 @@
 import type { Component, JSX } from 'solid-js'
-import { splitProps } from 'solid-js'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn, Avatar } from '@heaven/ui'
 
@@ -43,35 +42,34 @@ export interface UserHandleProps extends VariantProps<typeof userHandleVariants>
  * Includes optional action slot (e.g., follow button).
  */
 export const UserHandle: Component<UserHandleProps> = (props) => {
-  const [local] = splitProps(props, ['class', 'name', 'handle', 'avatarSrc', 'avatarFallback', 'action', 'onClick', 'size'])
-  const size = () => local.size ?? 'md'
+  const size = () => props.size ?? 'md'
 
   return (
     <div
-      class={cn(userHandleVariants({ size: size() }), local.class)}
-      onClick={local.onClick}
-      role={local.onClick ? 'button' : undefined}
-      tabIndex={local.onClick ? 0 : undefined}
+      class={cn(userHandleVariants({ size: size() }), props.class)}
+      onClick={props.onClick}
+      role={props.onClick ? 'button' : undefined}
+      tabIndex={props.onClick ? 0 : undefined}
     >
       <Avatar
-        src={local.avatarSrc}
+        src={props.avatarSrc}
         size={avatarSizeMap[size()]}
         shape="circle"
-        fallback={local.avatarFallback}
+        fallback={props.avatarFallback}
       />
       <div class="flex flex-col flex-1 min-w-0">
         <span class={cn('font-medium text-[var(--text-primary)] truncate', textSizeMap[size()].name)}>
-          {local.name}
+          {props.name}
         </span>
-        {local.handle && (
+        {props.handle && (
           <span class={cn('text-[var(--text-muted)] truncate', textSizeMap[size()].handle)}>
-            @{local.handle}
+            @{props.handle}
           </span>
         )}
       </div>
-      {local.action && (
+      {props.action && (
         <div class="flex-shrink-0">
-          {local.action}
+          {props.action}
         </div>
       )}
     </div>

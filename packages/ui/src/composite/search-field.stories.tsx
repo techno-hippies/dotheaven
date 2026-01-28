@@ -30,7 +30,6 @@ const recentSearches: SearchOption[] = [
     title: 'The Guess Who',
     subtitle: 'Artist',
     type: 'artist',
-    verified: true,
   },
 ]
 
@@ -53,7 +52,6 @@ const allSongs: SearchOption[] = [
     title: 'Radiohead',
     subtitle: 'Artist',
     type: 'artist',
-    verified: true,
   },
   {
     id: '7',
@@ -66,7 +64,6 @@ const allSongs: SearchOption[] = [
     title: 'Fleetwood Mac',
     subtitle: 'Artist',
     type: 'artist',
-    verified: true,
   },
 ]
 
@@ -170,7 +167,7 @@ export const InlineStyle: Story = {
 export const FullScreenExample: Story = {
   render: () => {
     const [query, setQuery] = createSignal('')
-    const [selected, setSelected] = createSignal<SearchOption | null>(null)
+    const [_selected, setSelected] = createSignal<SearchOption | null>(null)
 
     const filteredOptions = () => {
       if (!query()) return recentSearches
@@ -201,7 +198,7 @@ export const FullScreenExample: Story = {
 
 export const WithCustomDebounce: Story = {
   render: () => {
-    const [query, setQuery] = createSignal('')
+    const [_query, setQuery] = createSignal('')
     const [searches, setSearches] = createSignal<string[]>([])
 
     const handleInputChange = (value: string) => {
@@ -259,7 +256,6 @@ export const DifferentTypes: Story = {
         title: 'Tatsuro Yamashita',
         subtitle: 'Artist',
         type: 'artist',
-        verified: true,
       },
       {
         id: '4',

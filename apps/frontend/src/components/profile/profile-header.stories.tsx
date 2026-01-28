@@ -103,7 +103,7 @@ export const InContext: Story = {
     isFollowing: false,
     isOwnProfile: false,
   },
-  render: (args) => (
+  render: (args: any) => (
     <div class="bg-[var(--bg-page)] min-h-screen">
       <ProfileHeader {...args} />
       <div class="px-8 py-4 text-[var(--text-secondary)]">

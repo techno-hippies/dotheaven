@@ -54,13 +54,16 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
       {/* Content container with avatar overlapping banner */}
       <div class="px-8 pb-6">
         {/* Avatar - positioned to overlap banner */}
-        <div class="-mt-20 mb-4">
+        <div
+          class="-mt-20 mb-4 cursor-pointer inline-block"
+          onClick={() => props.onAvatarClick?.()}
+          role={props.onAvatarClick ? 'button' : undefined}
+          tabIndex={props.onAvatarClick ? 0 : undefined}
+        >
           <Avatar
             src={props.avatarUrl}
             alt={props.displayName}
             size="4xl"
-            class="cursor-pointer"
-            onClick={() => props.onAvatarClick?.()}
           />
         </div>
 

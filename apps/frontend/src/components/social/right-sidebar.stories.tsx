@@ -4,7 +4,7 @@ import { NowPlaying } from '../player/now-playing'
 import { PostCard } from './post-card'
 import { CommentItem, CommentSection } from './comment-item'
 import { FollowButton } from './follow-button'
-import { HeartIcon, CommentIcon, ShareIcon, type EngagementAction } from './engagement-bar'
+import { HeartIcon, CommentIcon, type EngagementAction } from './engagement-bar'
 
 const meta: Meta<typeof RightSidebar> = {
   title: 'UI/RightSidebar',

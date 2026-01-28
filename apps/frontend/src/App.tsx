@@ -1,45 +1,18 @@
 import { type Component, Show } from 'solid-js'
 import { usePlatform } from 'virtual:heaven-platform'
 import {
-  Sidebar,
-  SidebarSection,
   RightPanel,
-  ListItem,
   Avatar,
-  AlbumCover,
   IconButton,
   Button,
   AppShell,
   Header,
   MusicPlayer,
 } from '@heaven/ui'
+import { AppSidebar } from './components/shell'
 import { VerticalVideoFeed, VideoPlaybackProvider, type VideoPostData } from './components/feed'
 import { useAuth } from './providers'
 import { useNavigate } from '@solidjs/router'
-
-const ChatCircleIcon = () => (
-  <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
-    <path d="M128,24A104,104,0,0,0,36.18,176.88L24.83,210.93a16,16,0,0,0,20.24,20.24l34.05-11.35A104,104,0,1,0,128,24Zm0,192a87.87,87.87,0,0,1-44.06-11.81,8,8,0,0,0-4-1.08,7.85,7.85,0,0,0-2.53.42L40,216,52.47,178.6a8,8,0,0,0-.66-6.54A88,88,0,1,1,128,216Z" />
-  </svg>
-)
-
-const MusicNotesIcon = () => (
-  <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
-    <path d="M212.92,17.69a8,8,0,0,0-6.86-1.45l-128,32A8,8,0,0,0,72,56V166.08A36,36,0,1,0,88,196V62.25l112-28V134.08A36,36,0,1,0,216,164V24A8,8,0,0,0,212.92,17.69ZM52,216a20,20,0,1,1,20-20A20,20,0,0,1,52,216Zm128-32a20,20,0,1,1,20-20A20,20,0,0,1,180,184Z" />
-  </svg>
-)
-
-const PlusIcon = () => (
-  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-    <path d="M12 5v14M5 12h14" />
-  </svg>
-)
-
-const ChevronDownIcon = () => (
-  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-    <path d="M6 9l6 6 6-6" />
-  </svg>
-)
 
 const BellIcon = () => (
   <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
@@ -48,19 +21,11 @@ const BellIcon = () => (
   </svg>
 )
 
-const FolderPlusIcon = () => (
-  <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
-    <line x1="12" y1="10" x2="12" y2="16" />
-    <line x1="9" y1="13" x2="15" y2="13" />
-  </svg>
-)
-
-const UploadIcon = () => (
-  <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <polyline points="17 8 12 3 7 8" />
-    <line x1="12" y1="3" x2="12" y2="15" />
+const WalletIcon = () => (
+  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+    <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
+    <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
+    <path d="M18 12a2 2 0 0 0 0 4h4v-4h-4z" />
   </svg>
 )
 
@@ -104,54 +69,12 @@ export const App: Component = () => {
   const platform = usePlatform()
   const auth = useAuth()
   const navigate = useNavigate()
-
-  // Tauri: Open folder picker dialog
-  const handleAddFolders = async () => {
-    try {
-      const { open } = await import('@tauri-apps/plugin-dialog')
-      const selected = await open({
-        directory: true,
-        multiple: true,
-        title: 'Select Music Folders',
-      })
-      if (selected) {
-        console.log('Selected folders:', selected)
-        // TODO: Process selected folders
-      }
-    } catch (err) {
-      console.error('Failed to open folder picker:', err)
-    }
-  }
-
-  // Web: Open file upload dialog
-  const handleUploadFiles = () => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.multiple = true
-    input.accept = 'audio/*'
-    input.onchange = (e) => {
-      const files = (e.target as HTMLInputElement).files
-      if (files?.length) {
-        console.log('Selected files:', Array.from(files).map((f) => f.name))
-        // TODO: Process uploaded files
-      }
-    }
-    input.click()
-  }
-
-  // Platform-aware action handler
-  const handleWelcomeAction = platform.isTauri ? handleAddFolders : handleUploadFiles
-
   const handleLogin = () => {
     auth.loginWithPasskey()
   }
 
   const handleRegister = () => {
     auth.registerWithPasskey()
-  }
-
-  const handleLogout = () => {
-    auth.logout()
   }
 
   return (
@@ -197,6 +120,14 @@ export const App: Component = () => {
                 <IconButton variant="ghost" size="md" aria-label="Notifications">
                   <BellIcon />
                 </IconButton>
+                <IconButton
+                  variant="ghost"
+                  size="md"
+                  aria-label="Wallet"
+                  onClick={() => navigate('/wallet')}
+                >
+                  <WalletIcon />
+                </IconButton>
                 <button
                   onClick={() => navigate('/profile')}
                   class="flex items-center gap-2 hover:opacity-80 transition-opacity"
@@ -209,60 +140,7 @@ export const App: Component = () => {
           }
         />
       }
-      sidebar={
-        <Sidebar>
-          <SidebarSection
-            title="Chat"
-            icon={<ChatCircleIcon />}
-            action={
-              <div class="flex items-center gap-1">
-                <IconButton variant="soft" size="md" aria-label="Add chat">
-                  <PlusIcon />
-                </IconButton>
-                <IconButton variant="soft" size="md" aria-label="Chat options">
-                  <ChevronDownIcon />
-                </IconButton>
-              </div>
-            }
-          >
-            <ListItem
-              title="vitalik.eth"
-              subtitle="Hey, did you see the new proposal?"
-              cover={<Avatar size="sm" />}
-            />
-            <ListItem
-              title="nick.heaven"
-              subtitle="The transaction went through"
-              cover={<Avatar size="sm" />}
-            />
-          </SidebarSection>
-          <SidebarSection
-            title="Music"
-            icon={<MusicNotesIcon />}
-            action={
-              <div class="flex items-center gap-1">
-                <IconButton variant="soft" size="md" aria-label="Add playlist">
-                  <PlusIcon />
-                </IconButton>
-                <IconButton variant="soft" size="md" aria-label="Music options">
-                  <ChevronDownIcon />
-                </IconButton>
-              </div>
-            }
-          >
-            <ListItem
-              title="Liked Songs"
-              subtitle="0 songs"
-              cover={<AlbumCover size="sm" icon="heart" />}
-            />
-            <ListItem
-              title="Free Weekly"
-              subtitle="Playlist • technohippies"
-              cover={<AlbumCover size="sm" icon="playlist" />}
-            />
-          </SidebarSection>
-        </Sidebar>
-      }
+      sidebar={<AppSidebar />}
       rightPanel={
         <RightPanel>
           <div class="p-4">

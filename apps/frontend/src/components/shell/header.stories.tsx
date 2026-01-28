@@ -42,12 +42,6 @@ export const LoggedOut: Story = {
   },
 }
 
-const searchMeta: Meta<typeof SearchInput> = {
-  title: 'UI/SearchInput',
-  component: SearchInput,
-  tags: ['autodocs'],
-}
-
 export const Search: StoryObj<typeof SearchInput> = {
   render: () => <SearchInput placeholder="Search for music, artists, playlists..." />,
 }

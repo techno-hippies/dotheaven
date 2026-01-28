@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onMount, onCleanup, For, Show, type Component } from 'solid-js'
+import { createSignal, onMount, onCleanup, For, Show, type Component } from 'solid-js'
 import { VideoPost } from './VideoPost'
 import type { VerticalVideoFeedProps } from './types'
 

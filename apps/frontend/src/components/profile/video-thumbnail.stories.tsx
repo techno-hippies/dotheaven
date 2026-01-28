@@ -6,7 +6,7 @@ const meta = {
   component: VideoThumbnail,
   tags: ['autodocs'],
   decorators: [
-    (Story) => (
+    (Story: any) => (
       <div class="max-w-[280px] mx-auto">
         <Story />
       </div>

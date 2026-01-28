@@ -7,7 +7,7 @@ const meta: Meta<typeof VerticalVideoFeed> = {
   title: 'Feed/VerticalVideoFeed',
   component: VerticalVideoFeed,
   decorators: [
-    (Story) => (
+    (Story: any) => (
       <VideoPlaybackProvider>
         <div class="h-screen w-full bg-[var(--bg-page)]">
           <Story />
@@ -92,13 +92,13 @@ export const Default: Story = {
   args: {
     videos: sampleVideos,
     hasMore: true,
-    onLikeClick: (id) => console.log('Like clicked:', id),
-    onCommentClick: (id) => console.log('Comment clicked:', id),
-    onShareClick: (id) => console.log('Share clicked:', id),
-    onProfileClick: (username) => console.log('Profile clicked:', username),
-    onTrackClick: (id) => console.log('Track clicked:', id),
+    onLikeClick: (id: string) => console.log('Like clicked:', id),
+    onCommentClick: (id: string) => console.log('Comment clicked:', id),
+    onShareClick: (id: string) => console.log('Share clicked:', id),
+    onProfileClick: (username: string) => console.log('Profile clicked:', username),
+    onTrackClick: (id: string) => console.log('Track clicked:', id),
     onLoadMore: () => console.log('Load more triggered'),
-    onVideoViewed: (id) => console.log('Video viewed:', id),
+    onVideoViewed: (id: string) => console.log('Video viewed:', id),
   },
 }
 

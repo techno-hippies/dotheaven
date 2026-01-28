@@ -17,6 +17,9 @@ import '@fontsource/geist/700.css'
 import { App } from './App'
 import { AuthPage } from './pages/AuthPage'
 import { MyProfilePage } from './pages/ProfilePage'
+import { LikedSongsPage } from './pages/LikedSongsPage'
+import { ChatPage } from './pages/ChatPage'
+import { WalletPage } from './pages/WalletPage'
 
 const root = document.getElementById('root')
 
@@ -32,6 +35,9 @@ render(
           <Route path="/" component={App} />
           <Route path="/auth" component={AuthPage} />
           <Route path="/profile" component={MyProfilePage} />
+          <Route path="/liked-songs" component={LikedSongsPage} />
+          <Route path="/chat/:username" component={ChatPage} />
+          <Route path="/wallet" component={WalletPage} />
         </HashRouter>
       </AuthProvider>
     </PlatformProvider>

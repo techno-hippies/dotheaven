@@ -1,4 +1,4 @@
-import { Component, JSX, Show } from 'solid-js'
+import { Component, Show } from 'solid-js'
 import { cn, Button } from '@heaven/ui'
 
 export type AuthStatus = 'idle' | 'authenticating' | 'success' | 'error'

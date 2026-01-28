@@ -91,18 +91,18 @@ const mockTracks = [
 export const Default: Story = {
   args: {
     tracks: mockTracks,
-    onTrackClick: (track) => console.log('Track clicked:', track),
-    onTrackPlay: (track) => console.log('Track play:', track),
+    onTrackClick: (track: any) => console.log('Track clicked:', track),
+    onTrackPlay: (track: any) => console.log('Track play:', track),
     menuActions: {
-      onAddToPlaylist: (track) => console.log('Add to playlist:', track),
-      onAddToQueue: (track) => console.log('Add to queue:', track),
-      onGoToArtist: (track) => console.log('Go to artist:', track),
-      onGoToAlbum: (track) => console.log('Go to album:', track),
-      onRemoveFromPlaylist: (track) => console.log('Remove from playlist:', track),
+      onAddToPlaylist: (track: any) => console.log('Add to playlist:', track),
+      onAddToQueue: (track: any) => console.log('Add to queue:', track),
+      onGoToArtist: (track: any) => console.log('Go to artist:', track),
+      onGoToAlbum: (track: any) => console.log('Go to album:', track),
+      onRemoveFromPlaylist: (track: any) => console.log('Remove from playlist:', track),
     },
   },
   decorators: [
-    (Story) => (
+    (Story: any) => (
       <div class="min-h-screen bg-[var(--bg-page)]">
         <Story />
       </div>
@@ -113,18 +113,18 @@ export const Default: Story = {
 export const WithHeader: Story = {
   args: {
     tracks: mockTracks,
-    onTrackClick: (track) => console.log('Track clicked:', track),
-    onTrackPlay: (track) => console.log('Track play:', track),
+    onTrackClick: (track: any) => console.log('Track clicked:', track),
+    onTrackPlay: (track: any) => console.log('Track play:', track),
     menuActions: {
-      onAddToPlaylist: (track) => console.log('Add to playlist:', track),
-      onAddToQueue: (track) => console.log('Add to queue:', track),
-      onGoToArtist: (track) => console.log('Go to artist:', track),
-      onGoToAlbum: (track) => console.log('Go to album:', track),
-      onRemoveFromPlaylist: (track) => console.log('Remove from playlist:', track),
+      onAddToPlaylist: (track: any) => console.log('Add to playlist:', track),
+      onAddToQueue: (track: any) => console.log('Add to queue:', track),
+      onGoToArtist: (track: any) => console.log('Go to artist:', track),
+      onGoToAlbum: (track: any) => console.log('Go to album:', track),
+      onRemoveFromPlaylist: (track: any) => console.log('Remove from playlist:', track),
     },
   },
   decorators: [
-    (Story) => (
+    (Story: any) => (
       <div class="min-h-screen bg-gradient-to-b from-[#3a4a5a] via-[#2a3540] to-[var(--bg-page)]">
         <MediaHeader
           type="playlist"
@@ -155,7 +155,7 @@ export const EmptyPlaylist: Story = {
     tracks: [],
   },
   decorators: [
-    (Story) => (
+    (Story: any) => (
       <div class="min-h-screen bg-[var(--bg-page)]">
         <Story />
       </div>
@@ -170,10 +170,10 @@ export const LongPlaylist: Story = {
       ...mockTracks.map((t, i) => ({ ...t, id: `${t.id}-dup-${i}` })),
       ...mockTracks.map((t, i) => ({ ...t, id: `${t.id}-dup2-${i}` })),
     ],
-    onTrackClick: (track) => console.log('Track clicked:', track),
+    onTrackClick: (track: any) => console.log('Track clicked:', track),
   },
   decorators: [
-    (Story) => (
+    (Story: any) => (
       <div class="min-h-screen bg-[var(--bg-page)]">
         <Story />
       </div>

@@ -73,6 +73,7 @@ export const Default: Story = {
         symbol: 'ETH',
         icon: <EthereumIcon />,
         chainBadge: <EthereumIcon />, // Ethereum chain badge
+        balance: '10.5',
         balanceUSD: '$32,450.00',
         amount: '10.5 ETH',
       },
@@ -82,6 +83,7 @@ export const Default: Story = {
         symbol: 'MegaETH',
         icon: <EthereumIcon />, // ETH coin as main icon
         chainBadge: <MegaETHIcon />, // MegaETH chain as badge
+        balance: '4.12',
         balanceUSD: '$12,340.20',
         amount: '4.12 ETH',
       },
@@ -91,6 +93,7 @@ export const Default: Story = {
         symbol: 'MegaETH',
         icon: <USDmIcon />,
         chainBadge: <MegaETHIcon />, // MegaETH chain badge
+        balance: '3042.36',
         balanceUSD: '$3,042.36',
         amount: '3,042.36 USDm',
       },
@@ -110,6 +113,7 @@ export const SingleAsset: Story = {
         name: 'Ethereum',
         symbol: 'ETH',
         icon: <EthereumIcon />,
+        balance: '10.5',
         balanceUSD: '$32,450.00',
         amount: '10.5 ETH',
       },
