@@ -1,4 +1,6 @@
 mod auth;
+mod audio;
+mod jacktrip;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -6,6 +8,13 @@ use tauri::{Manager, State};
 use tokio::sync::RwLock;
 
 use auth::{AuthResult, PersistedAuth};
+use audio::{
+    audio_pause, audio_play, audio_resume, audio_seek, audio_set_volume, audio_stop, AudioState,
+};
+use jacktrip::{
+    check_jacktrip_dependencies, connect_jack_port, connect_jacktrip, disconnect_jack_port,
+    disconnect_jacktrip, is_jacktrip_connected, list_jack_ports, JacktripState,
+};
 
 // =============================================================================
 // State
@@ -109,12 +118,12 @@ pub fn run() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let state: SharedState = Arc::new(RwLock::new(AppState::default()));
-
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .manage(state.clone())
+        .manage(JacktripState::default())
         .setup(move |app| {
             let app_dir = app.path().app_data_dir().ok();
 
@@ -135,6 +144,9 @@ pub fn run() {
                 let window = app.get_webview_window("main").unwrap();
                 window.open_devtools();
             }
+            let audio_state = AudioState::new(app.handle().clone())
+                .expect("failed to init audio");
+            app.manage(audio_state);
 
             Ok(())
         })
@@ -144,6 +156,19 @@ pub fn run() {
             start_passkey_auth,
             save_auth,
             sign_out,
+            audio_play,
+            audio_pause,
+            audio_resume,
+            audio_seek,
+            audio_stop,
+            audio_set_volume,
+            check_jacktrip_dependencies,
+            connect_jack_port,
+            connect_jacktrip,
+            disconnect_jack_port,
+            disconnect_jacktrip,
+            is_jacktrip_connected,
+            list_jack_ports,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

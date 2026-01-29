@@ -9,7 +9,7 @@
 
 const IS_DEV = import.meta.env.DEV
 
-import { Component, createSignal, createMemo, For, createEffect, Show } from 'solid-js'
+import { Component, createSignal, createMemo, For, createEffect, Show, onCleanup } from 'solid-js'
 import { useParams, useSearchParams } from '@solidjs/router'
 import {
   AppShell,
@@ -24,7 +24,8 @@ import {
 } from '@heaven/ui'
 import { AppSidebar, HeaderActions } from '../components/shell'
 import { useAuth } from '../providers'
-import { useAgoraVoice, type VoiceState } from '../lib/voice'
+import { useVoice, type VoiceState } from '../lib/voice'
+import { getWorkerToken } from '../lib/workerAuth'
 
 // Cloudflare Worker URL (Heaven voice worker)
 const CHAT_WORKER_URL =
@@ -37,75 +38,6 @@ const AI_PERSONALITIES: Record<string, { id: string; name: string; avatarUrl: st
     name: 'Scarlett',
     avatarUrl: 'https://picsum.photos/seed/scarlett/200/200',
   },
-}
-
-// =============================================================================
-// Auth Token Management
-// =============================================================================
-
-interface CachedToken {
-  token: string
-  wallet: string
-  expiresAt: number
-}
-
-let cachedToken: CachedToken | null = null
-
-async function getWorkerToken(
-  wallet: string,
-  signMessage: (message: string) => Promise<string>
-): Promise<string> {
-  const normalizedWallet = wallet.toLowerCase()
-  const now = Date.now()
-
-  // Return cached token if still valid (with 60s buffer)
-  if (cachedToken && cachedToken.wallet === normalizedWallet && cachedToken.expiresAt > now + 60000) {
-    return cachedToken.token
-  }
-
-  if (IS_DEV) console.log('[AIChatPage] Authenticating with worker...')
-
-  // Step 1: Get nonce
-  const nonceRes = await fetch(`${CHAT_WORKER_URL}/auth/nonce`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ wallet: normalizedWallet }),
-  })
-
-  if (!nonceRes.ok) {
-    const err = (await nonceRes.json().catch(() => ({}))) as { error?: string }
-    throw new Error(`Failed to get nonce: ${err.error || nonceRes.statusText}`)
-  }
-
-  const { nonce } = (await nonceRes.json()) as { nonce: string }
-
-  // Step 2: Sign nonce with PKP
-  const signature = await signMessage(nonce)
-
-  // Step 3: Verify signature and get JWT
-  const verifyRes = await fetch(`${CHAT_WORKER_URL}/auth/verify`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ wallet: normalizedWallet, signature, nonce }),
-  })
-
-  if (!verifyRes.ok) {
-    const err = (await verifyRes.json().catch(() => ({}))) as { error?: string }
-    throw new Error(`Auth verification failed: ${err.error || verifyRes.statusText}`)
-  }
-
-  const { token } = (await verifyRes.json()) as { token: string }
-
-  // Cache token (JWT typically valid for 1 hour)
-  cachedToken = {
-    token,
-    wallet: normalizedWallet,
-    expiresAt: now + 55 * 60 * 1000, // 55 minutes
-  }
-
-  if (IS_DEV) console.log('[AIChatPage] Authenticated successfully')
-
-  return token
 }
 
 // =============================================================================
@@ -193,7 +125,7 @@ export const AIChatPage: Component = () => {
     const pkpInfo = auth.pkpInfo()
     if (!pkpInfo) return null
 
-    return useAgoraVoice({
+    return useVoice({
       pkpInfo: {
         tokenId: pkpInfo.tokenId,
         publicKey: pkpInfo.publicKey,
@@ -219,7 +151,8 @@ export const AIChatPage: Component = () => {
       if (IS_DEV) console.log('[AIChatPage] Starting voice call...')
       setHasStartedCall(true)
       // Delay to let hook initialize
-      setTimeout(() => voice()?.startCall(), 100)
+      const timer = window.setTimeout(() => voice()?.startCall(), 100)
+      onCleanup(() => clearTimeout(timer))
     }
   })
 
@@ -313,7 +246,12 @@ export const AIChatPage: Component = () => {
 
     try {
       // Get auth token
-      const token = await getWorkerToken(pkpInfo.ethAddress, auth.signMessage)
+      const token = await getWorkerToken({
+        workerUrl: CHAT_WORKER_URL,
+        wallet: pkpInfo.ethAddress,
+        signMessage: auth.signMessage,
+        logPrefix: 'AIChatPage',
+      })
 
       // Build history for context
       const history = messages()

@@ -14,9 +14,9 @@ use tokio::net::TcpListener;
 
 // Auth page URL
 #[cfg(debug_assertions)]
-const AUTH_PAGE_URL: &str = "http://localhost:5173/auth";
+const AUTH_PAGE_URL: &str = "http://localhost:5173/#/auth";
 #[cfg(not(debug_assertions))]
-const AUTH_PAGE_URL: &str = "https://dotheaven.org/auth";
+const AUTH_PAGE_URL: &str = "https://dotheaven.org/#/auth";
 
 const AUTH_FILE: &str = "heaven-auth.json";
 

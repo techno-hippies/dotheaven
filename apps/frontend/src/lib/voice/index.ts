@@ -3,7 +3,10 @@
  * Real-time voice calls via Agora CAI
  */
 
-export { useAgoraVoice, type VoiceState, type UseAgoraVoiceOptions, type UseAgoraVoiceReturn } from './useAgoraVoice'
+export { useAgoraVoice, type UseAgoraVoiceOptions, type UseAgoraVoiceReturn } from './useAgoraVoice'
+export { useJackTripVoice } from './useJackTripVoice'
+export { useVoice } from './useVoice'
+export type { VoiceState, VoiceProvider } from './types'
 export {
   startAgent,
   stopAgent,

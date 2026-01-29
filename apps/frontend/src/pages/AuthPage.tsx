@@ -16,9 +16,12 @@ export const AuthPage: Component = () => {
   const [error, setError] = createSignal<string | null>(null)
   const [authMode, setAuthMode] = createSignal<'signin' | 'register'>('signin')
 
-  // Parse callback URL from query params
+  // Parse callback URL from query params (supports both hash and regular routing)
   const getCallbackUrl = () => {
-    const params = new URLSearchParams(window.location.search)
+    // HashRouter: params are in the hash fragment, e.g. #/auth?callback=...
+    const hash = window.location.hash
+    const hashQuery = hash.includes('?') ? hash.slice(hash.indexOf('?')) : ''
+    const params = new URLSearchParams(hashQuery || window.location.search)
     return params.get('callback') || undefined
   }
 

@@ -21,6 +21,8 @@ export interface MusicPlayerProps {
   onShuffle?: () => void
   onRepeat?: () => void
   onProgressChange?: (value: number) => void
+  onProgressChangeStart?: () => void
+  onProgressChangeEnd?: () => void
   onVolumeChange?: (value: number) => void
   /** Hide now playing info and volume for centered minimal layout */
   minimal?: boolean
@@ -90,6 +92,8 @@ export const MusicPlayer: Component<MusicPlayerProps> = (props) => {
             class="flex-1"
             value={props.progress}
             onChange={props.onProgressChange}
+            onChangeStart={props.onProgressChangeStart}
+            onChangeEnd={props.onProgressChangeEnd}
           />
           <span class="text-base text-[var(--text-muted)] w-10">
             {props.duration || '0:00'}

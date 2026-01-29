@@ -17,8 +17,8 @@ export interface Track {
   artist: string
   album: string
   albumCover?: string
-  dateAdded: string
-  duration: string
+  dateAdded?: string
+  duration?: string
 }
 
 export interface TrackMenuActions {
@@ -32,6 +32,7 @@ export interface TrackMenuActions {
 export interface TrackListProps {
   class?: string
   tracks: Track[]
+  showDateAdded?: boolean
   onTrackClick?: (track: Track) => void
   onTrackPlay?: (track: Track) => void
   menuActions?: TrackMenuActions
@@ -40,25 +41,31 @@ export interface TrackListProps {
 /**
  * TrackList - Track listing table for playlists/albums/artists.
  *
- * Columns: # | Title | Album | Date added | Duration | Menu
+ * Columns: # | Title | Album | Date added (optional) | Duration | Menu
  */
 export const TrackList: Component<TrackListProps> = (props) => {
+  const showDate = () => props.showDateAdded !== false
+  const gridCols = () => showDate()
+    ? 'grid-cols-[48px_minmax(200px,4fr)_minmax(120px,2fr)_minmax(120px,1fr)_80px_48px]'
+    : 'grid-cols-[48px_minmax(200px,4fr)_minmax(120px,2fr)_80px_48px]'
+
   return (
     <div class={cn('px-8 pb-8', props.class)}>
       {/* Table Header */}
-      <div class="grid grid-cols-[48px_minmax(200px,4fr)_minmax(120px,2fr)_minmax(120px,1fr)_80px_48px] gap-4 px-4 py-2 border-b border-[var(--bg-highlight)] text-sm text-[var(--text-muted)] font-medium">
+      <div class={cn('grid gap-4 px-4 py-2 border-b border-[var(--bg-highlight)] text-sm text-[var(--text-muted)] font-medium', gridCols())}>
         <div class="text-center">#</div>
         <div>Title</div>
         <div>Album</div>
-        <div>Date added</div>
+        <Show when={showDate()}>
+          <div>Date added</div>
+        </Show>
         <div class="flex items-center justify-center">
-          {/* Duration icon (clock) */}
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
             <circle cx="12" cy="12" r="10" />
             <path d="M12 6v6l4 2" />
           </svg>
         </div>
-        <div /> {/* Empty column for menu */}
+        <div />
       </div>
 
       {/* Track Rows */}
@@ -69,7 +76,8 @@ export const TrackList: Component<TrackListProps> = (props) => {
             return (
               <div
                 class={cn(
-                  "group grid grid-cols-[48px_minmax(200px,4fr)_minmax(120px,2fr)_minmax(120px,1fr)_80px_48px] gap-4 px-4 py-2 rounded-lg transition-colors cursor-pointer",
+                  "group grid gap-4 px-4 py-2 rounded-lg transition-colors cursor-pointer",
+                  gridCols(),
                   menuOpen() ? "bg-[var(--bg-highlight)]" : "hover:bg-[var(--bg-highlight)]"
                 )}
                 onClick={() => props.onTrackClick?.(track)}
@@ -108,9 +116,11 @@ export const TrackList: Component<TrackListProps> = (props) => {
               </div>
 
               {/* Date Added */}
-              <div class="flex items-center text-sm text-[var(--text-secondary)]">
-                {track.dateAdded}
-              </div>
+              <Show when={showDate()}>
+                <div class="flex items-center text-sm text-[var(--text-secondary)]">
+                  {track.dateAdded}
+                </div>
+              </Show>
 
               {/* Duration */}
               <div class="flex items-center justify-center text-sm text-[var(--text-secondary)]">

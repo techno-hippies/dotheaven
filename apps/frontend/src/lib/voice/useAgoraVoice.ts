@@ -13,6 +13,7 @@ import AgoraRTC, {
 } from 'agora-rtc-sdk-ng'
 import type { PKPInfo } from './api'
 import { startAgent, stopAgent, AGORA_APP_ID } from './api'
+import type { VoiceState } from './types'
 
 const IS_DEV = import.meta.env.DEV
 
@@ -22,8 +23,6 @@ AgoraRTC.setLogLevel(IS_DEV ? 3 : 1)
 // =============================================================================
 // Types
 // =============================================================================
-
-export type VoiceState = 'idle' | 'connecting' | 'connected' | 'error'
 
 export interface UseAgoraVoiceOptions {
   /** PKP wallet info */

@@ -15,9 +15,12 @@ import {
 } from '@xmtp/browser-sdk'
 
 const IS_DEV = import.meta.env.DEV
+const IS_TAURI = import.meta.env.VITE_PLATFORM === 'tauri'
 const XMTP_ENV = (import.meta.env.VITE_XMTP_ENV || (IS_DEV ? 'dev' : 'production')) as
   | 'dev'
   | 'production'
+
+const CONNECT_TIMEOUT_MS = 20000
 
 // Singleton client instance
 let xmtpClient: Client | null = null
@@ -34,6 +37,25 @@ function hexToBytes(hex: string): Uint8Array {
     bytes[i] = parseInt(cleanHex.slice(i * 2, i * 2 + 2), 16)
   }
   return bytes
+}
+
+function supportsOpfs(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
+  if (!window.isSecureContext) return false
+  return typeof navigator.storage?.getDirectory === 'function'
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  if (!ms || ms <= 0) return promise
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`[XMTP] ${label} timed out after ${ms}ms`))
+    }, ms)
+  })
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId)
+  })
 }
 
 /**
@@ -107,9 +129,24 @@ export async function initXMTPClient(
 
     if (IS_DEV) console.log('[XMTP] Signer created, calling Client.create with env:', XMTP_ENV)
 
-    xmtpClient = await Client.create(signer, {
-      env: XMTP_ENV,
-    })
+    const canUseOpfs = supportsOpfs()
+    if (!canUseOpfs && IS_DEV) {
+      console.warn(
+        `[XMTP] OPFS unavailable${IS_TAURI ? ' in Tauri' : ''}; using in-memory storage`
+      )
+    }
+
+    const client = await withTimeout(
+      Client.create(signer, {
+        env: XMTP_ENV,
+        dbPath: canUseOpfs ? undefined : null,
+        disableDeviceSync: canUseOpfs ? undefined : true,
+      }),
+      CONNECT_TIMEOUT_MS,
+      'Client.create'
+    )
+
+    xmtpClient = client
 
     currentAddress = address.toLowerCase()
 

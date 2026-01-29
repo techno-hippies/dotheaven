@@ -24,6 +24,7 @@
     "@tauri-apps/plugin-dialog": "2.6.0",
     "@xmtp/browser-sdk": "6.1.2",
     "buffer": "6.0.3",
+    "music-metadata-browser": "2.5.11",
     "phosphor-icons-solid": "1.0.0",
     "solid-js": "^1.9.3",
     "viem": "2.44.4"

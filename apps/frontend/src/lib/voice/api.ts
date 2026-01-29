@@ -4,6 +4,8 @@
  * Handles authentication and agent lifecycle for Agora CAI voice calls.
  */
 
+import { clearWorkerAuthCache, getWorkerToken } from '../workerAuth'
+
 // PKPInfo type definition
 export interface PKPInfo {
   tokenId: string
@@ -53,79 +55,11 @@ export interface StopAgentResult {
 // Auth Token Management
 // =============================================================================
 
-interface CachedToken {
-  token: string
-  wallet: string
-  expiresAt: number
-}
-
-let cachedToken: CachedToken | null = null
-
-/**
- * Get or refresh JWT token for worker API calls
- */
-async function getWorkerToken(
-  pkpInfo: PKPInfo,
-  signMessage: (message: string) => Promise<string>
-): Promise<string> {
-  const wallet = pkpInfo.ethAddress.toLowerCase()
-  const now = Date.now()
-
-  // Return cached token if still valid (with 60s buffer)
-  if (cachedToken && cachedToken.wallet === wallet && cachedToken.expiresAt > now + 60000) {
-    return cachedToken.token
-  }
-
-  if (IS_DEV) console.log('[VoiceAPI] Authenticating with worker...')
-
-  // Step 1: Get nonce
-  const nonceRes = await fetch(`${VOICE_WORKER_URL}/auth/nonce`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ wallet }),
-  })
-
-  if (!nonceRes.ok) {
-    const err = (await nonceRes.json().catch(() => ({}))) as { error?: string }
-    throw new Error(`Failed to get nonce: ${err.error || nonceRes.statusText}`)
-  }
-
-  const { nonce } = (await nonceRes.json()) as { nonce: string }
-
-  // Step 2: Sign nonce with PKP
-  const signature = await signMessage(nonce)
-
-  // Step 3: Verify signature and get JWT
-  const verifyRes = await fetch(`${VOICE_WORKER_URL}/auth/verify`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ wallet, signature, nonce }),
-  })
-
-  if (!verifyRes.ok) {
-    const err = (await verifyRes.json().catch(() => ({}))) as { error?: string }
-    throw new Error(`Auth verification failed: ${err.error || verifyRes.statusText}`)
-  }
-
-  const { token } = (await verifyRes.json()) as { token: string }
-
-  // Cache token (JWT typically valid for 1 hour)
-  cachedToken = {
-    token,
-    wallet,
-    expiresAt: now + 55 * 60 * 1000, // 55 minutes
-  }
-
-  if (IS_DEV) console.log('[VoiceAPI] Authenticated successfully')
-
-  return token
-}
-
 /**
  * Clear cached auth token (call on logout)
  */
 export function clearVoiceAuthCache(): void {
-  cachedToken = null
+  clearWorkerAuthCache()
 }
 
 // =============================================================================
@@ -140,7 +74,12 @@ export async function startAgent(
   signMessage: (message: string) => Promise<string>
 ): Promise<StartAgentResponse> {
   try {
-    const token = await getWorkerToken(pkpInfo, signMessage)
+    const token = await getWorkerToken({
+      workerUrl: VOICE_WORKER_URL,
+      wallet: pkpInfo.ethAddress,
+      signMessage,
+      logPrefix: 'VoiceAPI',
+    })
 
     if (IS_DEV) console.log('[VoiceAPI] Starting agent...')
 
@@ -202,7 +141,12 @@ export async function stopAgent(
   sessionId: string
 ): Promise<StopAgentResult> {
   try {
-    const token = await getWorkerToken(pkpInfo, signMessage)
+    const token = await getWorkerToken({
+      workerUrl: VOICE_WORKER_URL,
+      wallet: pkpInfo.ethAddress,
+      signMessage,
+      logPrefix: 'VoiceAPI',
+    })
 
     if (IS_DEV) console.log(`[VoiceAPI] Stopping agent: ${sessionId}`)
 

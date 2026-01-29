@@ -1,7 +1,7 @@
 /**
  * VoiceCallPage - Dedicated voice call page
  *
- * Full-screen voice call interface with Agora RTC.
+ * Full-screen voice call interface.
  * Accessible at /chat/:chatId/call
  */
 
@@ -11,7 +11,7 @@ import { Component, createSignal, createMemo, onMount, onCleanup } from 'solid-j
 import { useParams, useNavigate } from '@solidjs/router'
 import { VoicePage } from '../components/chat/VoicePage'
 import { useAuth } from '../providers'
-import { useAgoraVoice, type VoiceState } from '../lib/voice'
+import { useVoice, type VoiceState } from '../lib/voice'
 
 // AI Personalities
 const AI_PERSONALITIES = [
@@ -56,7 +56,7 @@ export const VoiceCallPage: Component = () => {
     const info = pkpInfo()
     if (!info) return null
 
-    return useAgoraVoice({
+    return useVoice({
       pkpInfo: info,
       signMessage,
       onBotSpeaking: () => setIsBotSpeaking(true),
