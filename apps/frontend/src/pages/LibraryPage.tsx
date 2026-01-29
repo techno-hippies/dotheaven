@@ -75,6 +75,7 @@ export const LibraryPage: Component = () => {
   let unlistenEnded: (() => void) | undefined
   let unlistenState: (() => void) | undefined
   let unlistenLoaded: (() => void) | undefined
+  let unlistenError: (() => void) | undefined
 
   const logAudio = (event: string, extra?: Record<string, unknown>) => {
     if (!audioDebug()) return
@@ -117,12 +118,20 @@ export const LibraryPage: Component = () => {
     if (isNative) {
       listen('audio:position', (event) => {
         const payload = event.payload as { position?: number }
-        if (typeof payload?.position === 'number') setCurrentTime(payload.position)
+        if (typeof payload?.position === 'number') {
+          setCurrentTime(payload.position)
+          if (audioDebug()) {
+            console.log('[Audio] native position', payload.position)
+          }
+        }
       }).then((unlisten) => {
         unlistenPosition = unlisten
       })
       listen('audio:loaded', (event) => {
         const payload = event.payload as { duration?: number }
+        if (audioDebug()) {
+          console.log('[Audio] native loaded', payload)
+        }
         if (typeof payload?.duration === 'number') {
           setDuration(payload.duration)
         } else {
@@ -133,16 +142,31 @@ export const LibraryPage: Component = () => {
         unlistenLoaded = unlisten
       })
       listen('audio:ended', () => {
+        if (audioDebug()) {
+          console.log('[Audio] native ended')
+        }
         playNext()
       }).then((unlisten) => {
         unlistenEnded = unlisten
       })
       listen('audio:state', (event) => {
         const payload = event.payload as { state?: string }
+        if (audioDebug()) {
+          console.log('[Audio] native state', payload)
+        }
         if (payload?.state === 'playing') setIsPlaying(true)
         if (payload?.state === 'paused' || payload?.state === 'stopped') setIsPlaying(false)
       }).then((unlisten) => {
         unlistenState = unlisten
+      })
+      listen('audio:error', (event) => {
+        const payload = event.payload as { message?: string }
+        const message = payload?.message || 'Audio playback failed.'
+        console.error('[Audio] native error:', message)
+        setPlaybackError(message)
+        setIsPlaying(false)
+      }).then((unlisten) => {
+        unlistenError = unlisten
       })
       return
     }
@@ -264,6 +288,7 @@ export const LibraryPage: Component = () => {
       unlistenEnded?.()
       unlistenState?.()
       unlistenLoaded?.()
+      unlistenError?.()
       invoke('audio_stop')
     }
   })
@@ -320,6 +345,9 @@ export const LibraryPage: Component = () => {
 
     if (isNative) {
       try {
+        if (audioDebug()) {
+          console.log('[Audio] native play', { index, path: t[index].filePath })
+        }
         await invoke('audio_play', { path: t[index].filePath, seek: 0 })
         setIsPlaying(true)
       } catch (e) {

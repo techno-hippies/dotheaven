@@ -24,6 +24,20 @@ fn env_default(key: &str, default: &str) -> String {
     env::var(key).unwrap_or_else(|_| default.to_string())
 }
 
+fn use_pw_jack() -> bool {
+    which("pw-jack").is_ok()
+}
+
+fn command_for(base: &str) -> Command {
+    if use_pw_jack() {
+        let mut cmd = Command::new("pw-jack");
+        cmd.arg(base);
+        cmd
+    } else {
+        Command::new(base)
+    }
+}
+
 fn ensure_binary_exists(name: &str) -> Result<(), String> {
     which(name)
         .map(|_| ())
@@ -47,7 +61,7 @@ pub fn check_jacktrip_dependencies() -> Result<(), String> {
 }
 
 fn command_output(command: &str, args: &[&str]) -> Result<std::process::Output, String> {
-    Command::new(command)
+    command_for(command)
         .args(args)
         .output()
         .map_err(|e| format!("{command} failed to start: {e}"))
@@ -64,7 +78,7 @@ fn format_command_error(command: &str, output: &std::process::Output) -> String 
 }
 
 fn is_jack_server_running() -> bool {
-    match Command::new("jack_lsp")
+    match command_for("jack_lsp")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
@@ -145,6 +159,11 @@ fn ensure_jackd_running(state: &State<JacktripState>) -> Result<(), String> {
         return Ok(());
     }
 
+    if use_pw_jack() {
+        println!("[JackTrip] pw-jack detected; using PipeWire-JACK");
+        return Ok(());
+    }
+
     if env::var("LD_LIBRARY_PATH")
         .unwrap_or_default()
         .contains("pipewire")
@@ -195,7 +214,7 @@ pub fn connect_jacktrip(
         let _ = child.try_wait();
     }
 
-    let child = Command::new("jacktrip")
+    let child = command_for("jacktrip")
         .args([
             "-C",
             server,

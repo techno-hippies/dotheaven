@@ -86,9 +86,19 @@ export const TrackList: Component<TrackListProps> = (props) => {
               {/* Track Number / Play Button */}
               <div class="flex items-center justify-center text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]">
                 <span class="group-hover:hidden">{index() + 1}</span>
-                <svg class="w-4 h-4 hidden group-hover:block" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
+                <button
+                  type="button"
+                  class="hidden group-hover:flex items-center justify-center"
+                  aria-label={`Play ${track.title}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    props.onTrackPlay?.(track)
+                  }}
+                >
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </button>
               </div>
 
               {/* Title + Artist */}

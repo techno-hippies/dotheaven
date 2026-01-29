@@ -136,15 +136,45 @@ export async function initXMTPClient(
       )
     }
 
-    const client = await withTimeout(
-      Client.create(signer, {
-        env: XMTP_ENV,
-        dbPath: canUseOpfs ? undefined : null,
-        disableDeviceSync: canUseOpfs ? undefined : true,
-      }),
-      CONNECT_TIMEOUT_MS,
-      'Client.create'
-    )
+    const createOpts = {
+      env: XMTP_ENV,
+      dbPath: canUseOpfs ? undefined : null,
+      disableDeviceSync: canUseOpfs ? undefined : true,
+    } as const
+
+    let client: Client
+    try {
+      client = await withTimeout(
+        Client.create(signer, createOpts),
+        CONNECT_TIMEOUT_MS,
+        'Client.create'
+      )
+    } catch (err) {
+      // If we hit the installation limit, use static revocation API and retry
+      if (err instanceof Error && err.message.includes('registered 10/10 installations')) {
+        console.warn('[XMTP] Installation limit reached, revoking all installations...')
+
+        // Extract inboxId from the error message
+        const inboxIdMatch = err.message.match(/InboxID\s+([a-f0-9]+)/)
+        const inboxId = inboxIdMatch?.[1]
+        if (!inboxId) throw err
+
+        // Use static API to fetch and revoke all existing installations
+        const inboxStates = await Client.fetchInboxStates([inboxId], XMTP_ENV)
+        const installationBytes = inboxStates[0].installations.map((i: { bytes: Uint8Array }) => i.bytes)
+
+        await Client.revokeInstallations(signer, inboxId, installationBytes, XMTP_ENV)
+        if (IS_DEV) console.log('[XMTP] All installations revoked, retrying client creation...')
+
+        client = await withTimeout(
+          Client.create(signer, createOpts),
+          CONNECT_TIMEOUT_MS,
+          'Client.create (retry after revocation)'
+        )
+      } else {
+        throw err
+      }
+    }
 
     xmtpClient = client
 
