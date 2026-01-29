@@ -7,20 +7,13 @@ import {
   onCleanup,
 } from 'solid-js'
 import {
-  initXMTPClient,
-  getOrCreateDM,
-  listDMs,
-  loadMessages,
-  sendMessage,
-  streamMessages,
-  updateConsentState,
-  disconnect as disconnectXMTP,
-  ConsentState,
-  type Dm,
-  type DecodedMessage,
+  createTransport,
+  resetTransport,
+  type XmtpTransport,
+  type XmtpMessage,
+  type ConversationInfo,
 } from '../lib/xmtp'
 import { useAuth } from './AuthContext'
-import { SortDirection, GroupMessageKind } from '@xmtp/browser-sdk'
 
 const IS_DEV = import.meta.env.DEV
 
@@ -38,19 +31,8 @@ export interface ChatListItem {
   name: string
   lastMessage?: string
   timestamp?: Date
+  hasUnread?: boolean
 }
-
-interface ConversationCache {
-  conversation: Dm
-  peerAddress: string
-  createdAt: Date
-  lastMessage?: string
-  lastMessageTime?: Date
-}
-
-// Module-level cache for conversations - survives component re-mounts
-// Keyed by both peerAddress (lowercase) AND conversation ID
-const conversationCache = new Map<string, ConversationCache>()
 
 interface XMTPContextValue {
   isConnected: () => boolean
@@ -58,11 +40,9 @@ interface XMTPContextValue {
   connect: () => Promise<void>
   disconnect: () => void
   inboxId: () => string | null
-  // Conversation list
   conversations: () => ChatListItem[]
   refreshConversations: () => Promise<void>
-  // Conversation methods
-  getConversation: (peerAddress: string) => Promise<Dm>
+  getConversation: (peerAddress: string) => Promise<string>
   getMessages: (peerAddress: string) => XMTPMessage[]
   sendMessage: (peerAddress: string, content: string) => Promise<void>
   subscribeToMessages: (peerAddress: string, callback: (messages: XMTPMessage[]) => void) => () => void
@@ -70,35 +50,18 @@ interface XMTPContextValue {
 
 const XMTPContext = createContext<XMTPContextValue>()
 
-/**
- * Get displayable content from XMTP message
- */
-function getDisplayableXMTPContent(msg: DecodedMessage): string | null {
-  // Only show application messages (filter membership updates, etc.)
-  const kind = msg.kind as GroupMessageKind | string
-  const isApplication = kind === GroupMessageKind.Application || kind === 'application'
-  if (!isApplication) return null
-
-  const typeId = msg.contentType?.typeId
-  if (typeId !== 'text' && typeId !== 'markdown') return null
-
-  if (typeof msg.content === 'string') return msg.content
-  if (typeof msg.fallback === 'string' && msg.fallback.length > 0) return msg.fallback
-  return null
-}
+// Module-level conversation ID cache: peerAddress → conversationId
+const conversationIdCache = new Map<string, string>()
 
 /**
- * Convert XMTP message to local format
+ * Convert transport message to local display format
  */
-function xmtpToLocalMessage(msg: DecodedMessage, myInboxId: string): XMTPMessage | null {
-  const content = getDisplayableXMTPContent(msg)
-  if (!content) return null
-
+function toLocalMessage(msg: XmtpMessage, myInboxId: string): XMTPMessage {
   return {
     id: msg.id,
-    content,
-    sender: msg.senderInboxId === myInboxId ? 'user' : 'other',
-    timestamp: msg.sentAt,
+    content: msg.content,
+    sender: msg.senderAddress === myInboxId ? 'user' : 'other',
+    timestamp: new Date(Number(msg.sentAtNs) / 1_000_000),
   }
 }
 
@@ -108,14 +71,11 @@ export const XMTPProvider: ParentComponent = (props) => {
   const [isConnecting, setIsConnecting] = createSignal(false)
   const [inboxId, setInboxId] = createSignal<string | null>(null)
   const [conversations, setConversations] = createSignal<ChatListItem[]>([])
-
-  // Message state per peer address
   const [messagesMap, setMessagesMap] = createSignal<Record<string, XMTPMessage[]>>({})
 
-  // Active stream cleanups
+  let transport: XmtpTransport | null = null
   const streamCleanups = new Map<string, () => void>()
 
-  // Cleanup all streams on unmount
   onCleanup(() => {
     streamCleanups.forEach((cleanup) => cleanup())
     streamCleanups.clear()
@@ -135,23 +95,21 @@ export const XMTPProvider: ParentComponent = (props) => {
       throw new Error('Not authenticated - please sign in first')
     }
 
-    if (isConnected() || isConnecting()) {
-      if (IS_DEV) console.log('[XMTPProvider] Already connected or connecting')
-      return
-    }
+    if (isConnected() || isConnecting()) return
 
     setIsConnecting(true)
 
     try {
       if (IS_DEV) console.log('[XMTPProvider] Connecting XMTP for:', address)
 
-      // Use the auth context's signMessage function
-      const client = await initXMTPClient(address, auth.signMessage)
-      setInboxId(client.inboxId ?? null)
-      setIsConnected(true)
-      if (IS_DEV) console.log('[XMTPProvider] Connected, inbox:', client.inboxId)
+      transport = await createTransport()
+      await transport.init(address, auth.signMessage)
 
-      // Load conversations after connecting
+      setInboxId(transport.getInboxId())
+      setIsConnected(true)
+
+      if (IS_DEV) console.log('[XMTPProvider] Connected, inbox:', transport.getInboxId())
+
       await refreshConversations()
     } catch (error) {
       console.error('[XMTPProvider] Failed to connect:', error)
@@ -162,96 +120,45 @@ export const XMTPProvider: ParentComponent = (props) => {
   }
 
   const disconnect = () => {
-    // Cleanup all streams
     streamCleanups.forEach((cleanup) => cleanup())
     streamCleanups.clear()
-
-    // Clear message state
     setMessagesMap({})
     setConversations([])
+    conversationIdCache.clear()
 
-    // Clear conversation cache
-    conversationCache.clear()
-
-    // Disconnect client
-    disconnectXMTP()
+    resetTransport()
+    transport = null
     setIsConnected(false)
     setInboxId(null)
 
     if (IS_DEV) console.log('[XMTPProvider] Disconnected')
   }
 
-  /**
-   * Format address for display
-   */
   const formatAddress = (address: string): string => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
 
-  /**
-   * Refresh the list of conversations from XMTP
-   */
   const refreshConversations = async () => {
-    if (!isConnected()) return
+    if (!transport || !isConnected()) return
 
     try {
       if (IS_DEV) console.log('[XMTPProvider] Refreshing conversations...')
 
-      const dms = await listDMs()
+      const convos = await transport.listConversations()
 
-      // Build chat list with details
-      const chatList: ChatListItem[] = await Promise.all(
-        dms.map(async (dm) => {
-          try {
-            // Get members to find peer address
-            const members = await dm.members()
-            const myId = inboxId()
-            const peer = members.find((m) => m.inboxId !== myId)
-            // @ts-expect-error - accountAddresses exists on GroupMember but types may be outdated
-            const peerAddress = (peer?.accountAddresses?.[0] as string) || dm.id
+      const myId = inboxId()
+      const chatList: ChatListItem[] = convos.map((c: ConversationInfo) => {
+        conversationIdCache.set(c.peerAddress.toLowerCase(), c.id)
+        return {
+          id: c.id,
+          peerAddress: c.peerAddress,
+          name: formatAddress(c.peerAddress),
+          lastMessage: c.lastMessage,
+          timestamp: c.lastMessageAt ? new Date(c.lastMessageAt) : undefined,
+          hasUnread: c.lastMessageSender ? c.lastMessageSender !== myId : false,
+        }
+      })
 
-            // Get last message
-            const messages = await dm.messages({ limit: 1n, direction: SortDirection.Descending })
-            const lastMsg = messages[0]
-            const lastContent = lastMsg ? getDisplayableXMTPContent(lastMsg) : undefined
-
-            const cacheEntry: ConversationCache = {
-              conversation: dm,
-              peerAddress,
-              createdAt: new Date(),
-              lastMessage: lastContent || undefined,
-              lastMessageTime: lastMsg?.sentAt,
-            }
-
-            // Cache by both peerAddress AND conversation ID for lookup flexibility
-            conversationCache.set(peerAddress.toLowerCase(), cacheEntry)
-            conversationCache.set(dm.id.toLowerCase(), cacheEntry)
-
-            return {
-              id: dm.id,
-              peerAddress,
-              name: formatAddress(peerAddress),
-              lastMessage: lastContent || undefined,
-              timestamp: lastMsg?.sentAt,
-            }
-          } catch (err) {
-            console.error('[XMTPProvider] Error loading conversation:', err)
-            // Cache by dm.id so we can still look it up
-            conversationCache.set(dm.id.toLowerCase(), {
-              conversation: dm,
-              peerAddress: dm.id,
-              createdAt: new Date(),
-            })
-            return {
-              id: dm.id,
-              peerAddress: dm.id,
-              name: formatAddress(dm.id),
-            }
-          }
-        })
-      )
-
-      // Sort by timestamp (most recent first)
       chatList.sort((a, b) => {
         if (!a.timestamp && !b.timestamp) return 0
         if (!a.timestamp) return 1
@@ -266,86 +173,52 @@ export const XMTPProvider: ParentComponent = (props) => {
     }
   }
 
-  /**
-   * Validate if string is an Ethereum address
-   */
-  const isValidEthAddress = (addr: string): boolean => {
-    return /^0x[a-fA-F0-9]{40}$/.test(addr)
-  }
+  const getConversation = async (peerAddress: string): Promise<string> => {
+    if (!transport) throw new Error('Not connected')
 
-  const getConversation = async (peerAddressOrId: string): Promise<Dm> => {
-    const key = peerAddressOrId.toLowerCase()
+    const key = peerAddress.toLowerCase()
+    const cached = conversationIdCache.get(key)
+    if (cached) return cached
 
-    // Check cache first (works for both addresses and conversation IDs)
-    const cached = conversationCache.get(key)
-    if (cached) {
-      if (IS_DEV) console.log('[XMTPProvider] Returning cached conversation for:', peerAddressOrId)
-      return cached.conversation
-    }
-
-    // Only create new DM if it's a valid Ethereum address
-    if (!isValidEthAddress(peerAddressOrId)) {
-      throw new Error(`Cannot create conversation: "${peerAddressOrId}" is not a valid Ethereum address`)
-    }
-
-    // Create new conversation
-    const conversation = await getOrCreateDM(peerAddressOrId)
-
-    // Update consent state to allowed
-    const consentState = await conversation.consentState()
-    if (consentState === ConsentState.Unknown) {
-      await updateConsentState(conversation, ConsentState.Allowed)
-    }
-
-    // Cache by both address and conversation ID
-    const cacheEntry: ConversationCache = {
-      conversation,
-      peerAddress: peerAddressOrId,
-      createdAt: new Date(),
-    }
-    conversationCache.set(key, cacheEntry)
-    conversationCache.set(conversation.id.toLowerCase(), cacheEntry)
-
-    return conversation
+    const conversationId = await transport.getOrCreateConversation(peerAddress)
+    conversationIdCache.set(key, conversationId)
+    return conversationId
   }
 
   const getMessagesForPeer = (peerAddress: string): XMTPMessage[] => {
     return messagesMap()[peerAddress.toLowerCase()] || []
   }
 
-  const upsertMessage = (peerAddress: string, msg: DecodedMessage) => {
+  const upsertMessage = (peerAddress: string, msg: XmtpMessage) => {
     const myId = inboxId()
     if (!myId) return
 
-    const localMsg = xmtpToLocalMessage(msg, myId)
-    if (!localMsg) return
-
+    const localMsg = toLocalMessage(msg, myId)
     const key = peerAddress.toLowerCase()
+
     setMessagesMap((prev) => {
       const existing = prev[key] || []
-
-      // Check if message already exists (by id)
       const existingIndex = existing.findIndex(
         (m) => m.id === localMsg.id || (m.optimistic && m.content === localMsg.content)
       )
 
       if (existingIndex >= 0) {
-        // Replace optimistic or existing message
         const updated = [...existing]
         updated[existingIndex] = localMsg
         return { ...prev, [key]: updated }
       }
 
-      // Add new message
       return { ...prev, [key]: [...existing, localMsg] }
     })
   }
 
   const sendMessageToPeer = async (peerAddress: string, content: string) => {
-    const conversation = await getConversation(peerAddress)
+    if (!transport) throw new Error('Not connected')
+
+    const conversationId = await getConversation(peerAddress)
     const key = peerAddress.toLowerCase()
 
-    // Add optimistic message
+    // Optimistic message
     const optimisticMsg: XMTPMessage = {
       id: `optimistic-${Date.now()}`,
       content,
@@ -360,28 +233,19 @@ export const XMTPProvider: ParentComponent = (props) => {
     }))
 
     try {
-      await sendMessage(conversation, content)
+      await transport.sendMessage(conversationId, content)
 
-      // Update cache with last message
-      const cached = conversationCache.get(key)
-      if (cached) {
-        cached.lastMessage = content
-        cached.lastMessageTime = new Date()
-      }
-
-      // Update conversations list with new/updated conversation
+      // Update conversations list
       setConversations((prev) => {
-        const existing = prev.find((c) => c.peerAddress.toLowerCase() === key)
         const now = new Date()
+        const existing = prev.find((c) => c.peerAddress.toLowerCase() === key)
 
         if (existing) {
-          // Update existing conversation and move to top
           const updated = prev.map((c) =>
             c.peerAddress.toLowerCase() === key
               ? { ...c, lastMessage: content, timestamp: now }
               : c
           )
-          // Sort by timestamp (most recent first)
           return updated.sort((a, b) => {
             if (!a.timestamp && !b.timestamp) return 0
             if (!a.timestamp) return 1
@@ -389,9 +253,8 @@ export const XMTPProvider: ParentComponent = (props) => {
             return b.timestamp.getTime() - a.timestamp.getTime()
           })
         } else {
-          // Add new conversation at top
           const newChat: ChatListItem = {
-            id: conversation.id,
+            id: conversationId,
             peerAddress,
             name: formatAddress(peerAddress),
             lastMessage: content,
@@ -407,7 +270,6 @@ export const XMTPProvider: ParentComponent = (props) => {
         [key]: (prev[key] || []).filter((m) => m.id !== optimisticMsg.id),
       }))
 
-      // Add error message
       const errorMsg: XMTPMessage = {
         id: `error-${Date.now()}`,
         content: 'Failed to send message. Please try again.',
@@ -429,29 +291,31 @@ export const XMTPProvider: ParentComponent = (props) => {
   ): (() => void) => {
     const key = peerAddress.toLowerCase()
 
-    // Load initial messages
+    // Mark as read when opening
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.peerAddress.toLowerCase() === key ? { ...c, hasUnread: false } : c
+      )
+    )
+
     ;(async () => {
       try {
-        const conversation = await getConversation(peerAddress)
+        if (!transport) return
+
+        const conversationId = await getConversation(peerAddress)
         const myId = inboxId()
         if (!myId) return
 
         // Load existing messages
-        const xmtpMsgs = await loadMessages(conversation, {
-          direction: SortDirection.Ascending,
-          kind: GroupMessageKind.Application,
-        })
-
-        const localMsgs = xmtpMsgs
-          .map((m) => xmtpToLocalMessage(m, myId))
-          .filter((m): m is XMTPMessage => m !== null)
+        const xmtpMsgs = await transport.loadMessages(conversationId)
+        const localMsgs = xmtpMsgs.map((m) => toLocalMessage(m, myId))
 
         setMessagesMap((prev) => ({ ...prev, [key]: localMsgs }))
         callback(localMsgs)
 
         // Start streaming
-        const cleanup = await streamMessages(
-          conversation,
+        const cleanup = transport.streamMessages(
+          conversationId,
           (newMsg) => {
             upsertMessage(peerAddress, newMsg)
             callback(getMessagesForPeer(peerAddress))
@@ -461,14 +325,12 @@ export const XMTPProvider: ParentComponent = (props) => {
           }
         )
 
-        // Store cleanup
         streamCleanups.set(key, cleanup)
       } catch (error) {
         console.error('[XMTPProvider] Failed to subscribe to messages:', error)
       }
     })()
 
-    // Return unsubscribe function
     return () => {
       const cleanup = streamCleanups.get(key)
       if (cleanup) {

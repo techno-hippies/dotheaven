@@ -147,12 +147,12 @@ export const AppSidebar: Component = () => {
               Sign in to see chats
             </div>
           </Show>
-          <For each={xmtp.conversations().filter(chat => chat.lastMessage)}>
+          <For each={xmtp.conversations()}>
             {(chat) => (
               <ListItem
                 title={chat.name}
-                subtitle={chat.lastMessage}
                 cover={<Avatar size="sm" />}
+                trailing={chat.hasUnread ? <div class="w-2.5 h-2.5 rounded-full bg-[var(--accent-blue)] shrink-0" /> : undefined}
                 onClick={() => navigate(`/chat/${encodeURIComponent(chat.peerAddress)}`)}
                 active={location.pathname === `/chat/${encodeURIComponent(chat.peerAddress)}`}
               />

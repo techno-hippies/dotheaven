@@ -6,6 +6,18 @@
   "permissions": [
     "core:default",
     "shell:allow-open",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [{ "name": "binaries/xmtp-sidecar", "sidecar": true, "args": true }]
+    },
+    {
+      "identifier": "shell:allow-stdin-write",
+      "allow": [{ "name": "binaries/xmtp-sidecar", "sidecar": true }]
+    },
+    {
+      "identifier": "shell:allow-kill",
+      "allow": [{ "name": "binaries/xmtp-sidecar", "sidecar": true }]
+    },
     "dialog:default",
     "fs:default",
     {

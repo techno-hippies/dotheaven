@@ -1,17 +1,8 @@
-export {
-  initXMTPClient,
-  getClient,
-  getInboxId,
-  getOrCreateDM,
-  listDMs,
-  sendMessage,
-  loadMessages,
-  streamMessages,
-  updateConsentState,
-  disconnect,
-  isConnected,
-  ConsentState,
-  type Dm,
-  type DecodedMessage,
-  type ListMessagesOptions,
-} from './client'
+export type {
+  XmtpTransport,
+  ConversationInfo,
+  XmtpMessage,
+  LoadMessagesOptions,
+  SignMessageFn,
+} from './transport'
+export { createTransport, getTransport, resetTransport } from './factory'

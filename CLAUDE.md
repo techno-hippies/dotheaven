@@ -16,12 +16,15 @@
 ```
 dotheaven/
 ├── apps/
-│   └── frontend/          # SolidJS app (web + Tauri desktop)
-│       ├── src/
-│       │   ├── components/    # App-specific components
-│       │   ├── lib/           # Client libraries (xmtp, voice, lit, web3)
-│       │   ├── pages/         # Route pages
-│       │   └── providers/     # Context providers (Auth, XMTP, Wallet)
+│   ├── frontend/          # SolidJS app (web + Tauri desktop)
+│   │   ├── src/
+│   │   │   ├── components/    # App-specific components
+│   │   │   ├── lib/           # Client libraries (xmtp, voice, lit, web3)
+│   │   │   ├── pages/         # Route pages
+│   │   │   └── providers/     # Context providers (Auth, XMTP, Wallet)
+│   │   └── src-tauri/         # Tauri Rust backend + sidecar binaries
+│   └── xmtp-sidecar/     # Node.js XMTP sidecar (Tauri only)
+│       └── src/               # IPC protocol, service, remote signer
 ├── packages/
 │   ├── ui/                # Shared UI components + Storybook
 │   ├── core/              # Core business logic (playlists, storage)
@@ -34,6 +37,7 @@ dotheaven/
 ```bash
 bun dev              # Run frontend dev server
 bun dev:tauri        # Run Tauri desktop app
+bun build:sidecar    # Build XMTP sidecar (required before dev:tauri)
 bun storybook        # Run Storybook (UI components)
 bun check            # Type check all packages
 ```
@@ -50,7 +54,13 @@ bun check            # Type check all packages
 - **Peer-to-peer encrypted messaging** via XMTP protocol
 - DMs between Ethereum addresses
 - Real-time message streaming
-- See `apps/frontend/src/lib/xmtp/` and `providers/XMTPProvider.tsx`
+- **Dual-target architecture**: platform-aware `XmtpTransport` interface
+  - **Web**: `BrowserTransport` using `@xmtp/browser-sdk` with OPFS storage
+  - **Tauri**: `SidecarTransport` using a Node.js sidecar (`apps/xmtp-sidecar`) with persistent SQLite via `@xmtp/node-sdk`
+- Platform selected at runtime via `VITE_PLATFORM` env var + dynamic imports in `factory.ts`
+- Sidecar communicates over NDJSON stdio IPC; PKP signing proxied from frontend
+- See `apps/frontend/src/lib/xmtp/` (transport layer) and `providers/XMTPProvider.tsx`
+- See `apps/xmtp-sidecar/` (Node sidecar for Tauri)
 
 ### AI Chat (Cloudflare Workers)
 - **Text chat with AI** via Cloudflare Worker backend

@@ -7,6 +7,7 @@ export interface ListItemProps {
   title: string
   subtitle?: string
   cover?: JSX.Element
+  trailing?: JSX.Element
   onClick?: () => void
   onTitleClick?: () => void
   onCoverClick?: () => void
@@ -46,7 +47,7 @@ export const ListItem: Component<ListItemProps> = (props) => {
       </Show>
 
       {/* Text info */}
-      <div class="flex flex-col gap-0.5 flex-1 min-w-0">
+      <div class="flex flex-col gap-0.5 flex-1 min-w-0 overflow-hidden">
         <Show
           when={props.onTitleClick}
           fallback={
@@ -71,6 +72,11 @@ export const ListItem: Component<ListItemProps> = (props) => {
           </span>
         </Show>
       </div>
+
+      {/* Trailing slot */}
+      <Show when={props.trailing}>
+        {props.trailing}
+      </Show>
     </button>
   )
 }

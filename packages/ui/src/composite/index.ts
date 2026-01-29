@@ -27,7 +27,7 @@ export {
   DropdownMenuItemDescription,
 } from './dropdown-menu'
 export { MusicPlayer, type MusicPlayerProps } from './music-player'
-export { TrackList, type TrackListProps, type Track, type TrackMenuActions } from './track-list'
+export { TrackList, type TrackListProps, type Track, type TrackMenuActions, type ScrobbleStatus } from './track-list'
 export { MediaHeader, type MediaHeaderProps } from './media-header'
 export { CommentItem, CommentSection, type CommentItemProps, type CommentSectionProps } from './comment-item'
 export { FollowButton, type FollowButtonProps } from './follow-button'
