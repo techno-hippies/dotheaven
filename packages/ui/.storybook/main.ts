@@ -9,7 +9,10 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 const config: StorybookConfig = {
-  stories: ['../src/**/*.stories.@(js|jsx|ts|tsx)'],
+  stories: [
+    '../src/**/*.stories.@(js|jsx|ts|tsx)',
+    '../../../apps/frontend/src/**/*.stories.@(js|jsx|ts|tsx)',
+  ],
   addons: [],
   framework: {
     name: 'storybook-solidjs-vite',

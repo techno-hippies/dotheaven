@@ -1,0 +1,17 @@
+# Scrobble batch — one per ScrobbleV1.submitBatch() call
+#
+# Per-track data (ipId, isrc, track_key) lives in the IPFS batch JSON at `cid`.
+# The subgraph indexes batch-level aggregates only. A separate trending indexer
+# fetches CIDs and unpacks per-track identifiers for aggregation.
+type ScrobbleBatch @entity(immutable: true) {
+  id: ID!                      # tx hash (hex)
+  user: Bytes!                 # wallet address (indexed in event)
+  startTs: BigInt!             # earliest track timestamp
+  endTs: BigInt!               # latest track timestamp
+  count: Int!                  # number of tracks in batch
+  cid: String!                 # IPFS CID of full batch JSON
+  batchHash: Bytes!            # SHA-256 of batch JSON
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}

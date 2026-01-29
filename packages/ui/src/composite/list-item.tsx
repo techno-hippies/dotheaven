@@ -1,4 +1,5 @@
 import type { Component, JSX } from 'solid-js'
+import { Show } from 'solid-js'
 import { cn } from '../lib/utils'
 
 export interface ListItemProps {
@@ -7,6 +8,8 @@ export interface ListItemProps {
   subtitle?: string
   cover?: JSX.Element
   onClick?: () => void
+  onTitleClick?: () => void
+  onCoverClick?: () => void
   active?: boolean
 }
 
@@ -27,18 +30,46 @@ export const ListItem: Component<ListItemProps> = (props) => {
       onClick={props.onClick}
     >
       {/* Cover / Icon slot */}
-      {props.cover}
+      <Show
+        when={props.onCoverClick}
+        fallback={props.cover}
+      >
+        <div
+          class="cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation()
+            props.onCoverClick?.()
+          }}
+        >
+          {props.cover}
+        </div>
+      </Show>
 
       {/* Text info */}
       <div class="flex flex-col gap-0.5 flex-1 min-w-0">
-        <span class="text-base font-medium text-[var(--text-primary)] truncate">
-          {props.title}
-        </span>
-        {props.subtitle && (
+        <Show
+          when={props.onTitleClick}
+          fallback={
+            <span class="text-base font-medium text-[var(--text-primary)] truncate">
+              {props.title}
+            </span>
+          }
+        >
+          <span
+            class="text-base font-medium text-[var(--text-primary)] truncate hover:underline cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation()
+              props.onTitleClick?.()
+            }}
+          >
+            {props.title}
+          </span>
+        </Show>
+        <Show when={props.subtitle}>
           <span class="text-base text-[var(--text-secondary)] truncate">
             {props.subtitle}
           </span>
-        )}
+        </Show>
       </div>
     </button>
   )

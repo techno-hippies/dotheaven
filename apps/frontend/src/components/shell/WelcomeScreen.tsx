@@ -21,7 +21,7 @@ export const WelcomeScreen: Component<WelcomeScreenProps> = (props) => {
     <div
       class={cn(
         "flex flex-col items-center justify-center min-h-screen w-full",
-        "bg-gradient-to-b from-[oklch(0.25_0.04_280)] via-background to-[oklch(0.15_0.04_285)]",
+        "bg-[var(--bg-page)]",
         props.class
       )}
     >
@@ -35,11 +35,11 @@ export const WelcomeScreen: Component<WelcomeScreenProps> = (props) => {
       </div>
 
       {/* Welcome Text */}
-      <h1 class="text-4xl font-semibold text-foreground mb-3">
+      <h1 class="text-4xl font-semibold text-[var(--text-primary)] mb-3">
         Welcome to Heaven
       </h1>
 
-      <p class="text-lg text-muted-foreground mb-10">
+      <p class="text-lg text-[var(--text-secondary)] mb-10">
         {props.subtitle || "Add your music folders to start listening"}
       </p>
 
@@ -47,12 +47,7 @@ export const WelcomeScreen: Component<WelcomeScreenProps> = (props) => {
       <Button
         onClick={props.onAction}
         size="lg"
-        class={cn(
-          "rounded-full gap-2",
-          "bg-white text-[oklch(0.25_0.04_280)] font-medium",
-          "hover:bg-white/95",
-          "shadow-lg shadow-white/10"
-        )}
+        variant="default"
       >
         {props.actionIcon || <FolderPlusIcon class="w-5 h-5" />}
         {props.actionLabel || "Add Folders"}

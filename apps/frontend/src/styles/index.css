@@ -36,70 +36,70 @@
   --color-border: var(--border);
   --color-ring: var(--ring);
 }
-
 :root {
-  /* Heaven Dark Theme - Pastel Blue Edition
-   * Inspired by legacy website (#1a1625)
-   * Deep purple-blue background with soft pastel blue accents
-   */
+  /* Neutral greys (mid-dark, not black) */
+  --background: #1b1e24;          /* neutral */
+  --foreground: #f3f6ff;
 
-  /* Background colors - deep purple-blue tones */
-  --background: oklch(0.18 0.04 280);        /* Deep purple-blue #1a1625 inspired */
-  --foreground: oklch(0.95 0.01 260);        /* Soft white with slight blue tint */
+  --card: #232831;                /* neutral surface */
+  --card-foreground: #f3f6ff;
 
-  /* Card colors - slightly lighter than background */
-  --card: oklch(0.22 0.035 280);             /* Elevated purple-blue surface */
-  --card-foreground: oklch(0.95 0.01 260);   /* Soft white text on cards */
+  --secondary: #20252d;
+  --secondary-foreground: #e6ecff;
 
-  /* Primary - Pastel blue accent */
-  --primary: oklch(0.65 0.12 240);           /* Soft pastel blue */
-  --primary-foreground: oklch(0.98 0.005 280); /* Near white for text on primary */
+  --muted: #1e222a;
+  --muted-foreground: #b6c0d8;
 
-  /* Secondary - Muted purple-blue */
-  --secondary: oklch(0.28 0.03 280);         /* Darker elevated surface */
-  --secondary-foreground: oklch(0.85 0.02 260); /* Lighter text */
+  /* Mid-range BABY BLUES (no cyan, no purple) */
+  --primary: #7fb3ff;             /* baby blue */
+  --primary-foreground: #0b1020;
 
-  /* Muted - Very subtle purple-blue */
-  --muted: oklch(0.25 0.025 280);            /* Subtle background variation */
-  --muted-foreground: oklch(0.60 0.03 260);  /* Muted text with blue hint */
+  --accent: #a7cbff;              /* lighter baby blue */
+  --accent-foreground: #0b1020;
 
-  /* Accent - Brighter pastel blue for highlights */
-  --accent: oklch(0.55 0.15 240);            /* Vibrant pastel blue */
-  --accent-foreground: oklch(0.98 0.005 260); /* White text on accent */
+  --destructive: #ff5a5f;
+  --destructive-foreground: #ffffff;
 
-  /* Destructive - Soft coral/rose for errors */
-  --destructive: oklch(0.60 0.18 15);        /* Soft coral-red */
-  --destructive-foreground: oklch(0.98 0 0); /* White text */
+  --border: #343c4a;
+  --ring: #7fb3ff;
 
-  /* Borders and inputs - subtle purple-blue tones */
-  --border: oklch(0.30 0.03 280);            /* Subtle border */
-  --ring: oklch(0.65 0.12 240);              /* Pastel blue focus ring */
+  /* legacy compatibility: force blue/neutral only */
+  --bg-page: #1b1e24;
+  --bg-surface: #232831;
+  --bg-elevated: #2a303a;
+  --bg-highlight: #313846;
+  --bg-highlight-hover: #394255;
 
-  /* Legacy compatibility - keeping existing hex values for gradual migration */
-  --bg-page: #1a1625;        /* Original dark purple-blue */
-  --bg-surface: #1f1b2e;     /* Slightly lighter surface */
-  --bg-elevated: #252139;    /* Elevated surface */
-  --bg-highlight: #2d2645;   /* Highlight/hover state */
-  --bg-highlight-hover: #342d52; /* Lighter hover state for better contrast */
+  --text-primary: #f3f6ff;
+  --text-secondary: #d7e1ff;
+  --text-muted: #b6c0d8;
 
-  --text-primary: #f0f0f5;   /* Soft white with blue tint */
-  --text-secondary: #b8b8d0; /* Muted blue-gray */
-  --text-muted: #7878a0;     /* Muted purple-blue */
+  --border-default: #343c4a;
+  --border-subtle: #2a303a;
 
-  --border-default: #2d2645; /* Border color */
-  --border-subtle: #252139;  /* Subtle border */
-
-  /* Accent colors */
-  --accent-blue: oklch(0.65 0.12 240);      /* Pastel blue accent */
-  --accent-blue-hover: oklch(0.70 0.14 240); /* Lighter blue on hover */
-  --accent-purple: oklch(0.60 0.15 290);    /* Soft purple accent */
-  --accent-coral: oklch(0.65 0.18 15);      /* Warm coral accent */
-
-  /* Radius */
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --accent-blue: #7fb3ff;
+  --accent-blue-hover: #98c3ff;
+  --accent-purple: #7fb3ff; /* force NOT purple */
+  --accent-coral: #ff7a73;
 }
+
+/* “Heavenly cloudy” WITHOUT mix-blend-mode (prevents purple casts) */
+@layer base {
+  html, body {
+    background-color: var(--background) !important;
+    color: var(--foreground);
+  }
+
+  body {
+    background-image:
+      radial-gradient(1100px 650px at 50% -12%, rgba(243,246,255,0.16), transparent 62%),
+      radial-gradient(900px 600px at 18% 18%, rgba(127,179,255,0.10), transparent 60%),
+      radial-gradient(900px 600px at 82% 22%, rgba(127,179,255,0.08), transparent 60%),
+      linear-gradient(to bottom, rgba(167,203,255,0.06), transparent 55%);
+    background-attachment: fixed;
+  }
+}
+
 
 @layer base {
   * {

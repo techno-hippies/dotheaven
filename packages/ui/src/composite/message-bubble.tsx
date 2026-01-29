@@ -1,67 +1,83 @@
-import { type Component, type JSX, splitProps } from 'solid-js'
-import { cva, type VariantProps } from 'class-variance-authority'
+import { type Component, type JSX, splitProps, Show } from 'solid-js'
 import { cn } from '../lib/utils'
+import { Avatar } from '../primitives/avatar'
 
-const messageBubbleVariants = cva(
-  'px-4 py-2.5 rounded-lg max-w-[75%] break-words',
-  {
-    variants: {
-      alignment: {
-        left: 'bg-[var(--bg-highlight)] text-[var(--text-primary)]',
-        right: 'bg-[var(--accent-blue)] text-white',
-      },
-    },
-    defaultVariants: {
-      alignment: 'left',
-    },
-  }
-)
-
-export interface MessageBubbleProps extends VariantProps<typeof messageBubbleVariants> {
+export interface MessageBubbleProps {
   /** Message text content */
   message: string
+  /** Sender's display name */
+  username?: string
+  /** Avatar image URL */
+  avatarUrl?: string
   /** Timestamp text (e.g., "2:30 PM") */
   timestamp?: string
+  /** Whether this message is from the current user */
+  isOwn?: boolean
+  /** Whether this is the first message in a group (shows avatar/username) */
+  isFirstInGroup?: boolean
   /** Additional class for container */
   class?: string
 }
 
 /**
- * MessageBubble - Chat message bubble component
+ * MessageBubble - Discord-style chat message component
  *
  * Features:
- * - Left alignment: Gray bubble with rounded top-left corner cut
- * - Right alignment: Green bubble with rounded top-right corner cut
- * - Timestamp support
- * - Max width 75% for readability
- *
- * Design matches iMessage/WhatsApp style messaging
+ * - Avatar on left, content stacked to the right
+ * - Username + timestamp on first line (when isFirstInGroup)
+ * - Message content below
+ * - Own messages have accent colored username
  */
 export const MessageBubble: Component<MessageBubbleProps> = (props) => {
-  const [local, others] = splitProps(props, ['class', 'alignment', 'message', 'timestamp'])
+  const [local, others] = splitProps(props, [
+    'class',
+    'message',
+    'username',
+    'avatarUrl',
+    'timestamp',
+    'isOwn',
+    'isFirstInGroup',
+  ])
+
+  const showHeader = () => local.isFirstInGroup !== false
 
   return (
     <div
       class={cn(
-        'flex flex-col gap-1',
-        local.alignment === 'right' ? 'items-end' : 'items-start',
+        'flex gap-3 px-4 py-1.5 -mx-4 hover:bg-[rgba(255,255,255,0.03)] transition-colors',
+        showHeader() && 'mt-4 first:mt-0',
         local.class
       )}
       {...others}
     >
-      <div class={messageBubbleVariants({ alignment: local.alignment })}>
-        <p class="text-base leading-snug whitespace-pre-wrap">{local.message}</p>
+      <Show
+        when={showHeader()}
+        fallback={<div class="w-10 flex-shrink-0 ml-4" />}
+      >
+        <Avatar size="md" src={local.avatarUrl} class="flex-shrink-0 mt-0.5 ml-4" />
+      </Show>
+      <div class="flex-1 min-w-0 mr-4">
+        <Show when={showHeader()}>
+          <div class="flex items-baseline gap-2">
+            <Show when={local.username}>
+              <span
+                class={cn(
+                  'text-base font-semibold',
+                  local.isOwn ? 'text-[var(--accent-blue)]' : 'text-[var(--text-primary)]'
+                )}
+              >
+                {local.username}
+              </span>
+            </Show>
+            <Show when={local.timestamp}>
+              <span class="text-sm text-[var(--text-muted)]">{local.timestamp}</span>
+            </Show>
+          </div>
+        </Show>
+        <p class="text-base text-[var(--text-primary)] leading-snug whitespace-pre-wrap break-words">
+          {local.message}
+        </p>
       </div>
-      {local.timestamp && (
-        <span
-          class={cn(
-            'text-xs',
-            local.alignment === 'right' ? 'text-[var(--text-muted)]' : 'text-[var(--text-muted)]'
-          )}
-        >
-          {local.timestamp}
-        </span>
-      )}
     </div>
   )
 }
@@ -76,7 +92,7 @@ export interface MessageListProps {
  */
 export const MessageList: Component<MessageListProps> = (props) => {
   return (
-    <div class={cn('flex flex-col gap-3 p-4', props.class)}>
+    <div class={cn('flex flex-col py-4', props.class)}>
       {props.children}
     </div>
   )

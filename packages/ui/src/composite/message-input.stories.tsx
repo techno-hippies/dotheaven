@@ -5,7 +5,7 @@ import { IconButton } from '../primitives/icon-button'
 import { createSignal } from 'solid-js'
 
 const meta: Meta<typeof MessageInput> = {
-  title: 'UI/MessageInput',
+  title: 'Composite/MessageInput',
   component: MessageInput,
   tags: ['autodocs'],
 }
@@ -81,28 +81,39 @@ export const FullChatExample: Story = {
     interface Message {
       id: number
       text: string
-      alignment: 'left' | 'right'
+      username: string
       timestamp: string
+      isOwn: boolean
     }
 
     const [messages, setMessages] = createSignal<Message[]>([
       {
         id: 1,
         text: 'Hey! Have you had a chance to review the governance proposal?',
-        alignment: 'left',
+        username: 'vitalik.eth',
         timestamp: '2:30 PM',
+        isOwn: false,
       },
       {
         id: 2,
         text: 'Yes! I think it looks solid. The tokenomics make sense.',
-        alignment: 'right',
+        username: 'you',
         timestamp: '2:31 PM',
+        isOwn: true,
       },
       {
         id: 3,
         text: "Great, I'll submit my vote then. Should go live by tomorrow.",
-        alignment: 'left',
+        username: 'vitalik.eth',
         timestamp: '2:33 PM',
+        isOwn: false,
+      },
+      {
+        id: 4,
+        text: 'Perfect! Let me know if you need any help with the implementation. I can take a look at the smart contracts this weekend.',
+        username: 'you',
+        timestamp: '2:34 PM',
+        isOwn: true,
       },
     ])
 
@@ -118,14 +129,15 @@ export const FullChatExample: Story = {
         {
           id: prev.length + 1,
           text: message,
-          alignment: 'right',
+          username: 'you',
           timestamp,
+          isOwn: true,
         },
       ])
     }
 
     return (
-      <div class="max-w-2xl mx-auto bg-black h-[600px] flex flex-col">
+      <div class="max-w-2xl mx-auto bg-[var(--bg-page)] h-[600px] flex flex-col">
         {/* Header */}
         <div class="h-16 bg-[var(--bg-surface)] flex items-center justify-between px-6 border-b border-[var(--border-default)] flex-shrink-0">
           <div class="flex items-center gap-3">
@@ -150,9 +162,10 @@ export const FullChatExample: Story = {
           <MessageList>
             {messages().map((msg) => (
               <MessageBubble
-                alignment={msg.alignment}
+                username={msg.username}
                 message={msg.text}
                 timestamp={msg.timestamp}
+                isOwn={msg.isOwn}
               />
             ))}
           </MessageList>

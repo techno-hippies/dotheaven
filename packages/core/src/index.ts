@@ -1,5 +1,8 @@
 // Types
 export * from './types'
 
-// Stores (add as needed)
-// export * from './stores'
+// Storage
+export * from './storage'
+
+// Scrobble
+export * from './scrobble'

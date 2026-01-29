@@ -3,7 +3,7 @@ import { TextField, TextArea } from './text-field'
 import { createSignal } from 'solid-js'
 
 const meta: Meta<typeof TextField> = {
-  title: 'UI/TextField',
+  title: 'Primitives/TextField',
   component: TextField,
   tags: ['autodocs'],
   argTypes: {

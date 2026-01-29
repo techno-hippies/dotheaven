@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { WalletAssets } from './wallet-assets'
 
 const meta: Meta<typeof WalletAssets> = {
-  title: 'Components/WalletAssets',
+  title: 'Web3/WalletAssets',
   component: WalletAssets,
   tags: ['autodocs'],
   parameters: {
@@ -54,23 +54,25 @@ const MegaETHIcon = () => (
   </svg>
 )
 
-// USDm icon (stablecoin-style)
-const USDmIcon = () => (
-  <svg viewBox="0 0 32 32" class="w-12 h-12">
-    <circle cx="16" cy="16" r="16" fill="#3B82F6"/>
-    <text x="16" y="21" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#FFF" text-anchor="middle">$</text>
-  </svg>
+// USDFC icon - using actual image from public/images
+const USDFCIcon = () => (
+  <img src="/images/usdfc.png" alt="USDFC" class="w-12 h-12 object-contain" />
+)
+
+// Filecoin icon - using actual image from public/images
+const FilecoinIcon = () => (
+  <img src="/images/filecoin.png" alt="Filecoin" class="w-12 h-12 object-contain" />
 )
 
 export const Default: Story = {
   args: {
     address: '0x7a2F8b1234567890abcdef1234567890abcd8c4E',
-    totalBalance: '$47,832.56',
+    totalBalance: '$53,795.12',
     assets: [
       {
         id: 'eth-ethereum',
         name: 'Ethereum',
-        symbol: 'ETH',
+        symbol: 'Ethereum',
         icon: <EthereumIcon />,
         chainBadge: <EthereumIcon />, // Ethereum chain badge
         balance: '10.5',
@@ -88,14 +90,24 @@ export const Default: Story = {
         amount: '4.12 ETH',
       },
       {
-        id: 'usdm',
-        name: 'USDm',
-        symbol: 'MegaETH',
-        icon: <USDmIcon />,
-        chainBadge: <MegaETHIcon />, // MegaETH chain badge
-        balance: '3042.36',
-        balanceUSD: '$3,042.36',
-        amount: '3,042.36 USDm',
+        id: 'usdfc',
+        name: 'USDFC',
+        symbol: 'Filecoin',
+        icon: <USDFCIcon />,
+        chainBadge: <FilecoinIcon />, // Filecoin chain badge
+        balance: '5250.00',
+        balanceUSD: '$5,250.00',
+        amount: '5,250.00 USDFC',
+      },
+      {
+        id: 'fil',
+        name: 'Filecoin',
+        symbol: 'Filecoin',
+        icon: <FilecoinIcon />,
+        chainBadge: <FilecoinIcon />, // Filecoin chain badge
+        balance: '142.8',
+        balanceUSD: '$712.56',
+        amount: '142.8 FIL',
       },
     ],
     onSend: () => console.log('Send clicked'),

@@ -1,4 +1,10 @@
-import { type Component, createSignal, For } from 'solid-js'
+/**
+ * ChatPage - XMTP peer-to-peer messaging
+ *
+ * Uses XMTPProvider for real messaging with other wallets.
+ */
+
+import { type Component, createSignal, createEffect, For, Show, onCleanup } from 'solid-js'
 import {
   AppShell,
   Header,
@@ -10,16 +16,9 @@ import {
   MessageList,
   MessageInput,
 } from '@heaven/ui'
-import { AppSidebar } from '../components/shell'
-import { useAuth } from '../providers'
-import { useNavigate, useParams } from '@solidjs/router'
-
-const BellIcon = () => (
-  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-  </svg>
-)
+import { AppSidebar, HeaderActions } from '../components/shell'
+import { useAuth, useXMTP, type XMTPMessage } from '../providers'
+import { useParams } from '@solidjs/router'
 
 const MoreIcon = () => (
   <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -29,115 +28,83 @@ const MoreIcon = () => (
   </svg>
 )
 
-interface Message {
-  id: number
-  text: string
-  alignment: 'left' | 'right'
-  timestamp: string
-}
-
-// Chat data for different users
-const chatData: Record<string, { displayName: string; messages: Message[] }> = {
-  vitalik: {
-    displayName: 'vitalik.eth',
-    messages: [
-      {
-        id: 1,
-        text: 'Hey! Have you had a chance to review the governance proposal?',
-        alignment: 'left',
-        timestamp: '2:30 PM',
-      },
-      {
-        id: 2,
-        text: 'Yes! I think it looks solid. The tokenomics make sense.',
-        alignment: 'right',
-        timestamp: '2:31 PM',
-      },
-      {
-        id: 3,
-        text: "Great, I'll submit my vote then. Should go live by tomorrow.",
-        alignment: 'left',
-        timestamp: '2:33 PM',
-      },
-    ],
-  },
-  nick: {
-    displayName: 'nick.heaven',
-    messages: [
-      {
-        id: 1,
-        text: 'The transaction went through!',
-        alignment: 'left',
-        timestamp: '10:15 AM',
-      },
-      {
-        id: 2,
-        text: 'Nice! How much gas did it cost?',
-        alignment: 'right',
-        timestamp: '10:16 AM',
-      },
-      {
-        id: 3,
-        text: 'Only 0.002 ETH, not bad for a swap.',
-        alignment: 'left',
-        timestamp: '10:17 AM',
-      },
-      {
-        id: 4,
-        text: "That's pretty reasonable. What did you swap?",
-        alignment: 'right',
-        timestamp: '10:18 AM',
-      },
-    ],
-  },
-}
-
 export const ChatPage: Component = () => {
   const auth = useAuth()
-  const navigate = useNavigate()
+  const xmtp = useXMTP()
   const params = useParams<{ username: string }>()
 
-  const chatUser = () => chatData[params.username] || { displayName: params.username, messages: [] }
-  const [messages, setMessages] = createSignal<Message[]>(chatUser().messages)
+  // Messages state
+  const [messages, setMessages] = createSignal<XMTPMessage[]>([])
+  const [isSending, setIsSending] = createSignal(false)
 
-  const handleSubmit = (message: string) => {
-    const now = new Date()
-    const timestamp = now.toLocaleTimeString('en-US', {
+  // Scroll container ref
+  let messagesContainer: HTMLDivElement | undefined
+
+  // Get peer address or conversation ID from URL
+  const peerAddressOrId = () => decodeURIComponent(params.username || '')
+
+  // Format address for display
+  const formatAddress = (addr: string) => {
+    if (!addr) return ''
+    if (addr.length <= 12) return addr
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+  }
+
+  // Auto-connect XMTP when authenticated AND authData is available.
+  // Skip if authData is null (new signup) — signing would trigger WebAuthn without a user gesture.
+  createEffect(() => {
+    if (auth.isAuthenticated() && auth.authData() && !xmtp.isConnected() && !xmtp.isConnecting()) {
+      xmtp.connect().catch((err) => {
+        console.error('[ChatPage] Failed to connect XMTP:', err)
+      })
+    }
+  })
+
+  // Subscribe to messages when component mounts and XMTP is connected
+  createEffect(() => {
+    const addrOrId = peerAddressOrId()
+    if (!addrOrId || !xmtp.isConnected()) return
+
+    const unsubscribe = xmtp.subscribeToMessages(addrOrId, (msgs) => {
+      setMessages(msgs)
+    })
+
+    onCleanup(unsubscribe)
+  })
+
+  // Scroll to bottom when messages change
+  createEffect(() => {
+    messages() // Track dependency
+    if (messagesContainer) {
+      messagesContainer.scrollTop = messagesContainer.scrollHeight
+    }
+  })
+
+  // Send message via XMTP
+  const handleSubmit = async (message: string) => {
+    const addrOrId = peerAddressOrId()
+    if (!addrOrId || !xmtp.isConnected()) return
+
+    setIsSending(true)
+    try {
+      await xmtp.sendMessage(addrOrId, message)
+    } catch (error) {
+      console.error('[ChatPage] Failed to send message:', error)
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
     })
-
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: prev.length + 1,
-        text: message,
-        alignment: 'right',
-        timestamp,
-      },
-    ])
   }
 
   return (
     <AppShell
-      header={
-        <Header
-          rightSlot={
-            <div class="flex items-center gap-3">
-              <IconButton variant="ghost" size="md" aria-label="Notifications">
-                <BellIcon />
-              </IconButton>
-              <button
-                onClick={() => navigate('/profile')}
-                class="flex items-center gap-2 hover:opacity-80 transition-opacity"
-                title={`Signed in as ${auth.pkpAddress()?.slice(0, 6)}...${auth.pkpAddress()?.slice(-4)}`}
-              >
-                <Avatar size="sm" class="cursor-pointer" />
-              </button>
-            </div>
-          }
-        />
-      }
+      header={<Header rightSlot={<HeaderActions />} />}
       sidebar={<AppSidebar />}
       rightPanel={
         <RightPanel>
@@ -160,39 +127,81 @@ export const ChatPage: Component = () => {
         />
       }
     >
-      <div class="h-full flex flex-col bg-[var(--bg-page)]">
-        {/* Chat Header */}
-        <div class="h-16 bg-[var(--bg-surface)] flex items-center justify-between px-6 border-b border-[var(--border-default)] flex-shrink-0">
-          <div class="flex items-center gap-3">
-            <Avatar size="md" />
-            <span class="text-base font-medium text-[var(--text-primary)]">{chatUser().displayName}</span>
+      {/* Not authenticated */}
+      <Show when={!auth.isAuthenticated()}>
+        <div class="h-full flex flex-col items-center justify-center gap-4">
+          <p class="text-[var(--text-secondary)]">Sign in to view messages</p>
+        </div>
+      </Show>
+
+      {/* Chat content */}
+      <Show when={auth.isAuthenticated()}>
+        <div class="h-full overflow-y-auto bg-[var(--bg-page)]">
+          <div class="h-full flex flex-col bg-[var(--bg-surface)] rounded-t-lg">
+            {/* Chat Header */}
+            <div class="h-16 flex items-center justify-between px-6 border-b border-[var(--border-default)] flex-shrink-0">
+              <div class="flex items-center gap-3">
+                <Avatar size="md" />
+                <div>
+                  <span class="text-base font-medium text-[var(--text-primary)]">
+                    {formatAddress(peerAddressOrId())}
+                  </span>
+                  <p class="text-sm text-[var(--text-muted)]">
+                    <Show when={xmtp.isConnected()} fallback="Connecting...">
+                      XMTP
+                    </Show>
+                  </p>
+                </div>
+              </div>
+              <IconButton variant="ghost" size="md" aria-label="Open menu">
+                <MoreIcon />
+              </IconButton>
+            </div>
+
+            {/* Messages */}
+            <div ref={messagesContainer} class="flex-1 overflow-y-auto">
+              <Show when={xmtp.isConnecting()}>
+                <div class="flex items-center justify-center h-full">
+                  <p class="text-[var(--text-muted)]">Connecting to XMTP...</p>
+                </div>
+              </Show>
+              <Show when={xmtp.isConnected()}>
+                <MessageList>
+                  <Show when={messages().length === 0}>
+                    <div class="flex items-center justify-center py-12">
+                      <p class="text-[var(--text-muted)]">No messages yet. Start a conversation!</p>
+                    </div>
+                  </Show>
+                  <For each={messages()}>
+                    {(msg, index) => {
+                      const isOwn = msg.sender === 'user'
+                      const prev = messages()[index() - 1]
+                      const isFirstInGroup = !prev || prev.sender !== msg.sender
+
+                      return (
+                        <MessageBubble
+                          message={msg.content}
+                          username={isFirstInGroup ? (isOwn ? 'You' : formatAddress(peerAddressOrId())) : undefined}
+                          timestamp={isFirstInGroup ? formatTime(msg.timestamp) : undefined}
+                          isOwn={isOwn}
+                          isFirstInGroup={isFirstInGroup}
+                        />
+                      )
+                    }}
+                  </For>
+                </MessageList>
+              </Show>
+            </div>
+
+            {/* Input */}
+            <MessageInput
+              onSubmit={handleSubmit}
+              placeholder={`Message ${formatAddress(peerAddressOrId())}...`}
+              disabled={isSending() || !xmtp.isConnected()}
+            />
           </div>
-          <IconButton variant="ghost" size="md" aria-label="Open menu">
-            <MoreIcon />
-          </IconButton>
         </div>
-
-        {/* Messages */}
-        <div class="flex-1 overflow-y-auto">
-          <MessageList>
-            <For each={messages()}>
-              {(msg) => (
-                <MessageBubble
-                  alignment={msg.alignment}
-                  message={msg.text}
-                  timestamp={msg.timestamp}
-                />
-              )}
-            </For>
-          </MessageList>
-        </div>
-
-        {/* Input */}
-        <MessageInput
-          onSubmit={handleSubmit}
-          placeholder={`Message ${chatUser().displayName}...`}
-        />
-      </div>
+      </Show>
     </AppShell>
   )
 }

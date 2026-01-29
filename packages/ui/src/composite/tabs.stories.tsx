@@ -3,7 +3,7 @@ import { createSignal } from 'solid-js'
 import { Tabs } from './tabs'
 
 const meta = {
-  title: 'Components/Tabs',
+  title: 'Composite/Tabs',
   component: Tabs,
   tags: ['autodocs'],
   argTypes: {

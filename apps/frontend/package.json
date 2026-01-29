@@ -22,7 +22,9 @@
     "@lit-protocol/networks": "8.4.0",
     "@solidjs/router": "0.15.4",
     "@tauri-apps/plugin-dialog": "2.6.0",
+    "@xmtp/browser-sdk": "6.1.2",
     "buffer": "6.0.3",
+    "phosphor-icons-solid": "1.0.0",
     "solid-js": "^1.9.3",
     "viem": "2.44.4"
   },
@@ -30,6 +32,7 @@
     "@tailwindcss/vite": "^4.1.12",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/cli": "^2.0.0",
+    "@tauri-apps/plugin-fs": "2.4.5",
     "@tauri-apps/plugin-shell": "2.3.4",
     "autoprefixer": "^10.4.21",
     "class-variance-authority": "0.7.1",

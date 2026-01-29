@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { Button } from './button'
 
 const meta: Meta<typeof Button> = {
-  title: 'UI/Button',
+  title: 'Primitives/Button',
   component: Button,
   tags: ['autodocs'],
   argTypes: {
@@ -72,5 +72,20 @@ export const Large: Story = {
   args: {
     size: 'lg',
     children: 'Large',
+  },
+}
+
+export const Loading: Story = {
+  args: {
+    loading: true,
+    children: 'Loading',
+  },
+}
+
+export const LoadingSecondary: Story = {
+  args: {
+    loading: true,
+    variant: 'secondary',
+    children: 'Authenticating',
   },
 }

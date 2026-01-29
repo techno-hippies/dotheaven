@@ -1,0 +1,18 @@
+{
+  "naga-dev": {
+    "network": "nagaDev",
+    "cidFile": "cids/dev.json",
+    "pkpFile": "output/pkp-naga-dev.json",
+    "keysDir": "keys/dev",
+    "permissionsContract": "0x85Fa92469Ed765791818b17C926d29fA824E25Ca",
+    "notes": "Free development network - no tstLPX required"
+  },
+  "naga-test": {
+    "network": "nagaTest",
+    "cidFile": "cids/test.json",
+    "pkpFile": "output/pkp-naga-test.json",
+    "keysDir": "keys/test",
+    "permissionsContract": "0x7255737630fcfb4914cf51552123eee9abec6120",
+    "notes": "Testnet - requires tstLPX for operations"
+  }
+}

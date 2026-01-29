@@ -1,4 +1,4 @@
-import { Show, createEffect, type Component } from 'solid-js'
+import { createEffect, type Component } from 'solid-js'
 import { cn } from '@heaven/ui'
 import { VideoPlayer } from './VideoPlayer'
 import { VideoActions } from './VideoActions'
@@ -73,11 +73,11 @@ export const VideoPost: Component<VideoPostProps> = (props) => {
 
   return (
     <div class={cn(
-      'relative h-[var(--vh-screen,100vh)] md:h-screen w-full bg-[var(--bg-page)] snap-start flex items-center justify-center',
+      'relative h-full w-full bg-[var(--bg-surface)] rounded-lg snap-start flex items-center justify-center py-4',
       props.class
     )}>
       {/* Video Container - responsive sizing for 9:16 */}
-      <div class="relative w-full h-full md:w-[50.625vh] md:h-[90vh] md:max-w-[450px] md:max-h-[800px] bg-black md:rounded-lg overflow-hidden">
+      <div class="relative w-full md:w-auto md:h-full md:aspect-[9/16] md:max-w-[450px] bg-black md:rounded-lg overflow-hidden">
         {/* Video Player */}
         <VideoPlayer
           videoUrl={props.videoUrl}
@@ -90,47 +90,6 @@ export const VideoPost: Component<VideoPostProps> = (props) => {
           priorityLoad={props.priorityLoad}
         />
 
-        {/* Desktop: Video Info Overlay - bottom left (inside video container) */}
-        <div class="absolute bottom-4 left-6 right-20 z-20 pointer-events-none max-md:hidden">
-          <button
-            onClick={() => props.onProfileClick?.()}
-            class="text-lg font-semibold text-white drop-shadow-lg hover:underline cursor-pointer pointer-events-auto"
-          >
-            @{props.username}
-          </button>
-          <Show when={props.caption}>
-            <p class="text-sm text-white/90 mt-1 line-clamp-2">{props.caption}</p>
-          </Show>
-          <Show when={props.trackTitle}>
-            <button
-              onClick={() => props.onTrackClick?.()}
-              class="block text-sm text-white/70 mt-1 hover:underline cursor-pointer pointer-events-auto"
-            >
-              {props.trackTitle} {props.trackArtist && `- ${props.trackArtist}`}
-            </button>
-          </Show>
-        </div>
-      </div>
-
-      {/* Mobile: Video Info - absolute positioned outside container */}
-      <div class="md:hidden absolute left-0 right-0 bottom-4 p-6 pr-20 pointer-events-none z-40">
-        <button
-          onClick={() => props.onProfileClick?.()}
-          class="text-lg font-semibold text-white drop-shadow-lg hover:underline cursor-pointer pointer-events-auto"
-        >
-          @{props.username}
-        </button>
-        <Show when={props.caption}>
-          <p class="text-sm text-white/90 mt-1 line-clamp-2 drop-shadow-md">{props.caption}</p>
-        </Show>
-        <Show when={props.trackTitle}>
-          <button
-            onClick={() => props.onTrackClick?.()}
-            class="block text-sm text-white/70 mt-1 hover:underline cursor-pointer pointer-events-auto"
-          >
-            {props.trackTitle} {props.trackArtist && `- ${props.trackArtist}`}
-          </button>
-        </Show>
       </div>
 
       {/* Mobile: Actions overlay on right side */}
@@ -154,26 +113,6 @@ export const VideoPost: Component<VideoPostProps> = (props) => {
         />
       </div>
 
-      {/* Desktop: Actions column to the right of video */}
-      <div class="max-md:hidden absolute left-[calc(50%+25vh+20px)] top-1/2 transform -translate-y-1/2 z-20">
-        <VideoActions
-          username={props.username}
-          userAvatar={props.userAvatar}
-          onProfileClick={() => props.onProfileClick?.()}
-          isLiked={props.isLiked ?? false}
-          likeCount={props.likes}
-          onLikeClick={() => props.onLikeClick?.()}
-          commentCount={props.comments}
-          onCommentClick={props.onCommentClick ? () => props.onCommentClick?.() : undefined}
-          onShareClick={() => props.onShareClick?.()}
-          trackTitle={props.trackTitle}
-          trackArtist={props.trackArtist}
-          trackCoverUrl={props.trackCoverUrl}
-          onTrackClick={() => props.onTrackClick?.()}
-          isMuted={isMuted()}
-          onToggleMute={() => setIsMuted(!isMuted())}
-        />
-      </div>
     </div>
   )
 }

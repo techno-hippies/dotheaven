@@ -1,0 +1,1 @@
+/usr/lib/postgresql/16/bin/postgres "-c" "unix_socket_directories=/media/t42/th42/Code/dotheaven/subgraphs/activity-feed/./build/pgtemp-JLJhD6/pg_data_dir" "-c" "port=35183" "-c" "fsync=off" "-c" "synchronous_commit=off" "-c" "full_page_writes=off" "-c" "autovacuum=off" "-D" "/media/t42/th42/Code/dotheaven/subgraphs/activity-feed/./build/pgtemp-JLJhD6/pg_data_dir"

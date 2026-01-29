@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { CommentItem, CommentSection } from './comment-item'
 
 const meta: Meta<typeof CommentItem> = {
-  title: 'UI/CommentItem',
+  title: 'Composite/CommentItem',
   component: CommentItem,
   parameters: {
     layout: 'centered',

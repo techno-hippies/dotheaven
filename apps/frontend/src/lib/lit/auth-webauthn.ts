@@ -4,8 +4,9 @@ import { getLitClient } from './client'
 import type { PKPInfo, AuthData } from './types'
 
 /**
- * Register a new account with WebAuthn (passkey)
- * This mints a new PKP and associates it with the user's passkey
+ * Register a new account with WebAuthn (passkey).
+ * Mints a PKP and immediately authenticates to get authData
+ * (access token) needed for session signatures.
  */
 export async function registerWithWebAuthn(): Promise<{
   pkpInfo: PKPInfo
@@ -27,7 +28,7 @@ export async function registerWithWebAuthn(): Promise<{
     tokenId: result.pkpInfo.tokenId.toString(),
   }
 
-  // Authenticate to get auth data (access token)
+  // Authenticate immediately to get auth data (access token)
   const authResult = await WebAuthnAuthenticator.authenticate()
 
   const authData: AuthData = {
@@ -35,6 +36,8 @@ export async function registerWithWebAuthn(): Promise<{
     authMethodId: authResult.authMethodId,
     accessToken: authResult.accessToken,
   }
+
+  console.log('[Lit] Registration + authentication complete')
 
   return { pkpInfo, authData }
 }

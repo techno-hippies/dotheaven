@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { MusicPlayer } from './music-player'
 
 const meta: Meta<typeof MusicPlayer> = {
-  title: 'UI/MusicPlayer',
+  title: 'Composite/MusicPlayer',
   component: MusicPlayer,
   tags: ['autodocs'],
 }

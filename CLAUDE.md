@@ -1,5 +1,13 @@
 # Heaven Development Guide
 
+## CRITICAL: Dev Server Rules
+**NEVER start, restart, or manage dev servers or Storybook yourself.**
+- DO NOT run `bun dev`, `bun storybook`, or any server commands
+- DO NOT use `pkill`, `kill`, or attempt to stop/start servers
+- DO NOT check server status or try to fix server issues
+- The user manages all dev servers - you only write code
+- If you see server errors, ignore them and continue with your task
+
 ## Tooling
 - **Package Manager**: Use `bun` (not npm/yarn/pnpm)
 - **Runtime**: Bun for all scripts and dev commands
@@ -9,9 +17,14 @@
 dotheaven/
 ├── apps/
 │   └── frontend/          # SolidJS app (web + Tauri desktop)
+│       ├── src/
+│       │   ├── components/    # App-specific components
+│       │   ├── lib/           # Client libraries (xmtp, voice, lit, web3)
+│       │   ├── pages/         # Route pages
+│       │   └── providers/     # Context providers (Auth, XMTP, Wallet)
 ├── packages/
 │   ├── ui/                # Shared UI components + Storybook
-│   ├── core/              # Core business logic
+│   ├── core/              # Core business logic (playlists, storage)
 │   └── platform/          # Platform-specific utilities
 ├── contracts/             # Smart contracts
 └── lit-actions/           # Lit Protocol actions
@@ -23,6 +36,48 @@ bun dev              # Run frontend dev server
 bun dev:tauri        # Run Tauri desktop app
 bun storybook        # Run Storybook (UI components)
 bun check            # Type check all packages
+```
+
+## Core Features
+
+### Authentication (Lit Protocol)
+- **WebAuthn/Passkey auth** via Lit Protocol PKPs (Programmable Key Pairs)
+- User signs in with passkey → gets a PKP wallet address
+- PKP can sign messages for XMTP and other services
+- See `apps/frontend/src/providers/AuthContext.tsx`
+
+### Messaging (XMTP)
+- **Peer-to-peer encrypted messaging** via XMTP protocol
+- DMs between Ethereum addresses
+- Real-time message streaming
+- See `apps/frontend/src/lib/xmtp/` and `providers/XMTPProvider.tsx`
+
+### AI Chat (Cloudflare Workers)
+- **Text chat with AI** via Cloudflare Worker backend
+- Auth: wallet signature → JWT token
+- Worker URL: `VITE_CHAT_WORKER_URL` env var
+- See `apps/frontend/src/pages/AIChatPage.tsx`
+
+### Voice Calls (Agora WebRTC)
+- **Real-time voice** with AI via Agora RTC
+- Integrated into AI chat page (not a separate route)
+- Call state shown in chat header with duration
+- See `apps/frontend/src/lib/voice/` and `AIChatPage.tsx`
+
+## Key Routes
+```
+/                      # Home (vertical video feed)
+/chat/ai/:personalityId  # AI chat (Scarlett) - has voice call
+/chat/:addressOrId     # XMTP peer-to-peer chat
+/wallet                # Wallet page
+/library               # Music library
+/playlist/:id          # Playlist page
+```
+
+## Environment Variables
+```bash
+VITE_CHAT_WORKER_URL   # Cloudflare Worker for AI chat
+VITE_AGORA_APP_ID      # Agora RTC app ID for voice calls
 ```
 
 ## Color Scheme (Heaven Dark Theme)

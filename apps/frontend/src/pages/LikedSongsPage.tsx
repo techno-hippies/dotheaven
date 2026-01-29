@@ -3,31 +3,14 @@ import {
   AppShell,
   Header,
   RightPanel,
-  Avatar,
-  IconButton,
   MusicPlayer,
   MediaHeader,
   TrackList,
+  IconButton,
+  PlayButton,
   type Track,
 } from '@heaven/ui'
-import { AppSidebar } from '../components/shell'
-import { useAuth } from '../providers'
-import { useNavigate } from '@solidjs/router'
-
-const BellIcon = () => (
-  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-  </svg>
-)
-
-const WalletIcon = () => (
-  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-    <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
-    <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
-    <path d="M18 12a2 2 0 0 0 0 4h4v-4h-4z" />
-  </svg>
-)
+import { AppSidebar, HeaderActions } from '../components/shell'
 
 // Placeholder liked songs
 const likedSongs: Track[] = [
@@ -52,36 +35,10 @@ const likedSongs: Track[] = [
 ]
 
 export const LikedSongsPage: Component = () => {
-  const auth = useAuth()
-  const navigate = useNavigate()
-
   return (
     <AppShell
       header={
-        <Header
-          rightSlot={
-            <div class="flex items-center gap-3">
-              <IconButton variant="ghost" size="md" aria-label="Notifications">
-                <BellIcon />
-              </IconButton>
-              <IconButton
-                variant="ghost"
-                size="md"
-                aria-label="Wallet"
-                onClick={() => navigate('/wallet')}
-              >
-                <WalletIcon />
-              </IconButton>
-              <button
-                onClick={() => navigate('/profile')}
-                class="flex items-center gap-2 hover:opacity-80 transition-opacity"
-                title={`Signed in as ${auth.pkpAddress()?.slice(0, 6)}...${auth.pkpAddress()?.slice(-4)}`}
-              >
-                <Avatar size="sm" class="cursor-pointer" />
-              </button>
-            </div>
-          }
-        />
+        <Header rightSlot={<HeaderActions />} />
       }
       sidebar={<AppSidebar />}
       rightPanel={
@@ -105,7 +62,7 @@ export const LikedSongsPage: Component = () => {
         />
       }
     >
-      <div class="h-full overflow-y-auto bg-gradient-to-b from-[#5a3a7a] via-[#3a2550] to-[var(--bg-page)]">
+      <div class="h-full overflow-y-auto bg-gradient-to-b from-[#5a3a7a] via-[#3a2550] to-[var(--bg-page)] rounded-t-lg">
         <MediaHeader
           type="playlist"
           title="Liked Songs"
@@ -114,6 +71,23 @@ export const LikedSongsPage: Component = () => {
             songCount: likedSongs.length,
             duration: '7 min 01 sec',
           }}
+          actionsSlot={
+            <div class="flex items-center gap-4">
+              <PlayButton onClick={() => console.log('Play liked songs')} aria-label="Play Liked Songs" />
+
+              {/* Shuffle Button */}
+              <IconButton
+                variant="soft"
+                size="lg"
+                onClick={() => console.log('Shuffle')}
+                aria-label="Shuffle"
+              >
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+              </IconButton>
+            </div>
+          }
         />
         <TrackList
           tracks={likedSongs}

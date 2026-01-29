@@ -3,13 +3,12 @@ import { MessageBubble, MessageList } from './message-bubble'
 import { IconButton } from '../primitives/icon-button'
 
 const meta: Meta<typeof MessageBubble> = {
-  title: 'UI/MessageBubble',
+  title: 'Composite/MessageBubble',
   component: MessageBubble,
   tags: ['autodocs'],
   argTypes: {
-    alignment: {
-      control: 'select',
-      options: ['left', 'right'],
+    isOwn: {
+      control: 'boolean',
     },
   },
 }
@@ -17,84 +16,93 @@ const meta: Meta<typeof MessageBubble> = {
 export default meta
 type Story = StoryObj<typeof MessageBubble>
 
-export const Left: Story = {
+export const Default: Story = {
   args: {
-    alignment: 'left',
+    username: 'vitalik.eth',
     message: 'Hey! Have you had a chance to review the governance proposal?',
     timestamp: '2:30 PM',
+    isOwn: false,
   },
 }
 
-export const Right: Story = {
+export const OwnMessage: Story = {
   args: {
-    alignment: 'right',
+    username: 'you',
     message: 'Yes! I think it looks solid. The tokenomics make sense.',
     timestamp: '2:31 PM',
+    isOwn: true,
   },
 }
 
 export const ShortMessage: Story = {
   args: {
-    alignment: 'left',
+    username: 'alice.eth',
     message: 'Cool!',
     timestamp: '2:32 PM',
+    isOwn: false,
   },
 }
 
 export const LongMessage: Story = {
   args: {
-    alignment: 'right',
+    username: 'you',
     message:
-      'This is a much longer message to demonstrate how the bubble wraps text when it gets really long. The bubble should maintain its max width of 75% and wrap the content nicely with proper line height.',
+      'This is a much longer message to demonstrate how the bubble wraps text when it gets really long. The bubble should maintain proper width and wrap the content nicely with proper line height.',
     timestamp: '2:33 PM',
+    isOwn: true,
   },
 }
 
 export const MultilineMessage: Story = {
   args: {
-    alignment: 'left',
+    username: 'bob.eth',
     message: 'First line\nSecond line\nThird line',
     timestamp: '2:34 PM',
+    isOwn: false,
   },
 }
 
 export const WithoutTimestamp: Story = {
   args: {
-    alignment: 'left',
+    username: 'vitalik.eth',
     message: 'This message has no timestamp',
   },
 }
 
 export const EmojiMessage: Story = {
   args: {
-    alignment: 'right',
-    message: 'Perfect! Let me know if you need anything else 👍',
+    username: 'you',
+    message: 'Perfect! Let me know if you need anything else',
     timestamp: '2:33 PM',
+    isOwn: true,
   },
 }
 
 export const Conversation: Story = {
   render: () => (
-    <div class="max-w-2xl mx-auto bg-black min-h-[600px] flex flex-col">
+    <div class="max-w-2xl mx-auto bg-[var(--bg-page)] min-h-[600px] flex flex-col">
       <MessageList class="flex-1">
         <MessageBubble
-          alignment="left"
+          username="vitalik.eth"
           message="Hey! Have you had a chance to review the governance proposal?"
           timestamp="2:30 PM"
         />
         <MessageBubble
-          alignment="right"
+          username="you"
           message="Yes! I think it looks solid. The tokenomics make sense."
+          timestamp="2:31 PM"
+          isOwn
         />
         <MessageBubble
-          alignment="left"
+          username="vitalik.eth"
           message="Great, I'll submit my vote then. Should go live by tomorrow."
           timestamp="2:33 PM"
         />
         <MessageBubble
-          alignment="right"
-          message="Perfect! Let me know if you need anything else 👍"
+          username="you"
+          message="Perfect! Let me know if you need anything else"
           timestamp="2:34 PM"
+          isOwn
         />
       </MessageList>
     </div>
@@ -103,7 +111,7 @@ export const Conversation: Story = {
 
 export const ConversationWithHeader: Story = {
   render: () => (
-    <div class="max-w-2xl mx-auto bg-black min-h-[600px] flex flex-col">
+    <div class="max-w-2xl mx-auto bg-[var(--bg-page)] min-h-[600px] flex flex-col">
       {/* Header */}
       <div class="h-16 bg-[var(--bg-surface)] flex items-center justify-between px-6 border-b border-[var(--border-default)]">
         <div class="flex items-center gap-3">
@@ -126,48 +134,69 @@ export const ConversationWithHeader: Story = {
       {/* Messages */}
       <MessageList class="flex-1 overflow-y-auto">
         <MessageBubble
-          alignment="left"
+          username="vitalik.eth"
           message="Hey! Have you had a chance to review the governance proposal?"
           timestamp="2:30 PM"
         />
         <MessageBubble
-          alignment="right"
+          username="you"
           message="Yes! I think it looks solid. The tokenomics make sense."
+          timestamp="2:31 PM"
+          isOwn
         />
         <MessageBubble
-          alignment="left"
+          username="vitalik.eth"
           message="Great, I'll submit my vote then. Should go live by tomorrow."
           timestamp="2:33 PM"
         />
         <MessageBubble
-          alignment="right"
-          message="Perfect! Let me know if you need anything else 👍"
+          username="you"
+          message="Perfect! Let me know if you need anything else"
           timestamp="2:34 PM"
+          isOwn
         />
       </MessageList>
     </div>
   ),
 }
 
-export const AllAlignments: Story = {
+export const GroupConversation: Story = {
   render: () => (
-    <div class="space-y-4 max-w-2xl">
-      <div>
-        <p class="text-xs text-[var(--text-muted)] mb-2 uppercase font-medium">Left Aligned</p>
+    <div class="max-w-2xl mx-auto bg-[var(--bg-page)] min-h-[600px] flex flex-col">
+      <MessageList class="flex-1">
         <MessageBubble
-          alignment="left"
-          message="This is a left-aligned message (received)"
-          timestamp="2:30 PM"
+          username="alice.eth"
+          message="Anyone want to grab coffee?"
+          timestamp="3:00 PM"
         />
-      </div>
-      <div>
-        <p class="text-xs text-[var(--text-muted)] mb-2 uppercase font-medium">Right Aligned</p>
         <MessageBubble
-          alignment="right"
-          message="This is a right-aligned message (sent)"
-          timestamp="2:31 PM"
+          username="bob.eth"
+          message="Sure, I'm in!"
+          timestamp="3:01 PM"
         />
-      </div>
+        <MessageBubble
+          username="you"
+          message="Count me in too"
+          timestamp="3:02 PM"
+          isOwn
+        />
+        <MessageBubble
+          username="alice.eth"
+          message="Great! Meet at the usual place in 15?"
+          timestamp="3:03 PM"
+        />
+        <MessageBubble
+          username="bob.eth"
+          message="Works for me"
+          timestamp="3:04 PM"
+        />
+        <MessageBubble
+          username="you"
+          message="On my way!"
+          timestamp="3:05 PM"
+          isOwn
+        />
+      </MessageList>
     </div>
   ),
 }

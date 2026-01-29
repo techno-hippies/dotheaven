@@ -45,7 +45,7 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
     <div class={cn('relative', props.class)}>
       {/* Banner - gradient background */}
       <div
-        class="h-48 w-full"
+        class="h-48 w-full rounded-t-lg"
         style={{
           background: props.bannerGradient ?? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
         }}

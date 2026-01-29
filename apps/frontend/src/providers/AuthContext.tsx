@@ -8,7 +8,7 @@ import {
   type Accessor,
 } from 'solid-js'
 import { usePlatform } from 'virtual:heaven-platform'
-import type { PKPInfo, AuthData, AuthResult, PersistedAuth } from '../lib/lit'
+import type { PKPInfo, AuthData, AuthResult, PersistedAuth, PKPAuthContext } from '../lib/lit'
 
 // Storage key for web session
 const WEB_SESSION_KEY = 'heaven:session'
@@ -21,6 +21,8 @@ export interface AuthContextType {
   isAuthenticated: Accessor<boolean>
   isAuthenticating: Accessor<boolean>
   authError: Accessor<string | null>
+  /** True after a new account registration completes (cleared by dismissOnboarding) */
+  isNewUser: Accessor<boolean>
 
   // Actions
   loginWithPasskey: () => Promise<void>
@@ -28,6 +30,12 @@ export interface AuthContextType {
   logout: () => Promise<void>
   cancelAuth: () => void
   clearError: () => void
+  /** Call when onboarding flow completes or is dismissed */
+  dismissOnboarding: () => void
+
+  // Signing (for XMTP and other protocols)
+  signMessage: (message: string) => Promise<string>
+  getAuthContext: () => Promise<PKPAuthContext>
 }
 
 const AuthContext = createContext<AuthContextType>()
@@ -39,6 +47,7 @@ export const AuthProvider: ParentComponent = (props) => {
   const [authData, setAuthData] = createSignal<AuthData | null>(null)
   const [isAuthenticating, setIsAuthenticating] = createSignal(false)
   const [authError, setAuthError] = createSignal<string | null>(null)
+  const [isNewUser, setIsNewUser] = createSignal(false)
 
   // Derived
   const pkpAddress = () => pkpInfo()?.ethAddress ?? null
@@ -122,6 +131,9 @@ export const AuthProvider: ParentComponent = (props) => {
               accessToken: payload.accessToken || '',
             })
             setIsAuthenticating(false)
+            if (payload.isNewUser) {
+              setIsNewUser(true)
+            }
             console.log('[Auth] Login complete:', payload.pkpAddress)
           }
         })
@@ -185,7 +197,7 @@ export const AuthProvider: ParentComponent = (props) => {
     }
   }
 
-  // Register new passkey
+  // Register new passkey (mint only — no second WebAuthn prompt)
   async function registerWithPasskey(): Promise<void> {
     setIsAuthenticating(true)
     setAuthError(null)
@@ -197,15 +209,16 @@ export const AuthProvider: ParentComponent = (props) => {
         await invoke('start_passkey_auth')
         console.log('[Auth] Opened browser for passkey registration')
       } else {
-        // Web: call Lit SDK directly
+        // Web: mint PKP and authenticate immediately
         const { registerWithWebAuthn } = await import('../lib/lit')
         const result = await registerWithWebAuthn()
 
+        setIsNewUser(true)
         setPkpInfo(result.pkpInfo)
         setAuthData(result.authData)
         saveWebSession(result.pkpInfo, result.authData)
         setIsAuthenticating(false)
-        console.log('[Auth] Web registration complete:', result.pkpInfo.ethAddress)
+        console.log('[Auth] PKP minted:', result.pkpInfo.ethAddress)
       }
     } catch (error) {
       console.error('[Auth] Registration failed:', error)
@@ -243,6 +256,46 @@ export const AuthProvider: ParentComponent = (props) => {
     setAuthError(null)
   }
 
+  function dismissOnboarding(): void {
+    setIsNewUser(false)
+  }
+
+  // Get or create PKP auth context for signing.
+  // Lazily authenticates if authData is missing (e.g. after registration).
+  async function getAuthContext(): Promise<PKPAuthContext> {
+    const currentPkpInfo = pkpInfo()
+    if (!currentPkpInfo) {
+      throw new Error('Not authenticated')
+    }
+
+    let currentAuthData = authData()
+    if (!currentAuthData) {
+      // Authenticate lazily — this triggers a WebAuthn prompt
+      const { authenticateWithWebAuthn } = await import('../lib/lit')
+      const result = await authenticateWithWebAuthn()
+      setPkpInfo(result.pkpInfo)
+      setAuthData(result.authData)
+      saveWebSession(result.pkpInfo, result.authData)
+      currentAuthData = result.authData
+    }
+
+    const { createPKPAuthContext } = await import('../lib/lit')
+    return createPKPAuthContext(currentPkpInfo, currentAuthData)
+  }
+
+  // Sign message using PKP
+  async function signMessage(message: string): Promise<string> {
+    const currentPkpInfo = pkpInfo()
+
+    if (!currentPkpInfo) {
+      throw new Error('Not authenticated')
+    }
+
+    const authContext = await getAuthContext()
+    const { signMessageWithPKP } = await import('../lib/lit')
+    return signMessageWithPKP(currentPkpInfo, authContext, message)
+  }
+
   const value: AuthContextType = {
     pkpInfo,
     pkpAddress,
@@ -250,11 +303,15 @@ export const AuthProvider: ParentComponent = (props) => {
     isAuthenticated,
     isAuthenticating,
     authError,
+    isNewUser,
     loginWithPasskey,
     registerWithPasskey,
     logout,
     cancelAuth,
     clearError,
+    dismissOnboarding,
+    signMessage,
+    getAuthContext,
   }
 
   return <AuthContext.Provider value={value}>{props.children}</AuthContext.Provider>

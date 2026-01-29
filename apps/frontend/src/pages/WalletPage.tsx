@@ -1,33 +1,23 @@
-import type { Component } from 'solid-js'
+import type { Component, JSX } from 'solid-js'
+import { createMemo, createEffect, onMount, Show } from 'solid-js'
+import { createStore } from 'solid-js/store'
 import {
   AppShell,
   Header,
   RightPanel,
-  Avatar,
-  IconButton,
   MusicPlayer,
   WalletAssets,
 } from '@heaven/ui'
-import { AppSidebar } from '../components/shell'
+import { AppSidebar, HeaderActions } from '../components/shell'
 import { useAuth } from '../providers'
-import { useNavigate } from '@solidjs/router'
+import {
+  CHAINS,
+  getNativeBalance,
+  getErc20Balance,
+  type ChainKey,
+} from '../lib/web3'
 
-const BellIcon = () => (
-  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-  </svg>
-)
-
-const WalletIcon = () => (
-  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-    <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
-    <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
-    <path d="M18 12a2 2 0 0 0 0 4h4v-4h-4z" />
-  </svg>
-)
-
-// Ethereum logo SVG
+// ============ Icons ============
 const EthereumIcon = () => (
   <svg viewBox="0 0 32 32" class="w-12 h-12">
     <g fill="none" fill-rule="evenodd">
@@ -54,79 +44,301 @@ const MegaETHIcon = () => (
   </svg>
 )
 
-const USDmIcon = () => (
-  <svg viewBox="0 0 32 32" class="w-12 h-12">
-    <circle cx="16" cy="16" r="16" fill="#3B82F6"/>
-    <text x="16" y="21" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#FFF" text-anchor="middle">$</text>
-  </svg>
+const USDFCIcon = () => (
+  <img src="/images/usdfc.png" alt="USDFC" class="w-12 h-12 object-contain" />
 )
 
-// Sample wallet data
-const walletAssets = [
+const USDMIcon = () => (
+  <img src="/images/usdm.png" alt="USDM" class="w-12 h-12 object-contain" />
+)
+
+const FilecoinIcon = () => (
+  <img src="/images/filecoin.png" alt="Filecoin" class="w-12 h-12 object-contain" />
+)
+
+// ============ Types ============
+type AssetStatus = 'idle' | 'refreshing' | 'error'
+
+interface AssetState {
+  formatted?: string
+  usd?: number
+  updatedAt?: number
+  status: AssetStatus
+  error?: string
+}
+
+interface AssetConfig {
+  id: string
+  key: string
+  name: string
+  symbol: string
+  chainKey: ChainKey
+  icon: () => JSX.Element
+  chainBadge: () => JSX.Element
+  isNative: boolean
+  tokenAddress?: string
+  unitSymbol: string
+  priceUsd: number // For testnets, mock prices
+}
+
+// ============ Cache Helpers ============
+const CACHE_PREFIX = 'wallet_balances_v1'
+const STALE_TIME_MS = 30_000 // 30 seconds
+const TTL_MS = 10 * 60 * 1000 // 10 minutes
+
+function cacheKey(pkp: string, assetKey: string) {
+  return `${CACHE_PREFIX}:${pkp}:${assetKey}`
+}
+
+function readCache(pkp: string, assetKey: string): AssetState | null {
+  try {
+    const raw = localStorage.getItem(cacheKey(pkp, assetKey))
+    if (!raw) return null
+    const cached = JSON.parse(raw) as AssetState
+    // Discard if too old
+    if (cached.updatedAt && Date.now() - cached.updatedAt > TTL_MS) {
+      localStorage.removeItem(cacheKey(pkp, assetKey))
+      return null
+    }
+    return cached
+  } catch {
+    return null
+  }
+}
+
+function writeCache(pkp: string, assetKey: string, value: AssetState) {
+  try {
+    localStorage.setItem(cacheKey(pkp, assetKey), JSON.stringify(value))
+  } catch {}
+}
+
+function isStale(updatedAt?: number) {
+  if (!updatedAt) return true
+  return Date.now() - updatedAt > STALE_TIME_MS
+}
+
+// ============ Asset Definitions ============
+const ASSET_CONFIGS: AssetConfig[] = [
   {
-    id: 'eth-ethereum',
-    name: 'Ethereum',
-    symbol: 'ETH',
-    icon: <EthereumIcon />,
-    chainBadge: <EthereumIcon />,
-    balance: '10.5',
-    balanceUSD: '$32,450.00',
-    amount: '10.5 ETH',
+    id: 'fil-calibration',
+    key: 'filCalib:native',
+    name: 'FIL',
+    symbol: 'Filecoin',
+    chainKey: 'filCalib',
+    icon: FilecoinIcon,
+    chainBadge: FilecoinIcon,
+    isNative: true,
+    unitSymbol: 'FIL',
+    priceUsd: 5,
+  },
+  {
+    id: 'usdfc-filecoin',
+    key: 'filCalib:erc20:0xb3042734b608a1B16e9e86B374A3f3e389B4cDf0',
+    name: 'USDFC',
+    symbol: 'Filecoin',
+    chainKey: 'filCalib',
+    icon: USDFCIcon,
+    chainBadge: FilecoinIcon,
+    isNative: false,
+    tokenAddress: '0xb3042734b608a1B16e9e86B374A3f3e389B4cDf0',
+    unitSymbol: 'USDFC',
+    priceUsd: 1,
+  },
+  {
+    id: 'eth-sepolia',
+    key: 'sepolia:native',
+    name: 'ETH',
+    symbol: 'Ethereum',
+    chainKey: 'sepolia',
+    icon: EthereumIcon,
+    chainBadge: EthereumIcon,
+    isNative: true,
+    unitSymbol: 'ETH',
+    priceUsd: 3090,
   },
   {
     id: 'eth-megaeth',
-    name: 'Ethereum',
+    key: 'mega:native',
+    name: 'ETH',
     symbol: 'MegaETH',
-    icon: <EthereumIcon />,
-    chainBadge: <MegaETHIcon />,
-    balance: '4.12',
-    balanceUSD: '$12,340.20',
-    amount: '4.12 ETH',
+    chainKey: 'mega',
+    icon: EthereumIcon,
+    chainBadge: MegaETHIcon,
+    isNative: true,
+    unitSymbol: 'ETH',
+    priceUsd: 3090,
   },
   {
-    id: 'usdm',
-    name: 'USDm',
+    id: 'usdm-megaeth',
+    key: 'mega:erc20:0x0000000000000000000000000000000000000000',
+    name: 'USDM',
     symbol: 'MegaETH',
-    icon: <USDmIcon />,
-    chainBadge: <MegaETHIcon />,
-    balance: '3042.36',
-    balanceUSD: '$3,042.36',
-    amount: '3,042.36 USDm',
+    chainKey: 'mega',
+    icon: USDMIcon,
+    chainBadge: MegaETHIcon,
+    isNative: false,
+    tokenAddress: '0x0000000000000000000000000000000000000000', // TODO: Replace with actual USDM contract address
+    unitSymbol: 'USDM',
+    priceUsd: 1,
   },
 ]
 
+// ============ Component ============
 export const WalletPage: Component = () => {
   const auth = useAuth()
-  const navigate = useNavigate()
+
+  // Store for each asset's state
+  const [assets, setAssets] = createStore<Record<string, AssetState>>({})
+
+  // Track in-flight requests to dedupe
+  const inflight = new Map<string, Promise<void>>()
+
+  // Fetch a single asset
+  async function refreshAsset(config: AssetConfig, pkp: string) {
+    const { key, chainKey, isNative, tokenAddress, priceUsd } = config
+
+    // Dedupe: if already fetching, return existing promise
+    if (inflight.has(key)) return inflight.get(key)!
+
+    // Mark as refreshing but keep existing values
+    setAssets(key, (prev) => ({ ...prev, status: 'refreshing' as AssetStatus, error: undefined }))
+
+    const promise = (async () => {
+      try {
+        const chain = CHAINS[chainKey]
+        let formatted: string
+
+        console.log(`[Wallet] Fetching ${key} for ${pkp}...`)
+
+        if (isNative) {
+          const result = await getNativeBalance(chain, pkp as `0x${string}`)
+          formatted = result.formatted
+          console.log(`[Wallet] ${key} native balance:`, result)
+        } else if (tokenAddress) {
+          const result = await getErc20Balance(chain, tokenAddress as `0x${string}`, pkp as `0x${string}`)
+          formatted = result.formatted
+          console.log(`[Wallet] ${key} token balance:`, result)
+        } else {
+          throw new Error('Invalid asset config')
+        }
+
+        const numericBalance = parseFloat(formatted)
+        const usd = numericBalance * priceUsd
+
+        const next: AssetState = {
+          formatted,
+          usd,
+          updatedAt: Date.now(),
+          status: 'idle',
+        }
+        console.log(`[Wallet] ${key} updated:`, next)
+        setAssets(key, next)
+        writeCache(pkp, key, next)
+      } catch (e: any) {
+        console.error(`[Wallet] Failed to fetch ${key}:`, e)
+        setAssets(key, (prev) => ({
+          ...prev,
+          status: 'error' as AssetStatus,
+          error: String(e?.message ?? e),
+        }))
+      } finally {
+        inflight.delete(key)
+      }
+    })()
+
+    inflight.set(key, promise)
+    return promise
+  }
+
+  // Hydrate from cache and refresh stale data
+  createEffect(() => {
+    const pkp = auth.pkpAddress()
+    console.log('[Wallet] pkpAddress:', pkp, 'isAuthenticated:', auth.isAuthenticated())
+    if (!pkp) return
+
+    const toRefresh: AssetConfig[] = []
+
+    // Hydrate all assets from cache first
+    for (const config of ASSET_CONFIGS) {
+      const cached = readCache(pkp, config.key)
+      console.log(`[Wallet] Cache for ${config.key}:`, cached)
+      if (cached) {
+        setAssets(config.key, cached)
+      } else {
+        setAssets(config.key, { status: 'idle' })
+      }
+
+      // Decide staleness from cache, not from reactive store
+      if (!cached?.formatted || isStale(cached.updatedAt)) {
+        toRefresh.push(config)
+      }
+    }
+
+    console.log('[Wallet] Assets to refresh:', toRefresh.map(c => c.key))
+
+    // Start refreshes
+    for (const config of toRefresh) {
+      refreshAsset(config, pkp)
+    }
+  })
+
+  // Refresh on window focus if stale
+  onMount(() => {
+    const handleFocus = () => {
+      const pkp = auth.pkpAddress()
+      if (!pkp) return
+
+      for (const config of ASSET_CONFIGS) {
+        const state = assets[config.key]
+        if (isStale(state?.updatedAt)) {
+          refreshAsset(config, pkp)
+        }
+      }
+    }
+
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  })
+
+  // Derive total USD from all available balances
+  const totalBalanceUSD = createMemo(() => {
+    const values = Object.values(assets)
+      .map((a) => a.usd)
+      .filter((v): v is number => v !== undefined && !isNaN(v))
+
+    if (values.length === 0) return '$—'
+
+    const sum = values.reduce((s, u) => s + u, 0)
+    return `$${sum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  })
+
+  // Build assets array for WalletAssets component
+  const walletAssets = createMemo(() => {
+    return ASSET_CONFIGS.map((config) => {
+      const state = assets[config.key]
+      const formatted = state?.formatted
+      const numericBalance = formatted ? parseFloat(formatted) : 0
+      const usd = state?.usd ?? 0
+
+      return {
+        id: config.id,
+        name: config.name,
+        symbol: config.symbol,
+        icon: <config.icon />,
+        chainBadge: <config.chainBadge />,
+        balance: formatted ? numericBalance.toFixed(4) : '—',
+        balanceUSD: formatted ? `$${usd.toFixed(2)}` : '$—', // Show $0.00 if we have data
+        amount: formatted ? `${numericBalance.toFixed(4)} ${config.unitSymbol}` : `— ${config.unitSymbol}`,
+        // For potential UI indicators
+        _status: state?.status ?? 'idle',
+        _error: state?.error,
+      }
+    })
+  })
 
   return (
     <AppShell
-      header={
-        <Header
-          rightSlot={
-            <div class="flex items-center gap-3">
-              <IconButton variant="ghost" size="md" aria-label="Notifications">
-                <BellIcon />
-              </IconButton>
-              <IconButton
-                variant="ghost"
-                size="md"
-                aria-label="Wallet"
-                class="text-[var(--accent-blue)]"
-              >
-                <WalletIcon />
-              </IconButton>
-              <button
-                onClick={() => navigate('/profile')}
-                class="flex items-center gap-2 hover:opacity-80 transition-opacity"
-                title={`Signed in as ${auth.pkpAddress()?.slice(0, 6)}...${auth.pkpAddress()?.slice(-4)}`}
-              >
-                <Avatar size="sm" class="cursor-pointer" />
-              </button>
-            </div>
-          }
-        />
-      }
+      header={<Header rightSlot={<HeaderActions />} />}
       sidebar={<AppSidebar />}
       rightPanel={
         <RightPanel>
@@ -149,14 +361,30 @@ export const WalletPage: Component = () => {
         />
       }
     >
-      <div class="h-full overflow-y-auto">
-        <WalletAssets
-          address={auth.pkpAddress() || '0x0000000000000000000000000000000000000000'}
-          totalBalance="$47,832.56"
-          assets={walletAssets}
-          onSend={() => console.log('Send clicked')}
-          onReceive={() => console.log('Receive clicked')}
-        />
+      <div class="h-full overflow-y-auto bg-[var(--bg-surface)] rounded-t-lg">
+        <Show
+          when={auth.isAuthenticated()}
+          fallback={
+              <div class="flex flex-col items-center justify-center min-h-[60vh] gap-6 py-8">
+                <div class="text-center">
+                  <h2 class="text-2xl font-bold text-[var(--text-primary)] mb-2">
+                    Sign In Required
+                  </h2>
+                  <p class="text-base text-[var(--text-secondary)]">
+                    Please sign in with your passkey to view your wallet
+                  </p>
+                </div>
+              </div>
+            }
+          >
+            <WalletAssets
+              address={auth.pkpAddress() || '0x0000000000000000000000000000000000000000'}
+              totalBalance={totalBalanceUSD()}
+              assets={walletAssets()}
+              onSend={() => console.log('Send clicked')}
+              onReceive={() => console.log('Receive clicked')}
+            />
+          </Show>
       </div>
     </AppShell>
   )

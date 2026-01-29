@@ -1,7 +1,19 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite'
+import { createSignal } from 'solid-js'
 import { Sidebar, SidebarSection } from './Sidebar'
 import { ListItem, AlbumCover } from '../composite'
-import { Avatar, IconButton } from '../primitives'
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogBody,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+  DialogCloseButton,
+} from '../composite/dialog'
+import { Avatar, IconButton, Button } from '../primitives'
 
 // Chat circle icon (Phosphor-style)
 const ChatCircleIcon = () => (
@@ -196,4 +208,71 @@ export const Empty: Story = {
       </SidebarSection>
     </Sidebar>
   ),
+}
+
+export const WithNewChatDialog: Story = {
+  render: () => {
+    const [address, setAddress] = createSignal('')
+
+    return (
+      <Dialog>
+        <Sidebar>
+          <SidebarSection
+            title="Chat"
+            icon={<ChatCircleIcon />}
+            action={
+              <div class="flex items-center gap-1">
+                <DialogTrigger
+                  as={(props: any) => (
+                    <IconButton {...props} variant="soft" size="md" aria-label="Add chat">
+                      <PlusIcon />
+                    </IconButton>
+                  )}
+                />
+                <IconButton variant="soft" size="md" aria-label="Chat options">
+                  <ChevronDownIcon />
+                </IconButton>
+              </div>
+            }
+          >
+            <ListItem
+              title="vitalik.eth"
+              subtitle="Hey, did you see the new proposal?"
+              cover={<Avatar size="sm" />}
+            />
+            <ListItem
+              title="nick.heaven"
+              subtitle="The transaction went through"
+              cover={<Avatar size="sm" />}
+            />
+          </SidebarSection>
+        </Sidebar>
+        <DialogContent class="max-w-md">
+          <DialogHeader>
+            <DialogTitle>New Message</DialogTitle>
+            <DialogDescription>
+              Start a conversation with anyone on the network.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            <input
+              type="text"
+              value={address()}
+              onInput={(e) => setAddress(e.currentTarget.value)}
+              placeholder="Message any ENS, .heaven, or 0x wallet address"
+              class="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
+            />
+          </DialogBody>
+          <DialogFooter>
+            <DialogCloseButton
+              as={(props: any) => (
+                <Button {...props} variant="secondary">Cancel</Button>
+              )}
+            />
+            <Button disabled={!address().trim()}>Start Chat</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
+  },
 }

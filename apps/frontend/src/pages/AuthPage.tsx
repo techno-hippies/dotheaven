@@ -96,8 +96,12 @@ export const AuthPage: Component = () => {
     setError(null)
 
     try {
-      const result = await registerWithWebAuthn()
-      await handleAuthSuccess(result.pkpInfo, result.authData, true)
+      await registerWithWebAuthn()
+      // Tauri auth page: we can call authenticate immediately since
+      // the user is actively interacting with this page (has gesture context)
+      const { authenticateWithWebAuthn } = await import('../lib/lit')
+      const authResult = await authenticateWithWebAuthn()
+      await handleAuthSuccess(authResult.pkpInfo, authResult.authData, true)
     } catch (e: unknown) {
       const err = e as Error
       console.error('[Auth] Registration failed:', err)

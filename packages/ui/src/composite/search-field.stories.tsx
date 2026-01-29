@@ -3,7 +3,7 @@ import { SearchField, type SearchOption } from './search-field'
 import { createSignal } from 'solid-js'
 
 const meta: Meta<typeof SearchField> = {
-  title: 'UI/SearchField',
+  title: 'Composite/SearchField',
   component: SearchField,
   tags: ['autodocs'],
 }

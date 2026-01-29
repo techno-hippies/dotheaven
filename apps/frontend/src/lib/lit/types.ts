@@ -41,3 +41,10 @@ export interface PersistedAuth {
   authMethodId?: string
   accessToken?: string
 }
+
+/**
+ * PKP Auth Context (from Lit SDK)
+ * Used for signing and executing Lit Actions
+ * Note: Cannot persist to localStorage due to callback functions
+ */
+export type PKPAuthContext = any // Opaque type from @lit-protocol/auth

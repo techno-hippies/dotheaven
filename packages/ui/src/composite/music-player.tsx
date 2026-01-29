@@ -3,6 +3,7 @@ import { cn } from '../lib/utils'
 import { AlbumCover } from './album-cover'
 import { Scrubber } from './scrubber'
 import { IconButton } from '../primitives/icon-button'
+import { PlayButton } from '../primitives/play-button'
 
 export interface MusicPlayerProps {
   class?: string
@@ -21,43 +22,40 @@ export interface MusicPlayerProps {
   onRepeat?: () => void
   onProgressChange?: (value: number) => void
   onVolumeChange?: (value: number) => void
+  /** Hide now playing info and volume for centered minimal layout */
+  minimal?: boolean
 }
-
-const PlayButton: Component<{ isPlaying?: boolean; onClick?: () => void }> = (props) => (
-  <IconButton variant="play" size="md" aria-label={props.isPlaying ? 'Pause' : 'Play'} onClick={props.onClick}>
-    {props.isPlaying ? (
-      <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 256 256">
-        <path d="M216,48V208a16,16,0,0,1-16,16H160a16,16,0,0,1-16-16V48a16,16,0,0,1,16-16h40A16,16,0,0,1,216,48ZM96,32H56A16,16,0,0,0,40,48V208a16,16,0,0,0,16,16H96a16,16,0,0,0,16-16V48A16,16,0,0,0,96,32Z" />
-      </svg>
-    ) : (
-      <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 256 256">
-        <path d="M240,128a15.74,15.74,0,0,1-7.6,13.51L88.32,229.65a16,16,0,0,1-16.2.3A15.86,15.86,0,0,1,64,216.13V39.87a15.86,15.86,0,0,1,8.12-13.82,16,16,0,0,1,16.2.3L232.4,114.49A15.74,15.74,0,0,1,240,128Z" />
-      </svg>
-    )}
-  </IconButton>
-)
 
 /**
  * Music player footer bar - matches Spotify-like bottom player.
  */
 export const MusicPlayer: Component<MusicPlayerProps> = (props) => {
   return (
-    <div class={cn('h-20 bg-[var(--bg-page)] flex items-center px-4 gap-6', props.class)}>
+    <div class={cn(
+      'h-20 bg-[var(--bg-page)] flex items-center px-4 gap-6',
+      props.minimal && 'justify-center',
+      props.class
+    )}>
       {/* Left: Now playing info */}
-      <div class="flex items-center gap-3 w-56">
-        <AlbumCover size="md" src={props.coverSrc} />
-        <div class="flex flex-col min-w-0">
-          <span class="text-base font-medium text-[var(--text-primary)] truncate">
-            {props.title || 'Now Playing'}
-          </span>
-          <span class="text-base text-[var(--text-secondary)] truncate">
-            {props.artist || 'Artist Name'}
-          </span>
+      {!props.minimal && (
+        <div class="flex items-center gap-3 w-56">
+          <AlbumCover size="md" src={props.coverSrc} />
+          <div class="flex flex-col min-w-0">
+            <span class="text-base font-medium text-[var(--text-primary)] truncate">
+              {props.title || 'Now Playing'}
+            </span>
+            <span class="text-base text-[var(--text-secondary)] truncate">
+              {props.artist || 'Artist Name'}
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Center: Controls + progress */}
-      <div class="flex-1 flex flex-col items-center justify-center gap-1 max-w-md mx-auto">
+      <div class={cn(
+        'flex flex-col items-center justify-center gap-1',
+        props.minimal ? 'w-full max-w-2xl' : 'flex-1 max-w-md mx-auto'
+      )}>
         {/* Controls */}
         <div class="flex items-center gap-4">
           <IconButton variant="ghost" size="md" aria-label="Shuffle" onClick={props.onShuffle}>
@@ -70,7 +68,7 @@ export const MusicPlayer: Component<MusicPlayerProps> = (props) => {
               <path d="M208,47.88V208.12a16,16,0,0,1-24.43,13.43L64,146.77V216a8,8,0,0,1-16,0V40a8,8,0,0,1,16,0v69.23L183.57,34.45A15.95,15.95,0,0,1,208,47.88Z" />
             </svg>
           </IconButton>
-          <PlayButton isPlaying={props.isPlaying} onClick={props.onPlayPause} />
+          <PlayButton variant="white" size="md" isPlaying={props.isPlaying} onClick={props.onPlayPause} />
           <IconButton variant="ghost" size="md" aria-label="Next" onClick={props.onNext}>
             <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
               <path d="M72.43,34.45A15.95,15.95,0,0,1,48,47.88V208.12a16,16,0,0,0,24.43,13.43L192,146.77V216a8,8,0,0,0,16,0V40a8,8,0,0,0-16,0v69.23Z" />
@@ -100,17 +98,19 @@ export const MusicPlayer: Component<MusicPlayerProps> = (props) => {
       </div>
 
       {/* Right: Volume */}
-      <div class="flex items-center gap-3 w-40 justify-end">
-        <svg class="w-5 h-5 text-[var(--text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-          <path d="M11 5L6 9H2v6h4l5 4V5z" />
-          <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
-        </svg>
-        <Scrubber
-          class="w-20"
-          value={props.volume ?? 75}
-          onChange={props.onVolumeChange}
-        />
-      </div>
+      {!props.minimal && (
+        <div class="flex items-center gap-3 w-40 justify-end">
+          <svg class="w-5 h-5 text-[var(--text-secondary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path d="M11 5L6 9H2v6h4l5 4V5z" />
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+          </svg>
+          <Scrubber
+            class="w-20"
+            value={props.volume ?? 75}
+            onChange={props.onVolumeChange}
+          />
+        </div>
+      )}
     </div>
   )
 }

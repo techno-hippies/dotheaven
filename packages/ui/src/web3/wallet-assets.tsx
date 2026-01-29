@@ -31,7 +31,7 @@ export interface WalletAssetsProps {
  */
 export const WalletAssets: Component<WalletAssetsProps> = (props) => {
   return (
-    <div class={cn('flex flex-col w-full max-w-4xl mx-auto bg-[var(--bg-page)] min-h-screen px-8', props.class)}>
+    <div class={cn('flex flex-col w-full max-w-4xl mx-auto min-h-screen px-8', props.class)}>
       {/* Header with balance */}
       <div class="flex flex-col items-center gap-6 py-12">
         <div class="flex flex-col items-center gap-3">
@@ -73,7 +73,7 @@ export const WalletAssets: Component<WalletAssetsProps> = (props) => {
         <div class="flex flex-col gap-3">
           <For each={props.assets}>
             {(asset) => (
-              <div class="flex items-center gap-6 p-5 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-highlight)] transition-colors cursor-pointer w-full">
+              <div class="flex items-center gap-6 p-5 rounded-lg bg-[var(--bg-elevated)] w-full cursor-default">
                 {/* Icon - fixed size container with chain badge */}
                 <div class="flex-shrink-0 relative">
                   {typeof asset.icon === 'string' ? (
@@ -105,20 +105,20 @@ export const WalletAssets: Component<WalletAssetsProps> = (props) => {
 
                 {/* Name and symbol - aligned left */}
                 <div class="flex flex-col flex-1 min-w-0">
-                  <div class="text-base font-medium text-[var(--text-primary)]">
+                  <div class="text-lg font-medium text-[var(--text-primary)]">
                     {asset.name}
                   </div>
-                  <div class="text-sm text-[var(--text-muted)]">
+                  <div class="text-base text-[var(--text-muted)]">
                     {asset.symbol}
                   </div>
                 </div>
 
                 {/* Balance - aligned right */}
                 <div class="flex flex-col items-end flex-shrink-0">
-                  <div class="text-base font-medium text-[var(--text-primary)]">
+                  <div class="text-lg font-medium text-[var(--text-primary)]">
                     {asset.balanceUSD}
                   </div>
-                  <div class="text-sm text-[var(--text-muted)]">
+                  <div class="text-base text-[var(--text-muted)]">
                     {asset.amount}
                   </div>
                 </div>

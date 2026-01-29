@@ -85,7 +85,7 @@ export const VerticalVideoFeed: Component<VerticalVideoFeedProps> = (props) => {
     >
       <div
         ref={containerRef}
-        class="h-[var(--vh-screen,100vh)] md:h-screen w-full overflow-y-scroll snap-y snap-mandatory scrollbar-hide"
+        class="h-full w-full overflow-y-scroll snap-y snap-mandatory scrollbar-hide"
         style={{ 'scrollbar-width': 'none', '-ms-overflow-style': 'none' }}
       >
         <For each={props.videos}>
@@ -100,7 +100,7 @@ export const VerticalVideoFeed: Component<VerticalVideoFeedProps> = (props) => {
             }
 
             return (
-              <div class="h-[var(--vh-screen,100vh)] md:h-screen w-full snap-start snap-always">
+              <div class="h-full w-full snap-start snap-always">
                 <VideoPost
                   id={video.id}
                   videoUrl={video.videoUrl}

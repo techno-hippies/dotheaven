@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { InfoCard, InfoCardSection, InfoCardRow } from './info-card'
 
 const meta: Meta<typeof InfoCard> = {
-  title: 'Components/InfoCard',
+  title: 'Composite/InfoCard',
   component: InfoCard,
   parameters: {
     layout: 'centered',

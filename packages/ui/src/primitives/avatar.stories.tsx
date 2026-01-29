@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { Avatar } from './avatar'
 
 const meta: Meta<typeof Avatar> = {
-  title: 'UI/Avatar',
+  title: 'Primitives/Avatar',
   component: Avatar,
   tags: ['autodocs'],
   argTypes: {

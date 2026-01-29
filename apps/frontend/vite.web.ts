@@ -19,7 +19,15 @@ export default defineConfig({
     ],
   },
   optimizeDeps: {
-    exclude: ['@heaven/platform', '@tauri-apps/api', '@tauri-apps/plugin-dialog', '@tauri-apps/plugin-shell'],
+    // Exclude XMTP packages from Vite's dep optimizer to prevent breaking worker/WASM initialization
+    exclude: [
+      '@heaven/platform',
+      '@tauri-apps/api',
+      '@tauri-apps/plugin-dialog',
+      '@tauri-apps/plugin-shell',
+      '@xmtp/browser-sdk',
+      '@xmtp/wasm-bindings',
+    ],
   },
   define: {
     'import.meta.env.VITE_PLATFORM': JSON.stringify('web'),

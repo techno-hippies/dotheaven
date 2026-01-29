@@ -3,7 +3,7 @@ import { createSignal } from 'solid-js'
 import { Scrubber } from './scrubber'
 
 const meta: Meta<typeof Scrubber> = {
-  title: 'UI/Scrubber',
+  title: 'Composite/Scrubber',
   component: Scrubber,
   tags: ['autodocs'],
 }

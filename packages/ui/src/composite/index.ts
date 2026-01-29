@@ -1,4 +1,5 @@
 export { AlbumCover, type AlbumCoverProps } from './album-cover'
+export { ActivityItem, type ActivityItemProps } from './activity-item'
 export { SearchField, type SearchFieldProps, type SearchOption } from './search-field'
 export { ListItem, type ListItemProps } from './list-item'
 export { InfoCard, InfoCardSection, InfoCardRow, type InfoCardProps, type InfoCardSectionProps, type InfoCardRowProps } from './info-card'
@@ -30,3 +31,33 @@ export { TrackList, type TrackListProps, type Track, type TrackMenuActions } fro
 export { MediaHeader, type MediaHeaderProps } from './media-header'
 export { CommentItem, CommentSection, type CommentItemProps, type CommentSectionProps } from './comment-item'
 export { FollowButton, type FollowButtonProps } from './follow-button'
+export { ProfileEditCard, type ProfileEditCardProps } from './profile-edit-card'
+export { ProfileEditField, type ProfileEditFieldProps, type ProfileEditFieldType } from './profile-edit-field'
+export { OnboardingNameStep, type OnboardingNameStepProps } from './onboarding-name-step'
+export { OnboardingBasicsStep, type OnboardingBasicsStepProps, type OnboardingBasicsData } from './onboarding-basics-step'
+export { OnboardingAvatarStep, type OnboardingAvatarStepProps } from './onboarding-avatar-step'
+export { OnboardingFlow, type OnboardingFlowProps, type OnboardingStep } from './onboarding-flow'
+export {
+  Dialog,
+  DialogTrigger,
+  DialogPortal,
+  DialogOverlay,
+  DialogContent,
+  DialogHeader,
+  DialogBody,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+  DialogCloseButton,
+} from './dialog'
+export {
+  Scheduler,
+  SchedulerCalendar,
+  TimeSlotList,
+  TimezoneSelector,
+  BookingConfirmation,
+  type SchedulerProps,
+  type DayAvailability,
+  type TimeSlot
+} from './scheduler'
+export { SongUploadCard, type SongUploadCardProps, type SongUploadFormData } from './song-upload-card'

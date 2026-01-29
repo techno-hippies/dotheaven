@@ -1,33 +1,17 @@
-import { type Component, Show } from 'solid-js'
-import { usePlatform } from 'virtual:heaven-platform'
+import type { Component } from 'solid-js'
+import { createSignal } from 'solid-js'
 import {
   RightPanel,
-  Avatar,
-  IconButton,
-  Button,
   AppShell,
   Header,
   MusicPlayer,
+  OnboardingFlow,
 } from '@heaven/ui'
-import { AppSidebar } from './components/shell'
+import { AppSidebar, HeaderActions } from './components/shell'
 import { VerticalVideoFeed, VideoPlaybackProvider, type VideoPostData } from './components/feed'
 import { useAuth } from './providers'
-import { useNavigate } from '@solidjs/router'
-
-const BellIcon = () => (
-  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-  </svg>
-)
-
-const WalletIcon = () => (
-  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-    <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
-    <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
-    <path d="M18 12a2 2 0 0 0 0 4h4v-4h-4z" />
-  </svg>
-)
+import { checkNameAvailable, registerHeavenName, uploadAvatar, setProfile } from './lib/heaven'
+import type { OnboardingBasicsData } from '@heaven/ui'
 
 // Placeholder feed videos
 const feedVideos: VideoPostData[] = [
@@ -66,79 +50,161 @@ const feedVideos: VideoPostData[] = [
 ]
 
 export const App: Component = () => {
-  const platform = usePlatform()
   const auth = useAuth()
-  const navigate = useNavigate()
-  const handleLogin = () => {
-    auth.loginWithPasskey()
+  const [claiming, setClaiming] = createSignal(false)
+  const [claimError, setClaimError] = createSignal<string | null>(null)
+  const [uploading, setUploading] = createSignal(false)
+  const [uploadError, setUploadError] = createSignal<string | null>(null)
+  const [submittingBasics, setSubmittingBasics] = createSignal(false)
+  const [basicsError, setBasicsError] = createSignal<string | null>(null)
+  const [claimedName, setClaimedName] = createSignal('')
+
+  async function handleCheckAvailability(name: string): Promise<boolean> {
+    try {
+      return await checkNameAvailable(name)
+    } catch (err) {
+      console.error('[Onboarding] Availability check failed:', err)
+      return false
+    }
   }
 
-  const handleRegister = () => {
-    auth.registerWithPasskey()
+  async function handleClaim(name: string): Promise<boolean> {
+    const pkp = auth.pkpInfo()
+    if (!pkp) return false
+
+    setClaiming(true)
+    setClaimError(null)
+    try {
+      const authContext = await auth.getAuthContext()
+      const result = await registerHeavenName(
+        name,
+        pkp.ethAddress,
+        authContext,
+        pkp.publicKey,
+      )
+
+      if (result.success) {
+        console.log('[Onboarding] Name registered:', result)
+        setClaimedName(name)
+        return true
+      } else {
+        console.error('[Onboarding] Registration failed:', result.error)
+        setClaimError(result.error || 'Registration failed. Please try again.')
+        return false
+      }
+    } catch (err) {
+      console.error('[Onboarding] Claim error:', err)
+      setClaimError(err instanceof Error ? err.message : 'Registration failed. Please try again.')
+      return false
+    } finally {
+      setClaiming(false)
+    }
+  }
+
+  async function handleBasicsContinue(data: OnboardingBasicsData): Promise<boolean> {
+    const pkp = auth.pkpInfo()
+    if (!pkp) return false
+
+    // If all fields are empty/null, skip silently (user clicked Continue with nothing)
+    const hasData = data.age || data.gender || data.nativeLanguage || data.targetLanguage
+    if (!hasData) return true
+
+    setSubmittingBasics(true)
+    setBasicsError(null)
+    try {
+      const authContext = await auth.getAuthContext()
+      const result = await setProfile(
+        {
+          displayName: claimedName() || undefined,
+          age: data.age,
+          gender: data.gender,
+          nativeLanguage: data.nativeLanguage,
+          targetLanguage: data.targetLanguage,
+        },
+        pkp.ethAddress,
+        authContext,
+        pkp.publicKey,
+      )
+
+      if (result.success) {
+        console.log('[Onboarding] Profile set on-chain:', result)
+        return true
+      } else {
+        console.error('[Onboarding] Profile set failed:', result.error)
+        setBasicsError(result.error || 'Failed to save profile. Please try again.')
+        return false
+      }
+    } catch (err) {
+      console.error('[Onboarding] Profile error:', err)
+      setBasicsError(err instanceof Error ? err.message : 'Failed to save profile. Please try again.')
+      return false
+    } finally {
+      setSubmittingBasics(false)
+    }
+  }
+
+  async function handleAvatarUpload(file: File): Promise<boolean> {
+    const pkp = auth.pkpInfo()
+    if (!pkp) return false
+
+    setUploading(true)
+    setUploadError(null)
+    try {
+      const authContext = await auth.getAuthContext()
+      const result = await uploadAvatar(file, pkp.publicKey, authContext)
+
+      if (result.success) {
+        console.log('[Onboarding] Avatar uploaded:', result)
+        return true
+      } else {
+        console.error('[Onboarding] Avatar upload failed:', result.error)
+        // Show user-friendly message for style rejection
+        const error = result.error || 'Upload failed. Please try again.'
+        setUploadError(
+          error.includes('realistic photos')
+            ? 'Only anime, cartoon, or illustrated avatars are allowed. Please choose a different image.'
+            : error
+        )
+        return false
+      }
+    } catch (err) {
+      console.error('[Onboarding] Avatar error:', err)
+      setUploadError(err instanceof Error ? err.message : 'Upload failed. Please try again.')
+      return false
+    } finally {
+      setUploading(false)
+    }
   }
 
   return (
+    <>
+    <OnboardingFlow
+      open={auth.isNewUser()}
+      onOpenChange={(open) => { if (!open) auth.dismissOnboarding() }}
+      nameStepProps={{
+        onCheckAvailability: handleCheckAvailability,
+        onClaim: handleClaim,
+        claiming: claiming(),
+        error: claimError(),
+      }}
+      basicsStepProps={{
+        onContinue: handleBasicsContinue,
+        submitting: submittingBasics(),
+        error: basicsError(),
+      }}
+      avatarStepProps={{
+        onUpload: handleAvatarUpload,
+        uploading: uploading(),
+        error: uploadError(),
+      }}
+      onComplete={(data) => {
+        console.log('[Onboarding] Complete:', data)
+        auth.dismissOnboarding()
+      }}
+    />
     <AppShell
       header={
-        <Header
-          rightSlot={
-            <div class="flex items-center gap-3">
-              <Show
-                when={auth.isAuthenticated()}
-                fallback={
-                  <Show
-                    when={auth.isAuthenticating()}
-                    fallback={
-                      <>
-                        <Button variant="secondary" onClick={handleLogin}>
-                          Login
-                        </Button>
-                        <Button variant="default" onClick={handleRegister}>
-                          Sign Up
-                        </Button>
-                      </>
-                    }
-                  >
-                    {/* Tauri: auth happens in browser, show waiting message */}
-                    <Show when={platform.isTauri}>
-                      <span class="text-sm text-[var(--text-secondary)]">
-                        Complete sign-in in browser...
-                      </span>
-                      <Button variant="secondary" onClick={() => auth.cancelAuth()}>
-                        Cancel
-                      </Button>
-                    </Show>
-                    {/* Web: auth happens in-page via WebAuthn prompt, show spinner */}
-                    <Show when={!platform.isTauri}>
-                      <span class="text-sm text-[var(--text-secondary)]">
-                        Authenticating...
-                      </span>
-                    </Show>
-                  </Show>
-                }
-              >
-                <IconButton variant="ghost" size="md" aria-label="Notifications">
-                  <BellIcon />
-                </IconButton>
-                <IconButton
-                  variant="ghost"
-                  size="md"
-                  aria-label="Wallet"
-                  onClick={() => navigate('/wallet')}
-                >
-                  <WalletIcon />
-                </IconButton>
-                <button
-                  onClick={() => navigate('/profile')}
-                  class="flex items-center gap-2 hover:opacity-80 transition-opacity"
-                  title={`Signed in as ${auth.pkpAddress()?.slice(0, 6)}...${auth.pkpAddress()?.slice(-4)}`}
-                >
-                  <Avatar size="sm" class="cursor-pointer" />
-                </button>
-              </Show>
-            </div>
-          }
-        />
+        <Header rightSlot={<HeaderActions />} />
       }
       sidebar={<AppSidebar />}
       rightPanel={
@@ -173,5 +239,6 @@ export const App: Component = () => {
         />
       </VideoPlaybackProvider>
     </AppShell>
+    </>
   )
 }

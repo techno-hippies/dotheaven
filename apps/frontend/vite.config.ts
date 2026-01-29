@@ -22,4 +22,8 @@ export default defineConfig({
   build: {
     target: ['es2021', 'chrome100', 'safari13'],
   },
+  optimizeDeps: {
+    // Exclude XMTP packages from Vite's dep optimizer to prevent breaking worker/WASM initialization
+    exclude: ['@xmtp/browser-sdk', '@xmtp/wasm-bindings'],
+  },
 })

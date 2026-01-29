@@ -1,0 +1,25 @@
+{
+  "name": "heaven-lit-actions",
+  "version": "1.0.0",
+  "description": "Lit Protocol actions for Heaven music platform",
+  "type": "module",
+  "scripts": {
+    "setup": "bun scripts/setup.ts",
+    "upload": "bun scripts/upload-action.ts",
+    "encrypt": "bun scripts/encrypt-key.ts",
+    "verify": "bun scripts/verify.ts"
+  },
+  "dependencies": {
+    "@lit-protocol/auth": "^8.1.2",
+    "@lit-protocol/auth-helpers": "^8.1.1",
+    "@lit-protocol/lit-client": "^8.2.3",
+    "@lit-protocol/networks": "^8.3.2",
+    "dotenv": "^16.3.1",
+    "ethers": "6.15.0",
+    "viem": "^2.38.6"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.0.0"
+  }
+}

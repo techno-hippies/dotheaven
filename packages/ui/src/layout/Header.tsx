@@ -6,6 +6,8 @@ export interface HeaderProps {
   logo?: JSX.Element
   searchSlot?: JSX.Element
   rightSlot?: JSX.Element
+  /** Hide logo for centered layout (e.g., feed view) */
+  hideLogo?: boolean
 }
 
 /**
@@ -15,24 +17,29 @@ export const Header: Component<HeaderProps> = (props) => {
   return (
     <header
       class={cn(
-        'h-16 bg-[var(--bg-page)] flex items-center justify-between px-6 gap-4',
+        'h-16 bg-[var(--bg-page)] flex items-center px-6 gap-4',
+        props.hideLogo ? 'justify-center' : 'justify-between',
         props.class
       )}
     >
       {/* Left: Logo */}
-      <div class="flex items-center gap-4">
-        {props.logo || <AppLogo size={36} />}
-      </div>
+      {!props.hideLogo && (
+        <div class="flex items-center gap-4">
+          {props.logo || <AppLogo size={36} />}
+        </div>
+      )}
 
       {/* Center: Search */}
-      <div class="flex-1 max-w-lg">
+      <div class={cn('flex-1 max-w-lg', props.hideLogo && 'flex-none w-full max-w-2xl')}>
         {props.searchSlot || <SearchInput />}
       </div>
 
       {/* Right: Actions */}
-      <div class="flex items-center gap-2">
-        {props.rightSlot}
-      </div>
+      {!props.hideLogo && (
+        <div class="flex items-center gap-2">
+          {props.rightSlot}
+        </div>
+      )}
     </header>
   )
 }

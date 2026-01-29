@@ -1,0 +1,26 @@
+specVersion: 1.0.0
+indexerHints:
+  prune: auto
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: ScrobbleV1
+    network: megaeth-testnet-v2
+    source:
+      address: "0x8fF05D1Ba81542d7bE2B79d6912C1D65F339dE0e"
+      abi: ScrobbleV1
+      startBlock: 9970187
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ScrobbleBatch
+      abis:
+        - name: ScrobbleV1
+          file: ./abis/ScrobbleV1.json
+      eventHandlers:
+        - event: ScrobbleBatch(indexed address,uint64,uint64,uint32,string,bytes32)
+          handler: handleScrobbleBatch
+      file: ./src/scrobble.ts
