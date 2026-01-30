@@ -3,7 +3,7 @@
  *
  * Platform-agnostic abstraction over XMTP messaging.
  * - Web: BrowserTransport (browser-sdk with OPFS)
- * - Tauri: SidecarTransport (Node sidecar with persistent SQLite)
+ * - Tauri: RustTransport (native libxmtp via Tauri commands)
  */
 
 export interface ConversationInfo {

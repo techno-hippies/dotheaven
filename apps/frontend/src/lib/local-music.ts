@@ -15,10 +15,13 @@ interface PersistedTrack {
   album: string
   duration: string
   filePath: string
+  mbid?: string
 }
 
 export interface LocalTrack extends Track {
   filePath: string
+  /** MusicBrainz Recording ID from ID3 tags */
+  mbid?: string
 }
 
 function getExtension(name: string): string {
@@ -76,16 +79,19 @@ export function getExtensionForPath(path: string): string {
   return getExtension(path)
 }
 
-async function readMetadata(filePath: string, fileName: string): Promise<{ title: string; artist: string; album: string; duration: string }> {
+async function readMetadata(filePath: string, fileName: string): Promise<{ title: string; artist: string; album: string; duration: string; mbid?: string }> {
   const fallback = fallbackFromFilename(fileName)
   try {
     const bytes = await readFile(filePath)
     const metadata = await parseBuffer(bytes, { mimeType: guessMime(fileName) })
+    // music-metadata-browser exposes MusicBrainz Recording ID via musicbrainz_recordingid
+    const mbid = metadata.common.musicbrainz_recordingid
     return {
       title: metadata.common.title || fallback.title,
       artist: metadata.common.artist || fallback.artist,
       album: metadata.common.album || '',
       duration: formatDuration(metadata.format.duration),
+      ...(mbid ? { mbid } : {}),
     }
   } catch (e) {
     console.warn('Failed to read metadata for', fileName, e)
@@ -102,6 +108,7 @@ export async function enrichTrackMetadata(track: LocalTrack): Promise<LocalTrack
     artist: meta.artist || track.artist,
     album: meta.album || track.album,
     duration: meta.duration || track.duration,
+    mbid: meta.mbid || track.mbid,
   }
 }
 
@@ -170,7 +177,7 @@ export function saveState(folderPath: string, tracks: LocalTrack[]) {
   const data = {
     folderPath,
     tracks: tracks.map((t): PersistedTrack => ({
-      id: t.id, title: t.title, artist: t.artist, album: t.album, duration: t.duration, filePath: t.filePath,
+      id: t.id, title: t.title, artist: t.artist, album: t.album, duration: t.duration, filePath: t.filePath, mbid: t.mbid,
     })),
   }
   try {

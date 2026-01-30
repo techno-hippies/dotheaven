@@ -1,7 +1,7 @@
 /**
  * Platform-aware XMTP transport factory.
  *
- * - Tauri: SidecarTransport (persistent SQLite via Node sidecar)
+ * - Tauri: RustTransport (native libxmtp via Tauri commands)
  * - Web: BrowserTransport (browser-sdk with OPFS)
  */
 
@@ -15,8 +15,8 @@ export async function createTransport(): Promise<XmtpTransport> {
   if (transport) return transport
 
   if (IS_TAURI) {
-    const { SidecarTransport } = await import('./sidecar-transport')
-    transport = new SidecarTransport()
+    const { RustTransport } = await import('./rust-transport')
+    transport = new RustTransport()
   } else {
     const { BrowserTransport } = await import('./browser-transport')
     transport = new BrowserTransport()

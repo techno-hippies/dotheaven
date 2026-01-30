@@ -1,6 +1,7 @@
 mod auth;
 mod audio;
 mod jacktrip;
+mod xmtp;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -124,6 +125,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .manage(state.clone())
         .manage(JacktripState::default())
+        .manage(xmtp::XmtpState::default())
         .setup(move |app| {
             let app_dir = app.path().app_data_dir().ok();
 
@@ -169,6 +171,17 @@ pub fn run() {
             disconnect_jacktrip,
             is_jacktrip_connected,
             list_jack_ports,
+            xmtp::xmtp_init,
+            xmtp::xmtp_resolve_signature,
+            xmtp::xmtp_disconnect,
+            xmtp::xmtp_is_connected,
+            xmtp::xmtp_get_inbox_id,
+            xmtp::xmtp_list_conversations,
+            xmtp::xmtp_get_or_create_conversation,
+            xmtp::xmtp_send_message,
+            xmtp::xmtp_load_messages,
+            xmtp::xmtp_stream_messages,
+            xmtp::xmtp_update_consent,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

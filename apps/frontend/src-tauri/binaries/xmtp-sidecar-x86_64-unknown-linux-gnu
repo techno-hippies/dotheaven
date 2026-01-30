@@ -1,2 +1,0 @@
-#!/bin/sh
-exec bun run "/media/t42/th42/Code/dotheaven/apps/xmtp-sidecar/src/index.ts" "$@"

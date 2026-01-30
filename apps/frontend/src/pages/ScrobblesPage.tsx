@@ -16,7 +16,6 @@ export const ScrobblesPage: Component = () => {
   const auth = useAuth()
   const [tracks, setTracks] = createSignal<Track[]>([])
   const [loading, setLoading] = createSignal(true)
-  const [totalCount, setTotalCount] = createSignal(0)
 
   createEffect(async () => {
     const address = auth.pkpAddress()
@@ -27,9 +26,12 @@ export const ScrobblesPage: Component = () => {
 
     try {
       setLoading(true)
+      console.log('[ScrobblesPage] Fetching scrobbles for:', address)
       const entries = await fetchScrobbleEntries(address)
-      setTotalCount(entries.length)
-      setTracks(scrobblesToTracks(entries))
+      console.log('[ScrobblesPage] Got entries:', entries.length, entries)
+      const converted = scrobblesToTracks(entries)
+      console.log('[ScrobblesPage] Converted tracks:', converted.length, converted)
+      setTracks(converted)
     } catch (err) {
       console.error('[ScrobblesPage] Failed to fetch scrobbles:', err)
     } finally {
@@ -37,22 +39,17 @@ export const ScrobblesPage: Component = () => {
     }
   })
 
+  const handleIdentify = (track: Track) => {
+    console.log('[ScrobblesPage] Identify track:', track.title)
+  }
+
   return (
     <AppShell
       header={
         <Header rightSlot={<HeaderActions />} />
       }
       sidebar={<AppSidebar />}
-      rightPanel={
-        <RightPanel>
-          <div class="p-4">
-            <h3 class="text-base font-semibold text-[var(--text-primary)] mb-4">Now Playing</h3>
-            <div class="aspect-square bg-[var(--bg-highlight)] rounded-lg mb-4" />
-            <p class="text-lg font-semibold text-[var(--text-primary)]">-</p>
-            <p class="text-base text-[var(--text-secondary)]">-</p>
-          </div>
-        </RightPanel>
-      }
+      rightPanel={<RightPanel />}
       footer={
         <MusicPlayer
           title="-"
@@ -69,7 +66,7 @@ export const ScrobblesPage: Component = () => {
           title="Scrobbles"
           creator="On-chain listening history"
           stats={{
-            songCount: totalCount(),
+            songCount: tracks().length,
             duration: 'Verified on MegaETH',
           }}
         />
@@ -78,26 +75,19 @@ export const ScrobblesPage: Component = () => {
             Loading scrobbles...
           </div>
         </Show>
-        <Show when={!loading() && !auth.isAuthenticated()}>
+        <Show when={!loading() && tracks().length === 0}>
           <div class="px-6 py-12 text-center text-[var(--text-muted)]">
-            Sign in to see your scrobbles
-          </div>
-        </Show>
-        <Show when={!loading() && auth.isAuthenticated() && tracks().length === 0}>
-          <div class="px-6 py-12 text-center text-[var(--text-muted)]">
-            No scrobbles yet. Start listening to build your on-chain history.
+            No scrobbles yet. Play a song to start recording your listening history on-chain.
           </div>
         </Show>
         <Show when={!loading() && tracks().length > 0}>
           <TrackList
             tracks={tracks()}
+            showScrobbleStatus
             onTrackClick={(track) => console.log('Track clicked:', track)}
             onTrackPlay={(track) => console.log('Track play:', track)}
             menuActions={{
-              onAddToPlaylist: (track) => console.log('Add to playlist:', track),
-              onAddToQueue: (track) => console.log('Add to queue:', track),
-              onGoToArtist: (track) => console.log('Go to artist:', track),
-              onGoToAlbum: (track) => console.log('Go to album:', track),
+              onIdentify: handleIdentify,
             }}
           />
         </Show>

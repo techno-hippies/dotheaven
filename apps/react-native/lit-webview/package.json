@@ -1,0 +1,21 @@
+{
+  "name": "lit-webview-bundle",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "NODE_OPTIONS='--max-old-space-size=8192' vite build && cp public/index.html ../android/app/src/main/assets/lit-bundle/",
+    "dev": "NODE_OPTIONS='--max-old-space-size=8192' vite build --watch"
+  },
+  "dependencies": {
+    "@lit-protocol/lit-client": "^8.3.1",
+    "@lit-protocol/networks": "^8.4.1",
+    "@lit-protocol/auth": "^8.2.3",
+    "buffer": "^6.0.3",
+    "viem": "^2.21.45"
+  },
+  "devDependencies": {
+    "vite": "^7.3.1",
+    "typescript": "^5.9.2"
+  }
+}

@@ -12,7 +12,7 @@ const IDB_KEY = 'pending-scrobbles'
 const MAX_BATCH_SIZE = 100
 const FLUSH_INTERVAL_MS = 4 * 60 * 60 * 1000 // 4 hours (matches Android)
 
-export type SubmitFn = (tracks: SubmitTrack[]) => Promise<{ cid: string; attestationUid: string | null }>
+export type SubmitFn = (tracks: SubmitTrack[]) => Promise<{ txHashes: string[] }>
 
 export interface SubmitTrack {
   artist: string
@@ -22,7 +22,8 @@ export interface SubmitTrack {
   playedAt: number
   source: string | null
   ipId: string | null
-  isrc: string | null
+  /** MusicBrainz Recording ID (uuid) */
+  mbid: string | null
 }
 
 export class ScrobbleQueue {
@@ -93,7 +94,7 @@ export class ScrobbleQueue {
         playedAt: s.playedAtSec,
         source: s.source || null,
         ipId: s.ipId,
-        isrc: s.isrc,
+        mbid: s.mbid,
       }))
 
       await this.submitFn(tracks)

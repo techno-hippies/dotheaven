@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lit Engine</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1a1625;
+      color: #f0f0f5;
+    }
+    .status {
+      padding: 10px;
+      border-radius: 8px;
+      background: #252139;
+      margin-bottom: 10px;
+    }
+    .status.ready {
+      border-left: 4px solid #4ade80;
+    }
+    .status.error {
+      border-left: 4px solid #f87171;
+    }
+    .info {
+      font-size: 12px;
+      color: #b8b8d0;
+      margin-top: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="status">
+      <div>🔄 Loading Lit Engine...</div>
+    </div>
+  </div>
+
+  <script src="./lit-engine.js"></script>
+  <script>
+    // Debug UI (optional, for development)
+    const app = document.getElementById('app');
+
+    window.addEventListener('message', (event) => {
+      console.log('[WebView] Received:', event.data);
+    });
+
+    // Update status on load
+    window.addEventListener('load', () => {
+      const isSecure = window.isSecureContext;
+      const hasSubtle = !!globalThis.crypto?.subtle;
+
+      app.innerHTML = `
+        <div class="status ${isSecure && hasSubtle ? 'ready' : 'error'}">
+          <div>${isSecure && hasSubtle ? '✅ Lit Engine Ready' : '❌ Environment Error'}</div>
+          <div class="info">Secure Context: ${isSecure}</div>
+          <div class="info">WebCrypto: ${hasSubtle ? 'Available' : 'Missing'}</div>
+          <div class="info">Origin: ${window.location.origin}</div>
+        </div>
+      `;
+    });
+  </script>
+</body>
+</html>

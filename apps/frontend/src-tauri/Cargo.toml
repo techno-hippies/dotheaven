@@ -27,6 +27,40 @@ open = "5"
 urlencoding = "2"
 base64 = "0.22"
 which = "6"
+hex = { package = "const-hex", version = "1.14" }
+prost = { version = "0.14", default-features = false }
+futures = "0.3"
+tracing = { version = "0.1", features = ["log"] }
+
+# XMTP (libxmtp) — pinned to local clone
+xmtp_mls = { path = "/media/t42/th42/Code/libxmtp/crates/xmtp_mls" }
+xmtp_db = { path = "/media/t42/th42/Code/libxmtp/crates/xmtp_db" }
+xmtp_id = { path = "/media/t42/th42/Code/libxmtp/crates/xmtp_id" }
+xmtp_api = { path = "/media/t42/th42/Code/libxmtp/crates/xmtp_api" }
+xmtp_api_d14n = { path = "/media/t42/th42/Code/libxmtp/crates/xmtp_api_d14n" }
+xmtp_api_grpc = { path = "/media/t42/th42/Code/libxmtp/crates/xmtp_api_grpc" }
+xmtp_common = { path = "/media/t42/th42/Code/libxmtp/crates/xmtp_common" }
+xmtp_content_types = { path = "/media/t42/th42/Code/libxmtp/crates/xmtp_content_types" }
+xmtp_cryptography = { path = "/media/t42/th42/Code/libxmtp/crates/xmtp_cryptography" }
+xmtp_proto = { path = "/media/t42/th42/Code/libxmtp/crates/xmtp_proto" }
+
+[patch.crates-io]
+diesel = { git = "https://github.com/ephemerahq/diesel", branch = "coda/copy-to-sqlite" }
+diesel_migrations = { git = "https://github.com/ephemerahq/diesel", branch = "coda/copy-to-sqlite" }
+
+# Pin openmls deps to the same revisions libxmtp uses
+openmls = { git = "https://github.com/xmtp/openmls", rev = "beb0884db264075aef271b96efbd7e9d102ee374" }
+openmls_basic_credential = { git = "https://github.com/xmtp/openmls", rev = "beb0884db264075aef271b96efbd7e9d102ee374" }
+openmls_libcrux_crypto = { git = "https://github.com/xmtp/openmls", rev = "beb0884db264075aef271b96efbd7e9d102ee374" }
+openmls_rust_crypto = { git = "https://github.com/xmtp/openmls", rev = "beb0884db264075aef271b96efbd7e9d102ee374" }
+openmls_traits = { git = "https://github.com/xmtp/openmls", rev = "beb0884db264075aef271b96efbd7e9d102ee374" }
+
+# Pin hpke-rs to the rev libxmtp uses (git default branch moved to 0.5)
+[patch."https://github.com/cryspen/hpke-rs"]
+hpke-rs = { path = "/media/t42/th42/Code/hpke-rs-pinned" }
+hpke-rs-crypto = { path = "/media/t42/th42/Code/hpke-rs-pinned/traits" }
+hpke-rs-libcrux = { path = "/media/t42/th42/Code/hpke-rs-pinned/libcrux_provider" }
+hpke-rs-rust-crypto = { path = "/media/t42/th42/Code/hpke-rs-pinned/rust_crypto_provider" }
 
 [profile.release]
 lto = true

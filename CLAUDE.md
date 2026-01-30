@@ -22,9 +22,7 @@ dotheaven/
 │   │   │   ├── lib/           # Client libraries (xmtp, voice, lit, web3)
 │   │   │   ├── pages/         # Route pages
 │   │   │   └── providers/     # Context providers (Auth, XMTP, Wallet)
-│   │   └── src-tauri/         # Tauri Rust backend + sidecar binaries
-│   └── xmtp-sidecar/     # Node.js XMTP sidecar (Tauri only)
-│       └── src/               # IPC protocol, service, remote signer
+│   │   └── src-tauri/         # Tauri Rust backend (native libxmtp)
 ├── packages/
 │   ├── ui/                # Shared UI components + Storybook
 │   ├── core/              # Core business logic (playlists, storage)
@@ -37,7 +35,6 @@ dotheaven/
 ```bash
 bun dev              # Run frontend dev server
 bun dev:tauri        # Run Tauri desktop app
-bun build:sidecar    # Build XMTP sidecar (required before dev:tauri)
 bun storybook        # Run Storybook (UI components)
 bun check            # Type check all packages
 ```
@@ -56,11 +53,10 @@ bun check            # Type check all packages
 - Real-time message streaming
 - **Dual-target architecture**: platform-aware `XmtpTransport` interface
   - **Web**: `BrowserTransport` using `@xmtp/browser-sdk` with OPFS storage
-  - **Tauri**: `SidecarTransport` using a Node.js sidecar (`apps/xmtp-sidecar`) with persistent SQLite via `@xmtp/node-sdk`
+  - **Tauri**: `RustTransport` using native libxmtp via Tauri commands (`src-tauri/src/xmtp.rs`)
 - Platform selected at runtime via `VITE_PLATFORM` env var + dynamic imports in `factory.ts`
-- Sidecar communicates over NDJSON stdio IPC; PKP signing proxied from frontend
+- Tauri backend: signature requests emitted as events, frontend signs via PKP, resolves via command
 - See `apps/frontend/src/lib/xmtp/` (transport layer) and `providers/XMTPProvider.tsx`
-- See `apps/xmtp-sidecar/` (Node sidecar for Tauri)
 
 ### AI Chat (Cloudflare Workers)
 - **Text chat with AI** via Cloudflare Worker backend
@@ -74,6 +70,16 @@ bun check            # Type check all packages
 - Call state shown in chat header with duration
 - See `apps/frontend/src/lib/voice/` and `AIChatPage.tsx`
 
+### Scrobbling (On-chain listening history)
+- **ScrobbleEngine** (`packages/core/src/scrobble/engine.ts`): State machine tracking play time per session. Threshold: `min(duration × 50%, 240s)`. Emits `ReadyScrobble` when met
+- **ScrobbleService** (`apps/frontend/src/lib/scrobble-service.ts`): Wires engine directly to Lit Action V2. Each scrobble fires immediately (no queue/batch)
+- **Lit Action V2** (`lit-actions/actions/scrobble-submit-v2.js`): Signs EIP-191, buckets tracks into MBID/ipId/meta, sponsor PKP broadcasts to ScrobbleV2 on MegaETH
+- **ScrobbleV2 contract**: `0xf42b285EEb9280860808fd3bC7b0D6c531EF53bd` on MegaETH (chain 6343)
+- **Subgraph**: Goldsky `dotheaven-activity/2.0.0` indexes `ScrobbleId` + `ScrobbleMeta` events
+- **Frontend**: `ScrobblesPage` fetches from subgraph, displays verified/unidentified status
+- **MBID extraction**: `local-music.ts` reads `musicbrainz_recordingid` from ID3 tags via music-metadata-browser
+- Three scrobble paths: MBID (MusicBrainz recording), ipId (Story Protocol IP), metadata hash (unidentified)
+
 ## Key Routes
 ```
 /                      # Home (vertical video feed)
@@ -82,6 +88,7 @@ bun check            # Type check all packages
 /wallet                # Wallet page
 /library               # Music library
 /playlist/:id          # Playlist page
+/scrobbles             # On-chain scrobble history
 ```
 
 ## Environment Variables

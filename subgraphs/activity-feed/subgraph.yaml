@@ -24,3 +24,27 @@ dataSources:
         - event: ScrobbleBatch(indexed address,uint64,uint64,uint32,string,bytes32)
           handler: handleScrobbleBatch
       file: ./src/scrobble.ts
+
+  - kind: ethereum
+    name: ScrobbleV2
+    network: megaeth-testnet-v2
+    source:
+      address: "0xf42b285EEb9280860808fd3bC7b0D6c531EF53bd"
+      abi: ScrobbleV2
+      startBlock: 10001071
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Scrobble
+        - ScrobbleMetaEntry
+      abis:
+        - name: ScrobbleV2
+          file: ./abis/ScrobbleV2.json
+      eventHandlers:
+        - event: ScrobbleId(indexed address,indexed uint256,bytes20,uint8,uint64)
+          handler: handleScrobbleId
+        - event: ScrobbleMeta(indexed address,indexed uint256,bytes32,uint64)
+          handler: handleScrobbleMeta
+      file: ./src/scrobble-v2.ts

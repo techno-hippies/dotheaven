@@ -99,6 +99,12 @@ const ACTIONS: Record<string, ActionDef> = {
       { name: 'filebase_api_key', envVar: 'FILEBASE_SONGS_BUCKET_API_KEY' },
     ],
   },
+  scrobbleSubmitV2: {
+    name: 'scrobbleSubmitV2',
+    path: 'actions/scrobble-submit-v2.js',
+    displayName: 'Scrobble Submit v2',
+    keys: [], // No encrypted keys — all data on-chain, sponsor PKP pays gas
+  },
 };
 
 // Parse CLI args

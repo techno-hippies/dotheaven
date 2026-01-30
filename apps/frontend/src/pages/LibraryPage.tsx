@@ -1,4 +1,4 @@
-import { type Component, createSignal, onCleanup, Show, onMount } from 'solid-js'
+import { type Component, createSignal, onCleanup, Show, onMount, createEffect, on } from 'solid-js'
 import {
   AppShell,
   Header,
@@ -24,6 +24,8 @@ import {
 } from '../lib/local-music'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { useAuth } from '../providers'
+import { createScrobbleService, type ScrobbleService } from '../lib/scrobble-service'
 
 function formatTime(seconds: number): string {
   if (!isFinite(seconds) || seconds < 0) return '0:00'
@@ -43,6 +45,22 @@ function parseDuration(value?: string | null): number {
 
 export const LibraryPage: Component = () => {
   const platform = usePlatform()
+  const auth = useAuth()
+
+  // Scrobble service — tracks play time and submits to chain via Lit Action
+  let scrobbleService: ScrobbleService | null = null
+
+  onMount(() => {
+    scrobbleService = createScrobbleService(
+      () => auth.getAuthContext(),
+      () => auth.pkpInfo()?.publicKey ?? null,
+    )
+    scrobbleService!.start()
+  })
+
+  onCleanup(() => {
+    scrobbleService?.stop()
+  })
 
   const [tracks, setTracks] = createSignal<LocalTrack[]>([])
   const [folderPath, setFolderPath] = createSignal<string | null>(null)
@@ -50,11 +68,17 @@ export const LibraryPage: Component = () => {
 
   // Playback state
   const [currentIndex, setCurrentIndex] = createSignal(-1)
+  const [selectedTrackId, setSelectedTrackId] = createSignal<string | null>(null)
   const [isPlaying, setIsPlaying] = createSignal(false)
   const [currentTime, setCurrentTime] = createSignal(0)
   const [duration, setDuration] = createSignal(0)
   const [volume, setVolume] = createSignal(75)
   const [playbackError, setPlaybackError] = createSignal<string | null>(null)
+
+  // Notify scrobble engine of play/pause changes
+  createEffect(on(isPlaying, (playing) => {
+    scrobbleService?.onPlaybackChange(playing)
+  }))
 
   let audio: HTMLAudioElement | undefined
   let currentRevoke: (() => void) | undefined
@@ -338,7 +362,19 @@ export const LibraryPage: Component = () => {
     const thisPlay = ++playId
     if (!isFallback) fallbackTried = false
     setCurrentIndex(index)
+    setSelectedTrackId(t[index].id)
     setPlaybackError(null)
+
+    // Notify scrobble engine of new track
+    const track = t[index] as LocalTrack
+    scrobbleService?.onTrackStart({
+      artist: track.artist,
+      title: track.title,
+      album: track.album || null,
+      durationMs: parseDuration(track.duration) * 1000 || null,
+      mbid: track.mbid || null,
+      ipId: null,
+    })
     setCurrentTime(0)
     const fallbackDuration = parseDuration(t[index].duration)
     if (fallbackDuration > 0) setDuration(fallbackDuration)
@@ -675,10 +711,9 @@ export const LibraryPage: Component = () => {
           <TrackList
             tracks={tracks()}
             showDateAdded={false}
-            onTrackClick={(track) => {
-              const idx = tracks().findIndex((t) => t.id === track.id)
-              if (idx >= 0) setCurrentIndex(idx)
-            }}
+            activeTrackId={currentTrack()?.id}
+            selectedTrackId={selectedTrackId() || undefined}
+            onTrackClick={(track) => setSelectedTrackId(track.id)}
             onTrackPlay={(track) => {
               const idx = tracks().findIndex((t) => t.id === track.id)
               if (idx >= 0) playTrack(idx)

@@ -21,8 +21,8 @@ export interface ReadyScrobble {
   source: string
   /** Optional Story Protocol IP Asset ID (for Heaven-published songs) */
   ipId: string | null
-  /** Optional ISRC from ID3 tags */
-  isrc: string | null
+  /** Optional MusicBrainz Recording ID from ID3 tags */
+  mbid: string | null
 }
 
 export interface TrackMetadata {
@@ -32,13 +32,13 @@ export interface TrackMetadata {
   durationMs?: number | null
   /** Story Protocol ipId if known */
   ipId?: string | null
-  /** ISRC from ID3 tags if available */
-  isrc?: string | null
+  /** MusicBrainz Recording ID if available */
+  mbid?: string | null
 }
 
-// Scrobble thresholds (production values)
-const MAX_SCROBBLE_THRESHOLD_MS = 240_000 // 4 minutes
-const MIN_DURATION_FOR_SCROBBLE_MS = 30_000 // 30 seconds
+// Scrobble thresholds (TEST: 1% / 3s min — revert for production)
+const MAX_SCROBBLE_THRESHOLD_MS = 10_000 // 10 seconds (test)
+const MIN_DURATION_FOR_SCROBBLE_MS = 3_000 // 3 seconds (test)
 
 interface SessionState {
   sessionKey: string
@@ -48,7 +48,7 @@ interface SessionState {
   album: string | null
   durationMs: number | null
   ipId: string | null
-  isrc: string | null
+  mbid: string | null
   startedAtEpochSec: number | null
   accumulatedPlayMs: number
   lastUpdateTimeMs: number
@@ -65,7 +65,7 @@ function createSession(sessionKey: string): SessionState {
     album: null,
     durationMs: null,
     ipId: null,
-    isrc: null,
+    mbid: null,
     startedAtEpochSec: null,
     accumulatedPlayMs: 0,
     lastUpdateTimeMs: 0,
@@ -87,7 +87,7 @@ function buildTrackKey(
 
 function computeThreshold(durationMs: number | null): number {
   if (durationMs != null && durationMs >= MIN_DURATION_FOR_SCROBBLE_MS) {
-    return Math.min(durationMs / 2, MAX_SCROBBLE_THRESHOLD_MS)
+    return Math.min(durationMs / 100, MAX_SCROBBLE_THRESHOLD_MS) // TEST: 1% — revert to durationMs / 2
   }
   // Unknown duration → require 4 minutes
   return MAX_SCROBBLE_THRESHOLD_MS
@@ -138,7 +138,7 @@ export class ScrobbleEngine {
     state.album = metadata.album ?? null
     state.durationMs = metadata.durationMs ?? null
     state.ipId = metadata.ipId ?? null
-    state.isrc = metadata.isrc ?? null
+    state.mbid = metadata.mbid ?? null
 
     // If playing and no start time, mark start
     if (newTrackKey != null && state.isPlaying && state.startedAtEpochSec == null) {
@@ -206,7 +206,7 @@ export class ScrobbleEngine {
           playedAtSec: state.startedAtEpochSec,
           source: state.sessionKey,
           ipId: state.ipId,
-          isrc: state.isrc,
+          mbid: state.mbid,
         })
       }
     }
@@ -234,7 +234,7 @@ export class ScrobbleEngine {
       this.accumulatePlayTime(state)
     }
 
-    const { artist, title, album, durationMs, startedAtEpochSec, accumulatedPlayMs, alreadyScrobbled, ipId, isrc } = state
+    const { artist, title, album, durationMs, startedAtEpochSec, accumulatedPlayMs, alreadyScrobbled, ipId, mbid } = state
 
     // Reset for next track
     state.trackKey = null
@@ -243,7 +243,7 @@ export class ScrobbleEngine {
     state.album = null
     state.durationMs = null
     state.ipId = null
-    state.isrc = null
+    state.mbid = null
     state.startedAtEpochSec = null
     state.accumulatedPlayMs = 0
     state.lastUpdateTimeMs = 0
@@ -264,7 +264,7 @@ export class ScrobbleEngine {
         playedAtSec: startedAtEpochSec,
         source: state.sessionKey,
         ipId,
-        isrc,
+        mbid,
       })
     }
   }

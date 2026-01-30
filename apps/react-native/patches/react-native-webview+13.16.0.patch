@@ -1,0 +1,82 @@
+diff --git a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
+index 4d5d2f1..0b7a0f1 100644
+--- a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
++++ b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
+@@
+-import android.graphics.Bitmap;
+-import android.net.http.SslError;
++import android.graphics.Bitmap;
++import android.net.Uri;
++import android.net.http.SslError;
+@@
+-import androidx.core.util.Pair;
++import androidx.core.util.Pair;
++import androidx.webkit.WebViewAssetLoader;
+@@
+     protected boolean mLastLoadFailed = false;
+     protected RNCWebView.ProgressChangedFilter progressChangedFilter = null;
+     protected @Nullable RNCBasicAuthCredential basicAuthCredential = null;
++    protected @Nullable WebViewAssetLoader assetLoader = null;
+ 
+     public void setBasicAuthCredential(@Nullable RNCBasicAuthCredential credential) {
+         basicAuthCredential = credential;
+     }
++
++    private WebViewAssetLoader getAssetLoader(WebView view) {
++        if (assetLoader == null) {
++            assetLoader = new WebViewAssetLoader.Builder()
++                .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(view.getContext()))
++                .build();
++        }
++        return assetLoader;
++    }
++
++    private @Nullable WebResourceResponse maybeInterceptFromAssets(WebView view, Uri uri) {
++        return getAssetLoader(view).shouldInterceptRequest(uri);
++    }
+@@
+     public void onPageFinished(WebView webView, String url) {
+         super.onPageFinished(webView, url);
+         String cookies = CookieManager.getInstance().getCookie(url);
+@@
+         if (!mLastLoadFailed) {
+             RNCWebView reactWebView = (RNCWebView) webView;
+ 
+             reactWebView.callInjectedJavaScript();
+ 
+             emitFinishEvent(webView, url);
+         }
+     }
++
++    @Override
++    public @Nullable WebResourceResponse shouldInterceptRequest(WebView view, String url) {
++        WebResourceResponse response = maybeInterceptFromAssets(view, Uri.parse(url));
++        if (response != null) {
++            return response;
++        }
++        return super.shouldInterceptRequest(view, url);
++    }
++
++    @Override
++    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
++    public @Nullable WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
++        WebResourceResponse response = maybeInterceptFromAssets(view, request.getUrl());
++        if (response != null) {
++            return response;
++        }
++        return super.shouldInterceptRequest(view, request);
++    }
+diff --git a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt
+index e5f3220..e7d9b87 100644
+--- a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt
++++ b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt
+@@
+         settings.allowFileAccessFromFileURLs = false
+         settings.allowUniversalAccessFromFileURLs = false
+         settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
++        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_AUTHENTICATION)) {
++            WebSettingsCompat.setWebAuthenticationSupport(
++                settings,
++                WebSettingsCompat.WEB_AUTHENTICATION_SUPPORT_FOR_APP
++            )
++        }

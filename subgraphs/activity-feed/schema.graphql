@@ -1,16 +1,42 @@
-# Scrobble batch — one per ScrobbleV1.submitBatch() call
-#
-# Per-track data (ipId, isrc, track_key) lives in the IPFS batch JSON at `cid`.
-# The subgraph indexes batch-level aggregates only. A separate trending indexer
-# fetches CIDs and unpacks per-track identifiers for aggregation.
+# ── ScrobbleV1 (legacy, IPFS-based) ──────────────────────────────────
+# Kept for backward compat — V1 contract still has historical data.
+
 type ScrobbleBatch @entity(immutable: true) {
   id: ID!                      # tx hash (hex)
-  user: Bytes!                 # wallet address (indexed in event)
+  user: Bytes!                 # wallet address
   startTs: BigInt!             # earliest track timestamp
   endTs: BigInt!               # latest track timestamp
   count: Int!                  # number of tracks in batch
   cid: String!                 # IPFS CID of full batch JSON
   batchHash: Bytes!            # SHA-256 of batch JSON
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+# ── ScrobbleV2 (on-chain, per-track) ────────────────────────────────
+# Each entity = one track play. Two types:
+# - Scrobble: identified track (MBID or ipId)
+# - ScrobbleMeta: unidentified track (title/artist/album stored on-chain as metaHash)
+
+type Scrobble @entity(immutable: true) {
+  id: ID!                      # "{txHash}-{logIndex}"
+  user: Bytes!                 # wallet address
+  scrobbleId: BigInt!          # per-user sequential ID from contract
+  identifier: Bytes!           # bytes20: MBID (left-aligned bytes16) or ipId (address)
+  kind: Int!                   # 1 = MBID, 2 = ipId
+  timestamp: BigInt!           # play timestamp (unix seconds)
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type ScrobbleMetaEntry @entity(immutable: true) {
+  id: ID!                      # "{txHash}-{logIndex}"
+  user: Bytes!                 # wallet address
+  scrobbleId: BigInt!          # per-user sequential ID from contract
+  metaHash: Bytes!             # keccak256(abi.encode(title, artist, album))
+  timestamp: BigInt!           # play timestamp (unix seconds)
   blockNumber: BigInt!
   blockTimestamp: BigInt!
   transactionHash: Bytes!

@@ -40,6 +40,7 @@ interface CIDs {
   heavenClaimName: string;
   heavenSetProfile: string;
   scrobbleSubmit: string;
+  scrobbleSubmitV2: string;
   [key: string]: string;
 }
 
@@ -69,7 +70,7 @@ if (!envConfig) {
 
 // Load CIDs
 const cidPath = join(ROOT_DIR, envConfig.cidFile);
-let cids: CIDs = { songPublish: '', lyricsTranslate: '', storyRegisterSponsor: '', avatarUpload: '', heavenClaimName: '', heavenSetProfile: '', scrobbleSubmit: '' };
+let cids: CIDs = { songPublish: '', lyricsTranslate: '', storyRegisterSponsor: '', avatarUpload: '', heavenClaimName: '', heavenSetProfile: '', scrobbleSubmit: '', scrobbleSubmitV2: '' };
 if (existsSync(cidPath)) {
   cids = JSON.parse(readFileSync(cidPath, 'utf-8'));
 }
