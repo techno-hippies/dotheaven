@@ -23,7 +23,7 @@ export const ListItem: Component<ListItemProps> = (props) => {
     <button
       type="button"
       class={cn(
-        'flex items-center gap-3 w-full p-2.5 px-3 rounded-lg text-left cursor-pointer',
+        'flex items-center gap-3 py-2.5 -mx-3 text-left cursor-pointer',
         'hover:bg-[var(--bg-highlight-hover)] transition-colors',
         props.active && 'bg-[var(--bg-highlight)]',
         props.class
@@ -33,10 +33,10 @@ export const ListItem: Component<ListItemProps> = (props) => {
       {/* Cover / Icon slot */}
       <Show
         when={props.onCoverClick}
-        fallback={props.cover}
+        fallback={<div class="ml-3">{props.cover}</div>}
       >
         <div
-          class="cursor-pointer"
+          class="cursor-pointer ml-3"
           onClick={(e) => {
             e.stopPropagation()
             props.onCoverClick?.()
@@ -47,7 +47,10 @@ export const ListItem: Component<ListItemProps> = (props) => {
       </Show>
 
       {/* Text info */}
-      <div class="flex flex-col gap-0.5 flex-1 min-w-0 overflow-hidden">
+      <div class={cn(
+        'flex flex-col gap-0.5 flex-1 min-w-0 overflow-hidden',
+        !props.trailing && 'mr-3'
+      )}>
         <Show
           when={props.onTitleClick}
           fallback={
@@ -75,7 +78,7 @@ export const ListItem: Component<ListItemProps> = (props) => {
 
       {/* Trailing slot */}
       <Show when={props.trailing}>
-        {props.trailing}
+        <div class="mr-3">{props.trailing}</div>
       </Show>
     </button>
   )

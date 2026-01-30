@@ -6,17 +6,12 @@
 
 import { type Component, createSignal, createEffect, For, Show, onCleanup } from 'solid-js'
 import {
-  AppShell,
-  Header,
-  RightPanel,
   Avatar,
   IconButton,
-  MusicPlayer,
   MessageBubble,
   MessageList,
   MessageInput,
 } from '@heaven/ui'
-import { AppSidebar, HeaderActions } from '../components/shell'
 import { useAuth, useXMTP, type XMTPMessage } from '../providers'
 import { useParams } from '@solidjs/router'
 
@@ -103,30 +98,7 @@ export const ChatPage: Component = () => {
   }
 
   return (
-    <AppShell
-      header={<Header rightSlot={<HeaderActions />} />}
-      sidebar={<AppSidebar />}
-      rightPanel={
-        <RightPanel>
-          <div class="p-4">
-            <h3 class="text-base font-semibold text-[var(--text-primary)] mb-4">Now Playing</h3>
-            <div class="aspect-square bg-[var(--bg-highlight)] rounded-lg mb-4" />
-            <p class="text-lg font-semibold text-[var(--text-primary)]">Neon Dreams</p>
-            <p class="text-base text-[var(--text-secondary)]">Synthwave Collective</p>
-          </div>
-        </RightPanel>
-      }
-      footer={
-        <MusicPlayer
-          title="Neon Dreams"
-          artist="Synthwave Collective"
-          currentTime="2:47"
-          duration="4:39"
-          progress={58}
-          isPlaying
-        />
-      }
-    >
+    <>
       {/* Not authenticated */}
       <Show when={!auth.isAuthenticated()}>
         <div class="h-full flex flex-col items-center justify-center gap-4">
@@ -202,6 +174,6 @@ export const ChatPage: Component = () => {
           </div>
         </div>
       </Show>
-    </AppShell>
+    </>
   )
 }

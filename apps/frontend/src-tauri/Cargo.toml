@@ -18,6 +18,7 @@ tauri-plugin-fs = "2"
 symphonia = { version = "0.5", features = ["aac", "flac", "isomp4", "mp3"] }
 cpal = "0.15"
 ringbuf = "0.3"
+rubato = "0.14.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
@@ -30,6 +31,9 @@ which = "6"
 hex = { package = "const-hex", version = "1.14" }
 prost = { version = "0.14", default-features = false }
 futures = "0.3"
+rusqlite = { version = "0.37", features = ["bundled"] }
+lofty = "0.21"
+walkdir = "2"
 tracing = { version = "0.1", features = ["log"] }
 
 # XMTP (libxmtp) — pinned to local clone

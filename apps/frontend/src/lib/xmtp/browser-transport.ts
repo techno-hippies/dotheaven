@@ -301,6 +301,15 @@ export class BrowserTransport implements XmtpTransport {
     }
   }
 
+  streamAllMessages(
+    _onMessage: (msg: XmtpMessage) => void,
+    _onError?: (err: Error) => void
+  ): () => void {
+    // TODO: implement for browser-sdk when needed
+    console.warn('[BrowserTransport] streamAllMessages not yet implemented')
+    return () => {}
+  }
+
   async updateConsent(conversationId: string, state: 'allowed' | 'denied' | 'unknown'): Promise<void> {
     const dm = this.conversationCache.get(conversationId)
     if (!dm) throw new Error(`Conversation ${conversationId} not found`)

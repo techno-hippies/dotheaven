@@ -6,5 +6,5 @@ export const LIT_CONFIG = {
   network: nagaDev,
   networkName: 'naga-dev',
   authServiceUrl: 'https://naga-dev-auth-service.getlit.dev',
-  sessionExpirationMs: 7 * 24 * 60 * 60 * 1000, // 7 days
+  sessionExpirationMs: 30 * 24 * 60 * 60 * 1000, // 30 days
 } as const

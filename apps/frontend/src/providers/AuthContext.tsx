@@ -27,6 +27,7 @@ export interface AuthContextType {
   // Actions
   loginWithPasskey: () => Promise<void>
   registerWithPasskey: () => Promise<void>
+  connectWallet: () => Promise<void>
   logout: () => Promise<void>
   cancelAuth: () => void
   clearError: () => void
@@ -38,7 +39,7 @@ export interface AuthContextType {
   getAuthContext: () => Promise<PKPAuthContext>
 }
 
-const AuthContext = createContext<AuthContextType>()
+export const AuthContext = createContext<AuthContextType>()
 
 export const AuthProvider: ParentComponent = (props) => {
   const platform = usePlatform()
@@ -67,11 +68,14 @@ export const AuthProvider: ParentComponent = (props) => {
             tokenId: auth.pkpTokenId || '',
           })
           if (auth.authMethodType && auth.authMethodId) {
-            setAuthData({
+            const restoredAuthData = {
               authMethodType: auth.authMethodType,
               authMethodId: auth.authMethodId,
               accessToken: auth.accessToken || '',
-            })
+            }
+            setAuthData(restoredAuthData)
+            console.log('[Auth] Restored authData keys:', Object.keys(restoredAuthData))
+            console.log('[Auth] Restored authData full:', restoredAuthData)
           }
           console.log('[Auth] Restored from Tauri storage:', auth.pkpAddress)
         }
@@ -125,11 +129,14 @@ export const AuthProvider: ParentComponent = (props) => {
               publicKey: payload.pkpPublicKey,
               tokenId: payload.pkpTokenId || '',
             })
-            setAuthData({
+            const eventAuthData = {
               authMethodType: payload.authMethodType || 0,
               authMethodId: payload.authMethodId || '',
               accessToken: payload.accessToken || '',
-            })
+            }
+            setAuthData(eventAuthData)
+            console.log('[Auth] Event authData keys:', Object.keys(eventAuthData))
+            console.log('[Auth] Event authData full:', eventAuthData)
             setIsAuthenticating(false)
             if (payload.isNewUser) {
               setIsNewUser(true)
@@ -228,10 +235,71 @@ export const AuthProvider: ParentComponent = (props) => {
     }
   }
 
+  // Connect wallet (EOA): tries sign-in, auto-registers if no PKP found
+  async function connectWallet(): Promise<void> {
+    setIsAuthenticating(true)
+    setAuthError(null)
+
+    try {
+      if (platform.isTauri) {
+        // Tauri: open browser, auth page handles both sign-in and auto-register
+        const { invoke } = await import('@tauri-apps/api/core')
+        await invoke('start_eoa_auth')
+        console.log('[Auth] Opened browser for wallet auth')
+      } else {
+        // Web: clear any existing session first (to remove old broken authData)
+        const { clearAuthContext } = await import('../lib/lit')
+        clearAuthContext()
+        localStorage.removeItem(WEB_SESSION_KEY)
+
+        // Try authenticate first, auto-register if no PKP
+        const { authenticateWithEOA } = await import('../lib/lit')
+        try {
+          const result = await authenticateWithEOA()
+          setPkpInfo(result.pkpInfo)
+          setAuthData(result.authData)
+          saveWebSession(result.pkpInfo, result.authData)
+          setIsAuthenticating(false)
+          console.log('[Auth] Web wallet login complete:', result.pkpInfo.ethAddress)
+        } catch (authErr) {
+          if (authErr instanceof Error && authErr.message.includes('No PKP found')) {
+            console.log('[Auth] No PKP for wallet, auto-registering...')
+            const { registerWithEOA } = await import('../lib/lit')
+            const result = await registerWithEOA()
+            setIsNewUser(true)
+            setPkpInfo(result.pkpInfo)
+            setAuthData(result.authData)
+            saveWebSession(result.pkpInfo, result.authData)
+            setIsAuthenticating(false)
+            console.log('[Auth] Web wallet PKP minted:', result.pkpInfo.ethAddress)
+          } else {
+            throw authErr
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[Auth] Wallet auth failed:', error)
+      setAuthError(error instanceof Error ? error.message : 'Authentication failed')
+      setIsAuthenticating(false)
+      throw error
+    }
+  }
+
   async function logout(): Promise<void> {
     setPkpInfo(null)
     setAuthData(null)
     setAuthError(null)
+
+    // Clear username cache
+    try {
+      const beforeLogout = localStorage.getItem('heaven:username')
+      console.log('[Auth] Clearing username from localStorage (was:', beforeLogout, ')')
+      localStorage.removeItem('heaven:username')
+      const afterLogout = localStorage.getItem('heaven:username')
+      console.log('[Auth] Username after clear:', afterLogout)
+    } catch (e) {
+      console.error('[Auth] Failed to clear username:', e)
+    }
 
     if (platform.isTauri) {
       try {
@@ -306,6 +374,7 @@ export const AuthProvider: ParentComponent = (props) => {
     isNewUser,
     loginWithPasskey,
     registerWithPasskey,
+    connectWallet,
     logout,
     cancelAuth,
     clearError,

@@ -2,17 +2,12 @@ import { type Component } from 'solid-js'
 import { Search } from '@kobalte/core/search'
 import { cn } from '../lib/utils'
 import { AlbumCover } from './album-cover'
+import { Spinner } from '../primitives'
 
 const SearchIcon = () => (
   <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
     <circle cx="11" cy="11" r="8" />
     <path d="M21 21l-4.35-4.35" />
-  </svg>
-)
-
-const LoadingIcon = () => (
-  <svg class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
   </svg>
 )
 
@@ -115,7 +110,7 @@ export const SearchField: Component<SearchFieldProps> = (props) => {
           class="flex items-center justify-center flex-shrink-0"
           loadingComponent={
             <Search.Icon class="text-[var(--text-muted)]">
-              <LoadingIcon />
+              <Spinner size="sm" />
             </Search.Icon>
           }
         >

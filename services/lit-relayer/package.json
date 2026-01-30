@@ -1,0 +1,22 @@
+{
+  "name": "@heaven/lit-relayer",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "mkdir -p api-bundled && bun build api/mint-user-pkp.ts --outfile=api-bundled/mint-user-pkp.js --target=node --format=cjs --external @vercel/node",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "@lit-protocol/auth": "^8.1.2",
+    "@lit-protocol/lit-client": "^8.2.3",
+    "@lit-protocol/networks": "^8.3.2",
+    "viem": "^2.45.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@vercel/node": "^3.2.0",
+    "typescript": "^5.6.0",
+    "vercel": "^37.0.0"
+  }
+}

@@ -107,6 +107,32 @@ export class RustTransport implements XmtpTransport {
     }
   }
 
+  streamAllMessages(
+    onMessage: (msg: XmtpMessage) => void,
+    onError?: (err: Error) => void,
+  ): () => void {
+    let unlisten: UnlistenFn | null = null
+    let isActive = true
+
+    // Start the Rust-side global stream
+    invoke('xmtp_stream_all_messages').catch((err) => {
+      if (isActive) onError?.(new Error(String(err)))
+    })
+
+    // Listen for messages emitted by the global stream
+    listen<XmtpMessage>('xmtp://message-all', (event) => {
+      if (!isActive) return
+      onMessage(event.payload)
+    }).then((fn) => {
+      unlisten = fn
+    })
+
+    return () => {
+      isActive = false
+      unlisten?.()
+    }
+  }
+
   async updateConsent(conversationId: string, state: 'allowed' | 'denied' | 'unknown'): Promise<void> {
     await invoke('xmtp_update_consent', { conversationId, consent: state })
   }

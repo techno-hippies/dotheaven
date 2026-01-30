@@ -9,11 +9,14 @@ export interface PKPInfo {
 
 /**
  * Authentication Data
+ * Preserves all fields from Lit Protocol authenticators
  */
 export interface AuthData {
   authMethodType: number
   authMethodId: string
   accessToken: string
+  // Allow additional fields from Lit Protocol (authSig, scope data, etc.)
+  [key: string]: any
 }
 
 /**

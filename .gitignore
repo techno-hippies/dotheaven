@@ -50,3 +50,8 @@ Cargo.lock
 # package-lock.json
 # yarn.lock
 # pnpm-lock.yaml
+
+# Vercel
+.vercel/
+**/.vercel/
+**/api-bundled/

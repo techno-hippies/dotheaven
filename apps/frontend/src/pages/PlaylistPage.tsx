@@ -1,10 +1,6 @@
 import { type Component, createSignal, createEffect, Show } from 'solid-js'
 import { useParams, useNavigate } from '@solidjs/router'
 import {
-  AppShell,
-  Header,
-  RightPanel,
-  MusicPlayer,
   MediaHeader,
   TrackList,
   Dialog,
@@ -26,7 +22,6 @@ import {
   type Track,
 } from '@heaven/ui'
 import { getPlaylist, updatePlaylist, deletePlaylist, type Playlist } from '@heaven/core'
-import { AppSidebar, HeaderActions } from '../components/shell'
 
 export const PlaylistPage: Component = () => {
   const params = useParams<{ id: string }>()
@@ -105,43 +100,19 @@ export const PlaylistPage: Component = () => {
   const tracks: Track[] = []
 
   return (
-    <AppShell
-      header={<Header rightSlot={<HeaderActions />} />}
-      sidebar={<AppSidebar />}
-      rightPanel={
-        <RightPanel>
-          <div class="p-4">
-            <h3 class="text-base font-semibold text-[var(--text-primary)] mb-4">Now Playing</h3>
-            <div class="aspect-square bg-[var(--bg-highlight)] rounded-lg mb-4" />
-            <p class="text-lg font-semibold text-[var(--text-primary)]">Neon Dreams</p>
-            <p class="text-base text-[var(--text-secondary)]">Synthwave Collective</p>
-          </div>
-        </RightPanel>
-      }
-      footer={
-        <MusicPlayer
-          title="Neon Dreams"
-          artist="Synthwave Collective"
-          currentTime="2:47"
-          duration="4:39"
-          progress={58}
-          isPlaying
-        />
-      }
-    >
-      <Show when={!loading()} fallback={
+    <Show when={!loading()} fallback={
+      <div class="h-full flex items-center justify-center">
+        <p class="text-[var(--text-muted)]">Loading...</p>
+      </div>
+    }>
+      <Show when={playlist()} fallback={
         <div class="h-full flex items-center justify-center">
-          <p class="text-[var(--text-muted)]">Loading...</p>
+          <p class="text-[var(--text-muted)]">Playlist not found</p>
         </div>
       }>
-        <Show when={playlist()} fallback={
-          <div class="h-full flex items-center justify-center">
-            <p class="text-[var(--text-muted)]">Playlist not found</p>
-          </div>
-        }>
-          {(p) => (
-            <div class="h-full overflow-y-auto bg-gradient-to-b from-[#4a3f6b] via-[#2a2440] to-[var(--bg-page)] rounded-t-lg">
-              <MediaHeader
+        {(p) => (
+          <div class="h-full overflow-y-auto bg-gradient-to-b from-[#4a3f6b] via-[#2a2440] to-[var(--bg-page)] rounded-t-lg">
+            <MediaHeader
                 type="playlist"
                 title={p().title}
                 description={p().description}
@@ -329,10 +300,9 @@ export const PlaylistPage: Component = () => {
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
-            </div>
-          )}
-        </Show>
+          </div>
+        )}
       </Show>
-    </AppShell>
+    </Show>
   )
 }

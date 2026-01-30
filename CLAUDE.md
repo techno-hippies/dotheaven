@@ -56,6 +56,8 @@ bun check            # Type check all packages
   - **Tauri**: `RustTransport` using native libxmtp via Tauri commands (`src-tauri/src/xmtp.rs`)
 - Platform selected at runtime via `VITE_PLATFORM` env var + dynamic imports in `factory.ts`
 - Tauri backend: signature requests emitted as events, frontend signs via PKP, resolves via command
+- **Unread tracking**: Global `streamAllMessages` stream detects incoming peer messages. `activeChat` signal tracks which chat is open. localStorage persists `lastRead` timestamps per peer so unread state survives restarts.
+- **Tauri events**: `xmtp://sign-request` (identity signing), `xmtp://message` (per-chat stream), `xmtp://message-all` (global stream for unread)
 - See `apps/frontend/src/lib/xmtp/` (transport layer) and `providers/XMTPProvider.tsx`
 
 ### AI Chat (Cloudflare Workers)
@@ -75,10 +77,39 @@ bun check            # Type check all packages
 - **ScrobbleService** (`apps/frontend/src/lib/scrobble-service.ts`): Wires engine directly to Lit Action V2. Each scrobble fires immediately (no queue/batch)
 - **Lit Action V2** (`lit-actions/actions/scrobble-submit-v2.js`): Signs EIP-191, buckets tracks into MBID/ipId/meta, sponsor PKP broadcasts to ScrobbleV2 on MegaETH
 - **ScrobbleV2 contract**: `0xf42b285EEb9280860808fd3bC7b0D6c531EF53bd` on MegaETH (chain 6343)
-- **Subgraph**: Goldsky `dotheaven-activity/2.0.0` indexes `ScrobbleId` + `ScrobbleMeta` events
+- **Subgraph**: Goldsky `dotheaven-activity/3.0.0` indexes `ScrobbleId` + `ScrobbleMeta` events
 - **Frontend**: `ScrobblesPage` fetches from subgraph, displays verified/unidentified status
-- **MBID extraction**: `local-music.ts` reads `musicbrainz_recordingid` from ID3 tags via music-metadata-browser
+- **MBID extraction**: Rust `music_db.rs` reads MusicBrainz recording ID from tags via lofty
 - Three scrobble paths: MBID (MusicBrainz recording), ipId (Story Protocol IP), metadata hash (unidentified)
+
+### Playlists (On-chain via PlaylistV1)
+- **PlaylistV1 contract**: `0xF0337C4A335cbB3B31c981945d3bE5B914F7B329` on MegaETH (chain 6343)
+- **Event-sourced**: name/coverCid/trackIds stored only in events; contract stores checkpoints (tracksHash, trackCount, version)
+- **Replay protection**: On-chain monotonic nonce per user (`userNonces` mapping + `consumeNonce()`)
+- **Lit Action**: `playlist-v1.js` — signs EIP-191, registers tracks in ScrobbleV3, then executes playlist op
+- **Subgraph**: Goldsky `dotheaven-playlists/1.0.0` indexes PlaylistCreated, PlaylistTracksSet, PlaylistMetaUpdated, PlaylistDeleted
+  - API: `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-playlists/1.0.0/gn`
+
+### Local Music Library (Tauri-only)
+- **Rust SQLite backend** (`src-tauri/src/music_db.rs`): rusqlite + lofty + walkdir
+  - `music.db` in app data dir with `tracks` table (file_path PK) and `settings` table
+  - Metadata extraction via lofty (ID3, Vorbis Comments, iTunes ilst, etc.)
+  - Cache invalidation by `(file_size, file_mtime)` — skips re-extraction for unchanged files
+  - Recursive folder scan with progress events (`music://scan-progress`)
+  - Pruning of deleted files on rescan
+  - Paginated queries: `LIMIT/OFFSET` via `music_get_tracks` + `music_get_track_count`
+  - All Tauri commands use `spawn_blocking` (sync rusqlite behind `Arc<Mutex<MusicDb>>`)
+- **Frontend** (`src/lib/local-music.ts`): Thin invoke wrappers, no JS-side metadata parsing
+- **LibraryPage** (`src/pages/LibraryPage.tsx`):
+  - Loads tracks in PAGE_SIZE=200 batches with epoch guard for cancellation
+  - Updates DOM on first page, then every 5th batch, and at end
+  - Platform-guarded: early-returns on web, dynamic imports for Tauri event API
+  - Scan progress UI shows done/total next to spinner
+- **TrackList virtualization** (`packages/ui/src/composite/track-list.tsx`):
+  - Renders only visible rows + 10 overscan buffer (ROW_HEIGHT=48)
+  - Scroll listener throttled via requestAnimationFrame
+  - Uses `getBoundingClientRect()` on rows container for correct offset math
+  - `props.tracks.slice()` preserves object identity to avoid `<For>` remounts
 
 ## Key Routes
 ```

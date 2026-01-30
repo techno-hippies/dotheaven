@@ -1,10 +1,7 @@
 import type { Component } from 'solid-js'
 import { createSignal, Show } from 'solid-js'
 import { cn } from '../lib/utils'
-import { Button } from '../primitives/button'
-import { PillGroup } from '../primitives/pill-group'
-import { LocationInput, type LocationResult } from '../primitives/location-input'
-import { Select, type SelectOption } from '../primitives/select'
+import { Button, PillGroup, LocationInput, Select, type LocationResult, type SelectOption } from '../primitives'
 
 export interface OnboardingBasicsData {
   age: number | null
@@ -187,16 +184,10 @@ export const OnboardingBasicsStep: Component<OnboardingBasicsStepProps> = (props
         <Button
           class="w-full h-12 text-lg"
           disabled={!!ageError() || props.submitting}
+          loading={props.submitting}
           onClick={handleContinue}
         >
-          {props.submitting ? (
-            <div class="flex items-center gap-2">
-              <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              Saving...
-            </div>
-          ) : (
-            hasAnyData() ? 'Continue' : 'Continue'
-          )}
+          {props.submitting ? 'Saving...' : 'Continue'}
         </Button>
         <button
           type="button"

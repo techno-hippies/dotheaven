@@ -1,14 +1,31 @@
-import { Show, type Component, createSignal, createMemo } from 'solid-js'
-import { ActivityItem, AlbumCover, InfoCard, InfoCardSection, InfoCardRow, Scheduler, type TimeSlot, type DayAvailability } from '@heaven/ui'
+import { Show, For, type Component, createSignal, createMemo, createEffect } from 'solid-js'
+import { ActivityItem, AlbumCover, Scheduler, type TimeSlot, type DayAvailability, EditableInfoCard, EditableInfoCardSection, EditableInfoCardRow } from '@heaven/ui'
 import { ProfileHeader, type ProfileHeaderProps } from './profile-header'
 import { ProfileTabs, type ProfileTab } from './profile-tabs'
 import { VideoGrid, type VideoGridItem } from './video-grid'
+import type { ProfileInput } from '../../lib/heaven'
 
-export interface ProfilePageProps extends Omit<ProfileHeaderProps, 'class'> {
+export interface ProfileScrobble {
+  id: string
+  title: string
+  artist: string
+  album: string
+  timestamp: string
+  trackId: string
+}
+
+export interface ProfilePageProps extends Omit<ProfileHeaderProps, 'class' | 'isEditing' | 'isSaving' | 'onEditClick' | 'onSaveClick'> {
   activeTab: ProfileTab
   onTabChange?: (tab: ProfileTab) => void
   videos?: VideoGridItem[]
   onVideoClick?: (videoId: string) => void
+  scrobbles?: ProfileScrobble[]
+  scrobblesLoading?: boolean
+  onScrobbleClick?: (scrobble: ProfileScrobble) => void
+  // Profile editing (only shown on own profile)
+  profileData?: ProfileInput | null
+  profileLoading?: boolean
+  onProfileSave?: (data: ProfileInput) => Promise<void>
 }
 
 /**
@@ -22,6 +39,15 @@ export interface ProfilePageProps extends Omit<ProfileHeaderProps, 'class'> {
  * - Placeholder states for other tabs
  */
 export const ProfilePage: Component<ProfilePageProps> = (props) => {
+  const [isEditing, setIsEditing] = createSignal(false)
+  const [isSaving, setIsSaving] = createSignal(false)
+
+  const handleEditClick = () => setIsEditing(true)
+
+  const handleSaveClick = async () => {
+    setIsSaving(true)
+  }
+
   return (
     <div class="bg-[var(--bg-page)] min-h-screen">
       <ProfileHeader
@@ -32,9 +58,13 @@ export const ProfilePage: Component<ProfilePageProps> = (props) => {
         stats={props.stats}
         isFollowing={props.isFollowing}
         isOwnProfile={props.isOwnProfile}
+        isEditing={isEditing()}
+        isSaving={isSaving()}
         onFollowClick={props.onFollowClick}
         onMessageClick={props.onMessageClick}
         onAvatarClick={props.onAvatarClick}
+        onEditClick={handleEditClick}
+        onSaveClick={handleSaveClick}
       />
 
       <ProfileTabs
@@ -70,129 +100,61 @@ export const ProfilePage: Component<ProfilePageProps> = (props) => {
         {/* Activity Tab */}
         <Show when={props.activeTab === 'activity'}>
           <div class="flex gap-8">
-            {/* Left: Info Cards */}
-            <div class="flex flex-col gap-4 w-[498px] flex-shrink-0">
-              <InfoCard>
-                <InfoCardSection title="Basics">
-                  <InfoCardRow label="Age" value="28" />
-                  <InfoCardRow label="Gender" value="Woman" />
-                  <InfoCardRow label="Nationality" value="French" />
-                  <InfoCardRow label="Native language" value="English" />
-                  <InfoCardRow label="Learning" value="Spanish, Japanese" />
-                </InfoCardSection>
-              </InfoCard>
-
-              <InfoCard>
-                <InfoCardSection title="Location">
-                  <InfoCardRow label="Location" value="San Francisco" />
-                  <InfoCardRow label="Flexibility" value="Open to relocating" />
-                </InfoCardSection>
-              </InfoCard>
-
-              <InfoCard>
-                <InfoCardSection title="Education & Career">
-                  <InfoCardRow label="School" value="Stanford University" />
-                  <InfoCardRow label="Degree" value="Bachelor of Science" />
-                  <InfoCardRow label="Field of study" value="Computer Science" />
-                  <InfoCardRow label="Profession" value="Software Engineer" />
-                  <InfoCardRow label="Industry" value="Technology" />
-                  <InfoCardRow label="Skills" value="React, TypeScript, Design" />
-                </InfoCardSection>
-              </InfoCard>
-
-              <InfoCard>
-                <InfoCardSection title="Dating">
-                  <InfoCardRow label="Relationship status" value="Single" />
-                  <InfoCardRow label="Height" value={`5'7" (170 cm)`} />
-                  <InfoCardRow label="Sexuality" value="Bisexual" />
-                  <InfoCardRow label="Ethnicity" value="White / Caucasian" />
-                  <InfoCardRow label="Dating style" value="Monogamous" />
-                  <InfoCardRow label="Friends open to" value="Men, Women" />
-                  <InfoCardRow label="Children" value="None" />
-                  <InfoCardRow label="Wants children" value="Open to it" />
-                </InfoCardSection>
-              </InfoCard>
-
-              <InfoCard>
-                <InfoCardSection title="Lifestyle">
-                  <InfoCardRow label="Hobbies" value="Photography, Hiking, Cooking" />
-                  <InfoCardRow label="Drinking" value="Socially" />
-                  <InfoCardRow label="Smoking" value="No" />
-                  <InfoCardRow label="Drugs" value="Never" />
-                </InfoCardSection>
-              </InfoCard>
+            {/* Left: Profile Info */}
+            <div class="flex-shrink-0" style={{ width: '498px' }}>
+              <Show
+                when={!props.profileLoading}
+                fallback={
+                  <div class="py-12 text-center text-[var(--text-muted)]">
+                    Loading profile...
+                  </div>
+                }
+              >
+                <ProfileInfoSection
+                  profile={props.profileData || {}}
+                  isOwnProfile={props.isOwnProfile}
+                  isEditing={isEditing()}
+                  isSaving={isSaving()}
+                  onSave={props.onProfileSave}
+                  setIsEditing={setIsEditing}
+                  setIsSaving={setIsSaving}
+                />
+              </Show>
             </div>
 
-            {/* Right: Activity Feed */}
+            {/* Right: Activity Feed (Scrobbles) */}
             <div class="flex flex-col flex-1">
-              <ActivityItem
-                icon={
-                  <div class="w-[72px] h-[72px] rounded-lg bg-[var(--bg-elevated)] flex items-center justify-center">
-                    <svg class="w-10 h-10 text-[var(--text-muted)]" fill="currentColor" viewBox="0 0 256 256">
-                      <path d="M235.54,150.21a104.84,104.84,0,0,1-37,52.91A104,104,0,0,1,32,120,103.09,103.09,0,0,1,52.88,57.48a104.84,104.84,0,0,1,52.91-37,8,8,0,0,1,10,10,88.08,88.08,0,0,0,109.8,109.8,8,8,0,0,1,10,10Z" />
-                    </svg>
-                  </div>
-                }
-                title="Sleep"
-                subtitle="7 hours 30 min"
-                timestamp="8h ago"
-              />
-
-              <ActivityItem
-                icon={
-                  <div class="w-[72px] h-[72px] rounded-lg bg-[var(--bg-elevated)] flex items-center justify-center">
-                    <svg class="w-10 h-10 text-[var(--text-muted)]" fill="currentColor" viewBox="0 0 256 256">
-                      <path d="M231.16,166.63l-28.63-14.31A47.74,47.74,0,0,1,176,109.39V80a8,8,0,0,0-8-8,48.05,48.05,0,0,1-48-48,8,8,0,0,0-12.83-6.37L30.13,76l-.2.16a16,16,0,0,0-1.24,23.75L142.4,213.66a8,8,0,0,0,5.66,2.34H224a16,16,0,0,0,16-16V180.94A15.92,15.92,0,0,0,231.16,166.63ZM224,200H151.37L40,88.63l12.87-9.76,38.79,38.79A8,8,0,0,0,103,106.34L65.74,69.11l40-30.31A64.15,64.15,0,0,0,160,87.5v21.89a63.65,63.65,0,0,0,35.38,57.24L224,180.94ZM70.8,184H32a8,8,0,0,1,0-16H70.8a8,8,0,1,1,0,16Zm40,24a8,8,0,0,1-8,8H48a8,8,0,0,1,0-16h54.8A8,8,0,0,1,110.8,208Z" />
-                    </svg>
-                  </div>
-                }
-                title="Run"
-                subtitle="45 min · 6.2 km"
-                timestamp="5h ago"
-              />
-
-              <ActivityItem
-                icon={
-                  <AlbumCover
-                    src="https://picsum.photos/seed/chill/200/200"
-                    alt="Late Night Chill"
-                    size="lg"
-                  />
-                }
-                title="Shared Late Night Chill"
-                subtitle="Playlist · 24 songs"
-                timestamp="1d ago"
-                onClick={() => console.log('Playlist clicked')}
-              />
-
-              <ActivityItem
-                icon={
-                  <div class="w-[72px] h-[72px] grid grid-cols-2 grid-rows-2 gap-1 rounded-lg overflow-hidden bg-[var(--bg-elevated)]">
-                    <img src="https://picsum.photos/seed/1/100/100" alt="Album 1" class="w-full h-full object-cover" />
-                    <img src="https://picsum.photos/seed/2/100/100" alt="Album 2" class="w-full h-full object-cover" />
-                    <img src="https://picsum.photos/seed/3/100/100" alt="Album 3" class="w-full h-full object-cover" />
-                    <img src="https://picsum.photos/seed/4/100/100" alt="Album 4" class="w-full h-full object-cover" />
-                  </div>
-                }
-                title="Scrobbled 12 songs"
-                subtitle="Tool, Tame Impala +5 others"
-                timestamp="2h ago"
-                onClick={() => console.log('Scrobble clicked')}
-              />
-
-              <ActivityItem
-                icon={
-                  <AlbumCover
-                    src="https://picsum.photos/seed/artist/200/200"
-                    alt="The Weeknd"
-                    size="lg"
-                  />
-                }
-                title="The Weeknd, Dua Lipa"
-                subtitle="8 songs"
-                timestamp="3d ago"
-                onClick={() => console.log('Artist clicked')}
-              />
+              <Show when={props.scrobblesLoading}>
+                <div class="py-12 text-center text-[var(--text-muted)]">
+                  Loading activity...
+                </div>
+              </Show>
+              <Show when={!props.scrobblesLoading && (!props.scrobbles || props.scrobbles.length === 0)}>
+                <div class="py-12 text-center text-[var(--text-muted)]">
+                  <svg class="w-16 h-16 mx-auto mb-3 opacity-40" fill="currentColor" viewBox="0 0 256 256">
+                    <path d="M212.92,25.69a8,8,0,0,0-6.86-1.45l-128,32A8,8,0,0,0,72,64V174.08A36,36,0,1,0,88,204V70.25l112-28v99.83A36,36,0,1,0,216,172V32A8,8,0,0,0,212.92,25.69ZM52,224a20,20,0,1,1,20-20A20,20,0,0,1,52,224Zm128-32a20,20,0,1,1,20-20A20,20,0,0,1,180,192Z" />
+                  </svg>
+                  <p class="text-base">No scrobbles yet</p>
+                </div>
+              </Show>
+              <Show when={!props.scrobblesLoading && props.scrobbles && props.scrobbles.length > 0}>
+                <For each={props.scrobbles}>
+                  {(scrobble) => (
+                    <ActivityItem
+                      icon={
+                        <AlbumCover
+                          alt={scrobble.album || scrobble.title}
+                          size="lg"
+                        />
+                      }
+                      title={scrobble.title}
+                      subtitle={[scrobble.artist, scrobble.album].filter(Boolean).join(' \u00b7 ')}
+                      timestamp={scrobble.timestamp}
+                      onClick={props.onScrobbleClick ? () => props.onScrobbleClick!(scrobble) : undefined}
+                    />
+                  )}
+                </For>
+              </Show>
             </div>
           </div>
         </Show>
@@ -238,6 +200,150 @@ export const ProfilePage: Component<ProfilePageProps> = (props) => {
           </div>
         </Show>
       </div>
+    </div>
+  )
+}
+
+// Profile info section with editable cards
+interface ProfileInfoSectionProps {
+  profile: ProfileInput
+  isOwnProfile?: boolean
+  isEditing: boolean
+  isSaving: boolean
+  onSave?: (data: ProfileInput) => Promise<void>
+  setIsEditing: (value: boolean) => void
+  setIsSaving: (value: boolean) => void
+}
+
+const ProfileInfoSection: Component<ProfileInfoSectionProps> = (props) => {
+  const [formData, setFormData] = createSignal<ProfileInput>(props.profile)
+
+  // Update parent's save handler
+  createEffect(() => {
+    if (props.isSaving) {
+      handleSave()
+    }
+  })
+
+  const handleSave = async () => {
+    if (!props.onSave) return
+
+    try {
+      await props.onSave(formData())
+      props.setIsEditing(false)
+    } catch (error) {
+      console.error('Failed to save profile:', error)
+      alert('Failed to save profile. Please try again.')
+    } finally {
+      props.setIsSaving(false)
+    }
+  }
+
+  const updateField = (field: keyof ProfileInput, value: any) => {
+    setFormData((prev) => ({ ...prev, [field]: value }))
+  }
+
+  return (
+    <div class="flex flex-col gap-4">
+      {/* Editable Info Cards */}
+      <EditableInfoCard>
+        <EditableInfoCardSection title="Basics" isEditing={props.isEditing}>
+          <EditableInfoCardRow
+            label="Age"
+            value={formData().age?.toString()}
+            isEditing={props.isEditing}
+            onValueChange={(value: string | string[]) => updateField('age', typeof value === 'string' && value ? Number(value) : undefined)}
+          />
+          <EditableInfoCardRow
+            label="Gender"
+            value={formData().gender}
+            isEditing={props.isEditing}
+            onValueChange={(value: string | string[]) => updateField('gender', typeof value === 'string' ? value : undefined)}
+          />
+          <EditableInfoCardRow
+            label="Height (cm)"
+            value={formData().heightCm?.toString()}
+            isEditing={props.isEditing}
+            onValueChange={(value: string | string[]) => updateField('heightCm', typeof value === 'string' && value ? Number(value) : undefined)}
+          />
+        </EditableInfoCardSection>
+      </EditableInfoCard>
+
+      <EditableInfoCard>
+        <EditableInfoCardSection title="Dating" isEditing={props.isEditing}>
+          <EditableInfoCardRow
+            label="Relationship status"
+            value={formData().relationshipStatus}
+            isEditing={props.isEditing}
+            onValueChange={(value: string | string[]) => updateField('relationshipStatus', typeof value === 'string' ? value : undefined)}
+          />
+          <EditableInfoCardRow
+            label="Sexuality"
+            value={formData().sexuality}
+            isEditing={props.isEditing}
+            onValueChange={(value: string | string[]) => updateField('sexuality', typeof value === 'string' ? value : undefined)}
+          />
+          <EditableInfoCardRow
+            label="Ethnicity"
+            value={formData().ethnicity}
+            isEditing={props.isEditing}
+            onValueChange={(value: string | string[]) => updateField('ethnicity', typeof value === 'string' ? value : undefined)}
+          />
+          <EditableInfoCardRow
+            label="Children"
+            value={formData().children}
+            isEditing={props.isEditing}
+            onValueChange={(value: string | string[]) => updateField('children', typeof value === 'string' ? value : undefined)}
+          />
+          <EditableInfoCardRow
+            label="Wants children"
+            value={formData().wantsChildren}
+            isEditing={props.isEditing}
+            onValueChange={(value: string | string[]) => updateField('wantsChildren', typeof value === 'string' ? value : undefined)}
+          />
+        </EditableInfoCardSection>
+      </EditableInfoCard>
+
+      <EditableInfoCard>
+        <EditableInfoCardSection title="Lifestyle" isEditing={props.isEditing}>
+          <EditableInfoCardRow
+            label="Drinking"
+            value={formData().drinking}
+            isEditing={props.isEditing}
+            onValueChange={(value: string | string[]) => updateField('drinking', typeof value === 'string' ? value : undefined)}
+          />
+          <EditableInfoCardRow
+            label="Smoking"
+            value={formData().smoking}
+            isEditing={props.isEditing}
+            onValueChange={(value: string | string[]) => updateField('smoking', typeof value === 'string' ? value : undefined)}
+          />
+          <EditableInfoCardRow
+            label="Drugs"
+            value={formData().drugs}
+            isEditing={props.isEditing}
+            onValueChange={(value: string | string[]) => updateField('drugs', typeof value === 'string' ? value : undefined)}
+          />
+          <EditableInfoCardRow
+            label="Religion"
+            value={formData().religion}
+            isEditing={props.isEditing}
+            onValueChange={(value: string | string[]) => updateField('religion', typeof value === 'string' ? value : undefined)}
+          />
+          <EditableInfoCardRow
+            label="Pets"
+            value={formData().pets}
+            isEditing={props.isEditing}
+            onValueChange={(value: string | string[]) => updateField('pets', typeof value === 'string' ? value : undefined)}
+          />
+          <EditableInfoCardRow
+            label="Diet"
+            value={formData().diet}
+            isEditing={props.isEditing}
+            onValueChange={(value: string | string[]) => updateField('diet', typeof value === 'string' ? value : undefined)}
+          />
+        </EditableInfoCardSection>
+      </EditableInfoCard>
     </div>
   )
 }

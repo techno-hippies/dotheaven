@@ -1,6 +1,7 @@
 mod auth;
 mod audio;
 mod jacktrip;
+mod music_db;
 mod xmtp;
 
 use std::path::PathBuf;
@@ -56,6 +57,11 @@ async fn get_auth(state: State<'_, SharedState>) -> Result<Option<PersistedAuth>
 #[tauri::command]
 async fn start_passkey_auth(app: tauri::AppHandle) -> Result<(), String> {
     auth::start_passkey_auth(app).await
+}
+
+#[tauri::command]
+async fn start_eoa_auth(app: tauri::AppHandle) -> Result<(), String> {
+    auth::start_eoa_auth(app).await
 }
 
 #[tauri::command]
@@ -126,29 +132,59 @@ pub fn run() {
         .manage(state.clone())
         .manage(JacktripState::default())
         .manage(xmtp::XmtpState::default())
+        .manage(music_db::MusicDbState::empty())
         .setup(move |app| {
-            let app_dir = app.path().app_data_dir().ok();
-
-            // Load persisted auth
-            if let Some(ref dir) = app_dir {
-                std::fs::create_dir_all(dir).ok();
-
-                if let Some(persisted) = auth::load_from_disk(dir) {
-                    log::info!("Loaded persisted auth: {:?}", persisted.pkp_address);
-                    let mut st = state.blocking_write();
-                    st.auth = Some(persisted);
-                    st.app_dir = Some(dir.clone());
-                }
-            }
-
-            #[cfg(debug_assertions)]
-            {
-                let window = app.get_webview_window("main").unwrap();
-                window.open_devtools();
-            }
+            // Audio thread — cheap: just spawns a thread + channel, no device probing
             let audio_state = AudioState::new(app.handle().clone())
                 .expect("failed to init audio");
             app.manage(audio_state);
+
+            // Defer all disk I/O off the main thread so the window paints immediately
+            let app_handle = app.handle().clone();
+            let app_dir = app.path().app_data_dir().ok();
+            let music_db_state: music_db::MusicDbState = app.state::<music_db::MusicDbState>().inner().clone();
+            tauri::async_runtime::spawn(async move {
+                // Load persisted auth
+                if let Some(ref dir) = app_dir {
+                    let dir = dir.clone();
+                    let state = state.clone();
+                    let loaded = tokio::task::spawn_blocking(move || {
+                        std::fs::create_dir_all(&dir).ok();
+                        auth::load_from_disk(&dir).map(|p| (p, dir))
+                    })
+                    .await
+                    .ok()
+                    .flatten();
+
+                    if let Some((persisted, dir)) = loaded {
+                        log::info!("Loaded persisted auth: {:?}", persisted.pkp_address);
+                        let mut st = state.write().await;
+                        st.auth = Some(persisted);
+                        st.app_dir = Some(dir);
+                    }
+                }
+
+                // Open MusicDb (SQLite open + schema creation)
+                let db_dir = app_handle.path().app_data_dir().ok();
+                if let Some(dir) = db_dir {
+                    match tokio::task::spawn_blocking(move || music_db::MusicDb::open(&dir)).await {
+                        Ok(Ok(db)) => {
+                            music_db_state.init(db);
+                            log::info!("MusicDb ready");
+                        }
+                        Ok(Err(e)) => log::error!("Failed to open MusicDb: {e}"),
+                        Err(e) => log::error!("MusicDb task panicked: {e}"),
+                    }
+                }
+
+                // DevTools — deferred so it doesn't block window paint
+                #[cfg(debug_assertions)]
+                {
+                    if let Some(window) = app_handle.get_webview_window("main") {
+                        window.open_devtools();
+                    }
+                }
+            });
 
             Ok(())
         })
@@ -156,6 +192,7 @@ pub fn run() {
             is_authenticated,
             get_auth,
             start_passkey_auth,
+            start_eoa_auth,
             save_auth,
             sign_out,
             audio_play,
@@ -181,7 +218,13 @@ pub fn run() {
             xmtp::xmtp_send_message,
             xmtp::xmtp_load_messages,
             xmtp::xmtp_stream_messages,
+            xmtp::xmtp_stream_all_messages,
             xmtp::xmtp_update_consent,
+            music_db::music_scan_folder,
+            music_db::music_get_tracks,
+            music_db::music_get_track_count,
+            music_db::music_get_folder,
+            music_db::music_set_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

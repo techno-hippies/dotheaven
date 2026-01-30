@@ -1,7 +1,7 @@
 import type { Component } from 'solid-js'
 import { createSignal, Show } from 'solid-js'
 import { cn } from '../lib/utils'
-import { Button } from '../primitives/button'
+import { Button } from '../primitives'
 
 export interface OnboardingAvatarStepProps {
   class?: string
@@ -140,19 +140,13 @@ export const OnboardingAvatarStep: Component<OnboardingAvatarStepProps> = (props
         <Button
           class="w-full h-12 text-lg"
           disabled={!preview() || props.uploading}
+          loading={props.uploading}
           onClick={() => {
             const file = selectedFile()
             if (file) props.onUpload?.(file)
           }}
         >
-          {props.uploading ? (
-            <div class="flex items-center gap-2">
-              <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              Uploading...
-            </div>
-          ) : (
-            'Continue'
-          )}
+          {props.uploading ? 'Uploading...' : 'Continue'}
         </Button>
         <button
           type="button"

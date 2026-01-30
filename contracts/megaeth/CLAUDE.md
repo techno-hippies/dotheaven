@@ -12,7 +12,8 @@
 | `RecordsV1.sol` | ENS-compatible record storage (addr, text, contenthash). Gated by NFT ownership. |
 | `Resolver.sol` | CCIP-Read resolver for ENS gateway compatibility (`*.eth.limo`). |
 | `ProfileV1.sol` | On-chain dating/social profile (packed enums). Supports `msg.sender` and sponsored `upsertProfileFor()` with EIP-191 sig. |
-| `ScrobbleV1.sol` | Minimal scrobble event log. Emits `ScrobbleBatch` events for subgraph indexing. No storage. |
+| `ScrobbleV3.sol` | Track Registry + Scrobble Events. Tracks registered once with metadata on-chain, scrobbles as cheap event refs. Deterministic `trackId = keccak256(abi.encode(kind, payload))`. Canonical payload checks. `updateTrack()` for typo fixes. |
+| `PlaylistV1.sol` | Event-sourced playlists. Stores header + `tracksHash`/`trackCount`/`version` in storage. Full track lists + name/coverCid emitted in events for subgraph. `onlySponsor` gated. `setTracks()` for reorder/add/remove (full list replace). Tombstone delete. |
 
 ## Chain Info
 
@@ -32,7 +33,8 @@ All names are **FREE** (`pricePerYear = 0`). Tiered pricing for short names (2-4
 | RegistryV1 | `0x61CAed8296a2eF78eCf9DCa5eDf3C44469c6b1E2` |
 | RecordsV1 | `0x351ba82bAfDA1070bba8158852624653e3654929` |
 | ProfileV1 | `0x0A6563122cB3515ff678A918B5F31da9b1391EA3` |
-| ScrobbleV1 | `0x8fF05D1Ba81542d7bE2B79d6912C1D65F339dE0e` |
+| ScrobbleV3 | `0x3117A73b265b38ad9cD3b37a5F8E1D312Ad29196` |
+| PlaylistV1 | `0xF0337C4A335cbB3B31c981945d3bE5B914F7B329` |
 
 Heaven Node: `0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27`
 
@@ -98,6 +100,35 @@ setAddr(node, userAddress)
 - Only NFT owner/approved can set records
 - Records are versioned and expiry-gated
 
+### ScrobbleV3 — Track Registry + Scrobble Events
+```
+trackId = keccak256(abi.encode(uint8(kind), bytes32(payload)))
+```
+- **kind 1 (MBID)**: `payload = bytes32(bytes16(mbid))` — left-aligned, low 16 bytes zero
+- **kind 2 (ipId)**: `payload = bytes32(uint256(uint160(ipId)))` — right-aligned, high 12 bytes zero
+- **kind 3 (meta)**: `payload = keccak256(abi.encode(titleNorm, artistNorm, albumNorm))`
+- Contract computes trackId internally from `(kind, payload)` — no caller-supplied trackIds
+- Canonical payload checks enforce correct alignment
+- `registerAndScrobbleBatch()` registers new tracks + scrobbles all in one tx
+- `updateTrack()` for typo/casing fixes (preserves trackId/payload)
+- Display strings (title/artist/album) stored on-chain in original casing
+- Normalized strings used only for kind 3 payload derivation
+
+### PlaylistV1 — Event-sourced Playlists
+```
+playlistId = keccak256(abi.encode(owner, createdAt, nonce))
+tracksHash = keccak256(abi.encode(TRACKS_SEED, playlistId, trackIds))
+```
+- **Event-sourced**: name/coverCid/trackIds emitted in events only, not stored in contract state
+- **Integrity checkpoint**: `tracksHash` + `trackCount` + `version` stored for verification
+- **Operations**: `createPlaylistFor()`, `setTracks()` (full list replace), `updateMeta()`, `deletePlaylist()` (tombstone)
+- **Visibility**: uint8 enum (0=public, 1=unlisted, 2=private) — metadata for subgraph/frontend filtering
+- **Bounds**: MAX_TRACKS=500, MAX_NAME=64 bytes, MAX_CID=128 bytes
+- **No track existence checks** — Lit Action ensures tracks are registered in ScrobbleV3 before calling playlist contract
+- **Replay protection**: `consumeNonce(user, expectedNonce)` — monotonic `userNonces[user]` consumed by Lit Action before each operation
+- **Version counter** increments on every mutation (tracks set, meta update, delete)
+- Subgraph reconstructs full playlist state from `PlaylistTracksSet` events filtered by current `version`
+
 ### Sponsor PKP Flow (via Lit Action)
 1. **Claim name**: Sponsor PKP calls `registerFor()` — pays gas, user gets NFT
 2. User's own PKP calls `RecordsV1.setText()` to set avatar CID (cheap tx)
@@ -111,12 +142,18 @@ contracts/megaeth/
 │   ├── RegistryV1.sol         # Name NFT registry (native ETH)
 │   ├── RecordsV1.sol          # ENS record storage
 │   ├── Resolver.sol           # CCIP-Read resolver
-│   └── ProfileV1.sol          # Social profile (packed enums)
+│   ├── ProfileV1.sol          # Social profile (packed enums)
+│   ├── ScrobbleV3.sol         # Track registry + scrobble events
+│   └── PlaylistV1.sol         # Event-sourced playlists
 ├── script/
-│   └── DeployHeaven.s.sol     # Deploy script
+│   ├── DeployHeaven.s.sol     # Deploy script (registry/records/profile)
+│   ├── DeployScrobbleV3.s.sol # Deploy ScrobbleV3
+│   └── DeployPlaylistV1.s.sol # Deploy PlaylistV1
 ├── test/
-│   ├── ProfileV1.t.sol          # Profile sig verification + replay tests
-│   └── SessionEscrowV1.t.sol    # Session escrow tests
+│   ├── ProfileV1.t.sol        # Profile sig verification + replay tests
+│   ├── ScrobbleV3.t.sol       # Track registry + scrobble tests
+│   ├── PlaylistV1.t.sol       # Playlist CRUD + tombstone tests
+│   └── SessionEscrowV1.t.sol  # Session escrow tests
 ├── foundry.toml
 ├── remappings.txt
 └── .env.example

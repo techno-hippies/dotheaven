@@ -12,17 +12,12 @@ const IS_DEV = import.meta.env.DEV
 import { Component, createSignal, createMemo, For, createEffect, Show, onCleanup } from 'solid-js'
 import { useParams, useSearchParams } from '@solidjs/router'
 import {
-  AppShell,
-  Header,
-  RightPanel,
-  MusicPlayer,
   IconButton,
   MessageBubble,
   MessageList,
   MessageInput,
   Avatar,
 } from '@heaven/ui'
-import { AppSidebar, HeaderActions } from '../components/shell'
 import { useAuth } from '../providers'
 import { useVoice, type VoiceState } from '../lib/voice'
 import { getWorkerToken } from '../lib/workerAuth'
@@ -307,44 +302,15 @@ export const AIChatPage: Component = () => {
   const p = personality()
   if (!p) {
     return (
-      <AppShell
-        header={<Header rightSlot={<HeaderActions />} />}
-        sidebar={<AppSidebar />}
-      >
-        <div class="h-full flex items-center justify-center">
-          <p class="text-[var(--text-secondary)]">AI personality not found</p>
-        </div>
-      </AppShell>
+      <div class="h-full flex items-center justify-center">
+        <p class="text-[var(--text-secondary)]">AI personality not found</p>
+      </div>
     )
   }
 
   return (
-    <AppShell
-      header={<Header rightSlot={<HeaderActions />} />}
-      sidebar={<AppSidebar />}
-      rightPanel={
-        <RightPanel>
-          <div class="p-4">
-            <h3 class="text-base font-semibold text-[var(--text-primary)] mb-4">Now Playing</h3>
-            <div class="aspect-square bg-[var(--bg-highlight)] rounded-lg mb-4" />
-            <p class="text-lg font-semibold text-[var(--text-primary)]">Neon Dreams</p>
-            <p class="text-base text-[var(--text-secondary)]">Synthwave Collective</p>
-          </div>
-        </RightPanel>
-      }
-      footer={
-        <MusicPlayer
-          title="Neon Dreams"
-          artist="Synthwave Collective"
-          currentTime="2:47"
-          duration="4:39"
-          progress={58}
-          isPlaying
-        />
-      }
-    >
-      <div class="h-full overflow-y-auto bg-[var(--bg-page)]">
-        <div class="h-full flex flex-col bg-[var(--bg-surface)] rounded-t-lg">
+    <div class="h-full overflow-y-auto bg-[var(--bg-page)]">
+      <div class="h-full flex flex-col bg-[var(--bg-surface)] rounded-t-lg">
           {/* Chat header */}
           <div class="flex items-center justify-between px-4 py-3 border-b border-[var(--border-default)]">
             <div class="flex items-center gap-3">
@@ -454,6 +420,5 @@ export const AIChatPage: Component = () => {
           />
         </div>
       </div>
-    </AppShell>
   )
 }

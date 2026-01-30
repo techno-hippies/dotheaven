@@ -8,32 +8,26 @@
 import { getLitClient } from '../lit/client'
 import type { PKPAuthContext } from '../lit/types'
 
-const AVATAR_ACTION_CODE_URL = import.meta.env.VITE_AVATAR_UPLOAD_ACTION_CID
-  ? `https://ipfs.filebase.io/ipfs/${import.meta.env.VITE_AVATAR_UPLOAD_ACTION_CID}`
-  : null
+const AVATAR_UPLOAD_CID = 'QmeA1zpz9R5Wem6gVjeUChAHKNXPRSqLHmujLVRuyo5bP5'
 
-let _cachedActionCode: string | null = null
-
-async function getAvatarActionCode(): Promise<string> {
-  if (_cachedActionCode) return _cachedActionCode
-
-  if (AVATAR_ACTION_CODE_URL) {
-    const res = await fetch(AVATAR_ACTION_CODE_URL)
-    if (!res.ok) throw new Error(`Failed to fetch avatar action: ${res.status}`)
-    _cachedActionCode = await res.text()
-    return _cachedActionCode
-  }
-
-  // Dev fallback
-  const res = await fetch('/lit-actions/avatar-upload-v1.js')
-  if (res.ok) {
-    _cachedActionCode = await res.text()
-    return _cachedActionCode
-  }
-
-  throw new Error(
-    'Avatar upload action not available. Set VITE_AVATAR_UPLOAD_ACTION_CID or serve the action file locally.'
-  )
+/** Encrypted Filebase key — only decryptable by the avatar upload Lit Action CID */
+const FILEBASE_ENCRYPTED_KEY = {
+  ciphertext: 'gI64VYKoMv3lF1gIjF2cX/qNiG4YcP0Zemg/qxvuWDyRV5XwIUFPbhA3AbRKh7cz1kmzy8BXP7dMrISPiuXlYaz6lLfICsDHd3y0uVyepYJlSeupN2f+W41bRmnPg6D1I7s08RLQMayWLcQYLmEHpucnqh4X6PLpDqtpVE3GvfbhiXKNSimc1TX98L8DB5z7gRqOXK9ddS4ut1OwvXTHQ4xNrm22JeeRwyD5Y04lVT/hI8ffz8MC',
+  dataToEncryptHash: '23ab539bda3900163da16db23be0e6e6c6003d35bd1ac54aeaada176f8f1e0d4',
+  accessControlConditions: [
+    {
+      conditionType: 'evmBasic',
+      contractAddress: '',
+      standardContractType: '',
+      chain: 'ethereum',
+      method: '',
+      parameters: [':currentActionIpfsId'],
+      returnValueTest: {
+        comparator: '=',
+        value: AVATAR_UPLOAD_CID,
+      },
+    },
+  ],
 }
 
 async function fileToBase64(file: File): Promise<string> {
@@ -76,6 +70,7 @@ export async function uploadAvatar(
   file: File,
   pkpPublicKey: string,
   authContext: PKPAuthContext,
+  options?: { skipStyleCheck?: boolean },
 ): Promise<AvatarUploadResult> {
   const litClient = await getLitClient()
 
@@ -114,13 +109,10 @@ export async function uploadAvatar(
   const v = (sig.recoveryId + 27).toString(16).padStart(2, '0')
   const signature = `0x${sigHex}${v}`
 
-  // Execute the avatar upload action
-  const actionCode = await getAvatarActionCode()
-
   const contentType = file.type || 'image/png'
 
   const result = await litClient.executeJs({
-    code: actionCode,
+    ipfsId: AVATAR_UPLOAD_CID,
     authContext,
     jsParams: {
       userPkpPublicKey: pkpPublicKey,
@@ -128,10 +120,9 @@ export async function uploadAvatar(
       signature,
       timestamp,
       nonce,
-      // Keys — in production these come from encrypted Lit secrets.
-      // For dev, pass plaintext from env vars.
-      openrouterPlaintextKey: import.meta.env.VITE_OPENROUTER_API_KEY || undefined,
-      filebasePlaintextKey: import.meta.env.VITE_FILEBASE_API_KEY || undefined,
+      skipStyleCheck: options?.skipStyleCheck ?? false,
+      filebaseEncryptedKey: FILEBASE_ENCRYPTED_KEY,
+      openrouterPlaintextKey: options?.skipStyleCheck ? undefined : (import.meta.env.VITE_OPENROUTER_API_KEY || undefined),
     },
   })
 

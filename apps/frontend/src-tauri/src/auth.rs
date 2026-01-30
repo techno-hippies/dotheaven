@@ -107,6 +107,12 @@ pub async fn start_passkey_auth(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Start browser-based EOA wallet auth flow
+/// Uses the same auth page as passkey — the page shows both options
+pub async fn start_eoa_auth(app: tauri::AppHandle) -> Result<(), String> {
+    start_passkey_auth(app).await
+}
+
 async fn handle_auth_callback(listener: TcpListener, app: tauri::AppHandle) {
     loop {
         if let Ok((mut socket, _)) = listener.accept().await {
@@ -121,7 +127,16 @@ async fn handle_auth_callback(listener: TcpListener, app: tauri::AppHandle) {
 
                 // Handle CORS preflight
                 if request.starts_with("OPTIONS") {
+                    log::info!("CORS preflight, continuing...");
                     let response = build_cors_preflight();
+                    let _ = socket.write_all(response.as_bytes()).await;
+                    continue;
+                }
+
+                // Ignore non-POST requests (favicon, etc.)
+                if !request.starts_with("POST") {
+                    log::info!("Ignoring non-POST request: {}", request.lines().next().unwrap_or(""));
+                    let response = "HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
                     let _ = socket.write_all(response.as_bytes()).await;
                     continue;
                 }
@@ -173,13 +188,21 @@ fn parse_callback(request: &str) -> Option<AuthResult> {
     // Handle POST requests with JSON body
     if first_line.starts_with("POST /callback") {
         // Find the body (after empty line)
-        let body_start = request.find("\r\n\r\n").or_else(|| request.find("\n\n"))?;
-        let body = &request[body_start..].trim();
-        log::info!("Callback body: {}", body);
+        if let Some(body_start) = request.find("\r\n\r\n") {
+            let body = request[body_start + 4..].trim();
+            log::info!("Callback body (CRLF): {}", body);
 
-        // Parse JSON
-        let parsed: AuthResult = serde_json::from_str(body).ok()?;
-        return Some(parsed);
+            // Parse JSON
+            let parsed: AuthResult = serde_json::from_str(body).ok()?;
+            return Some(parsed);
+        } else if let Some(body_start) = request.find("\n\n") {
+            let body = request[body_start + 2..].trim();
+            log::info!("Callback body (LF): {}", body);
+
+            // Parse JSON
+            let parsed: AuthResult = serde_json::from_str(body).ok()?;
+            return Some(parsed);
+        }
     }
 
     None

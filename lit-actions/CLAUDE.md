@@ -6,8 +6,8 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 - **Song publish**: Upload audio/preview/cover/metadata to IPFS, align lyrics (ElevenLabs), translate lyrics (OpenRouter) — all in one action with 3 encrypted keys
 - **Lyrics translate**: Batch-translate lyrics into multiple target languages in parallel, upload each to IPFS — separate action callable anytime after publish
 - **Story IP registration**: Sponsor PKP mints NFT + registers IP Asset + attaches PIL license on Story Protocol (gasless for user)
-- **Scrobble submit V1**: Pin scrobble batch to Filebase IPFS + ScrobbleV1 event on MegaETH via sponsor PKP (legacy)
-- **Scrobble submit V2**: On-chain per-track scrobbles to ScrobbleV2 on MegaETH. Three paths: MBID (MusicBrainz), ipId (Story Protocol), or metadata hash. No IPFS. Fires immediately per track from Tauri app
+- **Scrobble submit V3**: Track Registry + Scrobble Events on ScrobbleV3. Registers tracks once (title/artist/album on-chain), scrobbles as cheap event refs. Single `registerAndScrobbleBatch()` tx. Checks `isRegistered()` to skip re-registration. Normalized IDs + pretty display strings.
+- **Playlist v1**: Create/update/delete event-sourced playlists on PlaylistV1. Registers missing tracks in ScrobbleV3 automatically. Supports coverCid for playlist artwork. Sponsor PKP pays gas. EIP-191 sig verification.
 - **Heaven claim name**: Sponsor PKP claims a `.heaven` name on MegaETH on behalf of user (gasless). EIP-191 sig verification.
 - **Heaven set profile**: Sponsor PKP writes user's on-chain profile to ProfileV1 on MegaETH (gasless). EIP-191 sig + nonce replay protection.
 
@@ -19,17 +19,12 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 | Lyrics Translate | `actions/lyrics-translate-v1.js` | **Working** | `QmUrbZY5...` |
 | Avatar Upload | `actions/avatar-upload-v1.js` | **Working** | `QmeA1zpz...` |
 | Story Register Sponsor | `actions/story-register-sponsor-v1.js` | **Working** | `QmcRrDj9...` |
-| Scrobble Submit V1 | `actions/scrobble-submit-v1.js` | **Legacy** | `QmfLzRcY...` |
-| Scrobble Submit V2 | `actions/scrobble-submit-v2.js` | **Working** | `QmTcovqf...` |
+| Scrobble Submit V3 | `actions/scrobble-submit-v3.js` | **Working** | `QmW3mJc9...` |
+| Playlist v1 | `actions/playlist-v1.js` | **Working** | `QmeyKGbv...` |
 | Heaven Claim Name | `actions/heaven-claim-name-v1.js` | **Working** | (inline) |
 | Heaven Set Profile | `actions/heaven-set-profile-v1.js` | **Working** | (inline) |
 
 ## TODO
-
-### Immediate
-- [x] Deploy own SPG NFT collection with `isPublicMinting: true` → `0xb1764abf89e6a151ea27824612145ef89ed70a73`
-- [x] Implement license token mint (Tx #2) in story-register-sponsor to force royalty vault deployment
-- [x] Combined song-upload + lyrics-alignment + translate-lyrics into `song-publish-v1.js`
 
 ### Frontend Integration
 - [ ] Song upload flow: frontend calls songUpload Lit Action, receives CIDs
@@ -103,16 +98,16 @@ Client                      Lit Action                  Story Aeneid
 
 | Contract | Address |
 |----------|---------|
-| ScrobbleV1 | `0x8fF05D1Ba81542d7bE2B79d6912C1D65F339dE0e` |
-| ScrobbleV2 | `0xf42b285EEb9280860808fd3bC7b0D6c531EF53bd` |
+| ScrobbleV3 | `0x3117A73b265b38ad9cD3b37a5F8E1D312Ad29196` |
+| PlaylistV1 | `0xF0337C4A335cbB3B31c981945d3bE5B914F7B329` |
 
 ## Subgraph (Goldsky)
 
 | | Value |
 |--|-------|
-| Endpoint (v2) | `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/2.0.0/gn` |
+| Endpoint (v3) | `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/3.0.0/gn` |
 | Network | `megaeth-testnet-v2` (Goldsky identifier) |
-| Indexes | ScrobbleV1 `ScrobbleBatch` events + ScrobbleV2 `ScrobbleId`/`ScrobbleMeta` events |
+| Indexes | ScrobbleV3 `TrackRegistered` + `Scrobbled` events |
 
 Deploy: `goldsky subgraph deploy dotheaven-activity/<version> --path .` (from `subgraphs/activity-feed/`)
 
@@ -131,6 +126,8 @@ bun scripts/mint-pkp.ts                    # Mint new PKP
 bun scripts/setup.ts songPublish            # Deploy song publish action (upload + align + translate)
 bun scripts/setup.ts lyricsTranslate       # Deploy lyrics translate action (batch multi-language)
 bun scripts/setup.ts storyRegisterSponsor  # Deploy story register action
+bun scripts/setup.ts scrobbleSubmitV3      # Deploy scrobble submit V3 action
+bun scripts/setup.ts playlistV1            # Deploy playlist v1 action
 bun scripts/setup.ts heavenClaimName       # Deploy heaven claim name action
 bun scripts/setup.ts heavenSetProfile      # Deploy heaven set profile action
 bun scripts/deploy-spg-nft.ts             # Deploy own SPG NFT collection
@@ -141,8 +138,8 @@ bun tests/song-publish.test.ts             # Test song publish (upload + align +
 bun tests/lyrics-translate.test.ts         # Test batch lyrics translation
 bun tests/story-register-sponsor.test.ts   # Test Story registration (real broadcast)
 bun tests/story-register-sponsor.test.ts --dry-run  # Dry run (sign only, no broadcast)
-bun tests/scrobble-submit.test.ts          # Test scrobble submit V1 (pin + MegaETH event)
-bun tests/scrobble-submit-v2.test.ts       # Test scrobble submit V2 (on-chain per-track)
+bun tests/scrobble-submit-v3.test.ts       # Test scrobble submit V3 (track registry + scrobble events)
+bun tests/playlist-v1.test.ts               # Test playlist CRUD (create/setTracks/updateMeta/delete)
 bun tests/heaven-claim-name.test.ts        # Test .heaven name claim (MegaETH broadcast)
 bun tests/heaven-set-profile.test.ts       # Test profile write (MegaETH broadcast)
 bun tests/heaven-set-profile.test.ts --dry-run  # Dry run (sign only, no broadcast)
@@ -168,10 +165,10 @@ lit-actions/
 │   ├── song-publish-v1.js             # Upload + alignment + translation (combined)
 │   ├── lyrics-translate-v1.js         # Batch multi-language translation (parallel)
 │   ├── story-register-sponsor-v1.js   # Gasless Story IP registration via sponsor PKP
-│   ├── scrobble-submit-v1.js          # (Legacy) Pin scrobble batch to IPFS + ScrobbleV1 event
-│   ├── scrobble-submit-v2.js          # Per-track on-chain scrobbles to ScrobbleV2 (MBID/ipId/meta)
+│   ├── scrobble-submit-v3.js          # Track registry + scrobble events on ScrobbleV3
 │   ├── heaven-claim-name-v1.js        # Gasless .heaven name claim on MegaETH via sponsor PKP
-│   └── heaven-set-profile-v1.js       # Gasless profile write to ProfileV1 on MegaETH via sponsor PKP
+│   ├── heaven-set-profile-v1.js       # Gasless profile write to ProfileV1 on MegaETH via sponsor PKP
+│   └── playlist-v1.js                # Event-sourced playlist CRUD on PlaylistV1 via sponsor PKP
 ├── scripts/
 │   ├── mint-pkp.ts                    # Mint new PKP with EOA ownership
 │   ├── setup.ts                       # Deploy action + add permission + encrypt keys
@@ -184,6 +181,8 @@ lit-actions/
 │   ├── song-publish.test.ts           # E2E test for song publish (upload + align + translate)
 │   ├── lyrics-translate.test.ts       # E2E test for batch lyrics translation
 │   ├── story-register-sponsor.test.ts # E2E test for Story registration
+│   ├── scrobble-submit-v3.test.ts     # E2E test for scrobble submit V3
+│   ├── playlist-v1.test.ts             # E2E test for playlist CRUD (4 operations)
 │   ├── heaven-claim-name.test.ts      # E2E test for .heaven name claim
 │   ├── heaven-set-profile.test.ts     # E2E test for profile write
 │   └── shared/env.ts                  # Network detection + config loading
@@ -219,17 +218,20 @@ types = { RegisterSong: [recipient, ipMetadataHash, nftMetadataHash, commercialR
 ```
 Action verifies recovered address matches recipient. Prevents sponsor PKP abuse.
 
-### Scrobble Submit V1 (EIP-191) — Legacy
-```
-message = `heaven:scrobble:${batchHash}:${timestamp}:${nonce}`
-```
-`batchHash` is SHA-256 of the full batch JSON. Action pins to Filebase IPFS, then broadcasts `ScrobbleV1.submitBatch()`. Contract at `0x8fF05D1Ba81542d7bE2B79d6912C1D65F339dE0e`.
-
-### Scrobble Submit V2 (EIP-191)
+### Scrobble Submit V3 (EIP-191)
 ```
 message = `heaven:scrobble:${tracksHash}:${timestamp}:${nonce}`
 ```
-`tracksHash` is SHA-256 of `JSON.stringify(tracks)`. Each track has `{ artist, title, playedAt, mbid?, ipId?, album? }`. Action verifies signature, buckets tracks into MBID/ipId/meta, broadcasts up to 3 txs to `ScrobbleV2` on MegaETH (chain 6343). No IPFS. Fires immediately per-track from Tauri app. Contract at `0xf42b285EEb9280860808fd3bC7b0D6c531EF53bd`.
+`tracksHash` is SHA-256 of `JSON.stringify(tracks)`. Each track has `{ artist, title, playedAt, mbid?, ipId?, album? }`. Action computes `trackId = keccak256(abi.encode(uint8(kind), bytes32(payload)))` per track, checks `isRegistered()`, broadcasts single `registerAndScrobbleBatch()` tx to ScrobbleV3 on MegaETH (chain 6343). Normalized strings for payload derivation, pretty strings stored on-chain. Contract at `0x3117A73b265b38ad9cD3b37a5F8E1D312Ad29196`.
+
+### Playlist v1 (EIP-191)
+```
+create:     heaven:playlist:create:${payloadHash}:${timestamp}:${nonce}
+setTracks:  heaven:playlist:setTracks:${playlistId}:${payloadHash}:${timestamp}:${nonce}
+updateMeta: heaven:playlist:updateMeta:${playlistId}:${payloadHash}:${timestamp}:${nonce}
+delete:     heaven:playlist:delete:${playlistId}:${timestamp}:${nonce}
+```
+`payloadHash` = SHA-256 of `JSON.stringify(payload)` where payload varies by operation. `nonce` = on-chain `PlaylistV1.userNonces(user)` (monotonic, consumed via `consumeNonce()` for replay protection). Action verifies signature matches user PKP address, then sponsor PKP broadcasts to PlaylistV1 on MegaETH (chain 6343). Contract at `0xF0337C4A335cbB3B31c981945d3bE5B914F7B329`.
 
 ### Heaven Claim Name (EIP-191)
 ```

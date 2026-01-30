@@ -1,25 +1,23 @@
-import { type Component, createSignal, onCleanup, Show, onMount, createEffect, on } from 'solid-js'
+import { type Component, createSignal, createMemo, onCleanup, Show, onMount, createEffect, on } from 'solid-js'
 import {
-  AppShell,
-  Header,
-  RightPanel,
-  MusicPlayer,
   MediaHeader,
   TrackList,
   IconButton,
   PlayButton,
+  type SortField,
+  type SortState,
 } from '@heaven/ui'
 import { usePlatform } from 'virtual:heaven-platform'
-import { AppSidebar, HeaderActions } from '../components/shell'
 import {
   pickFolder,
-  scanFolder,
-  saveState,
-  loadState,
   createPlaybackSource,
   getMimeForPath,
   getExtensionForPath,
-  enrichTrackMetadata,
+  scanFolderNative,
+  getTracksNative,
+  getTrackCountNative,
+  getFolderNative,
+  setFolderNative,
   type LocalTrack,
 } from '../lib/local-music'
 import { invoke } from '@tauri-apps/api/core'
@@ -65,6 +63,29 @@ export const LibraryPage: Component = () => {
   const [tracks, setTracks] = createSignal<LocalTrack[]>([])
   const [folderPath, setFolderPath] = createSignal<string | null>(null)
   const [scanning, setScanning] = createSignal(false)
+  const [scanProgress, setScanProgress] = createSignal<{ done: number; total: number } | null>(null)
+
+  // Sort state
+  const [sort, setSort] = createSignal<SortState | undefined>(undefined)
+  const sortedTracks = createMemo(() => {
+    const s = sort()
+    const t = tracks()
+    if (!s) return t
+    return [...t].sort((a, b) => {
+      const aVal = ((a as any)[s.field] ?? '') as string
+      const bVal = ((b as any)[s.field] ?? '') as string
+      const cmp = aVal.localeCompare(bVal, undefined, { numeric: true })
+      return s.direction === 'asc' ? cmp : -cmp
+    })
+  })
+  const handleSort = (field: SortField) => {
+    const current = sort()
+    if (current?.field === field) {
+      setSort({ field, direction: current.direction === 'asc' ? 'desc' : 'asc' })
+    } else {
+      setSort({ field, direction: 'asc' })
+    }
+  }
 
   // Playback state
   const [currentIndex, setCurrentIndex] = createSignal(-1)
@@ -85,7 +106,6 @@ export const LibraryPage: Component = () => {
   let currentMode: 'stream' | 'blob' = 'stream'
   let fallbackTried = false
   let playId = 0 // guard against concurrent play calls
-  let metadataId = 0
   let seekWasPlaying = false
   let lastSeekValue = 0
   let pendingSeek: number | null = null
@@ -127,13 +147,16 @@ export const LibraryPage: Component = () => {
     return track ? parseDuration(track.duration) : 0
   }
 
-  // Load persisted state on mount
-  onMount(() => {
-    const saved = loadState()
-    if (saved) {
-      setFolderPath(saved.folderPath)
-      setTracks(saved.tracks)
-      hydrateMetadata(saved.tracks)
+  // Load persisted folder + tracks from native SQLite on mount
+  onMount(async () => {
+    if (!isNative) return
+    try {
+      const folder = await getFolderNative()
+      if (!folder) return
+      setFolderPath(folder)
+      await loadAllTracks(folder)
+    } catch (e) {
+      console.error('[Library] Failed to load persisted folder:', e)
     }
   })
 
@@ -321,6 +344,7 @@ export const LibraryPage: Component = () => {
     const path = await pickFolder()
     if (!path) return
     setFolderPath(path)
+    await setFolderNative(path)
     await rescan(path)
   }
 
@@ -328,32 +352,44 @@ export const LibraryPage: Component = () => {
     const folder = path || folderPath()
     if (!folder) return
     setScanning(true)
+    setScanProgress(null)
+
+    // Listen for scan progress events
+    let unlistenProgress: (() => void) | undefined
     try {
-      const scanned = await scanFolder(folder)
-      setTracks(scanned)
-      saveState(folder, scanned)
-      hydrateMetadata(scanned)
+      unlistenProgress = await listen('music://scan-progress', (event) => {
+        const payload = event.payload as { done: number; total: number }
+        setScanProgress(payload)
+      })
+    } catch {
+      // listen may fail on web
+    }
+
+    try {
+      await scanFolderNative(folder)
+      await loadAllTracks(folder)
+    } catch (e) {
+      console.error('[Library] Scan failed:', e)
     } finally {
+      unlistenProgress?.()
       setScanning(false)
+      setScanProgress(null)
     }
   }
 
-  async function hydrateMetadata(list: LocalTrack[]) {
-    const thisRun = ++metadataId
-    for (const track of list) {
-      if (thisRun !== metadataId) return
-      if (track.duration && track.album) continue
-      try {
-        const enriched = await enrichTrackMetadata(track)
-        if (thisRun !== metadataId) return
-        setTracks((prev) =>
-          prev.map((t) => (t.id === track.id ? { ...t, ...enriched } : t))
-        )
-        await new Promise((resolve) => setTimeout(resolve, 0))
-      } catch {
-        // ignore metadata errors
-      }
+  const PAGE_SIZE = 500
+  async function loadAllTracks(folder: string) {
+    const count = await getTrackCountNative(folder)
+    if (count === 0) {
+      setTracks([])
+      return
     }
+    const all: LocalTrack[] = []
+    for (let offset = 0; offset < count; offset += PAGE_SIZE) {
+      const page = await getTracksNative(folder, PAGE_SIZE, offset)
+      all.push(...page)
+    }
+    setTracks(all)
   }
 
   async function playTrack(index: number, mode: 'stream' | 'blob' = 'stream', isFallback = false) {
@@ -580,48 +616,7 @@ export const LibraryPage: Component = () => {
   const progress = () => (duration() > 0 ? (currentTime() / duration()) * 100 : 0)
 
   return (
-    <AppShell
-      header={
-        <Header rightSlot={<HeaderActions />} />
-      }
-      sidebar={<AppSidebar />}
-      rightPanel={
-        <RightPanel>
-          <div class="p-4">
-            <h3 class="text-base font-semibold text-[var(--text-primary)] mb-4">Now Playing</h3>
-            <div class="aspect-square bg-[var(--bg-highlight)] rounded-lg mb-4" />
-            <p class="text-lg font-semibold text-[var(--text-primary)]">
-              {currentTrack()?.title || 'Nothing playing'}
-            </p>
-            <p class="text-base text-[var(--text-secondary)]">
-              {currentTrack()?.artist || ''}
-            </p>
-            <Show when={playbackError()}>
-              <p class="text-sm text-red-400 mt-2">{playbackError()}</p>
-            </Show>
-          </div>
-        </RightPanel>
-      }
-      footer={
-        <MusicPlayer
-          title={currentTrack()?.title}
-          artist={currentTrack()?.artist}
-          currentTime={formatTime(currentTime())}
-          duration={formatTime(duration())}
-          progress={progress()}
-          volume={volume()}
-          isPlaying={isPlaying()}
-          onPlayPause={togglePlay}
-          onNext={playNext}
-          onPrev={playPrev}
-          onProgressChange={handleSeek}
-          onProgressChangeStart={handleSeekStart}
-          onProgressChangeEnd={handleSeekEnd}
-          onVolumeChange={handleVolumeChange}
-        />
-      }
-    >
-      <div class="h-full overflow-y-auto bg-gradient-to-b from-[#4a3a6a] via-[#2a2040] to-[var(--bg-page)] rounded-t-lg">
+    <div class="h-full overflow-y-auto bg-gradient-to-b from-[#4a3a6a] via-[#2a2040] to-[var(--bg-page)] rounded-t-lg">
         <MediaHeader
           type="playlist"
           title="Library"
@@ -690,6 +685,15 @@ export const LibraryPage: Component = () => {
                     <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
                 </IconButton>
+                <Show when={scanning() && scanProgress()}>
+                  {(p) => (
+                    <span class="text-sm text-[var(--text-muted)] tabular-nums">
+                      {p().done === 0
+                        ? `Finding files... ${p().total.toLocaleString()}`
+                        : `${p().done.toLocaleString()}/${p().total.toLocaleString()}`}
+                    </span>
+                  )}
+                </Show>
               </Show>
             </div>
           }
@@ -709,10 +713,12 @@ export const LibraryPage: Component = () => {
           }
         >
           <TrackList
-            tracks={tracks()}
+            tracks={sortedTracks()}
             showDateAdded={false}
             activeTrackId={currentTrack()?.id}
             selectedTrackId={selectedTrackId() || undefined}
+            sort={sort()}
+            onSort={handleSort}
             onTrackClick={(track) => setSelectedTrackId(track.id)}
             onTrackPlay={(track) => {
               const idx = tracks().findIndex((t) => t.id === track.id)
@@ -723,7 +729,6 @@ export const LibraryPage: Component = () => {
             }}
           />
         </Show>
-      </div>
-    </AppShell>
+    </div>
   )
 }

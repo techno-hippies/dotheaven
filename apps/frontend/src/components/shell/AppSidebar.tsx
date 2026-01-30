@@ -17,7 +17,10 @@ import {
   DialogCloseButton,
 } from '@heaven/ui'
 import { useNavigate, useLocation } from '@solidjs/router'
-import { useXMTP, useAuth } from '../../providers'
+import { createQuery, useQueryClient } from '@tanstack/solid-query'
+import { useXMTP, useAuth, usePlayer } from '../../providers'
+import { fetchUserPlaylists } from '../../lib/heaven/playlists'
+import { createPlaylistService } from '../../lib/playlist-service'
 
 const ChatCircleIcon = () => (
   <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
@@ -64,9 +67,60 @@ export const AppSidebar: Component = () => {
   const location = useLocation()
   const auth = useAuth()
   const xmtp = useXMTP()
+  const player = usePlayer()
+  const queryClient = useQueryClient()
 
   const [newChatAddress, setNewChatAddress] = createSignal('')
   const [newChatOpen, setNewChatOpen] = createSignal(false)
+  const [createPlaylistOpen, setCreatePlaylistOpen] = createSignal(false)
+  const [newPlaylistName, setNewPlaylistName] = createSignal('')
+  const [creatingPlaylist, setCreatingPlaylist] = createSignal(false)
+
+  const playlistService = createPlaylistService(
+    () => auth.getAuthContext(),
+    () => auth.pkpInfo()?.publicKey ?? null,
+    () => auth.pkpAddress() ?? null,
+  )
+
+  const playlistsQuery = createQuery(() => ({
+    queryKey: ['userPlaylists', auth.pkpAddress()],
+    queryFn: () => fetchUserPlaylists(auth.pkpAddress()!),
+    get enabled() { return auth.isAuthenticated() && !!auth.pkpAddress() },
+  }))
+
+  const playlists = () => playlistsQuery.data ?? []
+
+  const handleCreatePlaylist = async () => {
+    const name = newPlaylistName().trim()
+    if (!name) return
+    setCreatingPlaylist(true)
+    try {
+      const result = await playlistService.createPlaylist({
+        name,
+        coverCid: '',
+        visibility: 0,
+        tracks: [],
+      })
+      if (result.success && result.playlistId) {
+        setCreatePlaylistOpen(false)
+        setNewPlaylistName('')
+        navigate(`/playlist/${result.playlistId}`)
+        // Retry invalidation until subgraph indexes the new playlist
+        const retryRefresh = async (attempts: number) => {
+          for (let i = 0; i < attempts; i++) {
+            await new Promise((r) => setTimeout(r, 3000))
+            queryClient.invalidateQueries({ queryKey: ['userPlaylists'] })
+            const current = playlistsQuery.data ?? []
+            if (current.some((p) => p.id === result.playlistId)) break
+          }
+        }
+        retryRefresh(5)
+      }
+    } catch (err) {
+      console.error('[Sidebar] Create playlist failed:', err)
+    }
+    setCreatingPlaylist(false)
+  }
 
   // Auto-connect XMTP when authenticated AND authData is available.
   // Skip if authData is null (new signup) — signing would trigger WebAuthn without a user gesture.
@@ -164,7 +218,7 @@ export const AppSidebar: Component = () => {
           icon={<MusicNotesIcon />}
           action={
             <div class="flex items-center gap-1">
-              <IconButton variant="soft" size="md" aria-label="Add playlist">
+              <IconButton variant="soft" size="md" aria-label="Add playlist" onClick={() => setCreatePlaylistOpen(true)}>
                 <PlusIcon />
               </IconButton>
               <IconButton variant="soft" size="md" aria-label="Music options">
@@ -175,7 +229,7 @@ export const AppSidebar: Component = () => {
         >
           <ListItem
             title="My Library"
-            subtitle="0 songs"
+            subtitle={`${player.tracks().length.toLocaleString()} songs`}
             cover={<AlbumCover size="sm" icon="music" />}
             onClick={() => navigate('/library')}
             active={isActive('/library')}
@@ -187,18 +241,23 @@ export const AppSidebar: Component = () => {
             onClick={() => navigate('/liked-songs')}
             active={isActive('/liked-songs')}
           />
-          <ListItem
-            title="Scrobbles"
-            subtitle="On-chain history"
-            cover={<AlbumCover size="sm" icon="music" />}
-            onClick={() => navigate('/scrobbles')}
-            active={isActive('/scrobbles')}
-          />
-          <ListItem
-            title="Free Weekly"
-            subtitle="Playlist • technohippies"
-            cover={<AlbumCover size="sm" icon="playlist" />}
-          />
+          <For each={playlists()}>
+            {(pl) => (
+              <ListItem
+                title={pl.name}
+                subtitle={`${pl.trackCount} songs`}
+                cover={
+                  <AlbumCover
+                    size="sm"
+                    src={pl.coverCid ? `https://ipfs.filebase.io/ipfs/${pl.coverCid}` : undefined}
+                    icon="playlist"
+                  />
+                }
+                onClick={() => navigate(`/playlist/${pl.id}`)}
+                active={location.pathname === `/playlist/${pl.id}`}
+              />
+            )}
+          </For>
         </SidebarSection>
       </Sidebar>
 
@@ -232,6 +291,41 @@ export const AppSidebar: Component = () => {
             />
             <Button disabled={!newChatAddress().trim()} onClick={handleStartChat}>
               Start Chat
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Playlist Dialog */}
+      <Dialog open={createPlaylistOpen()} onOpenChange={setCreatePlaylistOpen}>
+        <DialogContent class="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create Playlist</DialogTitle>
+            <DialogDescription>
+              Create a new on-chain playlist.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            <input
+              type="text"
+              value={newPlaylistName()}
+              onInput={(e) => setNewPlaylistName(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleCreatePlaylist()
+              }}
+              placeholder="Playlist name"
+              class="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
+              autofocus
+            />
+          </DialogBody>
+          <DialogFooter>
+            <DialogCloseButton
+              as={(props: Record<string, unknown>) => (
+                <Button {...props} variant="secondary">Cancel</Button>
+              )}
+            />
+            <Button disabled={!newPlaylistName().trim() || creatingPlaylist()} onClick={handleCreatePlaylist}>
+              {creatingPlaylist() ? 'Creating...' : 'Create'}
             </Button>
           </DialogFooter>
         </DialogContent>

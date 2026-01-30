@@ -521,6 +521,50 @@ pub async fn xmtp_stream_messages(
     Ok(())
 }
 
+/// Start streaming ALL messages across all DM conversations.
+/// Messages are emitted as `xmtp://message-all` events.
+/// This is used for unread indicators when the user isn't viewing a specific chat.
+#[tauri::command]
+pub async fn xmtp_stream_all_messages(
+    app: AppHandle,
+    state: State<'_, XmtpState>,
+) -> Result<(), String> {
+    let client = {
+        let guard = state.client.read().await;
+        get_client(&guard)?
+    };
+
+    let mut stream = client
+        .stream_all_messages_owned(Some(ConversationType::Dm), None)
+        .await
+        .map_err(|e| format!("stream_all: {e}"))?;
+
+    let app_handle = app.clone();
+
+    tokio::spawn(async move {
+        while let Some(result) = stream.next().await {
+            match result {
+                Ok(msg) => {
+                    let conv_id = hex::encode(&msg.group_id);
+                    if let Some(json_msg) = msg_to_json(&msg, &conv_id) {
+                        if let Err(e) = app_handle.emit("xmtp://message-all", &json_msg) {
+                            log::error!("[XMTP/Rust] Failed to emit message-all: {e}");
+                            break;
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::error!("[XMTP/Rust] Stream-all error: {e}");
+                    break;
+                }
+            }
+        }
+        log::info!("[XMTP/Rust] stream_all_messages ended");
+    });
+
+    Ok(())
+}
+
 /// Update consent state for a conversation.
 #[tauri::command]
 pub async fn xmtp_update_consent(

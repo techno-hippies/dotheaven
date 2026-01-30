@@ -1,0 +1,18 @@
+{
+  "name": "playlist-feed-subgraph",
+  "version": "1.0.0",
+  "description": "Playlist feed subgraph on MegaETH — dotheaven",
+  "scripts": {
+    "codegen": "graph codegen",
+    "build": "graph codegen && graph build",
+    "deploy": "graph deploy playlist-feed --node https://api.studio.thegraph.com/deploy/",
+    "create-local": "graph create --node http://localhost:8020/ playlist-feed",
+    "remove-local": "graph remove --node http://localhost:8020/ playlist-feed",
+    "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 playlist-feed"
+  },
+  "keywords": ["the-graph", "megaeth", "playlist", "music"],
+  "devDependencies": {
+    "@graphprotocol/graph-cli": "^0.98.1",
+    "@graphprotocol/graph-ts": "^0.35.1"
+  }
+}

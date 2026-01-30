@@ -1,6 +1,7 @@
 import { type Component, createSignal, createEffect, onCleanup, Show } from 'solid-js'
 import { Combobox } from '@kobalte/core/combobox'
 import { cn } from '../lib/utils'
+import { Spinner } from './spinner'
 
 export interface LocationResult {
   provider: 'photon'
@@ -129,10 +130,6 @@ const XIcon = () => (
   <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 256 256">
     <path d="M208.49,191.51a12,12,0,0,1-17,17L128,145,64.49,208.49a12,12,0,0,1-17-17L111,128,47.51,64.49a12,12,0,0,1,17-17L128,111l63.51-63.52a12,12,0,0,1,17,17L145,128Z" />
   </svg>
-)
-
-const LoadingSpinner = () => (
-  <div class="w-4 h-4 border-2 border-[var(--text-muted)] border-t-transparent rounded-full animate-spin" />
 )
 
 /**
@@ -287,7 +284,7 @@ export const LocationInput: Component<LocationInputProps> = (props) => {
           {/* Fixed-size container to prevent layout shift */}
           <div class="w-8 h-8 flex items-center justify-center shrink-0">
             <Show when={isLoading()}>
-              <LoadingSpinner />
+              <Spinner size="sm" class="text-[var(--text-muted)]" />
             </Show>
             <Show when={!isLoading() && (query() || props.value)}>
               <button

@@ -1,52 +1,196 @@
-import type { Track, ScrobbleStatus } from '@heaven/ui'
+import type { Track } from '@heaven/ui'
 
-// V2 subgraph endpoint
+/**
+ * ScrobbleV3 — reads scrobble history from Goldsky subgraph.
+ *
+ * The subgraph indexes:
+ * - Track entities (from TrackRegistered events) — metadata on-chain
+ * - Scrobble entities (from Scrobbled events) — linked to Track via trackId
+ *
+ * Each Scrobble has a `track` relation with the full metadata.
+ */
+
 const GOLDSKY_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/2.0.0/gn'
+  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/3.0.0/gn'
 
 // ── Types ──────────────────────────────────────────────────────────
 
-/** V2 identified scrobble (MBID or ipId) from subgraph */
-export interface ScrobbleGQL {
-  id: string
-  user: string
-  scrobbleId: string
-  identifier: string     // bytes20 hex
-  kind: number           // 1 = MBID, 2 = ipId
-  timestamp: string
-  blockNumber: string
-  blockTimestamp: string
-  transactionHash: string
-}
-
-/** V2 metadata scrobble (unidentified) from subgraph */
-export interface ScrobbleMetaGQL {
-  id: string
-  user: string
-  scrobbleId: string
-  metaHash: string       // keccak256(abi.encode(title, artist, album))
-  timestamp: string
-  blockNumber: string
-  blockTimestamp: string
-  transactionHash: string
-}
-
-/** Unified scrobble entry for display */
 export interface ScrobbleEntry {
   id: string
-  identifier: string     // MBID uuid, ipId address, or metaHash
-  kind: 'mbid' | 'ipId' | 'meta'
-  status: ScrobbleStatus
-  playedAt: number       // unix seconds
+  trackId: string
+  playedAt: number          // unix seconds
   txHash: string
-  // Resolved metadata (populated from MusicBrainz/contract/cache)
-  artist?: string
-  title?: string
-  album?: string
-  albumCover?: string
+  artist: string
+  title: string
+  album: string
+  kind: number              // 1=MBID, 2=ipId, 3=meta
 }
 
-// ── Helpers ────────────────────────────────────────────────────────
+interface ScrobbleGQL {
+  id: string
+  user: string
+  track: {
+    id: string
+    kind: number
+  }
+  timestamp: string
+  blockTimestamp: string
+  transactionHash: string
+}
+
+// ── Fetch ──────────────────────────────────────────────────────────
+
+/**
+ * Fetch scrobble history for a user from the V3 subgraph.
+ * Track metadata is resolved on-chain via getTrack() since the subgraph
+ * only stores trackId/kind/payload (not the display strings).
+ */
+export async function fetchScrobbleEntries(
+  userAddress: string,
+  maxEntries = 100,
+): Promise<ScrobbleEntry[]> {
+  const addr = userAddress.toLowerCase()
+
+  const query = `{
+    scrobbles(
+      where: { user: "${addr}" }
+      orderBy: timestamp
+      orderDirection: desc
+      first: ${maxEntries}
+    ) {
+      id
+      user
+      track {
+        id
+        kind
+      }
+      timestamp
+      blockTimestamp
+      transactionHash
+    }
+  }`
+
+  const res = await fetch(GOLDSKY_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query }),
+  })
+  if (!res.ok) throw new Error(`Goldsky query failed: ${res.status}`)
+  const json = await res.json()
+
+  const scrobbles: ScrobbleGQL[] = json.data?.scrobbles ?? []
+  if (scrobbles.length === 0) return []
+
+  // Resolve track metadata from on-chain (subgraph doesn't store display strings)
+  const uniqueTrackIds = [...new Set(scrobbles.map((s) => s.track.id))]
+  const trackMeta = await batchGetTracks(uniqueTrackIds)
+
+  return scrobbles.map((s) => {
+    const meta = trackMeta.get(s.track.id)
+    return {
+      id: s.id,
+      trackId: s.track.id,
+      playedAt: parseInt(s.timestamp),
+      txHash: s.transactionHash,
+      artist: meta?.artist ?? 'Unknown',
+      title: meta?.title ?? `Track ${s.track.id.slice(0, 10)}...`,
+      album: meta?.album ?? '',
+      kind: s.track.kind,
+    }
+  })
+}
+
+/**
+ * Convert ScrobbleEntry[] to Track[] for TrackList component.
+ */
+export function scrobblesToTracks(entries: ScrobbleEntry[]): Track[] {
+  return entries.map((e) => ({
+    id: e.id,
+    title: e.title,
+    artist: e.artist,
+    album: e.album,
+    dateAdded: formatTimeAgo(e.playedAt),
+    duration: '--:--',
+    scrobbleStatus: 'verified' as const,
+  }))
+}
+
+// ── Track metadata resolution (on-chain via MegaETH RPC) ──────────
+
+const MEGAETH_RPC = 'https://carrot.megaeth.com/rpc'
+const SCROBBLE_V3 = '0x3117A73b265b38ad9cD3b37a5F8E1D312Ad29196'
+
+interface TrackMeta {
+  title: string
+  artist: string
+  album: string
+}
+
+async function batchGetTracks(trackIds: string[]): Promise<Map<string, TrackMeta>> {
+  const results = new Map<string, TrackMeta>()
+  // cast sig "getTrack(bytes32)" → 0x82368a6b
+  const selector = '0x82368a6b'
+
+  const promises = trackIds.map(async (trackId) => {
+    try {
+      const data = selector + trackId.slice(2).padStart(64, '0')
+      const result = await rpcCall('eth_call', [
+        { to: SCROBBLE_V3, data },
+        'latest',
+      ])
+      if (result && result !== '0x' && result.length > 66) {
+        const decoded = decodeGetTrackResult(result)
+        if (decoded) results.set(trackId, decoded)
+      }
+    } catch {
+      // Skip failed lookups
+    }
+  })
+
+  await Promise.all(promises)
+  return results
+}
+
+function decodeGetTrackResult(hex: string): TrackMeta | null {
+  try {
+    const data = hex.slice(2)
+    const titleOffset = parseInt(data.slice(0, 64), 16) * 2
+    const artistOffset = parseInt(data.slice(64, 128), 16) * 2
+    const albumOffset = parseInt(data.slice(128, 192), 16) * 2
+    return {
+      title: decodeString(data, titleOffset),
+      artist: decodeString(data, artistOffset),
+      album: decodeString(data, albumOffset),
+    }
+  } catch {
+    return null
+  }
+}
+
+function decodeString(data: string, offset: number): string {
+  const len = parseInt(data.slice(offset, offset + 64), 16)
+  if (len === 0) return ''
+  const hexStr = data.slice(offset + 64, offset + 64 + len * 2)
+  const bytes = new Uint8Array(hexStr.length / 2)
+  for (let i = 0; i < hexStr.length; i += 2) {
+    bytes[i / 2] = parseInt(hexStr.slice(i, i + 2), 16)
+  }
+  return new TextDecoder().decode(bytes)
+}
+
+async function rpcCall(method: string, params: unknown[]): Promise<any> {
+  const res = await fetch(MEGAETH_RPC, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+  })
+  if (!res.ok) throw new Error(`RPC failed: ${res.status}`)
+  const json = await res.json()
+  if (json.error) throw new Error(`RPC error: ${json.error.message}`)
+  return json.result
+}
+
+// ── Helpers ───────────────────────────────────────────────────────
 
 function formatTimeAgo(ts: number): string {
   const now = Math.floor(Date.now() / 1000)
@@ -57,139 +201,3 @@ function formatTimeAgo(ts: number): string {
   if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`
   return new Date(ts * 1000).toLocaleDateString()
 }
-
-/** Convert bytes20 hex to MBID uuid string (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx) */
-function bytes20ToMBID(hex: string): string {
-  // bytes20 = 40 hex chars, MBID is first 32 (bytes16 left-aligned, last 8 are zeroes)
-  const clean = hex.startsWith('0x') ? hex.slice(2) : hex
-  const mbid = clean.slice(0, 32)
-  return `${mbid.slice(0, 8)}-${mbid.slice(8, 12)}-${mbid.slice(12, 16)}-${mbid.slice(16, 20)}-${mbid.slice(20, 32)}`
-}
-
-/** Convert bytes20 hex to address (take first 40 hex chars) */
-function bytes20ToAddress(hex: string): string {
-  const clean = hex.startsWith('0x') ? hex.slice(2) : hex
-  return '0x' + clean.slice(0, 40)
-}
-
-// ── Fetch ──────────────────────────────────────────────────────────
-
-async function queryGoldsky(query: string): Promise<any> {
-  const res = await fetch(GOLDSKY_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query }),
-  })
-  if (!res.ok) throw new Error(`Goldsky query failed: ${res.status}`)
-  return res.json()
-}
-
-/**
- * Fetch all V2 scrobbles for a user. Returns unified entries sorted newest first.
- */
-export async function fetchScrobbleEntries(
-  userAddress: string,
-  first = 100,
-): Promise<ScrobbleEntry[]> {
-  const addr = userAddress.toLowerCase()
-
-  const query = `{
-    scrobbles(
-      where: { user: "${addr}" }
-      orderBy: timestamp
-      orderDirection: desc
-      first: ${first}
-    ) {
-      id
-      user
-      scrobbleId
-      identifier
-      kind
-      timestamp
-      blockNumber
-      blockTimestamp
-      transactionHash
-    }
-    scrobbleMetaEntries(
-      where: { user: "${addr}" }
-      orderBy: timestamp
-      orderDirection: desc
-      first: ${first}
-    ) {
-      id
-      user
-      scrobbleId
-      metaHash
-      timestamp
-      blockNumber
-      blockTimestamp
-      transactionHash
-    }
-  }`
-
-  const json = await queryGoldsky(query)
-  console.log('[scrobbles] Goldsky response:', JSON.stringify(json, null, 2))
-  const idScrobbles: ScrobbleGQL[] = json.data?.scrobbles ?? []
-  const metaScrobbles: ScrobbleMetaGQL[] = json.data?.scrobbleMetaEntries ?? []
-  console.log('[scrobbles] idScrobbles:', idScrobbles.length, 'metaScrobbles:', metaScrobbles.length)
-
-  const entries: ScrobbleEntry[] = []
-
-  for (const s of idScrobbles) {
-    const isMBID = s.kind === 1
-    entries.push({
-      id: s.id,
-      identifier: isMBID ? bytes20ToMBID(s.identifier) : bytes20ToAddress(s.identifier),
-      kind: isMBID ? 'mbid' : 'ipId',
-      status: 'verified',
-      playedAt: parseInt(s.timestamp),
-      txHash: s.transactionHash,
-    })
-  }
-
-  for (const s of metaScrobbles) {
-    entries.push({
-      id: s.id,
-      identifier: s.metaHash,
-      kind: 'meta',
-      status: 'unidentified',
-      playedAt: parseInt(s.timestamp),
-      txHash: s.transactionHash,
-    })
-  }
-
-  // Sort newest first
-  entries.sort((a, b) => b.playedAt - a.playedAt)
-  return entries
-}
-
-/**
- * Convert ScrobbleEntry[] to Track[] for TrackList component.
- *
- * For identified tracks (MBID/ipId), metadata must be resolved separately
- * (MusicBrainz API, contract read, or local cache). Until resolved, we show
- * the identifier as the title.
- */
-export function scrobblesToTracks(entries: ScrobbleEntry[]): Track[] {
-  return entries.map((e) => ({
-    id: e.id,
-    title: e.title || (e.kind === 'mbid' ? `MBID: ${e.identifier.slice(0, 13)}...` : e.kind === 'ipId' ? `ipId: ${e.identifier.slice(0, 10)}...` : `Unidentified track`),
-    artist: e.artist || (e.kind === 'meta' ? 'Unknown' : 'Resolving...'),
-    album: e.album || '',
-    albumCover: e.albumCover,
-    dateAdded: formatTimeAgo(e.playedAt),
-    duration: '--:--',
-    scrobbleStatus: e.status,
-  }))
-}
-
-// ── MusicBrainz resolution (TODO) ──────────────────────────────────
-// export async function resolveMBID(mbid: string): Promise<{ artist: string; title: string; album?: string }> {
-//   const res = await fetch(`https://musicbrainz.org/ws/2/recording/${mbid}?inc=artists+releases&fmt=json`)
-//   const data = await res.json()
-//   return {
-//     title: data.title,
-//     artist: data['artist-credit']?.[0]?.name ?? 'Unknown',
-//     album: data.releases?.[0]?.title,
-//   }
-// }

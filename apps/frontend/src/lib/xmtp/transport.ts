@@ -48,5 +48,10 @@ export interface XmtpTransport {
     onError?: (err: Error) => void
   ): () => void
 
+  streamAllMessages(
+    onMessage: (msg: XmtpMessage) => void,
+    onError?: (err: Error) => void
+  ): () => void
+
   updateConsent(conversationId: string, state: 'allowed' | 'denied' | 'unknown'): Promise<void>
 }

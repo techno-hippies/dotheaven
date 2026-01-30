@@ -1,16 +1,11 @@
 import type { Component } from 'solid-js'
 import {
-  AppShell,
-  Header,
-  RightPanel,
-  MusicPlayer,
   MediaHeader,
   TrackList,
   IconButton,
   PlayButton,
   type Track,
 } from '@heaven/ui'
-import { AppSidebar, HeaderActions } from '../components/shell'
 
 // Placeholder liked songs
 const likedSongs: Track[] = [
@@ -36,33 +31,7 @@ const likedSongs: Track[] = [
 
 export const LikedSongsPage: Component = () => {
   return (
-    <AppShell
-      header={
-        <Header rightSlot={<HeaderActions />} />
-      }
-      sidebar={<AppSidebar />}
-      rightPanel={
-        <RightPanel>
-          <div class="p-4">
-            <h3 class="text-base font-semibold text-[var(--text-primary)] mb-4">Now Playing</h3>
-            <div class="aspect-square bg-[var(--bg-highlight)] rounded-lg mb-4" />
-            <p class="text-lg font-semibold text-[var(--text-primary)]">Neon Dreams</p>
-            <p class="text-base text-[var(--text-secondary)]">Synthwave Collective</p>
-          </div>
-        </RightPanel>
-      }
-      footer={
-        <MusicPlayer
-          title="Neon Dreams"
-          artist="Synthwave Collective"
-          currentTime="2:47"
-          duration="4:39"
-          progress={58}
-          isPlaying
-        />
-      }
-    >
-      <div class="h-full overflow-y-auto bg-gradient-to-b from-[#5a3a7a] via-[#3a2550] to-[var(--bg-page)] rounded-t-lg">
+    <div class="h-full overflow-y-auto bg-gradient-to-b from-[#5a3a7a] via-[#3a2550] to-[var(--bg-page)] rounded-t-lg">
         <MediaHeader
           type="playlist"
           title="Liked Songs"
@@ -101,7 +70,6 @@ export const LikedSongsPage: Component = () => {
             onRemoveFromPlaylist: (track) => console.log('Remove from liked:', track),
           }}
         />
-      </div>
-    </AppShell>
+    </div>
   )
 }

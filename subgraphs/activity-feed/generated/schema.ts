@@ -12,7 +12,7 @@ import {
   Int8,
 } from "@graphprotocol/graph-ts";
 
-export class ScrobbleBatch extends Entity {
+export class Track extends Entity {
   constructor(id: string) {
     super();
     this.set("id", Value.fromString(id));
@@ -20,24 +20,22 @@ export class ScrobbleBatch extends Entity {
 
   save(): void {
     let id = this.get("id");
-    assert(id != null, "Cannot save ScrobbleBatch entity without an ID");
+    assert(id != null, "Cannot save Track entity without an ID");
     if (id) {
       assert(
         id.kind == ValueKind.STRING,
-        `Entities of type ScrobbleBatch must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
+        `Entities of type Track must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
       );
-      store.set("ScrobbleBatch", id.toString(), this);
+      store.set("Track", id.toString(), this);
     }
   }
 
-  static loadInBlock(id: string): ScrobbleBatch | null {
-    return changetype<ScrobbleBatch | null>(
-      store.get_in_block("ScrobbleBatch", id),
-    );
+  static loadInBlock(id: string): Track | null {
+    return changetype<Track | null>(store.get_in_block("Track", id));
   }
 
-  static load(id: string): ScrobbleBatch | null {
-    return changetype<ScrobbleBatch | null>(store.get("ScrobbleBatch", id));
+  static load(id: string): Track | null {
+    return changetype<Track | null>(store.get("Track", id));
   }
 
   get id(): string {
@@ -53,47 +51,8 @@ export class ScrobbleBatch extends Entity {
     this.set("id", Value.fromString(value));
   }
 
-  get user(): Bytes {
-    let value = this.get("user");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBytes();
-    }
-  }
-
-  set user(value: Bytes) {
-    this.set("user", Value.fromBytes(value));
-  }
-
-  get startTs(): BigInt {
-    let value = this.get("startTs");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigInt();
-    }
-  }
-
-  set startTs(value: BigInt) {
-    this.set("startTs", Value.fromBigInt(value));
-  }
-
-  get endTs(): BigInt {
-    let value = this.get("endTs");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigInt();
-    }
-  }
-
-  set endTs(value: BigInt) {
-    this.set("endTs", Value.fromBigInt(value));
-  }
-
-  get count(): i32 {
-    let value = this.get("count");
+  get kind(): i32 {
+    let value = this.get("kind");
     if (!value || value.kind == ValueKind.NULL) {
       return 0;
     } else {
@@ -101,25 +60,12 @@ export class ScrobbleBatch extends Entity {
     }
   }
 
-  set count(value: i32) {
-    this.set("count", Value.fromI32(value));
+  set kind(value: i32) {
+    this.set("kind", Value.fromI32(value));
   }
 
-  get cid(): string {
-    let value = this.get("cid");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toString();
-    }
-  }
-
-  set cid(value: string) {
-    this.set("cid", Value.fromString(value));
-  }
-
-  get batchHash(): Bytes {
-    let value = this.get("batchHash");
+  get payload(): Bytes {
+    let value = this.get("payload");
     if (!value || value.kind == ValueKind.NULL) {
       throw new Error("Cannot return null for a required field.");
     } else {
@@ -127,8 +73,34 @@ export class ScrobbleBatch extends Entity {
     }
   }
 
-  set batchHash(value: Bytes) {
-    this.set("batchHash", Value.fromBytes(value));
+  set payload(value: Bytes) {
+    this.set("payload", Value.fromBytes(value));
+  }
+
+  get metaHash(): Bytes {
+    let value = this.get("metaHash");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set metaHash(value: Bytes) {
+    this.set("metaHash", Value.fromBytes(value));
+  }
+
+  get registeredAt(): BigInt {
+    let value = this.get("registeredAt");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set registeredAt(value: BigInt) {
+    this.set("registeredAt", Value.fromBigInt(value));
   }
 
   get blockNumber(): BigInt {
@@ -144,19 +116,6 @@ export class ScrobbleBatch extends Entity {
     this.set("blockNumber", Value.fromBigInt(value));
   }
 
-  get blockTimestamp(): BigInt {
-    let value = this.get("blockTimestamp");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigInt();
-    }
-  }
-
-  set blockTimestamp(value: BigInt) {
-    this.set("blockTimestamp", Value.fromBigInt(value));
-  }
-
   get transactionHash(): Bytes {
     let value = this.get("transactionHash");
     if (!value || value.kind == ValueKind.NULL) {
@@ -168,6 +127,10 @@ export class ScrobbleBatch extends Entity {
 
   set transactionHash(value: Bytes) {
     this.set("transactionHash", Value.fromBytes(value));
+  }
+
+  get scrobbles(): ScrobbleLoader {
+    return new ScrobbleLoader("Track", this.get("id")!.toString(), "scrobbles");
   }
 }
 
@@ -223,43 +186,17 @@ export class Scrobble extends Entity {
     this.set("user", Value.fromBytes(value));
   }
 
-  get scrobbleId(): BigInt {
-    let value = this.get("scrobbleId");
+  get track(): string {
+    let value = this.get("track");
     if (!value || value.kind == ValueKind.NULL) {
       throw new Error("Cannot return null for a required field.");
     } else {
-      return value.toBigInt();
+      return value.toString();
     }
   }
 
-  set scrobbleId(value: BigInt) {
-    this.set("scrobbleId", Value.fromBigInt(value));
-  }
-
-  get identifier(): Bytes {
-    let value = this.get("identifier");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBytes();
-    }
-  }
-
-  set identifier(value: Bytes) {
-    this.set("identifier", Value.fromBytes(value));
-  }
-
-  get kind(): i32 {
-    let value = this.get("kind");
-    if (!value || value.kind == ValueKind.NULL) {
-      return 0;
-    } else {
-      return value.toI32();
-    }
-  }
-
-  set kind(value: i32) {
-    this.set("kind", Value.fromI32(value));
+  set track(value: string) {
+    this.set("track", Value.fromString(value));
   }
 
   get timestamp(): BigInt {
@@ -315,137 +252,20 @@ export class Scrobble extends Entity {
   }
 }
 
-export class ScrobbleMetaEntry extends Entity {
-  constructor(id: string) {
+export class ScrobbleLoader extends Entity {
+  _entity: string;
+  _field: string;
+  _id: string;
+
+  constructor(entity: string, id: string, field: string) {
     super();
-    this.set("id", Value.fromString(id));
+    this._entity = entity;
+    this._id = id;
+    this._field = field;
   }
 
-  save(): void {
-    let id = this.get("id");
-    assert(id != null, "Cannot save ScrobbleMetaEntry entity without an ID");
-    if (id) {
-      assert(
-        id.kind == ValueKind.STRING,
-        `Entities of type ScrobbleMetaEntry must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
-      );
-      store.set("ScrobbleMetaEntry", id.toString(), this);
-    }
-  }
-
-  static loadInBlock(id: string): ScrobbleMetaEntry | null {
-    return changetype<ScrobbleMetaEntry | null>(
-      store.get_in_block("ScrobbleMetaEntry", id),
-    );
-  }
-
-  static load(id: string): ScrobbleMetaEntry | null {
-    return changetype<ScrobbleMetaEntry | null>(
-      store.get("ScrobbleMetaEntry", id),
-    );
-  }
-
-  get id(): string {
-    let value = this.get("id");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toString();
-    }
-  }
-
-  set id(value: string) {
-    this.set("id", Value.fromString(value));
-  }
-
-  get user(): Bytes {
-    let value = this.get("user");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBytes();
-    }
-  }
-
-  set user(value: Bytes) {
-    this.set("user", Value.fromBytes(value));
-  }
-
-  get scrobbleId(): BigInt {
-    let value = this.get("scrobbleId");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigInt();
-    }
-  }
-
-  set scrobbleId(value: BigInt) {
-    this.set("scrobbleId", Value.fromBigInt(value));
-  }
-
-  get metaHash(): Bytes {
-    let value = this.get("metaHash");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBytes();
-    }
-  }
-
-  set metaHash(value: Bytes) {
-    this.set("metaHash", Value.fromBytes(value));
-  }
-
-  get timestamp(): BigInt {
-    let value = this.get("timestamp");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigInt();
-    }
-  }
-
-  set timestamp(value: BigInt) {
-    this.set("timestamp", Value.fromBigInt(value));
-  }
-
-  get blockNumber(): BigInt {
-    let value = this.get("blockNumber");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigInt();
-    }
-  }
-
-  set blockNumber(value: BigInt) {
-    this.set("blockNumber", Value.fromBigInt(value));
-  }
-
-  get blockTimestamp(): BigInt {
-    let value = this.get("blockTimestamp");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigInt();
-    }
-  }
-
-  set blockTimestamp(value: BigInt) {
-    this.set("blockTimestamp", Value.fromBigInt(value));
-  }
-
-  get transactionHash(): Bytes {
-    let value = this.get("transactionHash");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBytes();
-    }
-  }
-
-  set transactionHash(value: Bytes) {
-    this.set("transactionHash", Value.fromBytes(value));
+  load(): Scrobble[] {
+    let value = store.loadRelated(this._entity, this._id, this._field);
+    return changetype<Scrobble[]>(value);
   }
 }

@@ -16,8 +16,9 @@ export {
 } from './avatar'
 
 export {
+  getProfile,
   setProfile,
-  type ProfileBasicsInput,
+  type ProfileInput,
   type SetProfileResult,
 } from './profile'
 
@@ -26,3 +27,14 @@ export {
   scrobblesToTracks,
   type ScrobbleEntry,
 } from './scrobbles'
+
+export {
+  fetchUserPlaylists,
+  fetchPlaylist,
+  fetchPlaylistTracks,
+  resolvePlaylistTracks,
+  getUserNonce,
+  type OnChainPlaylist,
+  type OnChainPlaylistTrack,
+} from './playlists'
+

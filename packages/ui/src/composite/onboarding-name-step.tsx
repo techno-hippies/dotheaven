@@ -1,7 +1,7 @@
 import type { Component } from 'solid-js'
 import { createSignal, createEffect, Show } from 'solid-js'
 import { cn } from '../lib/utils'
-import { Button } from '../primitives/button'
+import { Button, Spinner } from '../primitives'
 
 export interface OnboardingNameStepProps {
   class?: string
@@ -94,7 +94,7 @@ export const OnboardingNameStep: Component<OnboardingNameStepProps> = (props) =>
         {/* Status line — fixed height so nothing shifts */}
         <div class="h-6 flex items-center gap-2">
           <Show when={status() === 'checking'}>
-            <div class="w-3.5 h-3.5 border-2 border-[var(--text-muted)] border-t-transparent rounded-full animate-spin" />
+            <Spinner size="sm" class="text-[var(--text-muted)]" />
             <span class="text-base text-[var(--text-muted)]">Checking...</span>
           </Show>
           <Show when={status() === 'available'}>
@@ -130,15 +130,9 @@ export const OnboardingNameStep: Component<OnboardingNameStepProps> = (props) =>
         class="w-full h-12 text-lg"
         disabled={status() !== 'available' || props.claiming}
         onClick={() => props.onClaim?.(sanitized())}
+        loading={props.claiming}
       >
-        {props.claiming ? (
-          <div class="flex items-center gap-2">
-            <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            Claiming...
-          </div>
-        ) : (
-          'Claim Name'
-        )}
+        {props.claiming ? 'Claiming...' : 'Claim Name'}
       </Button>
     </div>
   )

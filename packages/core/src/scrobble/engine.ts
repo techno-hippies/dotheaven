@@ -36,9 +36,10 @@ export interface TrackMetadata {
   mbid?: string | null
 }
 
-// Scrobble thresholds (TEST: 1% / 3s min — revert for production)
-const MAX_SCROBBLE_THRESHOLD_MS = 10_000 // 10 seconds (test)
-const MIN_DURATION_FOR_SCROBBLE_MS = 3_000 // 3 seconds (test)
+// Scrobble thresholds (TEST: low for quick iteration — revert for production)
+// Production: MAX=240_000, MIN=30_000, divisor=2
+const MAX_SCROBBLE_THRESHOLD_MS = 10_000   // 10s
+const MIN_DURATION_FOR_SCROBBLE_MS = 3_000 // 3s
 
 interface SessionState {
   sessionKey: string
@@ -87,7 +88,7 @@ function buildTrackKey(
 
 function computeThreshold(durationMs: number | null): number {
   if (durationMs != null && durationMs >= MIN_DURATION_FOR_SCROBBLE_MS) {
-    return Math.min(durationMs / 100, MAX_SCROBBLE_THRESHOLD_MS) // TEST: 1% — revert to durationMs / 2
+    return Math.min(durationMs / 100, MAX_SCROBBLE_THRESHOLD_MS) // TEST: 1% — revert to /2
   }
   // Unknown duration → require 4 minutes
   return MAX_SCROBBLE_THRESHOLD_MS

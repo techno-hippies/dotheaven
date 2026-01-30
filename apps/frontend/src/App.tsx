@@ -1,13 +1,6 @@
 import type { Component } from 'solid-js'
 import { createSignal } from 'solid-js'
-import {
-  RightPanel,
-  AppShell,
-  Header,
-  MusicPlayer,
-  OnboardingFlow,
-} from '@heaven/ui'
-import { AppSidebar, HeaderActions } from './components/shell'
+import { OnboardingFlow } from '@heaven/ui'
 import { VerticalVideoFeed, VideoPlaybackProvider, type VideoPostData } from './components/feed'
 import { useAuth } from './providers'
 import { checkNameAvailable, registerHeavenName, uploadAvatar, setProfile } from './lib/heaven'
@@ -86,6 +79,17 @@ export const App: Component = () => {
       if (result.success) {
         console.log('[Onboarding] Name registered:', result)
         setClaimedName(name)
+        console.log('[Onboarding] Claimed name set to:', name)
+
+        // Save username to localStorage for profile page
+        try {
+          console.log('[Onboarding] Saving username to localStorage:', name)
+          localStorage.setItem('heaven:username', name)
+          const saved = localStorage.getItem('heaven:username')
+          console.log('[Onboarding] Verification - localStorage now has:', saved)
+        } catch (e) {
+          console.error('[Onboarding] Failed to save username:', e)
+        }
         return true
       } else {
         console.error('[Onboarding] Registration failed:', result.error)
@@ -105,7 +109,6 @@ export const App: Component = () => {
     const pkp = auth.pkpInfo()
     if (!pkp) return false
 
-    // If all fields are empty/null, skip silently (user clicked Continue with nothing)
     const hasData = data.age || data.gender || data.nativeLanguage || data.targetLanguage
     if (!hasData) return true
 
@@ -158,7 +161,6 @@ export const App: Component = () => {
         return true
       } else {
         console.error('[Onboarding] Avatar upload failed:', result.error)
-        // Show user-friendly message for style rejection
         const error = result.error || 'Upload failed. Please try again.'
         setUploadError(
           error.includes('realistic photos')
@@ -202,43 +204,16 @@ export const App: Component = () => {
         auth.dismissOnboarding()
       }}
     />
-    <AppShell
-      header={
-        <Header rightSlot={<HeaderActions />} />
-      }
-      sidebar={<AppSidebar />}
-      rightPanel={
-        <RightPanel>
-          <div class="p-4">
-            <h3 class="text-base font-semibold text-[var(--text-primary)] mb-4">Now Playing</h3>
-            <div class="aspect-square bg-[var(--bg-highlight)] rounded-lg mb-4" />
-            <p class="text-lg font-semibold text-[var(--text-primary)]">Neon Dreams</p>
-            <p class="text-base text-[var(--text-secondary)]">Synthwave Collective</p>
-          </div>
-        </RightPanel>
-      }
-      footer={
-        <MusicPlayer
-          title="Neon Dreams"
-          artist="Synthwave Collective"
-          currentTime="2:47"
-          duration="4:39"
-          progress={58}
-          isPlaying
-        />
-      }
-    >
-      <VideoPlaybackProvider>
-        <VerticalVideoFeed
-          videos={feedVideos}
-          onLikeClick={(id) => console.log('Like:', id)}
-          onCommentClick={(id) => console.log('Comment:', id)}
-          onShareClick={(id) => console.log('Share:', id)}
-          onProfileClick={(username) => console.log('Profile:', username)}
-          onTrackClick={(id) => console.log('Track:', id)}
-        />
-      </VideoPlaybackProvider>
-    </AppShell>
+    <VideoPlaybackProvider>
+      <VerticalVideoFeed
+        videos={feedVideos}
+        onLikeClick={(id) => console.log('Like:', id)}
+        onCommentClick={(id) => console.log('Comment:', id)}
+        onShareClick={(id) => console.log('Share:', id)}
+        onProfileClick={(username) => console.log('Profile:', username)}
+        onTrackClick={(id) => console.log('Track:', id)}
+      />
+    </VideoPlaybackProvider>
     </>
   )
 }

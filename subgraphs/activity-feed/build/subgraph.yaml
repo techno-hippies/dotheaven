@@ -5,45 +5,25 @@ schema:
   file: schema.graphql
 dataSources:
   - kind: ethereum
-    name: ScrobbleV1
+    name: ScrobbleV3
     network: megaeth-testnet-v2
     source:
-      address: "0x8fF05D1Ba81542d7bE2B79d6912C1D65F339dE0e"
-      abi: ScrobbleV1
-      startBlock: 9970187
+      address: "0x3117A73b265b38ad9cD3b37a5F8E1D312Ad29196"
+      abi: ScrobbleV3
+      startBlock: 10041000
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
       language: wasm/assemblyscript
       entities:
-        - ScrobbleBatch
-      abis:
-        - name: ScrobbleV1
-          file: ScrobbleV1/ScrobbleV1.json
-      eventHandlers:
-        - event: ScrobbleBatch(indexed address,uint64,uint64,uint32,string,bytes32)
-          handler: handleScrobbleBatch
-      file: ScrobbleV1/ScrobbleV1.wasm
-  - kind: ethereum
-    name: ScrobbleV2
-    network: megaeth-testnet-v2
-    source:
-      address: "0xf42b285EEb9280860808fd3bC7b0D6c531EF53bd"
-      abi: ScrobbleV2
-      startBlock: 10001071
-    mapping:
-      kind: ethereum/events
-      apiVersion: 0.0.7
-      language: wasm/assemblyscript
-      entities:
+        - Track
         - Scrobble
-        - ScrobbleMetaEntry
       abis:
-        - name: ScrobbleV2
-          file: ScrobbleV2/ScrobbleV2.json
+        - name: ScrobbleV3
+          file: ScrobbleV3/ScrobbleV3.json
       eventHandlers:
-        - event: ScrobbleId(indexed address,indexed uint256,bytes20,uint8,uint64)
-          handler: handleScrobbleId
-        - event: ScrobbleMeta(indexed address,indexed uint256,bytes32,uint64)
-          handler: handleScrobbleMeta
-      file: ScrobbleV2/ScrobbleV2.wasm
+        - event: TrackRegistered(indexed bytes32,indexed uint8,bytes32,indexed bytes32,uint64)
+          handler: handleTrackRegistered
+        - event: Scrobbled(indexed address,indexed bytes32,uint64)
+          handler: handleScrobbled
+      file: ScrobbleV3/ScrobbleV3.wasm

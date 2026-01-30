@@ -1,19 +1,35 @@
 import { BigInt } from "@graphprotocol/graph-ts";
-import { ScrobbleBatch as ScrobbleBatchEvent } from "../generated/ScrobbleV1/ScrobbleV1";
-import { ScrobbleBatch } from "../generated/schema";
+import {
+  TrackRegistered as TrackRegisteredEvent,
+  Scrobbled as ScrobbledEvent,
+} from "../generated/ScrobbleV3/ScrobbleV3";
+import { Track, Scrobble } from "../generated/schema";
 
-export function handleScrobbleBatch(event: ScrobbleBatchEvent): void {
-  let id = event.transaction.hash.toHexString();
+export function handleTrackRegistered(event: TrackRegisteredEvent): void {
+  let id = event.params.trackId.toHexString();
 
-  let item = new ScrobbleBatch(id);
-  item.user = event.params.user;
-  item.startTs = BigInt.fromI64(event.params.startTs.toI64());
-  item.endTs = BigInt.fromI64(event.params.endTs.toI64());
-  item.count = event.params.count.toI32();
-  item.cid = event.params.cid;
-  item.batchHash = event.params.batchHash;
-  item.blockNumber = event.block.number;
-  item.blockTimestamp = event.block.timestamp;
-  item.transactionHash = event.transaction.hash;
-  item.save();
+  let track = new Track(id);
+  track.kind = event.params.kind;
+  track.payload = event.params.payload;
+  track.metaHash = event.params.metaHash;
+  track.registeredAt = BigInt.fromI64(event.params.registeredAt.toI64());
+  track.blockNumber = event.block.number;
+  track.transactionHash = event.transaction.hash;
+  track.save();
+}
+
+export function handleScrobbled(event: ScrobbledEvent): void {
+  let id =
+    event.transaction.hash.toHexString() +
+    "-" +
+    event.logIndex.toString();
+
+  let scrobble = new Scrobble(id);
+  scrobble.user = event.params.user;
+  scrobble.track = event.params.trackId.toHexString();
+  scrobble.timestamp = BigInt.fromI64(event.params.timestamp.toI64());
+  scrobble.blockNumber = event.block.number;
+  scrobble.blockTimestamp = event.block.timestamp;
+  scrobble.transactionHash = event.transaction.hash;
+  scrobble.save();
 }

@@ -2,7 +2,7 @@
   "name": "heaven",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*", "apps/*"],
+  "workspaces": ["packages/*", "apps/*", "services/*"],
   "scripts": {
     "dev": "bun --filter @heaven/frontend dev",
     "dev:web": "bun --filter @heaven/frontend dev:web",

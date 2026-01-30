@@ -1,16 +1,11 @@
 import type { Component } from 'solid-js'
 import {
-  AppShell,
-  Header,
-  RightPanel,
-  MusicPlayer,
   MediaHeader,
   TrackList,
   IconButton,
   PlayButton,
   type Track,
 } from '@heaven/ui'
-import { AppSidebar, HeaderActions } from '../components/shell'
 
 // Placeholder free weekly tracks from technohippies
 const freeWeeklyTracks: Track[] = [
@@ -63,33 +58,7 @@ const freeWeeklyTracks: Track[] = [
 
 export const FreeWeeklyPage: Component = () => {
   return (
-    <AppShell
-      header={
-        <Header rightSlot={<HeaderActions />} />
-      }
-      sidebar={<AppSidebar />}
-      rightPanel={
-        <RightPanel>
-          <div class="p-4">
-            <h3 class="text-base font-semibold text-[var(--text-primary)] mb-4">Now Playing</h3>
-            <div class="aspect-square bg-[var(--bg-highlight)] rounded-lg mb-4" />
-            <p class="text-lg font-semibold text-[var(--text-primary)]">Neon Dreams</p>
-            <p class="text-base text-[var(--text-secondary)]">Synthwave Collective</p>
-          </div>
-        </RightPanel>
-      }
-      footer={
-        <MusicPlayer
-          title="Neon Dreams"
-          artist="Synthwave Collective"
-          currentTime="2:47"
-          duration="4:39"
-          progress={58}
-          isPlaying
-        />
-      }
-    >
-      <div class="h-full overflow-y-auto bg-gradient-to-b from-[#2d6a4f] via-[#1a3d2e] to-[var(--bg-page)] rounded-t-lg">
+    <div class="h-full overflow-y-auto bg-gradient-to-b from-[#2d6a4f] via-[#1a3d2e] to-[var(--bg-page)] rounded-t-lg">
         <MediaHeader
           type="playlist"
           title="Free Weekly"
@@ -127,7 +96,6 @@ export const FreeWeeklyPage: Component = () => {
             onGoToAlbum: (track) => console.log('Go to album:', track),
           }}
         />
-      </div>
-    </AppShell>
+    </div>
   )
 }

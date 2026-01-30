@@ -1,5 +1,8 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{HeapConsumer, HeapProducer, HeapRb};
+use rubato::{
+    Resampler, SincFixedOut, SincInterpolationParameters, SincInterpolationType, WindowFunction,
+};
 use serde::Serialize;
 use std::fs::File;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -83,9 +86,156 @@ struct DecoderState {
     duration: Option<f64>,
 }
 
+/// Holds a rubato SincFixedOut resampler and per-channel input accumulation buffers.
+/// Kept alive across decode chunks so the sinc filter state is continuous (no clicks/gaps).
+struct ResamplerState {
+    resampler: SincFixedOut<f32>,
+    /// Per-channel accumulation buffer — we feed rubato exactly `input_frames_next()` frames.
+    input_buf: Vec<Vec<f32>>,
+    channels: usize,
+}
+
+impl ResamplerState {
+    /// Create a new high-quality sinc resampler.
+    /// `ratio` = output_rate / input_rate (e.g. 48000/44100 ≈ 1.0884).
+    fn new(input_rate: u32, output_rate: u32, channels: usize) -> Result<Self, String> {
+        let ratio = output_rate as f64 / input_rate as f64;
+        let params = SincInterpolationParameters {
+            sinc_len: 128,
+            f_cutoff: 0.95,
+            oversampling_factor: 128,
+            interpolation: SincInterpolationType::Cubic,
+            window: WindowFunction::BlackmanHarris2,
+        };
+        // chunk_size = number of output frames per process() call
+        let chunk_size = 1024;
+        let resampler = SincFixedOut::<f32>::new(ratio, 2.0, params, chunk_size, channels)
+            .map_err(|e| format!("Resampler construction error: {e}"))?;
+        let input_buf = vec![Vec::new(); channels];
+        log::info!(
+            "rubato resampler created: {input_rate}→{output_rate} Hz (ratio {ratio:.6}), {channels}ch, sinc_len=128"
+        );
+        Ok(Self {
+            resampler,
+            input_buf,
+            channels,
+        })
+    }
+
+    /// Accumulate interleaved samples, process full chunks, return interleaved output.
+    fn process_interleaved(&mut self, interleaved: &[f32]) -> Result<Vec<f32>, String> {
+        let channels = self.channels;
+        let in_frames = interleaved.len() / channels;
+
+        // Deinterleave into per-channel accumulation buffers
+        for frame in 0..in_frames {
+            for ch in 0..channels {
+                self.input_buf[ch].push(interleaved[frame * channels + ch]);
+            }
+        }
+
+        let mut out_interleaved = Vec::new();
+
+        // Process as many full chunks as we can
+        loop {
+            let needed = self.resampler.input_frames_next();
+            if self.input_buf[0].len() < needed {
+                break;
+            }
+
+            // Prepare input slices: exactly `needed` frames per channel
+            let input_refs: Vec<&[f32]> = self
+                .input_buf
+                .iter()
+                .map(|ch| &ch[..needed])
+                .collect();
+
+            // Prepare output buffers
+            let out_frames = self.resampler.output_frames_next();
+            let mut output_buf: Vec<Vec<f32>> = vec![vec![0.0; out_frames]; channels];
+            let mut output_refs: Vec<&mut [f32]> = output_buf
+                .iter_mut()
+                .map(|ch| ch.as_mut_slice())
+                .collect();
+
+            let (_in_used, out_written) = self
+                .resampler
+                .process_into_buffer(&input_refs, &mut output_refs, None)
+                .map_err(|e| format!("Resample error: {e}"))?;
+
+            // Drain consumed frames from accumulation buffers
+            for ch_buf in &mut self.input_buf {
+                ch_buf.drain(..needed);
+            }
+
+            // Interleave output
+            for frame in 0..out_written {
+                for ch in 0..channels {
+                    out_interleaved.push(output_buf[ch][frame]);
+                }
+            }
+        }
+
+        Ok(out_interleaved)
+    }
+
+    /// Drain remaining samples at EOF by zero-padding to fill the last chunk.
+    fn drain(&mut self) -> Result<Vec<f32>, String> {
+        let channels = self.channels;
+        let remaining = self.input_buf[0].len();
+        if remaining == 0 {
+            return Ok(Vec::new());
+        }
+
+        let needed = self.resampler.input_frames_next();
+        // Zero-pad each channel to `needed` frames
+        for ch_buf in &mut self.input_buf {
+            ch_buf.resize(needed, 0.0);
+        }
+
+        let input_refs: Vec<&[f32]> = self.input_buf.iter().map(|ch| ch.as_slice()).collect();
+        let out_frames = self.resampler.output_frames_next();
+        let mut output_buf: Vec<Vec<f32>> = vec![vec![0.0; out_frames]; channels];
+        let mut output_refs: Vec<&mut [f32]> = output_buf
+            .iter_mut()
+            .map(|ch| ch.as_mut_slice())
+            .collect();
+
+        let (_in_used, out_written) = self
+            .resampler
+            .process_into_buffer(&input_refs, &mut output_refs, None)
+            .map_err(|e| format!("Resample drain error: {e}"))?;
+
+        for ch_buf in &mut self.input_buf {
+            ch_buf.clear();
+        }
+
+        // Only output frames proportional to actual remaining input (not zero-pad)
+        let ratio = self.resampler.output_frames_next() as f64 / needed as f64;
+        let real_out = ((remaining as f64) * ratio).ceil() as usize;
+        let capped = real_out.min(out_written);
+
+        let mut out_interleaved = Vec::with_capacity(capped * channels);
+        for frame in 0..capped {
+            for ch in 0..channels {
+                out_interleaved.push(output_buf[ch][frame]);
+            }
+        }
+        Ok(out_interleaved)
+    }
+
+    fn reset(&mut self) {
+        self.resampler.reset();
+        for ch_buf in &mut self.input_buf {
+            ch_buf.clear();
+        }
+    }
+}
+
 struct AudioInner {
     output: Option<OutputState>,
     decoder: Option<DecoderState>,
+    resampler: Option<ResamplerState>,
     current_path: Option<String>,
     paused: bool,
     volume: f32,
@@ -161,47 +311,25 @@ fn open_decoder(path: &str, seek: Option<f64>) -> Result<DecoderState, String> {
     })
 }
 
-fn build_output(sample_rate: u32, _channels: usize) -> Result<OutputState, String> {
+/// Build the cpal output stream.
+/// Uses the device's default config (rate/channels/format) so the OS mixer doesn't
+/// add a second resampling stage. We resample once in our pipeline via rubato.
+fn build_output() -> Result<OutputState, String> {
     let host = cpal::default_host();
     let device = host
         .default_output_device()
         .ok_or_else(|| "No default audio output device".to_string())?;
 
-    let supported_configs = device
-        .supported_output_configs()
-        .map_err(|e| format!("Output config error: {e}"))?;
+    let config = device
+        .default_output_config()
+        .map_err(|e| format!("Default output config error: {e}"))?;
 
-    let mut chosen = None;
-    let mut fallback = None;
-    for config in supported_configs {
-        let range = config.min_sample_rate().0..=config.max_sample_rate().0;
-        if range.contains(&sample_rate) {
-            let candidate = config.with_sample_rate(cpal::SampleRate(sample_rate));
-            if candidate.sample_format() == cpal::SampleFormat::F32 {
-                chosen = Some(candidate);
-                break;
-            }
-            if fallback.is_none() {
-                fallback = Some(candidate);
-            }
-        }
-    }
-
-    let mut config = match chosen {
-        Some(cfg) => cfg,
-        None => match fallback {
-            Some(cfg) => cfg,
-            None => device
-                .default_output_config()
-                .map_err(|e| format!("Default output config error: {e}"))?,
-        },
-    };
-
-    if config.channels() == 0 {
-        config = device
-            .default_output_config()
-            .map_err(|e| format!("Default output config error: {e}"))?;
-    }
+    log::info!(
+        "cpal output: {}Hz, {}ch, {:?}",
+        config.sample_rate().0,
+        config.channels(),
+        config.sample_format()
+    );
 
     let output_rate = config.sample_rate().0;
     let output_channels = config.channels();
@@ -291,39 +419,9 @@ fn convert_channels(samples: &[f32], in_channels: usize, out_channels: usize) ->
     out
 }
 
-fn resample_interleaved(
-    samples: &[f32],
-    in_rate: u32,
-    out_rate: u32,
-    channels: usize,
-) -> Vec<f32> {
-    if in_rate == out_rate || samples.is_empty() {
-        return samples.to_vec();
-    }
-
-    let frames_in = samples.len() / channels;
-    let frames_out = ((frames_in as f64) * (out_rate as f64) / (in_rate as f64)).round() as usize;
-    let mut out = vec![0.0; frames_out * channels];
-
-    for ch in 0..channels {
-        for i in 0..frames_out {
-            let pos = (i as f64) * (in_rate as f64) / (out_rate as f64);
-            let idx = pos.floor() as usize;
-            let frac = pos - (idx as f64);
-            let idx0 = idx.min(frames_in.saturating_sub(1));
-            let idx1 = (idx + 1).min(frames_in.saturating_sub(1));
-            let s0 = samples[idx0 * channels + ch];
-            let s1 = samples[idx1 * channels + ch];
-            out[i * channels + ch] = s0 + (s1 - s0) * (frac as f32);
-        }
-    }
-
-    out
-}
-
 fn decode_next(
     decoder_state: &mut DecoderState,
-    output_rate: u32,
+    resampler: &mut Option<ResamplerState>,
     output_channels: usize,
 ) -> Result<Option<Vec<f32>>, String> {
     loop {
@@ -367,8 +465,12 @@ fn decode_next(
             samples = convert_channels(&samples, decoder_state.channels, output_channels);
         }
 
-        if decoder_state.sample_rate != output_rate {
-            samples = resample_interleaved(&samples, decoder_state.sample_rate, output_rate, output_channels);
+        if let Some(rs) = resampler.as_mut() {
+            samples = rs.process_interleaved(&samples)?;
+            if samples.is_empty() {
+                // Resampler accumulated input but hasn't produced a full chunk yet — decode more
+                continue;
+            }
         }
 
         return Ok(Some(samples));
@@ -395,16 +497,34 @@ fn handle_command(
 ) -> Result<(), String> {
     match command {
         Command::Play { path, seek } => {
-            let force_reset = inner.current_path.as_deref() != Some(path.as_str());
             let decoder = open_decoder(&path, seek)?;
-            let needs_output = inner
-                .output
-                .as_ref()
-                .map(|o| o.sample_rate != decoder.sample_rate || o.channels as usize != decoder.channels)
-                .unwrap_or(true);
-            if force_reset || needs_output {
-                inner.output = Some(build_output(decoder.sample_rate, decoder.channels)?);
+
+            // Rebuild output stream only if we don't have one yet
+            if inner.output.is_none() {
+                inner.output = Some(build_output()?);
             }
+
+            let output = inner.output.as_ref().unwrap();
+            let out_rate = output.sample_rate;
+            let out_ch = output.channels as usize;
+
+            // Create resampler if source rate differs from output rate
+            if decoder.sample_rate != out_rate {
+                log::info!(
+                    "resampling: source {}Hz → output {}Hz",
+                    decoder.sample_rate,
+                    out_rate
+                );
+                inner.resampler = Some(ResamplerState::new(
+                    decoder.sample_rate,
+                    out_rate,
+                    out_ch,
+                )?);
+            } else {
+                log::info!("no resampling needed: {}Hz", out_rate);
+                inner.resampler = None;
+            }
+
             inner.decoder = Some(decoder);
             inner.current_path = Some(path);
             inner.paused = false;
@@ -426,9 +546,9 @@ fn handle_command(
             inner.clock.pause();
             inner.pending = None;
             inner.pending_index = 0;
-            if let Some(decoder) = inner.decoder.as_ref() {
-                inner.output = Some(build_output(decoder.sample_rate, decoder.channels)?);
-            }
+            // Rebuild output to flush the ring buffer (silences leftover samples)
+            inner.output = Some(build_output()?);
+            // Resampler state is preserved — it will continue seamlessly on resume
             let _ = app.emit("audio:state", AudioStatePayload { state: "paused" });
         }
         Command::Resume => {
@@ -440,6 +560,7 @@ fn handle_command(
         }
         Command::Stop => {
             inner.decoder = None;
+            inner.resampler = None;
             inner.current_path = None;
             inner.paused = true;
             inner.clock = PlaybackClock::default();
@@ -454,11 +575,15 @@ fn handle_command(
             };
             if let Some(decoder) = inner.decoder.as_mut() {
                 seek_decoder(decoder, position)?;
-                inner.output = Some(build_output(decoder.sample_rate, decoder.channels)?);
             } else {
                 let decoder = open_decoder(&path, Some(position))?;
-                inner.output = Some(build_output(decoder.sample_rate, decoder.channels)?);
                 inner.decoder = Some(decoder);
+            }
+            // Rebuild output to flush ring buffer
+            inner.output = Some(build_output()?);
+            // Reset resampler internal state + accumulation buffers (discontinuity)
+            if let Some(rs) = inner.resampler.as_mut() {
+                rs.reset();
             }
             inner.paused = !play;
             inner.clock = PlaybackClock::default();
@@ -482,6 +607,7 @@ fn run_audio_thread(app: AppHandle, receiver: Receiver<Command>) -> Result<(), S
     let mut inner = AudioInner {
         output: None,
         decoder: None,
+        resampler: None,
         current_path: None,
         paused: true,
         volume: 1.0,
@@ -504,10 +630,13 @@ fn run_audio_thread(app: AppHandle, receiver: Receiver<Command>) -> Result<(), S
             }
         }
 
-        if let (Some(output), Some(decoder)) = (inner.output.as_mut(), inner.decoder.as_mut()) {
-            if !inner.paused {
-                if inner.pending.is_none() {
-                    match decode_next(decoder, output.sample_rate, output.channels as usize) {
+        let has_both = inner.output.is_some() && inner.decoder.is_some();
+        if has_both && !inner.paused {
+            let output_channels = inner.output.as_ref().unwrap().channels as usize;
+
+            if inner.pending.is_none() {
+                let decoder = inner.decoder.as_mut().unwrap();
+                match decode_next(decoder, &mut inner.resampler, output_channels) {
                         Ok(Some(mut samples)) => {
                             let volume = inner.volume;
                             if (volume - 1.0).abs() > f32::EPSILON {
@@ -519,7 +648,24 @@ fn run_audio_thread(app: AppHandle, receiver: Receiver<Command>) -> Result<(), S
                             inner.pending_index = 0;
                         }
                         Ok(None) => {
+                            // EOF — drain resampler tail before signaling end
+                            if let Some(rs) = inner.resampler.as_mut() {
+                                match rs.drain() {
+                                    Ok(mut tail) if !tail.is_empty() => {
+                                        let volume = inner.volume;
+                                        if (volume - 1.0).abs() > f32::EPSILON {
+                                            for sample in &mut tail {
+                                                *sample *= volume;
+                                            }
+                                        }
+                                        inner.pending = Some(tail);
+                                        inner.pending_index = 0;
+                                    }
+                                    _ => {}
+                                }
+                            }
                             inner.decoder = None;
+                            inner.resampler = None;
                             inner.paused = true;
                             inner.clock.pause();
                             let _ = app.emit("audio:ended", ());
@@ -533,6 +679,7 @@ fn run_audio_thread(app: AppHandle, receiver: Receiver<Command>) -> Result<(), S
                                 },
                             );
                             inner.decoder = None;
+                            inner.resampler = None;
                             inner.paused = true;
                             inner.clock.pause();
                             let _ = app.emit("audio:state", AudioStatePayload { state: "stopped" });
@@ -540,14 +687,13 @@ fn run_audio_thread(app: AppHandle, receiver: Receiver<Command>) -> Result<(), S
                     }
                 }
 
-                if let Some(samples) = inner.pending.as_ref() {
-                    let start = inner.pending_index.min(samples.len());
-                    let written = output.producer.push_slice(&samples[start..]);
-                    inner.pending_index = start + written;
-                    if inner.pending_index >= samples.len() {
-                        inner.pending = None;
-                        inner.pending_index = 0;
-                    }
+            if let (Some(samples), Some(output)) = (inner.pending.as_ref(), inner.output.as_mut()) {
+                let start = inner.pending_index.min(samples.len());
+                let written = output.producer.push_slice(&samples[start..]);
+                inner.pending_index = start + written;
+                if inner.pending_index >= samples.len() {
+                    inner.pending = None;
+                    inner.pending_index = 0;
                 }
             }
         }

@@ -1,72 +1,41 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Ionicons } from '@expo/vector-icons';
 import { MusicScreen } from '../screens/MusicScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { PlaceholderScreen } from '../screens/PlaceholderScreen';
+import { BottomTabBar, type TabItem } from '../components/BottomTabBar';
 
 const Tab = createBottomTabNavigator();
 
+const HomeScreen = () => <PlaceholderScreen title="Home" icon="home-outline" />;
 const SearchScreen = () => <PlaceholderScreen title="Search" icon="search-outline" />;
-const LibraryScreen = () => <PlaceholderScreen title="Library" icon="library-outline" />;
+const MessagesScreen = () => <PlaceholderScreen title="Messages" icon="chatbubble-outline" />;
+
+const TABS: TabItem[] = [
+  { key: 'Home', label: 'Home', icon: 'home' },
+  { key: 'Search', label: 'Search', icon: 'search' },
+  { key: 'Music', label: 'Music', icon: 'music' },
+  { key: 'Messages', label: 'Messages', icon: 'messages' },
+  { key: 'Profile', label: 'Profile', icon: 'profile' },
+];
 
 export const TabNavigator: React.FC = () => {
   return (
     <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: '#1f1b2e',
-          borderTopColor: '#2d2645',
-          borderTopWidth: 1,
-          paddingBottom: 8,
-          paddingTop: 8,
-          height: 60,
-        },
-        tabBarActiveTintColor: '#8fb8e0',
-        tabBarInactiveTintColor: '#7878a0',
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '500',
-        },
-      }}
+      screenOptions={{ headerShown: false }}
+      tabBar={({ state, navigation }) => (
+        <BottomTabBar
+          tabs={TABS}
+          activeTab={state.routes[state.index].name}
+          onTabPress={(key) => navigation.navigate(key)}
+        />
+      )}
     >
-      <Tab.Screen
-        name="Music"
-        component={MusicScreen}
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="musical-notes" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Search"
-        component={SearchScreen}
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="search" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Library"
-        component={LibraryScreen}
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="library" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" size={size} color={color} />
-          ),
-        }}
-      />
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Search" component={SearchScreen} />
+      <Tab.Screen name="Music" component={MusicScreen} />
+      <Tab.Screen name="Messages" component={MessagesScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
 };

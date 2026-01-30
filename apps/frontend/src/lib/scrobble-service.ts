@@ -1,7 +1,8 @@
 /**
- * ScrobbleService — wires ScrobbleEngine directly to Lit Action V2.
+ * ScrobbleService — wires ScrobbleEngine to Lit Action V3 (ScrobbleV3).
  *
  * Each scrobble fires the Lit Action immediately (no batching/queue).
+ * V3 registers tracks on-chain (title/artist/album) + scrobbles as cheap event refs.
  */
 
 import { ScrobbleEngine } from '@heaven/core'
@@ -11,7 +12,7 @@ import { getLitClient } from './lit/client'
 
 const SESSION_KEY = 'local'
 const TICK_INTERVAL_MS = 15_000
-const SCROBBLE_SUBMIT_V2_CID = 'QmTcovqfx6fW5d3AKhSqSDSnC5L56DouVbNhNcqmotaHQK'
+const SCROBBLE_SUBMIT_V3_CID = 'QmW3mJc9h9r33B8pmsWEhocaegniKJQjiP2UaLynJvbXU5'
 
 export interface ScrobbleService {
   start(): void
@@ -28,7 +29,7 @@ export function createScrobbleService(
   let tickTimer: ReturnType<typeof setInterval> | null = null
 
   const engine = new ScrobbleEngine((scrobble) => {
-    console.log('[Scrobble] Ready:', scrobble.artist, '-', scrobble.title, scrobble.mbid ? `(MBID: ${scrobble.mbid})` : '(no MBID)')
+    console.log('[Scrobble] Ready:', scrobble.artist, '-', scrobble.title)
     // Fire after a brief delay to avoid competing with audio/UI in WebKitGTK
     setTimeout(() => {
       submitScrobble(scrobble, getAuthContext, getPkpPublicKey).catch((err) => {
@@ -64,7 +65,7 @@ export function createScrobbleService(
   }
 }
 
-// ── Lit Action V2 submit (single scrobble) ────────────────────────────
+// ── Lit Action V3 submit ────────────────────────────────────────────
 
 async function submitScrobble(
   scrobble: ReadyScrobble,
@@ -96,7 +97,7 @@ async function submitScrobble(
 
   const message = `heaven:scrobble:${tracksHash}:${timestamp}:${nonce}`
 
-  console.log('[Scrobble] Signing + submitting via Lit Action...')
+  console.log('[Scrobble] Signing + submitting via Lit Action V3...')
 
   const litClient = await getLitClient()
   const authContext = await getAuthContext()
@@ -126,9 +127,9 @@ async function submitScrobble(
   const v = (sig.recoveryId + 27).toString(16).padStart(2, '0')
   const signature = `0x${sigHex}${v}`
 
-  // Execute the scrobble-submit-v2 Lit Action
+  // Execute the scrobble-submit-v3 Lit Action
   const result = await litClient.executeJs({
-    ipfsId: SCROBBLE_SUBMIT_V2_CID,
+    ipfsId: SCROBBLE_SUBMIT_V3_CID,
     authContext,
     jsParams: {
       userPkpPublicKey: pkpPublicKey,
@@ -140,13 +141,12 @@ async function submitScrobble(
   })
 
   const response = typeof result.response === 'string' ? JSON.parse(result.response) : result.response
-  console.log('[Scrobble] Lit Action response:', response)
 
   if (!response.success) {
     throw new Error(`Scrobble submit failed: ${response.error || 'unknown'}`)
   }
 
-  console.log('[Scrobble] On-chain! txHashes:', response.txHashes)
+  console.log(`[Scrobble] On-chain! tx: ${response.txHash} (registered: ${response.registered}, scrobbled: ${response.scrobbled})`)
 }
 
 async function sha256Hex(message: string): Promise<string> {

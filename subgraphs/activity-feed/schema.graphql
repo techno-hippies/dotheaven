@@ -1,41 +1,20 @@
-# ── ScrobbleV1 (legacy, IPFS-based) ──────────────────────────────────
-# Kept for backward compat — V1 contract still has historical data.
+# ── ScrobbleV3 — Track Registry + Scrobble Events ─────────────────
 
-type ScrobbleBatch @entity(immutable: true) {
-  id: ID!                      # tx hash (hex)
-  user: Bytes!                 # wallet address
-  startTs: BigInt!             # earliest track timestamp
-  endTs: BigInt!               # latest track timestamp
-  count: Int!                  # number of tracks in batch
-  cid: String!                 # IPFS CID of full batch JSON
-  batchHash: Bytes!            # SHA-256 of batch JSON
+type Track @entity(immutable: false) {
+  id: ID!                      # trackId (bytes32 hex)
+  kind: Int!                   # 1=MBID, 2=ipId, 3=meta
+  payload: Bytes!              # raw derivation input
+  metaHash: Bytes!             # keccak256(abi.encode(title, artist, album))
+  registeredAt: BigInt!        # block timestamp
   blockNumber: BigInt!
-  blockTimestamp: BigInt!
   transactionHash: Bytes!
+  scrobbles: [Scrobble!]! @derivedFrom(field: "track")
 }
-
-# ── ScrobbleV2 (on-chain, per-track) ────────────────────────────────
-# Each entity = one track play. Two types:
-# - Scrobble: identified track (MBID or ipId)
-# - ScrobbleMeta: unidentified track (title/artist/album stored on-chain as metaHash)
 
 type Scrobble @entity(immutable: true) {
   id: ID!                      # "{txHash}-{logIndex}"
   user: Bytes!                 # wallet address
-  scrobbleId: BigInt!          # per-user sequential ID from contract
-  identifier: Bytes!           # bytes20: MBID (left-aligned bytes16) or ipId (address)
-  kind: Int!                   # 1 = MBID, 2 = ipId
-  timestamp: BigInt!           # play timestamp (unix seconds)
-  blockNumber: BigInt!
-  blockTimestamp: BigInt!
-  transactionHash: Bytes!
-}
-
-type ScrobbleMetaEntry @entity(immutable: true) {
-  id: ID!                      # "{txHash}-{logIndex}"
-  user: Bytes!                 # wallet address
-  scrobbleId: BigInt!          # per-user sequential ID from contract
-  metaHash: Bytes!             # keccak256(abi.encode(title, artist, album))
+  track: Track!                # link to registered track
   timestamp: BigInt!           # play timestamp (unix seconds)
   blockNumber: BigInt!
   blockTimestamp: BigInt!

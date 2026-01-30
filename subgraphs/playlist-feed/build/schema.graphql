@@ -1,0 +1,25 @@
+# ── PlaylistV1 — Event-sourced playlists ──────────────────────────
+
+type Playlist @entity(immutable: false) {
+  id: ID!                        # playlistId (bytes32 hex)
+  owner: Bytes!                  # playlist owner address
+  name: String!                  # event-only: latest name
+  coverCid: String!              # event-only: IPFS CID for cover ("" = none)
+  visibility: Int!               # 0=public, 1=unlisted, 2=private
+  trackCount: Int!
+  version: Int!                  # increments on every mutation
+  exists: Boolean!               # false = tombstoned (deleted)
+  tracksHash: Bytes!             # integrity checkpoint
+  createdAt: BigInt!
+  updatedAt: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+  tracks: [PlaylistTrack!]! @derivedFrom(field: "playlist")
+}
+
+type PlaylistTrack @entity(immutable: false) {
+  id: ID!                        # "{playlistId}-{position}"
+  playlist: Playlist!
+  trackId: Bytes!                # bytes32 — references ScrobbleV3 track registry
+  position: Int!                 # 0-indexed order in list
+}

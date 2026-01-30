@@ -91,19 +91,17 @@ const ACTIONS: Record<string, ActionDef> = {
       { name: 'openrouter_api_key', envVar: 'OPENROUTER_API_KEY' },
     ],
   },
-  scrobbleSubmit: {
-    name: 'scrobbleSubmit',
-    path: 'actions/scrobble-submit-v1.js',
-    displayName: 'Scrobble Submit v1',
-    keys: [
-      { name: 'filebase_api_key', envVar: 'FILEBASE_SONGS_BUCKET_API_KEY' },
-    ],
+  scrobbleSubmitV3: {
+    name: 'scrobbleSubmitV3',
+    path: 'actions/scrobble-submit-v3.js',
+    displayName: 'Scrobble Submit v3',
+    keys: [], // No encrypted keys — track registry + scrobble events, sponsor PKP pays gas
   },
-  scrobbleSubmitV2: {
-    name: 'scrobbleSubmitV2',
-    path: 'actions/scrobble-submit-v2.js',
-    displayName: 'Scrobble Submit v2',
-    keys: [], // No encrypted keys — all data on-chain, sponsor PKP pays gas
+  playlistV1: {
+    name: 'playlistV1',
+    path: 'actions/playlist-v1.js',
+    displayName: 'Playlist v1',
+    keys: [], // No encrypted keys — sponsor PKP pays gas directly
   },
 };
 

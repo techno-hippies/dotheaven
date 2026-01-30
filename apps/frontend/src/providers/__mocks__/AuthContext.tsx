@@ -1,32 +1,10 @@
-import { createContext, type ParentComponent, type Accessor, createSignal } from 'solid-js'
+import { type ParentComponent, createSignal } from 'solid-js'
+import { AuthContext, type AuthContextType } from '../AuthContext'
 
-// Mock AuthContextType (matches the real interface)
-export interface AuthContextType {
-  // State
-  pkpInfo: Accessor<any>
-  pkpAddress: Accessor<`0x${string}` | null>
-  authData: Accessor<any>
-  isAuthenticated: Accessor<boolean>
-  isAuthenticating: Accessor<boolean>
-  authError: Accessor<string | null>
-  isNewUser: Accessor<boolean>
+export type { AuthContextType }
+export { AuthContext }
 
-  // Actions
-  loginWithPasskey: () => Promise<void>
-  registerWithPasskey: () => Promise<void>
-  logout: () => Promise<void>
-  cancelAuth: () => void
-  clearError: () => void
-  dismissOnboarding: () => void
-
-  // Signing
-  signMessage: (message: string) => Promise<string>
-  getAuthContext: () => Promise<any>
-}
-
-export const AuthContext = createContext<AuthContextType>()
-
-// Mock provider for Storybook
+// Mock provider for Storybook - uses the REAL AuthContext so useAuth() works
 export const MockAuthProvider: ParentComponent<{ mockValue?: Partial<AuthContextType> }> = (
   props,
 ) => {
@@ -44,22 +22,15 @@ export const MockAuthProvider: ParentComponent<{ mockValue?: Partial<AuthContext
     isNewUser: () => false,
     loginWithPasskey: async () => {},
     registerWithPasskey: async () => {},
+    connectWallet: async () => {},
     logout: async () => {},
     cancelAuth: () => {},
     clearError: () => {},
     dismissOnboarding: () => {},
     signMessage: async () => '0x1234567890abcdef',
-    getAuthContext: async () => ({}),
+    getAuthContext: async () => ({}) as any,
     ...props.mockValue,
   }
 
   return <AuthContext.Provider value={defaultValue}>{props.children}</AuthContext.Provider>
-}
-
-export function useAuth(): AuthContextType {
-  const ctx = AuthContext
-  if (!ctx) {
-    throw new Error('useAuth must be used within MockAuthProvider')
-  }
-  return ctx as any
 }

@@ -1,14 +1,7 @@
 import type { Component, JSX } from 'solid-js'
 import { createMemo, createEffect, onMount, Show } from 'solid-js'
 import { createStore } from 'solid-js/store'
-import {
-  AppShell,
-  Header,
-  RightPanel,
-  MusicPlayer,
-  WalletAssets,
-} from '@heaven/ui'
-import { AppSidebar, HeaderActions } from '../components/shell'
+import { WalletAssets } from '@heaven/ui'
 import { useAuth } from '../providers'
 import {
   CHAINS,
@@ -170,14 +163,14 @@ const ASSET_CONFIGS: AssetConfig[] = [
   },
   {
     id: 'usdm-megaeth',
-    key: 'mega:erc20:0x0000000000000000000000000000000000000000',
+    key: 'mega:erc20:0xFAfDdbb3FC7688494971a79cc65DCa3EF82079E7',
     name: 'USDM',
     symbol: 'MegaETH',
     chainKey: 'mega',
     icon: USDMIcon,
     chainBadge: MegaETHIcon,
     isNative: false,
-    tokenAddress: '0x0000000000000000000000000000000000000000', // TODO: Replace with actual USDM contract address
+    tokenAddress: '0xFAfDdbb3FC7688494971a79cc65DCa3EF82079E7',
     unitSymbol: 'USDM',
     priceUsd: 1,
   },
@@ -337,55 +330,30 @@ export const WalletPage: Component = () => {
   })
 
   return (
-    <AppShell
-      header={<Header rightSlot={<HeaderActions />} />}
-      sidebar={<AppSidebar />}
-      rightPanel={
-        <RightPanel>
-          <div class="p-4">
-            <h3 class="text-base font-semibold text-[var(--text-primary)] mb-4">Now Playing</h3>
-            <div class="aspect-square bg-[var(--bg-highlight)] rounded-lg mb-4" />
-            <p class="text-lg font-semibold text-[var(--text-primary)]">Neon Dreams</p>
-            <p class="text-base text-[var(--text-secondary)]">Synthwave Collective</p>
-          </div>
-        </RightPanel>
-      }
-      footer={
-        <MusicPlayer
-          title="Neon Dreams"
-          artist="Synthwave Collective"
-          currentTime="2:47"
-          duration="4:39"
-          progress={58}
-          isPlaying
-        />
-      }
-    >
-      <div class="h-full overflow-y-auto bg-[var(--bg-surface)] rounded-t-lg">
-        <Show
-          when={auth.isAuthenticated()}
-          fallback={
-              <div class="flex flex-col items-center justify-center min-h-[60vh] gap-6 py-8">
-                <div class="text-center">
-                  <h2 class="text-2xl font-bold text-[var(--text-primary)] mb-2">
-                    Sign In Required
-                  </h2>
-                  <p class="text-base text-[var(--text-secondary)]">
-                    Please sign in with your passkey to view your wallet
-                  </p>
-                </div>
+    <div class="h-full overflow-y-auto bg-[var(--bg-surface)] rounded-t-lg">
+      <Show
+        when={auth.isAuthenticated()}
+        fallback={
+            <div class="flex flex-col items-center justify-center min-h-[60vh] gap-6 py-8">
+              <div class="text-center">
+                <h2 class="text-2xl font-bold text-[var(--text-primary)] mb-2">
+                  Sign In Required
+                </h2>
+                <p class="text-base text-[var(--text-secondary)]">
+                  Please sign in with your passkey to view your wallet
+                </p>
               </div>
-            }
-          >
-            <WalletAssets
-              address={auth.pkpAddress() || '0x0000000000000000000000000000000000000000'}
-              totalBalance={totalBalanceUSD()}
-              assets={walletAssets()}
-              onSend={() => console.log('Send clicked')}
-              onReceive={() => console.log('Receive clicked')}
-            />
-          </Show>
-      </div>
-    </AppShell>
+            </div>
+          }
+        >
+          <WalletAssets
+            address={auth.pkpAddress() || '0x0000000000000000000000000000000000000000'}
+            totalBalance={totalBalanceUSD()}
+            assets={walletAssets()}
+            onSend={() => console.log('Send clicked')}
+            onReceive={() => console.log('Receive clicked')}
+          />
+        </Show>
+    </div>
   )
 }

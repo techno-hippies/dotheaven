@@ -31,12 +31,16 @@ export async function registerWithWebAuthn(): Promise<{
   // Authenticate immediately to get auth data (access token)
   const authResult = await WebAuthnAuthenticator.authenticate()
 
+  // DEBUG: Inspect authResult structure
+  console.log('[Lit] WebAuthn authResult keys:', Object.keys(authResult))
+  console.log('[Lit] WebAuthn authResult full:', authResult)
+
+  // Preserve ALL fields from authResult (includes authSig, scope data, etc.)
   const authData: AuthData = {
-    authMethodType: authResult.authMethodType,
-    authMethodId: authResult.authMethodId,
-    accessToken: authResult.accessToken,
+    ...authResult as AuthData,
   }
 
+  console.log('[Lit] WebAuthn authData keys after spread:', Object.keys(authData))
   console.log('[Lit] Registration + authentication complete')
 
   return { pkpInfo, authData }
@@ -53,11 +57,16 @@ export async function authenticateWithWebAuthn(): Promise<{
 
   const authResult = await WebAuthnAuthenticator.authenticate()
 
+  // DEBUG: Inspect authResult structure
+  console.log('[Lit] WebAuthn authResult keys:', Object.keys(authResult))
+  console.log('[Lit] WebAuthn authResult full:', authResult)
+
+  // Preserve ALL fields from authResult (includes authSig, scope data, etc.)
   const authData: AuthData = {
-    authMethodType: authResult.authMethodType,
-    authMethodId: authResult.authMethodId,
-    accessToken: authResult.accessToken,
+    ...authResult as AuthData,
   }
+
+  console.log('[Lit] WebAuthn authData keys after spread:', Object.keys(authData))
 
   // Get PKP associated with this auth method from chain
   const litClient = await getLitClient()

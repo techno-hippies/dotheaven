@@ -15,9 +15,13 @@ export interface ProfileHeaderProps {
   }
   isFollowing?: boolean
   isOwnProfile?: boolean
+  isEditing?: boolean
+  isSaving?: boolean
   onFollowClick?: () => void
   onMessageClick?: () => void
   onAvatarClick?: () => void
+  onEditClick?: () => void
+  onSaveClick?: () => void
 }
 
 /**
@@ -81,9 +85,24 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
           {/* Action buttons */}
           <div class="flex items-center gap-3">
             {props.isOwnProfile ? (
-              <Button variant="secondary" size="md">
-                Edit Profile
-              </Button>
+              props.isEditing ? (
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={() => props.onSaveClick?.()}
+                  disabled={props.isSaving}
+                >
+                  {props.isSaving ? 'Saving...' : 'Save Changes'}
+                </Button>
+              ) : (
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onClick={() => props.onEditClick?.()}
+                >
+                  Edit Profile
+                </Button>
+              )
             ) : (
               <>
                 <FollowButton

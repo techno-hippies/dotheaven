@@ -4,25 +4,89 @@
  * This enables signing with Lit Actions
  */
 
-import { getLitClient, getAuthManager } from './client'
+import { getLitClient, getAuthManager, resetClient } from './client'
 import type { PKPInfo, AuthData, PKPAuthContext } from './types'
+import { LIT_CONFIG } from './config'
 
 const IS_DEV = import.meta.env.DEV
 
 /**
- * In-memory cache for auth context
+ * In-memory cache for auth contexts
  * Cannot persist to localStorage due to callback functions
+ *
+ * For EOA: We cache the original eoaAuthContext from createEoaAuthContext()
+ * For WebAuthn: We cache the pkpAuthContext from createPkpAuthContext()
  */
 let cachedAuthContext: PKPAuthContext | null = null
 let cachedPKPPublicKey: string | null = null
-let cachedAuthMethodId: string | null = null
-let cachedAccessToken: string | null = null
+let cachedEoaAuthContext: PKPAuthContext | null = null
+let cachedEoaAddress: string | null = null
 
 /**
  * Calculate expiration time (24 hours from now)
  */
 function getConsistentExpiration(): string {
-  return new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString()
+  return new Date(Date.now() + LIT_CONFIG.sessionExpirationMs).toISOString()
+}
+
+/**
+ * Clear stale Lit session data from localStorage and reset the auth manager
+ */
+function clearStaleSessionData(): void {
+  // Remove all lit-auth session keys from localStorage
+  const keysToRemove: string[] = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key && key.startsWith(`lit-auth:${LIT_CONFIG.appName}:`)) {
+      keysToRemove.push(key)
+    }
+  }
+  for (const key of keysToRemove) {
+    console.log('[Lit] Removing stale session key:', key)
+    localStorage.removeItem(key)
+  }
+  // Reset auth manager so it doesn't reuse stale in-memory state
+  resetClient()
+  // Clear our in-memory cache too
+  cachedAuthContext = null
+  cachedPKPPublicKey = null
+}
+
+/**
+ * Attempt to create a PKP auth context (single try)
+ */
+async function attemptCreateAuthContext(
+  pkpInfo: PKPInfo,
+  authData: AuthData
+): Promise<PKPAuthContext> {
+  const litClient = await getLitClient()
+  const authManager = getAuthManager()
+
+  const authContext = await authManager.createPkpAuthContext({
+    authData: authData,
+    pkpPublicKey: pkpInfo.publicKey,
+    authConfig: {
+      domain: typeof window !== 'undefined' ? window.location.host : 'localhost',
+      statement: 'Execute Lit Actions and sign messages',
+      expiration: getConsistentExpiration(),
+      resources: [
+        ['lit-action-execution', '*'],
+        ['pkp-signing', '*'],
+        ['access-control-condition-decryption', '*'],
+      ],
+    },
+    litClient: litClient,
+  })
+
+  console.log('[Lit] PKP authContext created, keys:', Object.keys(authContext))
+
+  // Cache for this session
+  cachedAuthContext = authContext
+  cachedPKPPublicKey = pkpInfo.publicKey
+
+  if (IS_DEV) console.log('[Lit] PKP auth context created')
+
+  return authContext
 }
 
 /**
@@ -38,54 +102,45 @@ export async function createPKPAuthContext(
   pkpInfo: PKPInfo,
   authData: AuthData
 ): Promise<PKPAuthContext> {
-  // Return cached context if available and all fields match
-  if (
-    cachedAuthContext &&
-    cachedPKPPublicKey === pkpInfo.publicKey &&
-    cachedAuthMethodId === authData.authMethodId &&
-    cachedAccessToken === authData.accessToken
-  ) {
+  // Check for cached EOA auth context first
+  // EOA contexts must be reused because they have their own session key pair
+  const cachedEoa = getEoaAuthContext(pkpInfo.publicKey)
+  if (cachedEoa) {
+    console.log('[Lit] Using cached EOA auth context (reusing session key pair)')
+    return cachedEoa
+  }
+
+  // Check for cached PKP auth context (WebAuthn flow)
+  if (cachedAuthContext && cachedPKPPublicKey === pkpInfo.publicKey) {
     if (IS_DEV) console.log('[Lit] Using cached PKP auth context')
     return cachedAuthContext
   }
 
-  if (IS_DEV) console.log('[Lit] Creating PKP auth context...')
+  console.log('[Lit] Creating PKP auth context (WebAuthn flow)...')
+  console.log('[Lit] Input authData keys:', Object.keys(authData))
+  console.log('[Lit] Input authData full:', authData)
+  console.log('[Lit] Input authData type:', typeof authData)
+  console.log('[Lit] Input authData has authMethodType:', 'authMethodType' in authData)
+  console.log('[Lit] Input authData has authSig:', 'authSig' in authData)
+  console.log('[Lit] Input authData has sessionSigs:', 'sessionSigs' in authData)
 
   try {
-    const litClient = await getLitClient()
-    const authManager = getAuthManager()
-
-    // Create PKP auth context
-    const authContext = await authManager.createPkpAuthContext({
-      authData: {
-        authMethodType: authData.authMethodType as 1 | 2 | 3,
-        authMethodId: authData.authMethodId,
-        accessToken: authData.accessToken,
-      },
-      pkpPublicKey: pkpInfo.publicKey,
-      authConfig: {
-        domain: typeof window !== 'undefined' ? window.location.host : 'localhost',
-        statement: 'Execute Lit Actions and sign messages',
-        expiration: getConsistentExpiration(),
-        resources: [
-          ['lit-action-execution', '*'],
-          ['pkp-signing', '*'],
-          ['access-control-condition-decryption', '*'],
-        ],
-      },
-      litClient: litClient,
-    })
-
-    // Cache for this session
-    cachedAuthContext = authContext
-    cachedPKPPublicKey = pkpInfo.publicKey
-    cachedAuthMethodId = authData.authMethodId
-    cachedAccessToken = authData.accessToken
-
-    if (IS_DEV) console.log('[Lit] PKP auth context created')
-
-    return authContext
+    return await attemptCreateAuthContext(pkpInfo, authData)
   } catch (error) {
+    // If session keys are stale (401 / InvalidAuthSig), clear cached sessions and retry once
+    const msg = error instanceof Error ? error.message : ''
+    if (msg.includes('InvalidAuthSig') || msg.includes('auth_sig passed is invalid') || msg.includes("can't get auth context")) {
+      console.warn('[Lit] Session expired, clearing stale session data and retrying...')
+      clearStaleSessionData()
+      try {
+        return await attemptCreateAuthContext(pkpInfo, authData)
+      } catch (retryError) {
+        console.error('[Lit] Retry also failed:', retryError)
+        throw new Error(
+          `Failed to create PKP auth context after retry: ${retryError instanceof Error ? retryError.message : 'Unknown error'}`
+        )
+      }
+    }
     console.error('[Lit] Failed to create PKP auth context:', error)
     throw new Error(
       `Failed to create PKP auth context: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -105,13 +160,39 @@ export function getCachedAuthContext(pkpPublicKey: string): PKPAuthContext | nul
 }
 
 /**
+ * Cache EOA auth context for reuse
+ * EOA contexts have their own session key pair that must be reused
+ *
+ * IMPORTANT: EOA auth contexts cannot be recreated - they must be reused
+ * because creating a new PKP auth context would generate a different session key pair
+ * that isn't authorized by the original SIWE signature.
+ */
+export function cacheEoaAuthContext(pkpPublicKey: string, eoaAuthContext: PKPAuthContext): void {
+  console.log('[Lit] ✓ Caching EOA auth context for PKP:', pkpPublicKey)
+  console.log('[Lit] EOA context has sessionKeyPair:', 'sessionKeyPair' in eoaAuthContext)
+  cachedEoaAuthContext = eoaAuthContext
+  cachedEoaAddress = pkpPublicKey // Using PKP public key as cache key
+}
+
+/**
+ * Get cached EOA auth context if available
+ */
+export function getEoaAuthContext(pkpPublicKey: string): PKPAuthContext | null {
+  if (cachedEoaAuthContext && cachedEoaAddress === pkpPublicKey) {
+    if (IS_DEV) console.log('[Lit] Using cached EOA auth context')
+    return cachedEoaAuthContext
+  }
+  return null
+}
+
+/**
  * Clear cached auth context
  * Call this on logout or when switching PKPs
  */
 export function clearAuthContext(): void {
-  if (IS_DEV) console.log('[Lit] Clearing cached auth context')
+  if (IS_DEV) console.log('[Lit] Clearing cached auth contexts')
   cachedAuthContext = null
   cachedPKPPublicKey = null
-  cachedAuthMethodId = null
-  cachedAccessToken = null
+  cachedEoaAuthContext = null
+  cachedEoaAddress = null
 }
