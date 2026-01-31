@@ -19,12 +19,12 @@
  *
  * Required jsParams:
  * - userPkpPublicKey: User's PKP public key
- * - tracks: Array of { playedAt, mbid?, ipId?, artist?, title?, album? }
- * - signature: EIP-191 signature over `heaven:scrobble:${tracksHash}:${timestamp}:${nonce}`
+ * - tracks: Array of { playedAt, mbid?, ipId?, artist?, title?, album?, coverCid? }
  * - timestamp: Request timestamp (ms)
  * - nonce: Unique nonce for replay protection
+ * Action signs the message internally using the user's PKP (single executeJs).
  *
- * Returns: { success, version, user, count, txHash, registered, scrobbled }
+ * Returns: { success, version, user, count, txHash, registered, scrobbled, coversSet, coverTxHash }
  */
 
 // ============================================================
@@ -35,7 +35,7 @@ const CHAIN_ID = 6343;
 const RPC_URL = "https://carrot.megaeth.com/rpc";
 
 // ScrobbleV3 contract (MegaETH Testnet)
-const SCROBBLE_V3 = "0x3117A73b265b38ad9cD3b37a5F8E1D312Ad29196";
+const SCROBBLE_V3 = "0x144c450cd5B641404EEB5D5eD523399dD94049E0";
 
 // Sponsor PKP
 const SPONSOR_PKP_PUBLIC_KEY =
@@ -88,6 +88,8 @@ function normalize(s) {
 const SCROBBLE_V3_ABI = [
   "function registerAndScrobbleBatch(address user, uint8[] regKinds, bytes32[] regPayloads, string[] titles, string[] artists, string[] albums, bytes32[] trackIds, uint64[] timestamps) external",
   "function isRegistered(bytes32 trackId) external view returns (bool)",
+  "function getTrack(bytes32 trackId) external view returns (string title, string artist, string album, uint8 kind, bytes32 payload, uint64 registeredAt, string coverCid)",
+  "function setTrackCoverBatch(bytes32[] trackIds, string[] coverCids) external",
 ];
 
 // ============================================================
@@ -225,14 +227,12 @@ const main = async () => {
     const {
       userPkpPublicKey,
       tracks,
-      signature,
       timestamp,
       nonce,
     } = jsParams || {};
 
     must(userPkpPublicKey, "userPkpPublicKey");
     must(tracks, "tracks");
-    must(signature, "signature");
     must(timestamp, "timestamp");
     must(nonce, "nonce");
 
@@ -267,25 +267,48 @@ const main = async () => {
         title: (t.title || "").slice(0, 128),
         artist: (t.artist || "").slice(0, 128),
         album: (t.album || "").slice(0, 128),
+        coverCid: (t.coverCid || "").slice(0, 128),
         playedAt: t.playedAt,
       };
     });
 
     // ========================================
-    // STEP 3: Verify signature
+    // STEP 3: Sign (or verify) user message
     // ========================================
     const tracksHash = await sha256Hex(JSON.stringify(tracks));
     const message = `heaven:scrobble:${tracksHash}:${timestamp}:${nonce}`;
+
+    const msgHash = ethers.utils.hashMessage(message);
+    const sigResult = await Lit.Actions.signAndCombineEcdsa({
+      toSign: Array.from(ethers.utils.arrayify(msgHash)),
+      publicKey: userPkpPublicKey,
+      sigName: "user_scrobble_sig",
+    });
+
+    if (typeof sigResult === "string" && sigResult.startsWith("[ERROR]")) {
+      throw new Error(`User PKP signing failed: ${sigResult}`);
+    }
+
+    const sigObj = JSON.parse(sigResult);
+    let userV = Number(sigObj.recid ?? sigObj.recoveryId ?? sigObj.v);
+    if (userV === 0 || userV === 1) userV += 27;
+    const signature = ethers.utils.joinSignature({
+      r: `0x${strip0x(sigObj.r)}`,
+      s: `0x${strip0x(sigObj.s)}`,
+      v: userV,
+    });
+
     const recovered = ethers.utils.verifyMessage(message, signature);
     if (recovered.toLowerCase() !== userAddress.toLowerCase()) {
       throw new Error(
-        `Invalid signature: recovered ${recovered}, expected ${userAddress}`
+        `Sign mismatch: recovered ${recovered}, expected ${userAddress}`
       );
     }
 
     // ========================================
     // STEP 4: Check which tracks need registration
     // ========================================
+    // Check registration status + existing covers for tracks that have a coverCid
     const registrationCheck = await Lit.Actions.runOnce(
       { waitForResponse: true, name: "checkRegistered" },
       async () => {
@@ -295,18 +318,24 @@ const main = async () => {
         // Deduplicate trackIds
         const uniqueIds = [...new Set(trackInfos.map((t) => t.trackId))];
         const results = {};
+        const covers = {}; // trackId -> existing coverCid (empty string if none)
         for (const id of uniqueIds) {
           try {
             results[id] = await contract.isRegistered(id);
+            // For registered tracks, check if cover already set
+            if (results[id]) {
+              const track = await contract.getTrack(id);
+              covers[id] = track.coverCid || "";
+            }
           } catch {
             results[id] = false;
           }
         }
-        return JSON.stringify(results);
+        return JSON.stringify({ registered: results, covers });
       }
     );
 
-    const registered = JSON.parse(registrationCheck);
+    const { registered, covers } = JSON.parse(registrationCheck);
 
     // Split into: tracks needing registration vs already registered
     const seen = new Set();
@@ -370,6 +399,59 @@ const main = async () => {
     }, "registerAndScrobble");
 
     // ========================================
+    // STEP 6: Set covers for tracks that need them
+    // ========================================
+    // Collect tracks that have a coverCid and whose on-chain cover is empty.
+    // Newly registered tracks (no entry in covers{}) also need covers.
+    const coverSeen = new Set();
+    const coverTrackIds = [];
+    const coverCids = [];
+
+    for (const t of trackInfos) {
+      if (!t.coverCid || coverSeen.has(t.trackId)) continue;
+      coverSeen.add(t.trackId);
+      // If track was already registered and already has a cover, skip
+      const existingCover = covers[t.trackId];
+      if (existingCover && existingCover.length > 0) continue;
+      coverTrackIds.push(t.trackId);
+      coverCids.push(t.coverCid);
+    }
+
+    let coverTxHash = null;
+    if (coverTrackIds.length > 0) {
+      const coverTxData = iface.encodeFunctionData("setTrackCoverBatch", [
+        coverTrackIds,
+        coverCids,
+      ]);
+
+      const coverNonceJson = await Lit.Actions.runOnce(
+        { waitForResponse: true, name: "getCoverTxNonce" },
+        async () => {
+          const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+          const n = await provider.getTransactionCount(SPONSOR_PKP_ADDRESS, "pending");
+          return JSON.stringify({ nonce: n.toString() });
+        }
+      );
+      const coverTxNonce = Number(JSON.parse(coverNonceJson).nonce);
+
+      try {
+        const coverResult = await signAndBroadcast({
+          type: 0,
+          chainId: CHAIN_ID,
+          nonce: toBigNumber(coverTxNonce, "nonce"),
+          to: SCROBBLE_V3,
+          data: coverTxData,
+          gasLimit: toBigNumber("4000000", "gasLimit"),
+          gasPrice: toBigNumber(GAS_PRICE, "gasPrice"),
+          value: 0,
+        }, "setTrackCover");
+        coverTxHash = coverResult.txHash;
+      } catch (err) {
+        // Cover setting is best-effort; don't fail the whole scrobble
+      }
+    }
+
+    // ========================================
     // DONE
     // ========================================
     Lit.Actions.setResponse({
@@ -382,6 +464,8 @@ const main = async () => {
         blockNumber: result.blockNumber,
         registered: regKinds.length,
         scrobbled: scrobbleIds.length,
+        coversSet: coverTrackIds.length,
+        coverTxHash,
       }),
     });
   } catch (err) {

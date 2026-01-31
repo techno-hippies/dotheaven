@@ -72,6 +72,28 @@ export class SponsorUpdated__Params {
   }
 }
 
+export class TrackCoverSet extends ethereum.Event {
+  get params(): TrackCoverSet__Params {
+    return new TrackCoverSet__Params(this);
+  }
+}
+
+export class TrackCoverSet__Params {
+  _event: TrackCoverSet;
+
+  constructor(event: TrackCoverSet) {
+    this._event = event;
+  }
+
+  get trackId(): Bytes {
+    return this._event.parameters[0].value.toBytes();
+  }
+
+  get coverCid(): string {
+    return this._event.parameters[1].value.toString();
+  }
+}
+
 export class TrackRegistered extends ethereum.Event {
   get params(): TrackRegistered__Params {
     return new TrackRegistered__Params(this);
@@ -135,6 +157,7 @@ export class ScrobbleV3__getTrackResult {
   value3: i32;
   value4: Bytes;
   value5: BigInt;
+  value6: string;
 
   constructor(
     value0: string,
@@ -143,71 +166,7 @@ export class ScrobbleV3__getTrackResult {
     value3: i32,
     value4: Bytes,
     value5: BigInt,
-  ) {
-    this.value0 = value0;
-    this.value1 = value1;
-    this.value2 = value2;
-    this.value3 = value3;
-    this.value4 = value4;
-    this.value5 = value5;
-  }
-
-  toMap(): TypedMap<string, ethereum.Value> {
-    let map = new TypedMap<string, ethereum.Value>();
-    map.set("value0", ethereum.Value.fromString(this.value0));
-    map.set("value1", ethereum.Value.fromString(this.value1));
-    map.set("value2", ethereum.Value.fromString(this.value2));
-    map.set(
-      "value3",
-      ethereum.Value.fromUnsignedBigInt(BigInt.fromI32(this.value3)),
-    );
-    map.set("value4", ethereum.Value.fromFixedBytes(this.value4));
-    map.set("value5", ethereum.Value.fromUnsignedBigInt(this.value5));
-    return map;
-  }
-
-  getTitle(): string {
-    return this.value0;
-  }
-
-  getArtist(): string {
-    return this.value1;
-  }
-
-  getAlbum(): string {
-    return this.value2;
-  }
-
-  getKind(): i32 {
-    return this.value3;
-  }
-
-  getPayload(): Bytes {
-    return this.value4;
-  }
-
-  getRegisteredAt(): BigInt {
-    return this.value5;
-  }
-}
-
-export class ScrobbleV3__tracksResult {
-  value0: string;
-  value1: string;
-  value2: string;
-  value3: Bytes;
-  value4: i32;
-  value5: BigInt;
-  value6: boolean;
-
-  constructor(
-    value0: string,
-    value1: string,
-    value2: string,
-    value3: Bytes,
-    value4: i32,
-    value5: BigInt,
-    value6: boolean,
+    value6: string,
   ) {
     this.value0 = value0;
     this.value1 = value1;
@@ -223,13 +182,13 @@ export class ScrobbleV3__tracksResult {
     map.set("value0", ethereum.Value.fromString(this.value0));
     map.set("value1", ethereum.Value.fromString(this.value1));
     map.set("value2", ethereum.Value.fromString(this.value2));
-    map.set("value3", ethereum.Value.fromFixedBytes(this.value3));
     map.set(
-      "value4",
-      ethereum.Value.fromUnsignedBigInt(BigInt.fromI32(this.value4)),
+      "value3",
+      ethereum.Value.fromUnsignedBigInt(BigInt.fromI32(this.value3)),
     );
+    map.set("value4", ethereum.Value.fromFixedBytes(this.value4));
     map.set("value5", ethereum.Value.fromUnsignedBigInt(this.value5));
-    map.set("value6", ethereum.Value.fromBoolean(this.value6));
+    map.set("value6", ethereum.Value.fromString(this.value6));
     return map;
   }
 
@@ -245,11 +204,11 @@ export class ScrobbleV3__tracksResult {
     return this.value2;
   }
 
-  getPayload(): Bytes {
+  getKind(): i32 {
     return this.value3;
   }
 
-  getKind(): i32 {
+  getPayload(): Bytes {
     return this.value4;
   }
 
@@ -257,14 +216,108 @@ export class ScrobbleV3__tracksResult {
     return this.value5;
   }
 
-  getExists(): boolean {
+  getCoverCid(): string {
     return this.value6;
+  }
+}
+
+export class ScrobbleV3__tracksResult {
+  value0: string;
+  value1: string;
+  value2: string;
+  value3: string;
+  value4: Bytes;
+  value5: i32;
+  value6: BigInt;
+  value7: boolean;
+
+  constructor(
+    value0: string,
+    value1: string,
+    value2: string,
+    value3: string,
+    value4: Bytes,
+    value5: i32,
+    value6: BigInt,
+    value7: boolean,
+  ) {
+    this.value0 = value0;
+    this.value1 = value1;
+    this.value2 = value2;
+    this.value3 = value3;
+    this.value4 = value4;
+    this.value5 = value5;
+    this.value6 = value6;
+    this.value7 = value7;
+  }
+
+  toMap(): TypedMap<string, ethereum.Value> {
+    let map = new TypedMap<string, ethereum.Value>();
+    map.set("value0", ethereum.Value.fromString(this.value0));
+    map.set("value1", ethereum.Value.fromString(this.value1));
+    map.set("value2", ethereum.Value.fromString(this.value2));
+    map.set("value3", ethereum.Value.fromString(this.value3));
+    map.set("value4", ethereum.Value.fromFixedBytes(this.value4));
+    map.set(
+      "value5",
+      ethereum.Value.fromUnsignedBigInt(BigInt.fromI32(this.value5)),
+    );
+    map.set("value6", ethereum.Value.fromUnsignedBigInt(this.value6));
+    map.set("value7", ethereum.Value.fromBoolean(this.value7));
+    return map;
+  }
+
+  getTitle(): string {
+    return this.value0;
+  }
+
+  getArtist(): string {
+    return this.value1;
+  }
+
+  getAlbum(): string {
+    return this.value2;
+  }
+
+  getCoverCid(): string {
+    return this.value3;
+  }
+
+  getPayload(): Bytes {
+    return this.value4;
+  }
+
+  getKind(): i32 {
+    return this.value5;
+  }
+
+  getRegisteredAt(): BigInt {
+    return this.value6;
+  }
+
+  getExists(): boolean {
+    return this.value7;
   }
 }
 
 export class ScrobbleV3 extends ethereum.SmartContract {
   static bind(address: Address): ScrobbleV3 {
     return new ScrobbleV3("ScrobbleV3", address);
+  }
+
+  MAX_CID(): BigInt {
+    let result = super.call("MAX_CID", "MAX_CID():(uint256)", []);
+
+    return result[0].toBigInt();
+  }
+
+  try_MAX_CID(): ethereum.CallResult<BigInt> {
+    let result = super.tryCall("MAX_CID", "MAX_CID():(uint256)", []);
+    if (result.reverted) {
+      return new ethereum.CallResult();
+    }
+    let value = result.value;
+    return ethereum.CallResult.fromValue(value[0].toBigInt());
   }
 
   MAX_SCROBBLES(): BigInt {
@@ -323,7 +376,7 @@ export class ScrobbleV3 extends ethereum.SmartContract {
   getTrack(trackId: Bytes): ScrobbleV3__getTrackResult {
     let result = super.call(
       "getTrack",
-      "getTrack(bytes32):(string,string,string,uint8,bytes32,uint64)",
+      "getTrack(bytes32):(string,string,string,uint8,bytes32,uint64,string)",
       [ethereum.Value.fromFixedBytes(trackId)],
     );
 
@@ -334,6 +387,7 @@ export class ScrobbleV3 extends ethereum.SmartContract {
       result[3].toI32(),
       result[4].toBytes(),
       result[5].toBigInt(),
+      result[6].toString(),
     );
   }
 
@@ -342,7 +396,7 @@ export class ScrobbleV3 extends ethereum.SmartContract {
   ): ethereum.CallResult<ScrobbleV3__getTrackResult> {
     let result = super.tryCall(
       "getTrack",
-      "getTrack(bytes32):(string,string,string,uint8,bytes32,uint64)",
+      "getTrack(bytes32):(string,string,string,uint8,bytes32,uint64,string)",
       [ethereum.Value.fromFixedBytes(trackId)],
     );
     if (result.reverted) {
@@ -357,6 +411,7 @@ export class ScrobbleV3 extends ethereum.SmartContract {
         value[3].toI32(),
         value[4].toBytes(),
         value[5].toBigInt(),
+        value[6].toString(),
       ),
     );
   }
@@ -413,7 +468,7 @@ export class ScrobbleV3 extends ethereum.SmartContract {
   tracks(param0: Bytes): ScrobbleV3__tracksResult {
     let result = super.call(
       "tracks",
-      "tracks(bytes32):(string,string,string,bytes32,uint8,uint64,bool)",
+      "tracks(bytes32):(string,string,string,string,bytes32,uint8,uint64,bool)",
       [ethereum.Value.fromFixedBytes(param0)],
     );
 
@@ -421,17 +476,18 @@ export class ScrobbleV3 extends ethereum.SmartContract {
       result[0].toString(),
       result[1].toString(),
       result[2].toString(),
-      result[3].toBytes(),
-      result[4].toI32(),
-      result[5].toBigInt(),
-      result[6].toBoolean(),
+      result[3].toString(),
+      result[4].toBytes(),
+      result[5].toI32(),
+      result[6].toBigInt(),
+      result[7].toBoolean(),
     );
   }
 
   try_tracks(param0: Bytes): ethereum.CallResult<ScrobbleV3__tracksResult> {
     let result = super.tryCall(
       "tracks",
-      "tracks(bytes32):(string,string,string,bytes32,uint8,uint64,bool)",
+      "tracks(bytes32):(string,string,string,string,bytes32,uint8,uint64,bool)",
       [ethereum.Value.fromFixedBytes(param0)],
     );
     if (result.reverted) {
@@ -443,10 +499,11 @@ export class ScrobbleV3 extends ethereum.SmartContract {
         value[0].toString(),
         value[1].toString(),
         value[2].toString(),
-        value[3].toBytes(),
-        value[4].toI32(),
-        value[5].toBigInt(),
-        value[6].toBoolean(),
+        value[3].toString(),
+        value[4].toBytes(),
+        value[5].toI32(),
+        value[6].toBigInt(),
+        value[7].toBoolean(),
       ),
     );
   }
@@ -650,6 +707,74 @@ export class SetSponsorCall__Outputs {
   _call: SetSponsorCall;
 
   constructor(call: SetSponsorCall) {
+    this._call = call;
+  }
+}
+
+export class SetTrackCoverCall extends ethereum.Call {
+  get inputs(): SetTrackCoverCall__Inputs {
+    return new SetTrackCoverCall__Inputs(this);
+  }
+
+  get outputs(): SetTrackCoverCall__Outputs {
+    return new SetTrackCoverCall__Outputs(this);
+  }
+}
+
+export class SetTrackCoverCall__Inputs {
+  _call: SetTrackCoverCall;
+
+  constructor(call: SetTrackCoverCall) {
+    this._call = call;
+  }
+
+  get trackId(): Bytes {
+    return this._call.inputValues[0].value.toBytes();
+  }
+
+  get coverCid(): string {
+    return this._call.inputValues[1].value.toString();
+  }
+}
+
+export class SetTrackCoverCall__Outputs {
+  _call: SetTrackCoverCall;
+
+  constructor(call: SetTrackCoverCall) {
+    this._call = call;
+  }
+}
+
+export class SetTrackCoverBatchCall extends ethereum.Call {
+  get inputs(): SetTrackCoverBatchCall__Inputs {
+    return new SetTrackCoverBatchCall__Inputs(this);
+  }
+
+  get outputs(): SetTrackCoverBatchCall__Outputs {
+    return new SetTrackCoverBatchCall__Outputs(this);
+  }
+}
+
+export class SetTrackCoverBatchCall__Inputs {
+  _call: SetTrackCoverBatchCall;
+
+  constructor(call: SetTrackCoverBatchCall) {
+    this._call = call;
+  }
+
+  get trackIds(): Array<Bytes> {
+    return this._call.inputValues[0].value.toBytesArray();
+  }
+
+  get coverCids(): Array<string> {
+    return this._call.inputValues[1].value.toStringArray();
+  }
+}
+
+export class SetTrackCoverBatchCall__Outputs {
+  _call: SetTrackCoverBatchCall;
+
+  constructor(call: SetTrackCoverBatchCall) {
     this._call = call;
   }
 }

@@ -57,13 +57,14 @@ contract ScrobbleV3Test is Test {
 
         assertTrue(sc.isRegistered(trackId));
 
-        (string memory title, string memory artist, string memory album, uint8 kind, bytes32 storedPayload, uint64 registeredAt) = sc.getTrack(trackId);
+        (string memory title, string memory artist, string memory album, uint8 kind, bytes32 storedPayload, uint64 registeredAt, string memory coverCid) = sc.getTrack(trackId);
         assertEq(title, "Plastic Love");
         assertEq(artist, "Mariya Takeuchi");
         assertEq(album, "Variety");
         assertEq(kind, 1);
         assertEq(storedPayload, payload);
         assertGt(registeredAt, 0);
+        assertEq(bytes(coverCid).length, 0);
     }
 
     function test_registerTrack_ipId() public {
@@ -79,7 +80,7 @@ contract ScrobbleV3Test is Test {
 
         assertTrue(sc.isRegistered(trackId));
 
-        (, , , uint8 kind, bytes32 storedPayload, ) = sc.getTrack(trackId);
+        (, , , uint8 kind, bytes32 storedPayload, ,) = sc.getTrack(trackId);
         assertEq(kind, 2);
         assertEq(storedPayload, payload);
     }
@@ -96,7 +97,7 @@ contract ScrobbleV3Test is Test {
 
         assertTrue(sc.isRegistered(trackId));
 
-        (string memory title, , , uint8 kind, bytes32 storedPayload, ) = sc.getTrack(trackId);
+        (string memory title, , , uint8 kind, bytes32 storedPayload, ,) = sc.getTrack(trackId);
         assertEq(title, "Song");
         assertEq(kind, 3);
         assertEq(storedPayload, payload);
@@ -212,7 +213,7 @@ contract ScrobbleV3Test is Test {
         vm.prank(sponsor);
         sc.updateTrack(trackId, "Song", "Artist", "Album"); // fixed
 
-        (string memory title, string memory artist, string memory album, , , ) = sc.getTrack(trackId);
+        (string memory title, string memory artist, string memory album, , , ,) = sc.getTrack(trackId);
         assertEq(title, "Song");
         assertEq(artist, "Artist");
         assertEq(album, "Album");
@@ -251,7 +252,7 @@ contract ScrobbleV3Test is Test {
         vm.prank(sponsor);
         sc.updateTrack(trackId, "SONG", "ARTIST", "ALBUM");
 
-        (, , , uint8 kind, bytes32 storedPayload, ) = sc.getTrack(trackId);
+        (, , , uint8 kind, bytes32 storedPayload, ,) = sc.getTrack(trackId);
         assertEq(kind, 3);
         assertEq(storedPayload, payload); // unchanged
     }
@@ -389,9 +390,103 @@ contract ScrobbleV3Test is Test {
             _str("Justice"), _str("Genesis"), _str(unicode"†")
         );
 
-        (string memory title, string memory artist, , , , ) = sc.getTrack(trackId);
+        (string memory title, string memory artist, , , , ,) = sc.getTrack(trackId);
         assertEq(title, "Justice");
         assertEq(artist, "Genesis");
+    }
+
+    // ── Track cover ────────────────────────────────────────────────────
+
+    function test_setTrackCover() public {
+        bytes32 trackId = _registerMetaTrack("Song", "Artist", "Album");
+
+        vm.prank(sponsor);
+        sc.setTrackCover(trackId, "QmExampleCid123");
+
+        (, , , , , , string memory coverCid) = sc.getTrack(trackId);
+        assertEq(coverCid, "QmExampleCid123");
+    }
+
+    function test_setTrackCover_emitsEvent() public {
+        bytes32 trackId = _registerMetaTrack("Song", "Artist", "Album");
+
+        vm.expectEmit(true, false, false, true);
+        emit ScrobbleV3.TrackCoverSet(trackId, "QmExampleCid123");
+
+        vm.prank(sponsor);
+        sc.setTrackCover(trackId, "QmExampleCid123");
+    }
+
+    function test_setTrackCover_alreadySet_reverts() public {
+        bytes32 trackId = _registerMetaTrack("Song", "Artist", "Album");
+
+        vm.prank(sponsor);
+        sc.setTrackCover(trackId, "QmFirst");
+
+        vm.prank(sponsor);
+        vm.expectRevert("cover already set");
+        sc.setTrackCover(trackId, "QmSecond");
+    }
+
+    function test_setTrackCover_emptyCid_reverts() public {
+        bytes32 trackId = _registerMetaTrack("Song", "Artist", "Album");
+
+        vm.prank(sponsor);
+        vm.expectRevert("empty cid");
+        sc.setTrackCover(trackId, "");
+    }
+
+    function test_setTrackCover_notRegistered_reverts() public {
+        vm.prank(sponsor);
+        vm.expectRevert("not registered");
+        sc.setTrackCover(keccak256("fake"), "QmCid");
+    }
+
+    function test_setTrackCover_notSponsor_reverts() public {
+        bytes32 trackId = _registerMetaTrack("Song", "Artist", "Album");
+
+        vm.expectRevert("unauthorized");
+        sc.setTrackCover(trackId, "QmCid");
+    }
+
+    function test_setTrackCoverBatch() public {
+        bytes32 t1 = _registerMetaTrack("Song1", "Artist1", "Album1");
+        bytes32 t2 = _registerMetaTrack("Song2", "Artist2", "Album2");
+
+        bytes32[] memory ids = new bytes32[](2);
+        string[] memory cids = new string[](2);
+        ids[0] = t1; cids[0] = "QmCover1";
+        ids[1] = t2; cids[1] = "QmCover2";
+
+        vm.prank(sponsor);
+        sc.setTrackCoverBatch(ids, cids);
+
+        (, , , , , , string memory c1) = sc.getTrack(t1);
+        (, , , , , , string memory c2) = sc.getTrack(t2);
+        assertEq(c1, "QmCover1");
+        assertEq(c2, "QmCover2");
+    }
+
+    function test_setTrackCoverBatch_skipsAlreadySet() public {
+        bytes32 t1 = _registerMetaTrack("Song1", "Artist1", "Album1");
+        bytes32 t2 = _registerMetaTrack("Song2", "Artist2", "Album2");
+
+        // Set cover on t1 first
+        vm.prank(sponsor);
+        sc.setTrackCover(t1, "QmOriginal");
+
+        bytes32[] memory ids = new bytes32[](2);
+        string[] memory cids = new string[](2);
+        ids[0] = t1; cids[0] = "QmShouldNotOverwrite";
+        ids[1] = t2; cids[1] = "QmCover2";
+
+        vm.prank(sponsor);
+        sc.setTrackCoverBatch(ids, cids);
+
+        (, , , , , , string memory c1) = sc.getTrack(t1);
+        (, , , , , , string memory c2) = sc.getTrack(t2);
+        assertEq(c1, "QmOriginal"); // not overwritten
+        assertEq(c2, "QmCover2");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────

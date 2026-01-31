@@ -6,14 +6,14 @@
  * - Registering names via Lit Action (gasless, sponsor PKP pays)
  */
 
-import { createPublicClient, http, parseAbi, type Address } from 'viem'
+import { createPublicClient, http, parseAbi, keccak256, encodePacked, toBytes, type Address } from 'viem'
 import { megaTestnetV2 } from '../chains'
 import { getLitClient } from '../lit/client'
 import type { PKPAuthContext } from '../lit/types'
 
 // Contract addresses (MegaETH Testnet)
 const REGISTRY_V1 = '0x61CAed8296a2eF78eCf9DCa5eDf3C44469c6b1E2' as const
-const RECORDS_V1 = '0x351ba82bAfDA1070bba8158852624653e3654929' as const
+const RECORDS_V1 = '0x801b9A10a4088906d3d3D7bFf1f7ec9793302840' as const
 const HEAVEN_NODE = '0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27' as const
 
 const registryAbi = parseAbi([
@@ -119,34 +119,7 @@ export async function registerHeavenName(
   const timestamp = Date.now()
   const nonce = Math.floor(Math.random() * 1_000_000_000)
 
-  // Sign authorization message with user's PKP
-  const message = `heaven:register:${label}:${recipientAddress}:${timestamp}:${nonce}`
-
-  const signResult = await litClient.executeJs({
-    code: `(async () => {
-      const sigShare = await Lit.Actions.ethPersonalSignMessageEcdsa({
-        message: jsParams.message,
-        publicKey: jsParams.publicKey,
-        sigName: "sig",
-      });
-    })();`,
-    authContext,
-    jsParams: {
-      message,
-      publicKey: pkpPublicKey,
-    },
-  })
-
-  if (!signResult.signatures?.sig) {
-    throw new Error('Failed to sign registration authorization')
-  }
-
-  const sig = signResult.signatures.sig
-  const sigHex = sig.signature.startsWith('0x') ? sig.signature.slice(2) : sig.signature
-  const v = (sig.recoveryId + 27).toString(16).padStart(2, '0')
-  const signature = `0x${sigHex}${v}`
-
-  // Execute the register action
+  // Single executeJs: action signs with user's PKP + sponsor PKP broadcasts
   const actionCode = await getClaimNameActionCode()
 
   const result = await litClient.executeJs({
@@ -155,7 +128,7 @@ export async function registerHeavenName(
     jsParams: {
       recipient: recipientAddress,
       label,
-      signature,
+      userPkpPublicKey: pkpPublicKey,
       timestamp,
       nonce,
     },
@@ -189,6 +162,15 @@ export async function getAddr(node: `0x${string}`): Promise<Address> {
     functionName: 'addr',
     args: [node],
   })
+}
+
+/**
+ * Compute the ENS-compatible node (namehash) for a .heaven subname.
+ * node = keccak256(abi.encodePacked(parentNode, keccak256(label)))
+ */
+export function computeNode(label: string): `0x${string}` {
+  const labelHash = keccak256(toBytes(label))
+  return keccak256(encodePacked(['bytes32', 'bytes32'], [HEAVEN_NODE, labelHash]))
 }
 
 export { REGISTRY_V1, RECORDS_V1, HEAVEN_NODE }

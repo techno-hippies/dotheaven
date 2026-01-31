@@ -44,10 +44,11 @@ async function main() {
   if (!pk.startsWith("0x")) pk = "0x" + pk;
 
   const authEoa = privateKeyToAccount(pk as `0x${string}`);
-  const wallet = new ethers.Wallet(pk);
-  const userAddress = wallet.address;
-  const userPkpPublicKey = ethers.SigningKey.computePublicKey(pk, false);
-  console.log(`   User (EOA):  ${userAddress}`);
+  // Use the sponsor PKP as the "user" for this test, since the auth context
+  // must authorize signing with the user's PKP key (internal signing path).
+  const userPkpPublicKey = pkpCreds.publicKey;
+  const userAddress = pkpCreds.ethAddress;
+  console.log(`   User (PKP):  ${userAddress}`);
 
   console.log("\nConnecting to Lit Protocol...");
   const litClient = await createLitClient({ network: Env.litNetwork });
@@ -84,23 +85,25 @@ async function main() {
 
   const now = Math.floor(Date.now() / 1000);
   const tracks = [
-    // Kind 1 (MBID) — MusicBrainz recording UUID
+    // Kind 1 (MBID) — MusicBrainz recording UUID, with cover art
     {
       artist: "Mariya Takeuchi",
       title: "Plastic Love",
       album: "Variety",
       playedAt: now - 600,
       mbid: "b1a9c02e-b35c-4f18-9f04-0e4d0e3409c3",
+      coverCid: "QmTestCoverPlasticLove123",
     },
-    // Kind 2 (ipId) — Story Protocol IP Account
+    // Kind 2 (ipId) — Story Protocol IP Account, with cover art
     {
       artist: "Heaven Original",
       title: "Decentralized Love",
       album: "Web3 Sessions",
       playedAt: now - 300,
       ipId: "0x1234567890abcdef1234567890abcdef12345678",
+      coverCid: "QmTestCoverDecentralizedLove456",
     },
-    // Kind 3 (meta) — unidentified track
+    // Kind 3 (meta) — unidentified track, no cover art
     {
       artist: "Unknown Artist",
       title: "Mystery Track",
@@ -117,35 +120,25 @@ async function main() {
     else console.log(`       Kind 3 (meta)`);
   }
 
-  // ── Compute signature ──────────────────────────────────────────────
+  // ── Request params ─────────────────────────────────────────────────
 
-  async function sha256Hex(message: string): Promise<string> {
-    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(message));
-    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
-  }
-
-  const tracksHash = await sha256Hex(JSON.stringify(tracks));
   const timestamp = Date.now();
   const nonce = Math.floor(Math.random() * 1000000).toString();
 
-  const message = `heaven:scrobble:${tracksHash}:${timestamp}:${nonce}`;
-  const signature = await wallet.signMessage(message);
-
-  console.log(`\n   Tracks hash: ${tracksHash.slice(0, 16)}...`);
-  console.log(`   Timestamp:   ${timestamp}`);
+  console.log(`\n   Timestamp:   ${timestamp}`);
   console.log(`   Nonce:       ${nonce}`);
 
-  // ── Execute Lit Action ─────────────────────────────────────────────
+  // ── Execute Lit Action (internal signing — single executeJs) ───────
 
   const jsParams = {
     userPkpPublicKey,
     tracks,
-    signature,
+    // No signature — action signs internally using user's PKP
     timestamp,
     nonce,
   };
 
-  console.log("\nExecuting Lit Action...");
+  console.log("\nExecuting Lit Action (internal signing, single executeJs)...");
   const t0 = performance.now();
 
   try {
@@ -176,7 +169,9 @@ async function main() {
     console.log(`   Count:       ${response.count}`);
     console.log(`   Registered:  ${response.registered}`);
     console.log(`   Scrobbled:   ${response.scrobbled}`);
+    console.log(`   Covers Set:  ${response.coversSet}`);
     console.log(`   TX Hash:     ${response.txHash}`);
+    console.log(`   Cover TX:    ${response.coverTxHash || "(none)"}`);
     console.log(`   Block:       ${response.blockNumber}`);
 
     // Version
@@ -209,6 +204,11 @@ async function main() {
     }
     console.log("   ✓ TX hash present");
 
+    // Covers set (2 tracks have coverCid)
+    if (typeof response.coversSet === "number") {
+      console.log(`   ✓ coversSet field present (${response.coversSet})`);
+    }
+
     // Verify on MegaETH
     console.log(`\n   Verifying tx on MegaETH...`);
     const provider = new ethers.JsonRpcProvider("https://carrot.megaeth.com/rpc");
@@ -219,6 +219,19 @@ async function main() {
       throw new Error(`TX reverted: ${response.txHash}`);
     } else {
       console.warn(`   ⚠ TX not confirmed yet (may need more time)`);
+    }
+
+    // Verify cover TX if present
+    if (response.coverTxHash) {
+      console.log(`\n   Verifying cover tx on MegaETH...`);
+      const coverReceipt = await provider.getTransactionReceipt(response.coverTxHash);
+      if (coverReceipt && coverReceipt.status === 1) {
+        console.log(`   ✓ Cover TX confirmed in block ${coverReceipt.blockNumber} (${coverReceipt.logs.length} log(s))`);
+      } else if (coverReceipt && coverReceipt.status === 0) {
+        console.warn(`   ⚠ Cover TX reverted (best-effort, not fatal)`);
+      } else {
+        console.warn(`   ⚠ Cover TX not confirmed yet`);
+      }
     }
 
     console.log("\nAll checks passed!");

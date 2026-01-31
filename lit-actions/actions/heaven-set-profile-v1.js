@@ -13,8 +13,8 @@
  * Required jsParams:
  * - user: Address of the user whose profile is being set
  * - profileInput: ProfileInput struct fields as object
- * - signature: User's EIP-191 signature over authorization message
  * - nonce: Current nonce for the user (from contract)
+ * - userPkpPublicKey: User's PKP public key for internal signing
  *
  * Optional jsParams:
  * - dryRun: boolean (default false) — skip broadcast, return signed tx
@@ -81,14 +81,14 @@ const main = async () => {
     const {
       user,
       profileInput,
-      signature,
+      userPkpPublicKey,
       nonce,
       dryRun = false,
     } = jsParams || {};
 
     must(user, "user");
     must(profileInput, "profileInput");
-    must(signature, "signature");
+    must(userPkpPublicKey, "userPkpPublicKey");
     must(nonce !== undefined ? nonce : null, "nonce");
 
     const userAddr = ethers.utils.getAddress(user);
@@ -146,8 +146,27 @@ const main = async () => {
     );
     const profileHash = ethers.utils.keccak256(profileEncoded);
 
-    // Verify signature: message = "heaven:profile:{user}:{profileHash}:{nonce}"
+    // Sign or verify: message = "heaven:profile:{user}:{profileHash}:{nonce}"
     const message = `heaven:profile:${userAddr.toLowerCase()}:${profileHash}:${nonce}`;
+
+    const msgHash = ethers.utils.hashMessage(message);
+    const sigResult = await Lit.Actions.signAndCombineEcdsa({
+      toSign: Array.from(ethers.utils.arrayify(msgHash)),
+      publicKey: userPkpPublicKey,
+      sigName: "user_profile_sig",
+    });
+    if (typeof sigResult === "string" && sigResult.startsWith("[ERROR]")) {
+      throw new Error(`User PKP signing failed: ${sigResult}`);
+    }
+    const sigObj = JSON.parse(sigResult);
+    let userV = Number(sigObj.recid ?? sigObj.recoveryId ?? sigObj.v);
+    if (userV === 0 || userV === 1) userV += 27;
+    const signature = ethers.utils.joinSignature({
+      r: `0x${strip0x(sigObj.r)}`,
+      s: `0x${strip0x(sigObj.s)}`,
+      v: userV,
+    });
+
     const recovered = ethers.utils.verifyMessage(message, signature);
     if (recovered.toLowerCase() !== userAddr.toLowerCase()) {
       throw new Error(
@@ -213,23 +232,23 @@ const main = async () => {
       ethers.utils.serializeTransaction(unsignedTx)
     );
 
-    const sigResult = await Lit.Actions.signAndCombineEcdsa({
+    const sponsorSigResult = await Lit.Actions.signAndCombineEcdsa({
       toSign: Array.from(ethers.utils.arrayify(txHash)),
       publicKey: SPONSOR_PKP_PUBLIC_KEY,
       sigName: "sponsorProfileSig",
     });
 
-    if (typeof sigResult === "string" && sigResult.startsWith("[ERROR]")) {
-      throw new Error(`PKP signing failed: ${sigResult}`);
+    if (typeof sponsorSigResult === "string" && sponsorSigResult.startsWith("[ERROR]")) {
+      throw new Error(`PKP signing failed: ${sponsorSigResult}`);
     }
 
-    const sigObj = JSON.parse(sigResult);
-    let v = Number(sigObj.recid ?? sigObj.recoveryId ?? sigObj.v);
-    if (v === 0 || v === 1) v += 27;
+    const sponsorSigObj = JSON.parse(sponsorSigResult);
+    let sponsorV = Number(sponsorSigObj.recid ?? sponsorSigObj.recoveryId ?? sponsorSigObj.v);
+    if (sponsorV === 0 || sponsorV === 1) sponsorV += 27;
     const sig = ethers.utils.joinSignature({
-      r: `0x${strip0x(sigObj.r)}`,
-      s: `0x${strip0x(sigObj.s)}`,
-      v,
+      r: `0x${strip0x(sponsorSigObj.r)}`,
+      s: `0x${strip0x(sponsorSigObj.s)}`,
+      v: sponsorV,
     });
 
     const signedTx = ethers.utils.serializeTransaction(unsignedTx, sig);

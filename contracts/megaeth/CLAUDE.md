@@ -31,9 +31,9 @@ All names are **FREE** (`pricePerYear = 0`). Tiered pricing for short names (2-4
 | Contract | Address |
 |----------|---------|
 | RegistryV1 | `0x61CAed8296a2eF78eCf9DCa5eDf3C44469c6b1E2` |
-| RecordsV1 | `0x351ba82bAfDA1070bba8158852624653e3654929` |
+| RecordsV1 | `0x801b9A10a4088906d3d3D7bFf1f7ec9793302840` |
 | ProfileV1 | `0x0A6563122cB3515ff678A918B5F31da9b1391EA3` |
-| ScrobbleV3 | `0x3117A73b265b38ad9cD3b37a5F8E1D312Ad29196` |
+| ScrobbleV3 | `0x144c450cd5B641404EEB5D5eD523399dD94049E0` |
 | PlaylistV1 | `0xF0337C4A335cbB3B31c981945d3bE5B914F7B329` |
 
 Heaven Node: `0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27`

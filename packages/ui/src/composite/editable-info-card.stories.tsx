@@ -3,8 +3,31 @@ import { createSignal, Show } from 'solid-js'
 import { EditableInfoCard, EditableInfoCardSection, EditableInfoCardRow } from './editable-info-card'
 import { OnboardingNameStep } from './onboarding-name-step'
 import { Button } from '../primitives'
-import type { SelectOption } from '../primitives'
 import { cn } from '../lib/utils'
+import {
+  GENDER_OPTIONS,
+  NATIONALITY_OPTIONS,
+  LANGUAGE_OPTIONS,
+  LEARNING_LANGUAGE_OPTIONS,
+  RELOCATE_OPTIONS,
+  DEGREE_OPTIONS,
+  FIELD_OPTIONS,
+  PROFESSION_OPTIONS,
+  INDUSTRY_OPTIONS,
+  RELATIONSHIP_OPTIONS,
+  SEXUALITY_OPTIONS,
+  ETHNICITY_OPTIONS,
+  DATING_STYLE_OPTIONS,
+  CHILDREN_OPTIONS,
+  WANTS_CHILDREN_OPTIONS,
+  LOOKING_FOR_OPTIONS,
+  DRINKING_OPTIONS,
+  SMOKING_OPTIONS,
+  DRUGS_OPTIONS,
+  RELIGION_OPTIONS,
+  PETS_OPTIONS,
+  DIET_OPTIONS,
+} from '../constants/profile-options'
 
 const meta = {
   title: 'Composite/EditableInfoCard',
@@ -20,387 +43,6 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-// Mock data for selects - MUST match ProfileV1.sol enums
-const genderOptions: SelectOption[] = [
-  { value: '1', label: 'Woman' },
-  { value: '2', label: 'Man' },
-  { value: '3', label: 'Non-binary' },
-  { value: '4', label: 'Trans woman' },
-  { value: '5', label: 'Trans man' },
-  { value: '6', label: 'Intersex' },
-  { value: '7', label: 'Other' },
-]
-
-const relationshipOptions: SelectOption[] = [
-  { value: '1', label: 'Single' },
-  { value: '2', label: 'In a relationship' },
-  { value: '3', label: 'Married' },
-  { value: '4', label: 'Divorced' },
-  { value: '5', label: 'Separated' },
-  { value: '6', label: 'Widowed' },
-  { value: '7', label: "It's complicated" },
-]
-
-const sexualityOptions: SelectOption[] = [
-  { value: '1', label: 'Straight' },
-  { value: '2', label: 'Gay' },
-  { value: '3', label: 'Lesbian' },
-  { value: '4', label: 'Bisexual' },
-  { value: '5', label: 'Pansexual' },
-  { value: '6', label: 'Asexual' },
-  { value: '7', label: 'Queer' },
-  { value: '8', label: 'Questioning' },
-  { value: '9', label: 'Other' },
-]
-
-const ethnicityOptions: SelectOption[] = [
-  { value: '1', label: 'White' },
-  { value: '2', label: 'Black' },
-  { value: '3', label: 'East Asian' },
-  { value: '4', label: 'South Asian' },
-  { value: '5', label: 'Southeast Asian' },
-  { value: '6', label: 'Middle Eastern / North African' },
-  { value: '7', label: 'Hispanic / Latino/a' },
-  { value: '8', label: 'Native American / Indigenous' },
-  { value: '9', label: 'Pacific Islander' },
-  { value: '10', label: 'Mixed' },
-  { value: '11', label: 'Other' },
-]
-
-const datingStyleOptions: SelectOption[] = [
-  { value: '1', label: 'Monogamous' },
-  { value: '2', label: 'Non-monogamous' },
-  { value: '3', label: 'Open relationship' },
-  { value: '4', label: 'Polyamorous' },
-  { value: '5', label: 'Other' },
-]
-
-const childrenOptions: SelectOption[] = [
-  { value: '1', label: 'None' },
-  { value: '2', label: 'Has children' },
-]
-
-const wantsChildrenOptions: SelectOption[] = [
-  { value: '1', label: 'No' },
-  { value: '2', label: 'Yes' },
-  { value: '3', label: 'Open to it' },
-  { value: '4', label: 'Unsure' },
-]
-
-const drinkingOptions: SelectOption[] = [
-  { value: '1', label: 'Never' },
-  { value: '2', label: 'Rarely' },
-  { value: '3', label: 'Socially' },
-  { value: '4', label: 'Often' },
-]
-
-const smokingOptions: SelectOption[] = [
-  { value: '1', label: 'No' },
-  { value: '2', label: 'Socially' },
-  { value: '3', label: 'Yes' },
-  { value: '4', label: 'Vape' },
-]
-
-const drugsOptions: SelectOption[] = [
-  { value: '1', label: 'Never' },
-  { value: '2', label: 'Sometimes' },
-  { value: '3', label: 'Often' },
-]
-
-const relocateOptions: SelectOption[] = [
-  { value: '1', label: 'No' },
-  { value: '2', label: 'Maybe' },
-  { value: '3', label: 'Yes' },
-]
-
-const degreeOptions: SelectOption[] = [
-  { value: '1', label: 'No degree' },
-  { value: '2', label: 'High school' },
-  { value: '3', label: 'Associate' },
-  { value: '4', label: 'Bachelor' },
-  { value: '5', label: 'Master' },
-  { value: '6', label: 'Doctorate' },
-  { value: '7', label: 'Professional' },
-  { value: '8', label: 'Bootcamp' },
-  { value: '9', label: 'Other' },
-]
-
-const fieldBucketOptions: SelectOption[] = [
-  { value: '1', label: 'Computer Science' },
-  { value: '2', label: 'Engineering' },
-  { value: '3', label: 'Math / Statistics' },
-  { value: '4', label: 'Physical Sciences' },
-  { value: '5', label: 'Biology' },
-  { value: '6', label: 'Medicine / Health' },
-  { value: '7', label: 'Business' },
-  { value: '8', label: 'Economics' },
-  { value: '9', label: 'Law' },
-  { value: '10', label: 'Social Sciences' },
-  { value: '11', label: 'Psychology' },
-  { value: '12', label: 'Arts / Design' },
-  { value: '13', label: 'Humanities' },
-  { value: '14', label: 'Education' },
-  { value: '15', label: 'Communications' },
-  { value: '16', label: 'Other' },
-]
-
-const professionOptions: SelectOption[] = [
-  { value: '1', label: 'Software Engineer' },
-  { value: '2', label: 'Product' },
-  { value: '3', label: 'Design' },
-  { value: '4', label: 'Data' },
-  { value: '5', label: 'Sales' },
-  { value: '6', label: 'Marketing' },
-  { value: '7', label: 'Operations' },
-  { value: '8', label: 'Founder' },
-  { value: '9', label: 'Student' },
-  { value: '10', label: 'Other' },
-]
-
-const industryOptions: SelectOption[] = [
-  { value: '1', label: 'Technology' },
-  { value: '2', label: 'Finance' },
-  { value: '3', label: 'Healthcare' },
-  { value: '4', label: 'Education' },
-  { value: '5', label: 'Manufacturing' },
-  { value: '6', label: 'Retail' },
-  { value: '7', label: 'Media' },
-  { value: '8', label: 'Government' },
-  { value: '9', label: 'Nonprofit' },
-  { value: '10', label: 'Other' },
-]
-
-const lookingForOptions: SelectOption[] = [
-  { value: '1', label: 'Friendship' },
-  { value: '2', label: 'Casual' },
-  { value: '3', label: 'Serious' },
-  { value: '4', label: 'Long-term' },
-  { value: '5', label: 'Marriage' },
-  { value: '6', label: 'Not sure' },
-  { value: '7', label: 'Other' },
-]
-
-const religionOptions: SelectOption[] = [
-  { value: '1', label: 'Agnostic' },
-  { value: '2', label: 'Atheist' },
-  { value: '3', label: 'Buddhist' },
-  { value: '4', label: 'Christian' },
-  { value: '5', label: 'Hindu' },
-  { value: '6', label: 'Jewish' },
-  { value: '7', label: 'Muslim' },
-  { value: '8', label: 'Sikh' },
-  { value: '9', label: 'Spiritual' },
-  { value: '10', label: 'Other' },
-]
-
-const petsOptions: SelectOption[] = [
-  { value: '1', label: 'No pets' },
-  { value: '2', label: 'Has pets' },
-  { value: '3', label: 'Wants pets' },
-  { value: '4', label: 'Allergic' },
-]
-
-const dietOptions: SelectOption[] = [
-  { value: '1', label: 'Omnivore' },
-  { value: '2', label: 'Vegetarian' },
-  { value: '3', label: 'Vegan' },
-  { value: '4', label: 'Pescatarian' },
-  { value: '5', label: 'Halal' },
-  { value: '6', label: 'Kosher' },
-  { value: '7', label: 'Other' },
-]
-
-// Comprehensive nationality list (ISO 3166-1 alpha-2 codes)
-const nationalityOptions: SelectOption[] = [
-  { value: 'AF', label: 'Afghan' },
-  { value: 'AL', label: 'Albanian' },
-  { value: 'DZ', label: 'Algerian' },
-  { value: 'AR', label: 'Argentinian' },
-  { value: 'AM', label: 'Armenian' },
-  { value: 'AU', label: 'Australian' },
-  { value: 'AT', label: 'Austrian' },
-  { value: 'AZ', label: 'Azerbaijani' },
-  { value: 'BH', label: 'Bahraini' },
-  { value: 'BD', label: 'Bangladeshi' },
-  { value: 'BY', label: 'Belarusian' },
-  { value: 'BE', label: 'Belgian' },
-  { value: 'BO', label: 'Bolivian' },
-  { value: 'BA', label: 'Bosnian' },
-  { value: 'BR', label: 'Brazilian' },
-  { value: 'BG', label: 'Bulgarian' },
-  { value: 'KH', label: 'Cambodian' },
-  { value: 'CM', label: 'Cameroonian' },
-  { value: 'CA', label: 'Canadian' },
-  { value: 'CL', label: 'Chilean' },
-  { value: 'CN', label: 'Chinese' },
-  { value: 'CO', label: 'Colombian' },
-  { value: 'CR', label: 'Costa Rican' },
-  { value: 'HR', label: 'Croatian' },
-  { value: 'CU', label: 'Cuban' },
-  { value: 'CY', label: 'Cypriot' },
-  { value: 'CZ', label: 'Czech' },
-  { value: 'DK', label: 'Danish' },
-  { value: 'DO', label: 'Dominican' },
-  { value: 'EC', label: 'Ecuadorian' },
-  { value: 'EG', label: 'Egyptian' },
-  { value: 'SV', label: 'Salvadoran' },
-  { value: 'EE', label: 'Estonian' },
-  { value: 'ET', label: 'Ethiopian' },
-  { value: 'FI', label: 'Finnish' },
-  { value: 'FR', label: 'French' },
-  { value: 'GE', label: 'Georgian' },
-  { value: 'DE', label: 'German' },
-  { value: 'GH', label: 'Ghanaian' },
-  { value: 'GR', label: 'Greek' },
-  { value: 'GT', label: 'Guatemalan' },
-  { value: 'HT', label: 'Haitian' },
-  { value: 'HN', label: 'Honduran' },
-  { value: 'HK', label: 'Hong Konger' },
-  { value: 'HU', label: 'Hungarian' },
-  { value: 'IS', label: 'Icelandic' },
-  { value: 'IN', label: 'Indian' },
-  { value: 'ID', label: 'Indonesian' },
-  { value: 'IR', label: 'Iranian' },
-  { value: 'IQ', label: 'Iraqi' },
-  { value: 'IE', label: 'Irish' },
-  { value: 'IL', label: 'Israeli' },
-  { value: 'IT', label: 'Italian' },
-  { value: 'JM', label: 'Jamaican' },
-  { value: 'JP', label: 'Japanese' },
-  { value: 'JO', label: 'Jordanian' },
-  { value: 'KZ', label: 'Kazakhstani' },
-  { value: 'KE', label: 'Kenyan' },
-  { value: 'KW', label: 'Kuwaiti' },
-  { value: 'KG', label: 'Kyrgyzstani' },
-  { value: 'LV', label: 'Latvian' },
-  { value: 'LB', label: 'Lebanese' },
-  { value: 'LY', label: 'Libyan' },
-  { value: 'LT', label: 'Lithuanian' },
-  { value: 'LU', label: 'Luxembourger' },
-  { value: 'MY', label: 'Malaysian' },
-  { value: 'MX', label: 'Mexican' },
-  { value: 'MD', label: 'Moldovan' },
-  { value: 'MN', label: 'Mongolian' },
-  { value: 'ME', label: 'Montenegrin' },
-  { value: 'MA', label: 'Moroccan' },
-  { value: 'NP', label: 'Nepalese' },
-  { value: 'NL', label: 'Dutch' },
-  { value: 'NZ', label: 'New Zealander' },
-  { value: 'NI', label: 'Nicaraguan' },
-  { value: 'NG', label: 'Nigerian' },
-  { value: 'NO', label: 'Norwegian' },
-  { value: 'OM', label: 'Omani' },
-  { value: 'PK', label: 'Pakistani' },
-  { value: 'PA', label: 'Panamanian' },
-  { value: 'PY', label: 'Paraguayan' },
-  { value: 'PE', label: 'Peruvian' },
-  { value: 'PH', label: 'Filipino' },
-  { value: 'PL', label: 'Polish' },
-  { value: 'PT', label: 'Portuguese' },
-  { value: 'PR', label: 'Puerto Rican' },
-  { value: 'QA', label: 'Qatari' },
-  { value: 'RO', label: 'Romanian' },
-  { value: 'RU', label: 'Russian' },
-  { value: 'SA', label: 'Saudi Arabian' },
-  { value: 'RS', label: 'Serbian' },
-  { value: 'SG', label: 'Singaporean' },
-  { value: 'SK', label: 'Slovak' },
-  { value: 'SI', label: 'Slovenian' },
-  { value: 'ZA', label: 'South African' },
-  { value: 'KR', label: 'South Korean' },
-  { value: 'ES', label: 'Spanish' },
-  { value: 'LK', label: 'Sri Lankan' },
-  { value: 'SE', label: 'Swedish' },
-  { value: 'CH', label: 'Swiss' },
-  { value: 'SY', label: 'Syrian' },
-  { value: 'TW', label: 'Taiwanese' },
-  { value: 'TJ', label: 'Tajikistani' },
-  { value: 'TZ', label: 'Tanzanian' },
-  { value: 'TH', label: 'Thai' },
-  { value: 'TN', label: 'Tunisian' },
-  { value: 'TR', label: 'Turkish' },
-  { value: 'TM', label: 'Turkmen' },
-  { value: 'UG', label: 'Ugandan' },
-  { value: 'UA', label: 'Ukrainian' },
-  { value: 'AE', label: 'Emirati' },
-  { value: 'GB', label: 'British' },
-  { value: 'US', label: 'American' },
-  { value: 'UY', label: 'Uruguayan' },
-  { value: 'UZ', label: 'Uzbekistani' },
-  { value: 'VE', label: 'Venezuelan' },
-  { value: 'VN', label: 'Vietnamese' },
-  { value: 'YE', label: 'Yemeni' },
-  { value: 'ZM', label: 'Zambian' },
-  { value: 'ZW', label: 'Zimbabwean' },
-]
-
-// ISO 639-1 language codes
-const languageOptions: SelectOption[] = [
-  { value: 'en', label: 'English' },
-  { value: 'es', label: 'Spanish' },
-  { value: 'fr', label: 'French' },
-  { value: 'de', label: 'German' },
-  { value: 'it', label: 'Italian' },
-  { value: 'pt', label: 'Portuguese' },
-  { value: 'ru', label: 'Russian' },
-  { value: 'ja', label: 'Japanese' },
-  { value: 'ko', label: 'Korean' },
-  { value: 'zh', label: 'Mandarin Chinese' },
-  { value: 'ar', label: 'Arabic' },
-  { value: 'hi', label: 'Hindi' },
-  { value: 'bn', label: 'Bengali' },
-  { value: 'pa', label: 'Punjabi' },
-  { value: 'jv', label: 'Javanese' },
-  { value: 'vi', label: 'Vietnamese' },
-  { value: 'tr', label: 'Turkish' },
-  { value: 'pl', label: 'Polish' },
-  { value: 'nl', label: 'Dutch' },
-  { value: 'sv', label: 'Swedish' },
-]
-
-// Comprehensive language list for multi-select dropdown
-const learningLanguageOptions: SelectOption[] = [
-  { value: 'en', label: 'English' },
-  { value: 'es', label: 'Spanish' },
-  { value: 'fr', label: 'French' },
-  { value: 'de', label: 'German' },
-  { value: 'it', label: 'Italian' },
-  { value: 'pt', label: 'Portuguese' },
-  { value: 'ru', label: 'Russian' },
-  { value: 'ja', label: 'Japanese' },
-  { value: 'ko', label: 'Korean' },
-  { value: 'zh', label: 'Mandarin Chinese' },
-  { value: 'ar', label: 'Arabic' },
-  { value: 'hi', label: 'Hindi' },
-  { value: 'bn', label: 'Bengali' },
-  { value: 'pa', label: 'Punjabi' },
-  { value: 'jv', label: 'Javanese' },
-  { value: 'vi', label: 'Vietnamese' },
-  { value: 'tr', label: 'Turkish' },
-  { value: 'pl', label: 'Polish' },
-  { value: 'nl', label: 'Dutch' },
-  { value: 'sv', label: 'Swedish' },
-  { value: 'no', label: 'Norwegian' },
-  { value: 'da', label: 'Danish' },
-  { value: 'fi', label: 'Finnish' },
-  { value: 'cs', label: 'Czech' },
-  { value: 'el', label: 'Greek' },
-  { value: 'he', label: 'Hebrew' },
-  { value: 'th', label: 'Thai' },
-  { value: 'id', label: 'Indonesian' },
-  { value: 'ms', label: 'Malay' },
-  { value: 'tl', label: 'Tagalog' },
-  { value: 'uk', label: 'Ukrainian' },
-  { value: 'ro', label: 'Romanian' },
-  { value: 'hu', label: 'Hungarian' },
-  { value: 'fa', label: 'Persian (Farsi)' },
-  { value: 'ur', label: 'Urdu' },
-  { value: 'sw', label: 'Swahili' },
-  { value: 'ta', label: 'Tamil' },
-  { value: 'te', label: 'Telugu' },
-  { value: 'mr', label: 'Marathi' },
-  { value: 'ca', label: 'Catalan' },
-]
 
 /**
  * Facebook mid-2010s style profile editor
@@ -724,7 +366,7 @@ export const ProfileEditor: Story = {
                 value={gender()}
                 isEditing={isEditing()}
                 type="select"
-                options={genderOptions}
+                options={GENDER_OPTIONS}
                 onValueChange={(v) => setGender(v as string)}
               />
               <EditableInfoCardRow
@@ -732,7 +374,7 @@ export const ProfileEditor: Story = {
                 value={nationality()}
                 isEditing={isEditing()}
                 type="select"
-                options={nationalityOptions}
+                options={NATIONALITY_OPTIONS}
                 onValueChange={(v) => setNationality(v as string)}
               />
               <EditableInfoCardRow
@@ -740,7 +382,7 @@ export const ProfileEditor: Story = {
                 value={nativeLanguage()}
                 isEditing={isEditing()}
                 type="select"
-                options={languageOptions}
+                options={LANGUAGE_OPTIONS}
                 onValueChange={(v) => setNativeLanguage(v as string)}
               />
               <EditableInfoCardRow
@@ -748,7 +390,7 @@ export const ProfileEditor: Story = {
                 value={learningLanguages()}
                 isEditing={isEditing()}
                 type="multiselectdropdown"
-                options={learningLanguageOptions}
+                options={LEARNING_LANGUAGE_OPTIONS}
                 placeholder="Select languages you're learning"
                 onValueChange={(v) => setLearningLanguages(Array.isArray(v) ? v.join(', ') : v as string)}
               />
@@ -771,7 +413,7 @@ export const ProfileEditor: Story = {
                 value={flexibility()}
                 isEditing={isEditing()}
                 type="select"
-                options={relocateOptions}
+                options={RELOCATE_OPTIONS}
                 onValueChange={(v) => setFlexibility(v as string)}
               />
             </EditableInfoCardSection>
@@ -792,7 +434,7 @@ export const ProfileEditor: Story = {
                 value={degree()}
                 isEditing={isEditing()}
                 type="select"
-                options={degreeOptions}
+                options={DEGREE_OPTIONS}
                 onValueChange={(v) => setDegree(v as string)}
               />
               <EditableInfoCardRow
@@ -800,7 +442,7 @@ export const ProfileEditor: Story = {
                 value={fieldOfStudy()}
                 isEditing={isEditing()}
                 type="select"
-                options={fieldBucketOptions}
+                options={FIELD_OPTIONS}
                 onValueChange={(v) => setFieldOfStudy(v as string)}
               />
               <EditableInfoCardRow
@@ -808,7 +450,7 @@ export const ProfileEditor: Story = {
                 value={profession()}
                 isEditing={isEditing()}
                 type="select"
-                options={professionOptions}
+                options={PROFESSION_OPTIONS}
                 onValueChange={(v) => setProfession(v as string)}
               />
               <EditableInfoCardRow
@@ -816,7 +458,7 @@ export const ProfileEditor: Story = {
                 value={industry()}
                 isEditing={isEditing()}
                 type="select"
-                options={industryOptions}
+                options={INDUSTRY_OPTIONS}
                 onValueChange={(v) => setIndustry(v as string)}
               />
               <EditableInfoCardRow
@@ -837,7 +479,7 @@ export const ProfileEditor: Story = {
                 value={relationshipStatus()}
                 isEditing={isEditing()}
                 type="select"
-                options={relationshipOptions}
+                options={RELATIONSHIP_OPTIONS}
                 onValueChange={(v) => setRelationshipStatus(v as string)}
               />
               <EditableInfoCardRow
@@ -852,7 +494,7 @@ export const ProfileEditor: Story = {
                 value={lookingFor()}
                 isEditing={isEditing()}
                 type="select"
-                options={lookingForOptions}
+                options={LOOKING_FOR_OPTIONS}
                 onValueChange={(v) => setLookingFor(v as string)}
               />
               <EditableInfoCardRow
@@ -860,7 +502,7 @@ export const ProfileEditor: Story = {
                 value={sexuality()}
                 isEditing={isEditing()}
                 type="select"
-                options={sexualityOptions}
+                options={SEXUALITY_OPTIONS}
                 onValueChange={(v) => setSexuality(v as string)}
               />
               <EditableInfoCardRow
@@ -868,7 +510,7 @@ export const ProfileEditor: Story = {
                 value={ethnicity()}
                 isEditing={isEditing()}
                 type="select"
-                options={ethnicityOptions}
+                options={ETHNICITY_OPTIONS}
                 onValueChange={(v) => setEthnicity(v as string)}
               />
               <EditableInfoCardRow
@@ -876,7 +518,7 @@ export const ProfileEditor: Story = {
                 value={datingStyle()}
                 isEditing={isEditing()}
                 type="select"
-                options={datingStyleOptions}
+                options={DATING_STYLE_OPTIONS}
                 onValueChange={(v) => setDatingStyle(v as string)}
               />
               <EditableInfoCardRow
@@ -884,7 +526,7 @@ export const ProfileEditor: Story = {
                 value={children()}
                 isEditing={isEditing()}
                 type="select"
-                options={childrenOptions}
+                options={CHILDREN_OPTIONS}
                 onValueChange={(v) => setChildren(v as string)}
               />
               <EditableInfoCardRow
@@ -892,7 +534,7 @@ export const ProfileEditor: Story = {
                 value={wantsChildren()}
                 isEditing={isEditing()}
                 type="select"
-                options={wantsChildrenOptions}
+                options={WANTS_CHILDREN_OPTIONS}
                 onValueChange={(v) => setWantsChildren(v as string)}
               />
             </EditableInfoCardSection>
@@ -915,7 +557,7 @@ export const ProfileEditor: Story = {
                 value={drinking()}
                 isEditing={isEditing()}
                 type="select"
-                options={drinkingOptions}
+                options={DRINKING_OPTIONS}
                 onValueChange={(v) => setDrinking(v as string)}
               />
               <EditableInfoCardRow
@@ -923,7 +565,7 @@ export const ProfileEditor: Story = {
                 value={smoking()}
                 isEditing={isEditing()}
                 type="select"
-                options={smokingOptions}
+                options={SMOKING_OPTIONS}
                 onValueChange={(v) => setSmoking(v as string)}
               />
               <EditableInfoCardRow
@@ -931,7 +573,7 @@ export const ProfileEditor: Story = {
                 value={drugs()}
                 isEditing={isEditing()}
                 type="select"
-                options={drugsOptions}
+                options={DRUGS_OPTIONS}
                 onValueChange={(v) => setDrugs(v as string)}
               />
               <EditableInfoCardRow
@@ -939,7 +581,7 @@ export const ProfileEditor: Story = {
                 value={religion()}
                 isEditing={isEditing()}
                 type="select"
-                options={religionOptions}
+                options={RELIGION_OPTIONS}
                 onValueChange={(v) => setReligion(v as string)}
               />
               <EditableInfoCardRow
@@ -947,7 +589,7 @@ export const ProfileEditor: Story = {
                 value={pets()}
                 isEditing={isEditing()}
                 type="select"
-                options={petsOptions}
+                options={PETS_OPTIONS}
                 onValueChange={(v) => setPets(v as string)}
               />
               <EditableInfoCardRow
@@ -955,7 +597,7 @@ export const ProfileEditor: Story = {
                 value={diet()}
                 isEditing={isEditing()}
                 type="select"
-                options={dietOptions}
+                options={DIET_OPTIONS}
                 onValueChange={(v) => setDiet(v as string)}
               />
             </EditableInfoCardSection>
@@ -1023,7 +665,7 @@ export const EmptyProfile: Story = {
                 value=""
                 isEditing={isEditing()}
                 type="select"
-                options={genderOptions}
+                options={GENDER_OPTIONS}
               />
               <EditableInfoCardRow
                 label="Nationality"
@@ -1041,7 +683,7 @@ export const EmptyProfile: Story = {
                 value=""
                 isEditing={isEditing()}
                 type="multiselectdropdown"
-                options={learningLanguageOptions}
+                options={LEARNING_LANGUAGE_OPTIONS}
               />
             </EditableInfoCardSection>
           </EditableInfoCard>

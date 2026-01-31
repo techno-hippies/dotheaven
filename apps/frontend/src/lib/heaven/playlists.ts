@@ -14,7 +14,7 @@ const PLAYLIST_ENDPOINT =
   'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-playlists/1.0.0/gn'
 
 const MEGAETH_RPC = 'https://carrot.megaeth.com/rpc'
-const SCROBBLE_V3 = '0x3117A73b265b38ad9cD3b37a5F8E1D312Ad29196'
+const SCROBBLE_V3 = '0x144c450cd5B641404EEB5D5eD523399dD94049E0'
 const PLAYLIST_V1 = '0xF0337C4A335cbB3B31c981945d3bE5B914F7B329'
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -42,6 +42,7 @@ interface TrackMeta {
   title: string
   artist: string
   album: string
+  coverCid: string
 }
 
 // ── Subgraph Queries ───────────────────────────────────────────────
@@ -197,11 +198,15 @@ export async function resolvePlaylistTracks(
 
   return playlistTracks.map((pt) => {
     const meta = metaMap.get(pt.trackId)
+    const FILEBASE_GATEWAY = 'https://ipfs.filebase.io/ipfs'
     return {
       id: pt.trackId,
       title: meta?.title ?? `Track ${pt.trackId.slice(0, 10)}...`,
       artist: meta?.artist ?? 'Unknown',
       album: meta?.album ?? '',
+      albumCover: meta?.coverCid
+        ? `${FILEBASE_GATEWAY}/${meta.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
+        : undefined,
       duration: '--:--',
     }
   })
@@ -267,13 +272,16 @@ async function batchGetTracks(trackIds: string[]): Promise<Map<string, TrackMeta
 function decodeGetTrackResult(hex: string): TrackMeta | null {
   try {
     const data = hex.slice(2)
+    // 7-tuple: (string title, string artist, string album, uint8 kind, bytes32 payload, uint64 registeredAt, string coverCid)
     const titleOffset = parseInt(data.slice(0, 64), 16) * 2
     const artistOffset = parseInt(data.slice(64, 128), 16) * 2
     const albumOffset = parseInt(data.slice(128, 192), 16) * 2
+    const coverCidOffset = parseInt(data.slice(384, 448), 16) * 2 // slot 6
     return {
       title: decodeString(data, titleOffset),
       artist: decodeString(data, artistOffset),
       album: decodeString(data, albumOffset),
+      coverCid: decodeString(data, coverCidOffset),
     }
   } catch {
     return null

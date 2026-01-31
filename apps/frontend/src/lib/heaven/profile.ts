@@ -5,7 +5,7 @@
  * authorizing the profile update. Nonce-based replay protection.
  */
 
-import { createPublicClient, http, parseAbi, encodeAbiParameters, keccak256 } from 'viem'
+import { createPublicClient, http, parseAbi, keccak256 } from 'viem'
 import { megaTestnetV2 } from '../chains'
 import { getLitClient } from '../lit/client'
 import type { PKPAuthContext } from '../lit/types'
@@ -18,32 +18,7 @@ const profileAbi = parseAbi([
   'function getProfile(address user) external view returns (Profile)',
 ])
 
-const SET_PROFILE_ACTION_URL = import.meta.env.VITE_HEAVEN_SET_PROFILE_ACTION_CID
-  ? `https://ipfs.filebase.io/ipfs/${import.meta.env.VITE_HEAVEN_SET_PROFILE_ACTION_CID}`
-  : null
-
-let _cachedActionCode: string | null = null
-
-async function getSetProfileActionCode(): Promise<string> {
-  if (_cachedActionCode) return _cachedActionCode
-
-  if (SET_PROFILE_ACTION_URL) {
-    const res = await fetch(SET_PROFILE_ACTION_URL)
-    if (!res.ok) throw new Error(`Failed to fetch set-profile action: ${res.status}`)
-    _cachedActionCode = await res.text()
-    return _cachedActionCode
-  }
-
-  const res = await fetch('/lit-actions/heaven-set-profile-v1.js')
-  if (res.ok) {
-    _cachedActionCode = await res.text()
-    return _cachedActionCode
-  }
-
-  throw new Error(
-    'Heaven set-profile action not available. Set VITE_HEAVEN_SET_PROFILE_ACTION_CID or serve the action file locally.'
-  )
-}
+const SET_PROFILE_ACTION_CID = 'QmYLHf2QQfY52HmvNdrtQfG3bBz8oRJzo32RfybRbnrQui'
 
 function getClient() {
   return createPublicClient({
@@ -348,7 +323,9 @@ export interface ProfileInput {
 
   // Photos
   coverPhoto?: string
+  coverFile?: File   // raw File for IPFS upload; coverPhoto string used as preview only
   avatar?: string
+  avatarFile?: File  // raw File for IPFS upload; avatar string used as preview only
 
   // Basics
   age?: number
@@ -423,8 +400,12 @@ function buildProfileInput(data: ProfileInput) {
     schoolId = keccak256(new TextEncoder().encode(data.school))
   }
 
-  // photoURI: prefer avatar over coverPhoto for now (contract has one photoURI field)
-  const photoURI = data.avatar || data.coverPhoto || ''
+  // photoURI: only store URIs (ipfs://, https://), never raw data URLs
+  let photoURI = ''
+  const avatar = data.avatar || ''
+  if (avatar && !avatar.startsWith('data:')) {
+    photoURI = avatar
+  }
 
   return {
     profileVersion: 1,
@@ -461,92 +442,6 @@ function buildProfileInput(data: ProfileInput) {
     pets: PETS_TO_NUM[data.pets || ''] ?? 0,
     diet: DIET_TO_NUM[data.diet || ''] ?? 0,
   }
-}
-
-// ABI type definition for ProfileInput tuple (matches contract struct order)
-const PROFILE_INPUT_ABI = [
-  {
-    type: 'tuple',
-    components: [
-      { name: 'profileVersion', type: 'uint8' },
-      { name: 'displayName', type: 'string' },
-      { name: 'nameHash', type: 'bytes32' },
-      { name: 'age', type: 'uint8' },
-      { name: 'heightCm', type: 'uint16' },
-      { name: 'nationality', type: 'bytes2' },
-      { name: 'nativeLanguage', type: 'bytes2' },
-      { name: 'learningLanguagesPacked', type: 'uint80' },
-      { name: 'friendsOpenToMask', type: 'uint8' },
-      { name: 'locationCityId', type: 'bytes32' },
-      { name: 'schoolId', type: 'bytes32' },
-      { name: 'skillsCommit', type: 'bytes32' },
-      { name: 'hobbiesCommit', type: 'bytes32' },
-      { name: 'photoURI', type: 'string' },
-      { name: 'gender', type: 'uint8' },
-      { name: 'relocate', type: 'uint8' },
-      { name: 'degree', type: 'uint8' },
-      { name: 'fieldBucket', type: 'uint8' },
-      { name: 'profession', type: 'uint8' },
-      { name: 'industry', type: 'uint8' },
-      { name: 'relationshipStatus', type: 'uint8' },
-      { name: 'sexuality', type: 'uint8' },
-      { name: 'ethnicity', type: 'uint8' },
-      { name: 'datingStyle', type: 'uint8' },
-      { name: 'children', type: 'uint8' },
-      { name: 'wantsChildren', type: 'uint8' },
-      { name: 'drinking', type: 'uint8' },
-      { name: 'smoking', type: 'uint8' },
-      { name: 'drugs', type: 'uint8' },
-      { name: 'lookingFor', type: 'uint8' },
-      { name: 'religion', type: 'uint8' },
-      { name: 'pets', type: 'uint8' },
-      { name: 'diet', type: 'uint8' },
-    ],
-  },
-] as const
-
-/**
- * Compute keccak256(abi.encode(profileInput)) matching contract + Lit Action.
- */
-function computeProfileHash(profileInput: ReturnType<typeof buildProfileInput>): `0x${string}` {
-  const encoded = encodeAbiParameters(PROFILE_INPUT_ABI, [
-    {
-      profileVersion: profileInput.profileVersion,
-      displayName: profileInput.displayName,
-      nameHash: profileInput.nameHash as `0x${string}`,
-      age: profileInput.age,
-      heightCm: profileInput.heightCm,
-      nationality: profileInput.nationality as `0x${string}`,
-      nativeLanguage: profileInput.nativeLanguage as `0x${string}`,
-      learningLanguagesPacked: BigInt(profileInput.learningLanguagesPacked),
-      friendsOpenToMask: profileInput.friendsOpenToMask,
-      locationCityId: profileInput.locationCityId as `0x${string}`,
-      schoolId: profileInput.schoolId as `0x${string}`,
-      skillsCommit: profileInput.skillsCommit as `0x${string}`,
-      hobbiesCommit: profileInput.hobbiesCommit as `0x${string}`,
-      photoURI: profileInput.photoURI,
-      gender: profileInput.gender,
-      relocate: profileInput.relocate,
-      degree: profileInput.degree,
-      fieldBucket: profileInput.fieldBucket,
-      profession: profileInput.profession,
-      industry: profileInput.industry,
-      relationshipStatus: profileInput.relationshipStatus,
-      sexuality: profileInput.sexuality,
-      ethnicity: profileInput.ethnicity,
-      datingStyle: profileInput.datingStyle,
-      children: profileInput.children,
-      wantsChildren: profileInput.wantsChildren,
-      drinking: profileInput.drinking,
-      smoking: profileInput.smoking,
-      drugs: profileInput.drugs,
-      lookingFor: profileInput.lookingFor,
-      religion: profileInput.religion,
-      pets: profileInput.pets,
-      diet: profileInput.diet,
-    },
-  ])
-  return keccak256(encoded)
 }
 
 /**
@@ -681,46 +576,14 @@ export async function setProfile(
   // 2. Build profile input
   const profileInput = buildProfileInput(data)
 
-  // 3. Compute profile hash
-  const profileHash = await computeProfileHash(profileInput)
-
-  // 4. Sign EIP-191 authorization message
-  const message = `heaven:profile:${userAddress.toLowerCase()}:${profileHash}:${nonce}`
-
-  const signResult = await litClient.executeJs({
-    code: `(async () => {
-      const sigShare = await Lit.Actions.ethPersonalSignMessageEcdsa({
-        message: jsParams.message,
-        publicKey: jsParams.publicKey,
-        sigName: "sig",
-      });
-    })();`,
-    authContext,
-    jsParams: {
-      message,
-      publicKey: pkpPublicKey,
-    },
-  })
-
-  if (!signResult.signatures?.sig) {
-    throw new Error('Failed to sign profile authorization')
-  }
-
-  const sig = signResult.signatures.sig
-  const sigHex = sig.signature.startsWith('0x') ? sig.signature.slice(2) : sig.signature
-  const v = (sig.recoveryId + 27).toString(16).padStart(2, '0')
-  const signature = `0x${sigHex}${v}`
-
-  // 5. Execute the set-profile action
-  const actionCode = await getSetProfileActionCode()
-
+  // 3. Single executeJs: action signs with user's PKP + sponsor PKP broadcasts
   const result = await litClient.executeJs({
-    code: actionCode,
+    ipfsId: SET_PROFILE_ACTION_CID,
     authContext,
     jsParams: {
       user: userAddress,
+      userPkpPublicKey: pkpPublicKey,
       profileInput,
-      signature,
       nonce: Number(nonce),
     },
   })

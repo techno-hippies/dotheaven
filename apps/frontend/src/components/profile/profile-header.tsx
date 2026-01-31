@@ -87,12 +87,12 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
             {props.isOwnProfile ? (
               props.isEditing ? (
                 <Button
-                  variant="primary"
+                  variant="default"
                   size="md"
                   onClick={() => props.onSaveClick?.()}
                   disabled={props.isSaving}
                 >
-                  {props.isSaving ? 'Saving...' : 'Save Changes'}
+                  {props.isSaving ? 'Saving...' : 'Save'}
                 </Button>
               ) : (
                 <Button

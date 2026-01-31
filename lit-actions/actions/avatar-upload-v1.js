@@ -15,11 +15,11 @@
  * Required jsParams:
  * - userPkpPublicKey: User's PKP public key
  * - imageUrl: Temporary URL or inline { base64, contentType } for the avatar image
- * - signature: User's EIP-191 signature over content hash digest
  * - timestamp: Request timestamp (ms)
  * - nonce: Unique nonce for replay protection
  * - filebaseEncryptedKey: Lit-encrypted Filebase credentials
  * - openrouterEncryptedKey: Lit-encrypted OpenRouter API key (for image style check)
+ * Action signs the message internally using the user's PKP (single executeJs).
  *
  * Optional jsParams:
  * - filebasePlaintextKey: Dev override for Filebase key (skip decryption)
@@ -41,6 +41,8 @@ const must = (v, label) => {
   if (v === undefined || v === null) throw new Error(`${label} is required`);
   return v;
 };
+
+const strip0x = (v) => (String(v || "").startsWith("0x") ? String(v).slice(2) : String(v));
 
 // ============================================================
 // SHA-256 + FILEBASE S3 (AWS Sig V4)
@@ -273,7 +275,6 @@ const main = async () => {
     const {
       userPkpPublicKey,
       imageUrl,
-      signature,
       timestamp,
       nonce,
       filebaseEncryptedKey,
@@ -285,7 +286,6 @@ const main = async () => {
 
     must(userPkpPublicKey, "userPkpPublicKey");
     must(imageUrl, "imageUrl");
-    must(signature, "signature");
     must(timestamp, "timestamp");
     must(nonce, "nonce");
 
@@ -306,9 +306,28 @@ const main = async () => {
     const imageHash = await sha256HexFromBuffer(image.data);
 
     // ========================================
-    // STEP 3: Verify signature binds content hash
+    // STEP 3: Sign or verify signature over content hash
     // ========================================
     const message = `heaven:avatar:${imageHash}:${timestamp}:${nonce}`;
+
+    const msgHash = ethers.utils.hashMessage(message);
+    const sigResult = await Lit.Actions.signAndCombineEcdsa({
+      toSign: Array.from(ethers.utils.arrayify(msgHash)),
+      publicKey: userPkpPublicKey,
+      sigName: "user_avatar_sig",
+    });
+    if (typeof sigResult === "string" && sigResult.startsWith("[ERROR]")) {
+      throw new Error(`User PKP signing failed: ${sigResult}`);
+    }
+    const sigObj = JSON.parse(sigResult);
+    let userV = Number(sigObj.recid ?? sigObj.recoveryId ?? sigObj.v);
+    if (userV === 0 || userV === 1) userV += 27;
+    const signature = ethers.utils.joinSignature({
+      r: `0x${strip0x(sigObj.r)}`,
+      s: `0x${strip0x(sigObj.s)}`,
+      v: userV,
+    });
+
     const recovered = ethers.utils.verifyMessage(message, signature);
     if (recovered.toLowerCase() !== userAddress.toLowerCase()) {
       throw new Error("Invalid signature: recovered address does not match user PKP");

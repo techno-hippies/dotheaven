@@ -90,6 +90,23 @@ export class Track extends Entity {
     this.set("metaHash", Value.fromBytes(value));
   }
 
+  get coverCid(): string | null {
+    let value = this.get("coverCid");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toString();
+    }
+  }
+
+  set coverCid(value: string | null) {
+    if (!value) {
+      this.unset("coverCid");
+    } else {
+      this.set("coverCid", Value.fromString(<string>value));
+    }
+  }
+
   get registeredAt(): BigInt {
     let value = this.get("registeredAt");
     if (!value || value.kind == ValueKind.NULL) {

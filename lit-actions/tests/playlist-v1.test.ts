@@ -23,11 +23,6 @@ import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-async function sha256Hex(message: string): Promise<string> {
-  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(message));
-  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
 async function main() {
   console.log("Test Playlist v1");
   console.log("=".repeat(60));
@@ -50,10 +45,11 @@ async function main() {
   if (!pk.startsWith("0x")) pk = "0x" + pk;
 
   const authEoa = privateKeyToAccount(pk as `0x${string}`);
-  const wallet = new ethers.Wallet(pk);
-  const userAddress = wallet.address;
-  const userPkpPublicKey = ethers.SigningKey.computePublicKey(pk, false);
-  console.log(`   User (EOA):  ${userAddress}`);
+  // Use the sponsor PKP as the "user" for this test, since the action
+  // signs internally using the user's PKP key (single executeJs).
+  const userPkpPublicKey = pkpCreds.publicKey;
+  const userAddress = pkpCreds.ethAddress;
+  console.log(`   User (PKP):  ${userAddress}`);
 
   console.log("\nConnecting to Lit Protocol...");
   const litClient = await createLitClient({ network: Env.litNetwork });
@@ -156,38 +152,10 @@ async function main() {
 
   const createTn = await makeTimestampNonce();
 
-  // Compute trackIds the same way the Lit Action does, for payload signing
-  function computeTrackId(track: any): string {
-    const coder = ethers.AbiCoder.defaultAbiCoder();
-    if (track.mbid) {
-      const hex = track.mbid.replace(/-/g, "").toLowerCase();
-      const payload = "0x" + hex + "0".repeat(32);
-      return ethers.keccak256(coder.encode(["uint8", "bytes32"], [1, payload]));
-    }
-    if (track.ipId) {
-      const payload = ethers.zeroPadValue(track.ipId.toLowerCase(), 32);
-      return ethers.keccak256(coder.encode(["uint8", "bytes32"], [2, payload]));
-    }
-    const titleNorm = (track.title || "").toLowerCase().trim().replace(/\s+/g, " ");
-    const artistNorm = (track.artist || "").toLowerCase().trim().replace(/\s+/g, " ");
-    const albumNorm = (track.album || "").toLowerCase().trim().replace(/\s+/g, " ");
-    const metaPayload = ethers.keccak256(
-      coder.encode(["string", "string", "string"], [titleNorm, artistNorm, albumNorm])
-    );
-    return ethers.keccak256(coder.encode(["uint8", "bytes32"], [3, metaPayload]));
-  }
-
-  const trackIds = tracks.map(computeTrackId);
-  const createPayload = { name: "Test Playlist", coverCid: "", visibility: 0, trackIds };
-  const createPayloadHash = await sha256Hex(JSON.stringify(createPayload));
-  const createMessage = `heaven:playlist:create:${createPayloadHash}:${createTn.timestamp}:${createTn.nonce}`;
-  const createSig = await wallet.signMessage(createMessage);
-
   console.log("   Executing create...");
   const createRes = await executeLitAction({
     userPkpPublicKey,
     operation: "create",
-    signature: createSig,
     timestamp: createTn.timestamp,
     nonce: createTn.nonce,
     name: "Test Playlist",
@@ -227,18 +195,12 @@ async function main() {
 
   // Use only first 2 tracks
   const newTracks = tracks.slice(0, 2);
-  const newTrackIds = newTracks.map(computeTrackId);
-  const setTracksPayload = { trackIds: newTrackIds };
   const setTracksTn = await makeTimestampNonce();
-  const setTracksPayloadHash = await sha256Hex(JSON.stringify(setTracksPayload));
-  const setTracksMessage = `heaven:playlist:setTracks:${playlistId}:${setTracksPayloadHash}:${setTracksTn.timestamp}:${setTracksTn.nonce}`;
-  const setTracksSig = await wallet.signMessage(setTracksMessage);
 
   console.log("   Executing setTracks...");
   const setTracksRes = await executeLitAction({
     userPkpPublicKey,
     operation: "setTracks",
-    signature: setTracksSig,
     timestamp: setTracksTn.timestamp,
     nonce: setTracksTn.nonce,
     playlistId,
@@ -265,16 +227,11 @@ async function main() {
   console.log("\n── TEST 3: Update Meta ─────────────────────────────");
 
   const updateTn = await makeTimestampNonce();
-  const updatePayload = { name: "Renamed Playlist", coverCid: "QmTestCoverCid123", visibility: 1 };
-  const updatePayloadHash = await sha256Hex(JSON.stringify(updatePayload));
-  const updateMessage = `heaven:playlist:updateMeta:${playlistId}:${updatePayloadHash}:${updateTn.timestamp}:${updateTn.nonce}`;
-  const updateSig = await wallet.signMessage(updateMessage);
 
   console.log("   Executing updateMeta...");
   const updateRes = await executeLitAction({
     userPkpPublicKey,
     operation: "updateMeta",
-    signature: updateSig,
     timestamp: updateTn.timestamp,
     nonce: updateTn.nonce,
     playlistId,
@@ -303,14 +260,11 @@ async function main() {
   console.log("\n── TEST 4: Delete Playlist ─────────────────────────");
 
   const deleteTn = await makeTimestampNonce();
-  const deleteMessage = `heaven:playlist:delete:${playlistId}:${deleteTn.timestamp}:${deleteTn.nonce}`;
-  const deleteSig = await wallet.signMessage(deleteMessage);
 
   console.log("   Executing delete...");
   const deleteRes = await executeLitAction({
     userPkpPublicKey,
     operation: "delete",
-    signature: deleteSig,
     timestamp: deleteTn.timestamp,
     nonce: deleteTn.nonce,
     playlistId,

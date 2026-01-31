@@ -129,7 +129,7 @@ export async function createPKPAuthContext(
   } catch (error) {
     // If session keys are stale (401 / InvalidAuthSig), clear cached sessions and retry once
     const msg = error instanceof Error ? error.message : ''
-    if (msg.includes('InvalidAuthSig') || msg.includes('auth_sig passed is invalid') || msg.includes("can't get auth context")) {
+    if (msg.includes('InvalidAuthSig') || msg.includes('auth_sig passed is invalid') || msg.includes("can't get auth context") || msg.includes('Signature error') || msg.includes('signature error')) {
       console.warn('[Lit] Session expired, clearing stale session data and retrying...')
       clearStaleSessionData()
       try {

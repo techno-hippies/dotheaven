@@ -10,5 +10,8 @@ export * from './layout'
 // Web3 - Blockchain-related components
 export * from './web3'
 
+// Constants - Shared constants
+export * from './constants/profile-options'
+
 // Utilities
 export { cn } from './lib/utils'

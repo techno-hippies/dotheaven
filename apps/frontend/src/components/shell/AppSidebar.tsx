@@ -67,8 +67,9 @@ export const AppSidebar: Component = () => {
   const location = useLocation()
   const auth = useAuth()
   const xmtp = useXMTP()
-  const player = usePlayer()
   const queryClient = useQueryClient()
+
+  const player = usePlayer()
 
   const [newChatAddress, setNewChatAddress] = createSignal('')
   const [newChatOpen, setNewChatOpen] = createSignal(false)

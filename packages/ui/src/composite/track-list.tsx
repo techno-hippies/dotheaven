@@ -60,7 +60,7 @@ export interface TrackListProps {
   onSort?: (field: SortField) => void
 }
 
-const ROW_HEIGHT = 48
+const ROW_HEIGHT = 56
 
 /**
  * TrackList - Virtualized track listing with sticky sortable headers.
@@ -209,13 +209,12 @@ export const TrackList: Component<TrackListProps> = (props) => {
 
                   {/* Title */}
                   <div class="flex items-center gap-3 min-w-0">
-                    <Show when={track().albumCover}>
-                      <AlbumCover
-                        src={track().albumCover}
-                        size="sm"
-                        class="flex-shrink-0"
-                      />
-                    </Show>
+                    <AlbumCover
+                      src={track().albumCover}
+                      size="sm"
+                      icon="music"
+                      class="flex-shrink-0"
+                    />
                     <div
                       class={cn(
                         "font-medium truncate",

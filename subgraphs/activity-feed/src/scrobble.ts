@@ -1,6 +1,7 @@
 import { BigInt } from "@graphprotocol/graph-ts";
 import {
   TrackRegistered as TrackRegisteredEvent,
+  TrackCoverSet as TrackCoverSetEvent,
   Scrobbled as ScrobbledEvent,
 } from "../generated/ScrobbleV3/ScrobbleV3";
 import { Track, Scrobble } from "../generated/schema";
@@ -16,6 +17,15 @@ export function handleTrackRegistered(event: TrackRegisteredEvent): void {
   track.blockNumber = event.block.number;
   track.transactionHash = event.transaction.hash;
   track.save();
+}
+
+export function handleTrackCoverSet(event: TrackCoverSetEvent): void {
+  let id = event.params.trackId.toHexString();
+  let track = Track.load(id);
+  if (track) {
+    track.coverCid = event.params.coverCid;
+    track.save();
+  }
 }
 
 export function handleScrobbled(event: ScrobbledEvent): void {

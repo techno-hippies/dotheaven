@@ -4,6 +4,7 @@ export {
   registerHeavenName,
   getTextRecord,
   getAddr,
+  computeNode,
   REGISTRY_V1,
   RECORDS_V1,
   HEAVEN_NODE,
@@ -21,6 +22,12 @@ export {
   type ProfileInput,
   type SetProfileResult,
 } from './profile'
+
+export {
+  setTextRecord,
+  setTextRecords,
+  type SetTextRecordResult,
+} from './records'
 
 export {
   fetchScrobbleEntries,

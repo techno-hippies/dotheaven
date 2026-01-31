@@ -7,6 +7,8 @@ export interface LocalTrack extends Track {
   filePath: string
   /** MusicBrainz Recording ID from ID3 tags */
   mbid?: string
+  /** IPFS CID for album cover art (set after uploading to Filebase) */
+  coverCid?: string
 }
 
 // =============================================================================

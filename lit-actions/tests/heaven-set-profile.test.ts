@@ -20,9 +20,9 @@
 import { createLitClient } from "@lit-protocol/lit-client";
 import { createAuthManager, storagePlugins, ViemAccountAuthenticator } from "@lit-protocol/auth";
 import { privateKeyToAccount } from "viem/accounts";
-import { createPublicClient, http, parseAbi, keccak256, encodePacked, encodeAbiParameters } from "viem";
+import { createPublicClient, http, parseAbi } from "viem";
 import { Env } from "./shared/env";
-import { ethers, ZeroHash, AbiCoder, Wallet, keccak256 as ethKeccak256, getAddress } from "ethers";
+import { ZeroHash } from "ethers";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -65,9 +65,11 @@ async function main() {
   const authEoa = privateKeyToAccount(pk as `0x${string}`);
   console.log(`   Auth EOA:    ${authEoa.address}`);
 
-  const wallet = new Wallet(pk);
-  const userAddress = wallet.address;
-  console.log(`   User (EOA):  ${userAddress}`);
+  // Use sponsor PKP as the "user" since internal signing requires
+  // the auth context to authorize the user's PKP key
+  const userAddress = pkpCreds.ethAddress;
+  const userPkpPublicKey = pkpCreds.publicKey;
+  console.log(`   User (PKP):  ${userAddress}`);
 
   // Read on-chain nonce
   console.log("\nReading on-chain nonce...");
@@ -120,60 +122,6 @@ async function main() {
     diet: 0,
   };
 
-  // Compute profileHash using ethers (same as Lit Action + contract)
-  const profileTuple = [
-    profileInput.profileVersion,
-    profileInput.displayName,
-    profileInput.nameHash,
-    profileInput.age,
-    profileInput.heightCm,
-    profileInput.nationality,
-    profileInput.nativeLanguage,
-    profileInput.learningLanguagesPacked,
-    profileInput.friendsOpenToMask,
-    profileInput.locationCityId,
-    profileInput.schoolId,
-    profileInput.skillsCommit,
-    profileInput.hobbiesCommit,
-    profileInput.photoURI,
-    profileInput.gender,
-    profileInput.relocate,
-    profileInput.degree,
-    profileInput.fieldBucket,
-    profileInput.profession,
-    profileInput.industry,
-    profileInput.relationshipStatus,
-    profileInput.sexuality,
-    profileInput.ethnicity,
-    profileInput.datingStyle,
-    profileInput.children,
-    profileInput.wantsChildren,
-    profileInput.drinking,
-    profileInput.smoking,
-    profileInput.drugs,
-    profileInput.lookingFor,
-    profileInput.religion,
-    profileInput.pets,
-    profileInput.diet,
-  ];
-
-  const abiCoder = AbiCoder.defaultAbiCoder();
-  const profileEncoded = abiCoder.encode(
-    [
-      "tuple(uint8,string,bytes32,uint8,uint16,bytes2,bytes2,uint80,uint8,bytes32,bytes32,bytes32,bytes32,string,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8)",
-    ],
-    [profileTuple]
-  );
-  const profileHash = ethKeccak256(profileEncoded);
-  console.log(`   Profile hash: ${profileHash.slice(0, 20)}...`);
-
-  // Sign EIP-191 authorization message
-  const message = `heaven:profile:${userAddress.toLowerCase()}:${profileHash}:${nonce}`;
-  console.log("\nSigning EIP-191 authorization...");
-  const signature = await wallet.signMessage(message);
-  console.log(`   Message:     ${message.slice(0, 60)}...`);
-  console.log(`   Signature:   ${signature.slice(0, 20)}...`);
-
   // Connect to Lit
   console.log("\nConnecting to Lit Protocol...");
   const litClient = await createLitClient({ network: Env.litNetwork });
@@ -207,11 +155,11 @@ async function main() {
   });
   console.log("Auth context ready");
 
-  // Build jsParams
+  // Build jsParams (internal signing — no pre-signature needed)
   const jsParams: any = {
     user: userAddress,
+    userPkpPublicKey,
     profileInput,
-    signature,
     nonce: Number(nonce),
     dryRun,
   };

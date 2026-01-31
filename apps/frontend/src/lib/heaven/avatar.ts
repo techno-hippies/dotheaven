@@ -8,11 +8,11 @@
 import { getLitClient } from '../lit/client'
 import type { PKPAuthContext } from '../lit/types'
 
-const AVATAR_UPLOAD_CID = 'QmeA1zpz9R5Wem6gVjeUChAHKNXPRSqLHmujLVRuyo5bP5'
+const AVATAR_UPLOAD_CID = 'QmTWwoC5zX2pUuSExsra5RVzChE9nCYRAkVVgppjvc196A'
 
 /** Encrypted Filebase key — only decryptable by the avatar upload Lit Action CID */
 const FILEBASE_ENCRYPTED_KEY = {
-  ciphertext: 'gI64VYKoMv3lF1gIjF2cX/qNiG4YcP0Zemg/qxvuWDyRV5XwIUFPbhA3AbRKh7cz1kmzy8BXP7dMrISPiuXlYaz6lLfICsDHd3y0uVyepYJlSeupN2f+W41bRmnPg6D1I7s08RLQMayWLcQYLmEHpucnqh4X6PLpDqtpVE3GvfbhiXKNSimc1TX98L8DB5z7gRqOXK9ddS4ut1OwvXTHQ4xNrm22JeeRwyD5Y04lVT/hI8ffz8MC',
+  ciphertext: 'pfbkdwk48PntH/CrTFsyRFLDxDak2yPMIvQMSss8iboeaa3bRGoY3M3ng11b1Ve5tH9A1lN7mVKpoDMYFGS+TClXG1JZKcKLIp9O8YVmBOxl8jGK+zGqCHiIU7JF/cFPpL5xAeZHgPjJL0XUlTWJiApU7lUqOGweTAwIiynpiEpfffxvcZM3Vt/oEIOvvbZfj/XXgOBHsQICM76Afx3r5rd9u1EwjjUAw1Az0qmtCRbvf43Kk7gC',
   dataToEncryptHash: '23ab539bda3900163da16db23be0e6e6c6003d35bd1ac54aeaada176f8f1e0d4',
   accessControlConditions: [
     {
@@ -44,13 +44,6 @@ async function fileToBase64(file: File): Promise<string> {
   })
 }
 
-async function sha256Hex(data: ArrayBuffer): Promise<string> {
-  const hash = await crypto.subtle.digest('SHA-256', data)
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-}
-
 export interface AvatarUploadResult {
   success: boolean
   avatarCID?: string
@@ -74,50 +67,21 @@ export async function uploadAvatar(
 ): Promise<AvatarUploadResult> {
   const litClient = await getLitClient()
 
-  // Convert file to base64 and compute hash
+  // Convert file to base64
   const base64 = await fileToBase64(file)
-  const arrayBuffer = await file.arrayBuffer()
-  const imageHash = await sha256Hex(arrayBuffer)
 
   const timestamp = Date.now()
   const nonce = Math.floor(Math.random() * 1_000_000_000)
 
-  // Sign authorization message with user's PKP
-  const message = `heaven:avatar:${imageHash}:${timestamp}:${nonce}`
-
-  const signResult = await litClient.executeJs({
-    code: `(async () => {
-      const sigShare = await Lit.Actions.ethPersonalSignMessageEcdsa({
-        message: jsParams.message,
-        publicKey: jsParams.publicKey,
-        sigName: "sig",
-      });
-    })();`,
-    authContext,
-    jsParams: {
-      message,
-      publicKey: pkpPublicKey,
-    },
-  })
-
-  if (!signResult.signatures?.sig) {
-    throw new Error('Failed to sign avatar authorization')
-  }
-
-  const sig = signResult.signatures.sig
-  const sigHex = sig.signature.startsWith('0x') ? sig.signature.slice(2) : sig.signature
-  const v = (sig.recoveryId + 27).toString(16).padStart(2, '0')
-  const signature = `0x${sigHex}${v}`
-
   const contentType = file.type || 'image/png'
 
+  // Single executeJs: action signs with user's PKP, validates, uploads
   const result = await litClient.executeJs({
     ipfsId: AVATAR_UPLOAD_CID,
     authContext,
     jsParams: {
       userPkpPublicKey: pkpPublicKey,
       imageUrl: { base64, contentType },
-      signature,
       timestamp,
       nonce,
       skipStyleCheck: options?.skipStyleCheck ?? false,

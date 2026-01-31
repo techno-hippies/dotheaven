@@ -21,6 +21,7 @@ contract RecordsV1 is Ownable {
 
     error NotAuthorized();
     error InvalidAddress();
+    error InvalidSignature();
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -31,6 +32,7 @@ contract RecordsV1 is Ownable {
     event ContenthashChanged(bytes32 indexed node, bytes contenthash);
     event RegistrarUpdated(address newRegistrar);
     event RecordsCleared(bytes32 indexed node, uint64 newVersion);
+    event SponsorUpdated(address newSponsor);
 
     /*//////////////////////////////////////////////////////////////
                                  STORAGE
@@ -56,12 +58,19 @@ contract RecordsV1 is Ownable {
     /// @notice Versioned contenthash: node => version => contenthash
     mapping(bytes32 => mapping(uint64 => bytes)) internal contenthashesV;
 
+    /// @notice Nonces for meta-tx replay protection (per node)
+    mapping(bytes32 => uint256) public nonces;
+
+    /// @notice Sponsor address allowed to relay meta-txs
+    address public sponsor;
+
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
-    constructor(address _registrar, address _owner) Ownable(_owner) {
+    constructor(address _registrar, address _owner, address _sponsor) Ownable(_owner) {
         registrar = IRegistry(_registrar);
+        sponsor = _sponsor;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -238,6 +247,152 @@ contract RecordsV1 is Ownable {
     }
 
     /*//////////////////////////////////////////////////////////////
+                      META-TX (SPONSORED) SETTERS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Set a text record on behalf of the name owner (gasless for user)
+    /// @dev Sponsor PKP calls this; signature proves the name owner authorized it
+    /// Message format: "heaven:records:{node}:{key}:{valueHash}:{nonce}"
+    function setTextFor(
+        bytes32 node,
+        string calldata key,
+        string calldata value,
+        bytes calldata signature
+    ) external {
+        require(msg.sender == sponsor || msg.sender == owner(), "Only sponsor");
+
+        uint256 tokenId = nodeToTokenId[node];
+        require(tokenId != 0, "Node not registered");
+
+        uint256 exp = registrar.expiries(tokenId);
+        require(exp > 0 && block.timestamp <= exp, "Name expired");
+
+        address nameOwner = registrar.ownerOf(tokenId);
+        uint256 currentNonce = nonces[node];
+
+        bytes32 valueHash = keccak256(bytes(value));
+        bytes32 messageHash = _hashMessage(
+            string.concat(
+                "heaven:records:",
+                _toHexString(node),
+                ":",
+                key,
+                ":",
+                _toHexString(valueHash),
+                ":",
+                _uintToString(currentNonce)
+            )
+        );
+
+        address recovered = _recover(messageHash, signature);
+        if (recovered != nameOwner) revert InvalidSignature();
+
+        nonces[node] = currentNonce + 1;
+
+        uint64 v = nodeVersion[node];
+        textsV[node][v][key] = value;
+        emit TextChanged(node, key, value);
+    }
+
+    /// @notice Batch set text records on behalf of the name owner (gasless)
+    /// Message format: "heaven:records-batch:{node}:{payloadHash}:{nonce}"
+    function setRecordsFor(
+        bytes32 node,
+        string[] calldata keys,
+        string[] calldata values,
+        bytes calldata signature
+    ) external {
+        require(msg.sender == sponsor || msg.sender == owner(), "Only sponsor");
+        require(keys.length == values.length, "Length mismatch");
+
+        uint256 tokenId = nodeToTokenId[node];
+        require(tokenId != 0, "Node not registered");
+
+        uint256 exp = registrar.expiries(tokenId);
+        require(exp > 0 && block.timestamp <= exp, "Name expired");
+
+        address nameOwner = registrar.ownerOf(tokenId);
+        uint256 currentNonce = nonces[node];
+
+        bytes32 payloadHash = keccak256(abi.encode(keys, values));
+        bytes32 messageHash = _hashMessage(
+            string.concat(
+                "heaven:records-batch:",
+                _toHexString(node),
+                ":",
+                _toHexString(payloadHash),
+                ":",
+                _uintToString(currentNonce)
+            )
+        );
+
+        address recovered = _recover(messageHash, signature);
+        if (recovered != nameOwner) revert InvalidSignature();
+
+        nonces[node] = currentNonce + 1;
+
+        uint64 v = nodeVersion[node];
+        for (uint256 i = 0; i < keys.length; i++) {
+            textsV[node][v][keys[i]] = values[i];
+            emit TextChanged(node, keys[i], values[i]);
+        }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                      SIGNATURE HELPERS
+    //////////////////////////////////////////////////////////////*/
+
+    function _hashMessage(string memory message) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n",
+                _uintToString(bytes(message).length),
+                message
+            )
+        );
+    }
+
+    function _recover(bytes32 hash, bytes calldata sig) internal pure returns (address) {
+        require(sig.length == 65, "Invalid sig length");
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
+        assembly {
+            r := calldataload(sig.offset)
+            s := calldataload(add(sig.offset, 32))
+            v := byte(0, calldataload(add(sig.offset, 64)))
+        }
+        if (v < 27) v += 27;
+        return ecrecover(hash, v, r, s);
+    }
+
+    function _toHexString(bytes32 b) internal pure returns (string memory) {
+        bytes memory s = new bytes(66);
+        s[0] = "0";
+        s[1] = "x";
+        bytes memory hexChars = "0123456789abcdef";
+        for (uint256 i; i < 32; i++) {
+            s[2 + i * 2] = hexChars[uint8(b[i]) >> 4];
+            s[3 + i * 2] = hexChars[uint8(b[i]) & 0x0f];
+        }
+        return string(s);
+    }
+
+    function _uintToString(uint256 v) internal pure returns (string memory) {
+        if (v == 0) return "0";
+        uint256 temp = v;
+        uint256 digits;
+        while (temp != 0) { digits++; temp /= 10; }
+        bytes memory buffer = new bytes(digits);
+        while (v != 0) {
+            digits -= 1;
+            buffer[digits] = bytes1(uint8(48 + uint256(v % 10)));
+            v /= 10;
+        }
+        return string(buffer);
+    }
+
+    /*//////////////////////////////////////////////////////////////
                           REGISTRAR CALLBACKS
     //////////////////////////////////////////////////////////////*/
 
@@ -262,6 +417,11 @@ contract RecordsV1 is Ownable {
     function setRegistrar(address _registrar) external onlyOwner {
         registrar = IRegistry(_registrar);
         emit RegistrarUpdated(_registrar);
+    }
+
+    function setSponsor(address _sponsor) external onlyOwner {
+        sponsor = _sponsor;
+        emit SponsorUpdated(_sponsor);
     }
 
     /*//////////////////////////////////////////////////////////////

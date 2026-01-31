@@ -1,5 +1,6 @@
-import { type Component, createSignal, createEffect, Show } from 'solid-js'
+import { type Component, createSignal, Show } from 'solid-js'
 import { useParams, useNavigate } from '@solidjs/router'
+import { createQuery } from '@tanstack/solid-query'
 import {
   MediaHeader,
   TrackList,
@@ -19,88 +20,68 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  type Track,
 } from '@heaven/ui'
-import { getPlaylist, updatePlaylist, deletePlaylist, type Playlist } from '@heaven/core'
+import { fetchPlaylistWithTracks } from '../lib/heaven/playlists'
 
 export const PlaylistPage: Component = () => {
   const params = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const [playlist, setPlaylist] = createSignal<Playlist | null>(null)
-  const [loading, setLoading] = createSignal(true)
   const [editOpen, setEditOpen] = createSignal(false)
   const [deleteOpen, setDeleteOpen] = createSignal(false)
   const [editTitle, setEditTitle] = createSignal('')
   const [editDescription, setEditDescription] = createSignal('')
   const [editCoverUrl, setEditCoverUrl] = createSignal('')
 
-  createEffect(async () => {
-    setLoading(true)
-    const data = await getPlaylist(params.id)
-    setPlaylist(data ?? null)
-    setLoading(false)
-  })
+  const query = createQuery(() => ({
+    queryKey: ['playlist', params.id],
+    queryFn: () => fetchPlaylistWithTracks(params.id),
+    enabled: !!params.id,
+    staleTime: 60_000,
+  }))
+
+  const playlist = () => query.data?.playlist ?? null
+  const tracks = () => query.data?.tracks ?? []
+
+  const coverUrl = () => {
+    const p = playlist()
+    return p?.coverCid ? `https://ipfs.filebase.io/ipfs/${p.coverCid}` : undefined
+  }
 
   const openEditDialog = () => {
     const p = playlist()
     if (!p) return
-    setEditTitle(p.title)
-    setEditDescription(p.description)
-    setEditCoverUrl(p.coverUrl || '')
+    setEditTitle(p.name)
+    setEditDescription('')
+    setEditCoverUrl(coverUrl() || '')
     setEditOpen(true)
   }
 
   const handleSave = async () => {
-    const p = playlist()
-    if (!p) return
-
-    const updated = await updatePlaylist(p.id, {
-      title: editTitle().trim() || 'My Playlist',
-      description: editDescription().trim(),
-      coverUrl: editCoverUrl().trim() || undefined,
-    })
-
-    if (updated) {
-      setPlaylist(updated)
-      // Playlist is already persisted in IDB, sidebar will refresh on next load
-    }
+    // TODO: wire to on-chain playlist update via Lit Action
     setEditOpen(false)
   }
 
   const handleDelete = async () => {
-    const p = playlist()
-    if (!p) return
-
-    const success = await deletePlaylist(p.id)
-    if (success) {
-      // Playlist is already removed from IDB, navigate away
-      navigate('/') // Navigate back to home or library
-    }
+    // TODO: wire to on-chain playlist delete via Lit Action
     setDeleteOpen(false)
   }
 
   const handleCopyUrl = () => {
     const url = window.location.href
     navigator.clipboard.writeText(url)
-    // TODO: Show toast notification
     console.log('URL copied to clipboard')
   }
 
   const handlePlay = () => {
     console.log('Play playlist')
-    // TODO: Implement play functionality
   }
 
   const handleAddCollaborator = () => {
     console.log('Add collaborator')
-    // TODO: Implement add collaborator functionality
   }
 
-  // Empty tracks for now
-  const tracks: Track[] = []
-
   return (
-    <Show when={!loading()} fallback={
+    <Show when={!query.isLoading} fallback={
       <div class="h-full flex items-center justify-center">
         <p class="text-[var(--text-muted)]">Loading...</p>
       </div>
@@ -114,11 +95,11 @@ export const PlaylistPage: Component = () => {
           <div class="h-full overflow-y-auto bg-gradient-to-b from-[#4a3f6b] via-[#2a2440] to-[var(--bg-page)] rounded-t-lg">
             <MediaHeader
                 type="playlist"
-                title={p().title}
-                description={p().description}
-                coverSrc={p().coverUrl}
+                title={p().name}
+                description=""
+                coverSrc={coverUrl()}
                 stats={{
-                  songCount: p().songCount,
+                  songCount: p().trackCount,
                   duration: '0 min',
                 }}
                 onTitleClick={openEditDialog}
@@ -183,14 +164,14 @@ export const PlaylistPage: Component = () => {
                   </div>
                 }
               />
-              <Show when={tracks.length > 0} fallback={
+              <Show when={tracks().length > 0} fallback={
                 <div class="px-8 py-12 text-center">
                   <p class="text-[var(--text-muted)] text-lg">No songs yet</p>
                   <p class="text-[var(--text-muted)] text-sm mt-2">Add songs to this playlist to get started</p>
                 </div>
               }>
                 <TrackList
-                  tracks={tracks}
+                  tracks={tracks()}
                   onTrackClick={(track) => console.log('Track clicked:', track)}
                   onTrackPlay={(track) => console.log('Track play:', track)}
                   menuActions={{
@@ -282,7 +263,7 @@ export const PlaylistPage: Component = () => {
                   <DialogHeader>
                     <DialogTitle>Delete Playlist</DialogTitle>
                     <DialogDescription>
-                      Are you sure you want to delete "{p().title}"? This action cannot be undone.
+                      Are you sure you want to delete "{p().name}"? This action cannot be undone.
                     </DialogDescription>
                   </DialogHeader>
                   <DialogFooter>

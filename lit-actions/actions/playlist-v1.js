@@ -21,9 +21,9 @@
  * Required jsParams:
  * - userPkpPublicKey: User's PKP public key
  * - operation: "create" | "setTracks" | "updateMeta" | "delete"
- * - signature: EIP-191 signature
  * - timestamp: Request timestamp (ms)
  * - nonce: On-chain user nonce from PlaylistV1.userNonces(user) — replay protection
+ * Action signs the message internally using the user's PKP (single executeJs).
  *
  * For "create":
  * - name: Playlist name (max 64 bytes)
@@ -60,7 +60,7 @@ const RPC_URL = "https://carrot.megaeth.com/rpc";
 const PLAYLIST_V1 = "0xF0337C4A335cbB3B31c981945d3bE5B914F7B329";
 
 // ScrobbleV3 contract (MegaETH Testnet) — global track catalog
-const SCROBBLE_V3 = "0x3117A73b265b38ad9cD3b37a5F8E1D312Ad29196";
+const SCROBBLE_V3 = "0x144c450cd5B641404EEB5D5eD523399dD94049E0";
 
 // Sponsor PKP
 const SPONSOR_PKP_PUBLIC_KEY =
@@ -342,7 +342,6 @@ const main = async () => {
     const {
       userPkpPublicKey,
       operation,
-      signature,
       timestamp,
       nonce,
       // create / updateMeta
@@ -359,7 +358,6 @@ const main = async () => {
 
     must(userPkpPublicKey, "userPkpPublicKey");
     must(operation, "operation");
-    must(signature, "signature");
     must(timestamp, "timestamp");
     must(nonce, "nonce");
 
@@ -455,7 +453,25 @@ const main = async () => {
       message = `heaven:playlist:delete:${playlistId}:${timestamp}:${nonce}`;
     }
 
-    const recovered = ethers.utils.verifyMessage(message, signature);
+    const msgHash = ethers.utils.hashMessage(message);
+    const sigResult = await Lit.Actions.signAndCombineEcdsa({
+      toSign: Array.from(ethers.utils.arrayify(msgHash)),
+      publicKey: userPkpPublicKey,
+      sigName: "user_playlist_sig",
+    });
+    if (typeof sigResult === "string" && sigResult.startsWith("[ERROR]")) {
+      throw new Error(`User PKP signing failed: ${sigResult}`);
+    }
+    const sigObj = JSON.parse(sigResult);
+    let userV = Number(sigObj.recid ?? sigObj.recoveryId ?? sigObj.v);
+    if (userV === 0 || userV === 1) userV += 27;
+    const finalSignature = ethers.utils.joinSignature({
+      r: `0x${strip0x(sigObj.r)}`,
+      s: `0x${strip0x(sigObj.s)}`,
+      v: userV,
+    });
+
+    const recovered = ethers.utils.verifyMessage(message, finalSignature);
     if (recovered.toLowerCase() !== userAddress.toLowerCase()) {
       throw new Error(
         `Invalid signature: recovered ${recovered}, expected ${userAddress}`

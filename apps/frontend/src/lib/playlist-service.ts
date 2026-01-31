@@ -8,12 +8,11 @@
  * 4. Return result
  */
 
-import { keccak256, encodeAbiParameters, padHex } from 'viem'
 import type { PKPAuthContext } from './lit'
 import { getLitClient } from './lit/client'
 import { getUserNonce } from './heaven/playlists'
 
-const PLAYLIST_V1_CID = 'QmdpkcmCsStUM5nYz7ffxRoS2oStUY37bEsnkN7ebPunUt'
+const PLAYLIST_V1_CID = 'QmZkySDfK5rg6Xs8JGhi8GTWKuTfZvzv6sHDhkZZaTncGs'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -106,50 +105,6 @@ export function createPlaylistService(
   }
 }
 
-// ── Track ID computation (mirrors Lit Action's computeTrackInfo) ───
-
-function computeTrackId(track: TrackInput): `0x${string}` {
-  if (track.mbid) {
-    const hex = track.mbid.replace(/-/g, '').toLowerCase()
-    const payload = ('0x' + hex + '0'.repeat(32)).slice(0, 66) as `0x${string}`
-    return keccak256(
-      encodeAbiParameters(
-        [{ type: 'uint8' }, { type: 'bytes32' }],
-        [1, payload],
-      ),
-    )
-  }
-
-  if (track.ipId) {
-    const payload = padHex(track.ipId.toLowerCase() as `0x${string}`, { size: 32 })
-    return keccak256(
-      encodeAbiParameters(
-        [{ type: 'uint8' }, { type: 'bytes32' }],
-        [2, payload],
-      ),
-    )
-  }
-
-  // Kind 3: metadata hash
-  const titleNorm = (track.title || '').toLowerCase().trim().replace(/\s+/g, ' ')
-  const artistNorm = (track.artist || '').toLowerCase().trim().replace(/\s+/g, ' ')
-  const albumNorm = (track.album || '').toLowerCase().trim().replace(/\s+/g, ' ')
-
-  const metaPayload = keccak256(
-    encodeAbiParameters(
-      [{ type: 'string' }, { type: 'string' }, { type: 'string' }],
-      [titleNorm, artistNorm, albumNorm],
-    ),
-  )
-
-  return keccak256(
-    encodeAbiParameters(
-      [{ type: 'uint8' }, { type: 'bytes32' }],
-      [3, metaPayload],
-    ),
-  )
-}
-
 // ── Core Execution ─────────────────────────────────────────────────
 
 async function executePlaylistAction(
@@ -168,55 +123,18 @@ async function executePlaylistAction(
   const timestamp = Date.now()
   const nonce = await getUserNonce(pkpAddress)
 
-  // Compute trackIds for operations that have tracks
-  let trackIds: string[] | undefined
-  if ((operation === 'create' || operation === 'setTracks') && params.tracks) {
-    const existingIds = (params.existingTrackIds as string[]) || []
-    const newIds = (params.tracks as TrackInput[]).map((t) => computeTrackId(t))
-    trackIds = [...existingIds, ...newIds]
-  }
-
-  // Build message for signing (uses trackIds, not raw tracks)
-  const message = await buildMessage(operation, params, trackIds, timestamp, nonce)
-
-  console.log(`[Playlist] ${operation} — signing + submitting via Lit Action...`)
+  console.log(`[Playlist] ${operation} — submitting via Lit Action (internal signing)...`)
 
   const litClient = await getLitClient()
   const authContext = await getAuthContext()
 
-  // Sign with user's PKP
-  const signResult = await litClient.executeJs({
-    code: `(async () => {
-      const sigShare = await Lit.Actions.ethPersonalSignMessageEcdsa({
-        message: jsParams.message,
-        publicKey: jsParams.publicKey,
-        sigName: "sig",
-      });
-    })();`,
-    authContext,
-    jsParams: {
-      message,
-      publicKey: pkpPublicKey,
-    },
-  })
-
-  if (!signResult.signatures?.sig) {
-    return { success: false, error: 'Failed to sign message' }
-  }
-
-  const sig = signResult.signatures.sig
-  const sigHex = sig.signature.startsWith('0x') ? sig.signature.slice(2) : sig.signature
-  const v = (sig.recoveryId + 27).toString(16).padStart(2, '0')
-  const signature = `0x${sigHex}${v}`
-
-  // Execute Lit Action — pass raw tracks (Lit Action computes trackIds internally too)
+  // Single executeJs: action signs with user's PKP + sponsor PKP broadcasts
   const result = await litClient.executeJs({
     ipfsId: PLAYLIST_V1_CID,
     authContext,
     jsParams: {
       userPkpPublicKey: pkpPublicKey,
       operation,
-      signature,
       timestamp,
       nonce,
       ...params,
@@ -241,55 +159,3 @@ async function executePlaylistAction(
   }
 }
 
-// ── Message Building ───────────────────────────────────────────────
-// Payload hashes must match the Lit Action exactly:
-// - create:    { name, coverCid, visibility, trackIds }
-// - setTracks: { trackIds }
-// - updateMeta: { name, coverCid, visibility }
-// - delete:    (no payload)
-
-async function buildMessage(
-  operation: string,
-  params: Record<string, unknown>,
-  trackIds: string[] | undefined,
-  timestamp: number,
-  nonce: number,
-): Promise<string> {
-  switch (operation) {
-    case 'create': {
-      const payload = {
-        name: params.name,
-        coverCid: (params.coverCid as string) || '',
-        visibility: params.visibility !== undefined ? Number(params.visibility) : 0,
-        trackIds,
-      }
-      const hash = await sha256Hex(JSON.stringify(payload))
-      return `heaven:playlist:create:${hash}:${timestamp}:${nonce}`
-    }
-    case 'setTracks': {
-      const payload = { trackIds }
-      const hash = await sha256Hex(JSON.stringify(payload))
-      return `heaven:playlist:setTracks:${params.playlistId}:${hash}:${timestamp}:${nonce}`
-    }
-    case 'updateMeta': {
-      const payload = {
-        name: params.name,
-        coverCid: (params.coverCid as string) || '',
-        visibility: params.visibility !== undefined ? Number(params.visibility) : 0,
-      }
-      const hash = await sha256Hex(JSON.stringify(payload))
-      return `heaven:playlist:updateMeta:${params.playlistId}:${hash}:${timestamp}:${nonce}`
-    }
-    case 'delete':
-      return `heaven:playlist:delete:${params.playlistId}:${timestamp}:${nonce}`
-    default:
-      throw new Error(`Unknown operation: ${operation}`)
-  }
-}
-
-async function sha256Hex(message: string): Promise<string> {
-  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(message))
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-}

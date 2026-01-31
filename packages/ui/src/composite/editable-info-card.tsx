@@ -24,18 +24,28 @@ export const EditableInfoCardRow: Component<EditableInfoCardRowProps> = (props) 
   // Use props.value directly for controlled inputs
   const getValue = () => props.value || ''
 
-  // Get display value (convert values to labels for multiselectdropdown)
+  // Get display value (convert values to labels for select/multiselectdropdown)
   const getDisplayValue = () => {
     const value = getValue()
-    if (!value || props.type !== 'multiselectdropdown') return value
+    if (!value) return value
 
-    // Convert comma-separated values to labels
-    const values = value.split(', ').filter(Boolean)
-    const labels = values.map(v => {
-      const option = (props.options as MultiSelectOption[])?.find(opt => opt.value === v)
-      return option?.label || v
-    })
-    return labels.join(', ')
+    // For select: convert value to label
+    if (props.type === 'select' && props.options) {
+      const option = (props.options as SelectOption[])?.find(opt => opt.value === value)
+      return option?.label || value
+    }
+
+    // For multiselectdropdown: convert comma-separated values to labels
+    if (props.type === 'multiselectdropdown' && props.options) {
+      const values = value.split(', ').filter(Boolean)
+      const labels = values.map(v => {
+        const option = (props.options as MultiSelectOption[])?.find(opt => opt.value === v)
+        return option?.label || v
+      })
+      return labels.join(', ')
+    }
+
+    return value
   }
 
   // Handle text/textarea changes

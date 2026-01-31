@@ -55,6 +55,7 @@ contract ScrobbleV3 {
         string title;
         string artist;
         string album;
+        string coverCid;
         bytes32 payload;
         uint8 kind;
         uint64 registeredAt;
@@ -76,6 +77,11 @@ contract ScrobbleV3 {
         bytes32 indexed metaHash
     );
 
+    event TrackCoverSet(
+        bytes32 indexed trackId,
+        string coverCid
+    );
+
     event Scrobbled(
         address indexed user,
         bytes32 indexed trackId,
@@ -87,6 +93,7 @@ contract ScrobbleV3 {
     uint256 public constant MAX_TRACK_REG = 50;
     uint256 public constant MAX_SCROBBLES = 200;
     uint256 public constant MAX_STR = 128;
+    uint256 public constant MAX_CID = 128;
 
     // ── Track registration ───────────────────────────────────────────────
 
@@ -182,6 +189,42 @@ contract ScrobbleV3 {
         emit TrackUpdated(trackId, keccak256(abi.encode(title, artist, album)));
     }
 
+    // ── Track cover ─────────────────────────────────────────────────────
+
+    /// @notice Set cover art CID for a track. Only sets if currently empty.
+    function setTrackCover(
+        bytes32 trackId,
+        string calldata coverCid
+    ) external onlySponsor {
+        Track storage t = tracks[trackId];
+        require(t.exists, "not registered");
+        require(bytes(coverCid).length > 0, "empty cid");
+        require(bytes(coverCid).length <= MAX_CID, "cid too long");
+        require(bytes(t.coverCid).length == 0, "cover already set");
+
+        t.coverCid = coverCid;
+        emit TrackCoverSet(trackId, coverCid);
+    }
+
+    /// @notice Batch set cover art CIDs for multiple tracks.
+    function setTrackCoverBatch(
+        bytes32[] calldata trackIds,
+        string[] calldata coverCids
+    ) external onlySponsor {
+        uint256 len = trackIds.length;
+        require(len == coverCids.length, "length mismatch");
+        require(len <= MAX_TRACK_REG, "batch too large");
+
+        for (uint256 i; i < len; ) {
+            Track storage t = tracks[trackIds[i]];
+            if (t.exists && bytes(coverCids[i]).length > 0 && bytes(coverCids[i]).length <= MAX_CID && bytes(t.coverCid).length == 0) {
+                t.coverCid = coverCids[i];
+                emit TrackCoverSet(trackIds[i], coverCids[i]);
+            }
+            unchecked { ++i; }
+        }
+    }
+
     // ── View helpers ─────────────────────────────────────────────────────
 
     function isRegistered(bytes32 trackId) external view returns (bool) {
@@ -194,11 +237,12 @@ contract ScrobbleV3 {
         string memory album,
         uint8 kind,
         bytes32 payload,
-        uint64 registeredAt
+        uint64 registeredAt,
+        string memory coverCid
     ) {
         Track storage t = tracks[trackId];
         require(t.exists, "not registered");
-        return (t.title, t.artist, t.album, t.kind, t.payload, t.registeredAt);
+        return (t.title, t.artist, t.album, t.kind, t.payload, t.registeredAt, t.coverCid);
     }
 
     // ── Internal ─────────────────────────────────────────────────────────
@@ -237,6 +281,7 @@ contract ScrobbleV3 {
             title: title,
             artist: artist,
             album: album,
+            coverCid: "",
             payload: payload,
             kind: kind,
             registeredAt: nowTs,

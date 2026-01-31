@@ -12,6 +12,19 @@
   },
   {
     "type": "function",
+    "name": "MAX_CID",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "MAX_SCROBBLES",
     "inputs": [],
     "outputs": [
@@ -89,6 +102,11 @@
         "name": "registeredAt",
         "type": "uint64",
         "internalType": "uint64"
+      },
+      {
+        "name": "coverCid",
+        "type": "string",
+        "internalType": "string"
       }
     ],
     "stateMutability": "view"
@@ -244,6 +262,42 @@
   },
   {
     "type": "function",
+    "name": "setTrackCover",
+    "inputs": [
+      {
+        "name": "trackId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "coverCid",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setTrackCoverBatch",
+    "inputs": [
+      {
+        "name": "trackIds",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      },
+      {
+        "name": "coverCids",
+        "type": "string[]",
+        "internalType": "string[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "sponsor",
     "inputs": [],
     "outputs": [
@@ -278,6 +332,11 @@
       },
       {
         "name": "album",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "coverCid",
         "type": "string",
         "internalType": "string"
       },
@@ -392,6 +451,25 @@
         "type": "address",
         "indexed": true,
         "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TrackCoverSet",
+    "inputs": [
+      {
+        "name": "trackId",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "coverCid",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
       }
     ],
     "anonymous": false

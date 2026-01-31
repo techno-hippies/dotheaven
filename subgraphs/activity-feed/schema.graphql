@@ -5,6 +5,7 @@ type Track @entity(immutable: false) {
   kind: Int!                   # 1=MBID, 2=ipId, 3=meta
   payload: Bytes!              # raw derivation input
   metaHash: Bytes!             # keccak256(abi.encode(title, artist, album))
+  coverCid: String             # IPFS CID for album art (set once via setTrackCover)
   registeredAt: BigInt!        # block timestamp
   blockNumber: BigInt!
   transactionHash: Bytes!

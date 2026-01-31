@@ -3,8 +3,7 @@
  * Test Avatar Upload v1 Lit Action
  *
  * Verifies:
- *  - Action fetches image content, computes hash
- *  - Signature verification passes
+ *  - Internal PKP signing (no pre-signature)
  *  - Image uploaded to Filebase IPFS
  *  - Returns valid CID
  *
@@ -16,8 +15,7 @@ import { createLitClient } from "@lit-protocol/lit-client";
 import { createAuthManager, storagePlugins, ViemAccountAuthenticator } from "@lit-protocol/auth";
 import { privateKeyToAccount } from "viem/accounts";
 import { Env } from "./shared/env";
-import { ethers } from "ethers";
-import { readFileSync, existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 
 async function main() {
@@ -42,11 +40,10 @@ async function main() {
   const authEoa = privateKeyToAccount(pk as `0x${string}`);
   console.log(`   Auth EOA:    ${authEoa.address}`);
 
-  // For testing: use the EOA as the "user" since it signs the message.
-  const wallet = new ethers.Wallet(pk);
-  const userAddress = wallet.address;
-  const userPkpPublicKey = ethers.SigningKey.computePublicKey(pk, false);
-  console.log(`   User (EOA):  ${userAddress}`);
+  // Use sponsor PKP as the "user" since internal signing requires
+  // the auth context to authorize the user's PKP key
+  const userPkpPublicKey = pkpCreds.publicKey;
+  console.log(`   User (PKP):  ${pkpCreds.ethAddress}`);
 
   console.log("\nConnecting to Lit Protocol...");
   const litClient = await createLitClient({ network: Env.litNetwork });
@@ -72,6 +69,7 @@ async function main() {
       resources: [
         ["pkp-signing", "*"],
         ["lit-action-execution", "*"],
+        ["access-control-condition-decryption", "*"],
       ],
       expiration: new Date(Date.now() + 1000 * 60 * 15).toISOString(),
       statement: "",
@@ -97,31 +95,16 @@ async function main() {
   const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
   const imageUrl = { base64: toBase64(testPng), contentType: "image/png" };
 
-  // Compute hash
-  const sha256Hex = async (data: Uint8Array) => {
-    const hash = await crypto.subtle.digest("SHA-256", data);
-    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
-  };
-
-  const imageHash = await sha256Hex(testPng);
   const timestamp = Date.now();
-  const nonce = Math.floor(Math.random() * 1000000).toString();
+  const nonce = Math.floor(Math.random() * 1000000);
 
-  // Sign the content hash digest
-  const message = `heaven:avatar:${imageHash}:${timestamp}:${nonce}`;
-  const signature = await wallet.signMessage(message);
-
-  console.log(`\n   Image hash:    ${imageHash.slice(0, 16)}...`);
-  console.log(`   Timestamp:     ${timestamp}`);
-  console.log(`   Nonce:         ${nonce}`);
-
-  // Load encrypted Filebase key (or use plaintext for dev)
+  // Build jsParams (internal signing — no pre-signature needed)
   let jsParams: any = {
     userPkpPublicKey,
     imageUrl,
-    signature,
     timestamp,
     nonce,
+    skipStyleCheck: true,
   };
 
   const keyPath = join(Env.paths.keys, "avatarUpload", "filebase_api_key_avatarUpload.json");
@@ -139,6 +122,9 @@ async function main() {
       process.exit(1);
     }
   }
+
+  console.log(`\n   Timestamp:     ${timestamp}`);
+  console.log(`   Nonce:         ${nonce}`);
 
   console.log("\nExecuting Lit Action...");
 
@@ -173,9 +159,9 @@ async function main() {
     }
     console.log("\n   CID valid");
 
-    // Verify user address
-    if (response.user.toLowerCase() !== userAddress.toLowerCase()) {
-      throw new Error(`User mismatch: expected ${userAddress}, got ${response.user}`);
+    // Verify user address matches sponsor PKP
+    if (response.user.toLowerCase() !== pkpCreds.ethAddress.toLowerCase()) {
+      throw new Error(`User mismatch: expected ${pkpCreds.ethAddress}, got ${response.user}`);
     }
     console.log("   User address matches");
 

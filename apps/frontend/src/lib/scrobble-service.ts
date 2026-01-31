@@ -12,7 +12,7 @@ import { getLitClient } from './lit/client'
 
 const SESSION_KEY = 'local'
 const TICK_INTERVAL_MS = 15_000
-const SCROBBLE_SUBMIT_V3_CID = 'QmW3mJc9h9r33B8pmsWEhocaegniKJQjiP2UaLynJvbXU5'
+const SCROBBLE_SUBMIT_V3_CID = 'QmbAT5L1RuKhvgPGpEScRiwYzK32qkDSJDR9gK8R588oB9'
 
 export interface ScrobbleService {
   start(): void
@@ -85,56 +85,26 @@ async function submitScrobble(
     playedAt: scrobble.playedAtSec,
     ...(scrobble.mbid ? { mbid: scrobble.mbid } : {}),
     ...(scrobble.ipId ? { ipId: scrobble.ipId } : {}),
+    ...(scrobble.coverCid ? { coverCid: scrobble.coverCid } : {}),
   }
 
   const litTracks = [track]
 
-  // Compute signature: heaven:scrobble:{sha256(tracks)}:{timestamp}:{nonce}
-  const tracksJson = JSON.stringify(litTracks)
-  const tracksHash = await sha256Hex(tracksJson)
   const timestamp = Date.now()
   const nonce = Math.floor(Math.random() * 1_000_000).toString()
 
-  const message = `heaven:scrobble:${tracksHash}:${timestamp}:${nonce}`
-
-  console.log('[Scrobble] Signing + submitting via Lit Action V3...')
+  console.log('[Scrobble] Submitting via Lit Action V3 (internal signing)...')
 
   const litClient = await getLitClient()
   const authContext = await getAuthContext()
 
-  // Sign with user's PKP
-  const signResult = await litClient.executeJs({
-    code: `(async () => {
-      const sigShare = await Lit.Actions.ethPersonalSignMessageEcdsa({
-        message: jsParams.message,
-        publicKey: jsParams.publicKey,
-        sigName: "sig",
-      });
-    })();`,
-    authContext,
-    jsParams: {
-      message,
-      publicKey: pkpPublicKey,
-    },
-  })
-
-  if (!signResult.signatures?.sig) {
-    throw new Error('Failed to sign scrobble message')
-  }
-
-  const sig = signResult.signatures.sig
-  const sigHex = sig.signature.startsWith('0x') ? sig.signature.slice(2) : sig.signature
-  const v = (sig.recoveryId + 27).toString(16).padStart(2, '0')
-  const signature = `0x${sigHex}${v}`
-
-  // Execute the scrobble-submit-v3 Lit Action
+  // Single executeJs: action signs with user's PKP + sponsor PKP broadcasts
   const result = await litClient.executeJs({
     ipfsId: SCROBBLE_SUBMIT_V3_CID,
     authContext,
     jsParams: {
       userPkpPublicKey: pkpPublicKey,
       tracks: litTracks,
-      signature,
       timestamp,
       nonce,
     },
@@ -146,12 +116,6 @@ async function submitScrobble(
     throw new Error(`Scrobble submit failed: ${response.error || 'unknown'}`)
   }
 
-  console.log(`[Scrobble] On-chain! tx: ${response.txHash} (registered: ${response.registered}, scrobbled: ${response.scrobbled})`)
+  console.log(`[Scrobble] On-chain! tx: ${response.txHash} (registered: ${response.registered}, scrobbled: ${response.scrobbled}, covers: ${response.coversSet ?? 0})`)
 }
 
-async function sha256Hex(message: string): Promise<string> {
-  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(message))
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-}

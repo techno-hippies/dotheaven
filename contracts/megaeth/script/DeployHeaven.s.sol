@@ -63,7 +63,8 @@ contract DeployHeavenScript is Script {
         console2.log("RegistryV1 deployed at:", address(registry));
 
         // 2. Deploy RecordsV1
-        RecordsV1 records = new RecordsV1(address(registry), owner);
+        address sponsorPkp = vm.envOr("SPONSOR_PKP", address(0));
+        RecordsV1 records = new RecordsV1(address(registry), owner, sponsorPkp);
         console2.log("RecordsV1 deployed at:", address(records));
 
         // Link Records to Registry

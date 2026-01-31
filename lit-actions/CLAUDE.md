@@ -10,6 +10,7 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 - **Playlist v1**: Create/update/delete event-sourced playlists on PlaylistV1. Registers missing tracks in ScrobbleV3 automatically. Supports coverCid for playlist artwork. Sponsor PKP pays gas. EIP-191 sig verification.
 - **Heaven claim name**: Sponsor PKP claims a `.heaven` name on MegaETH on behalf of user (gasless). EIP-191 sig verification.
 - **Heaven set profile**: Sponsor PKP writes user's on-chain profile to ProfileV1 on MegaETH (gasless). EIP-191 sig + nonce replay protection.
+- **Heaven set records**: Sponsor PKP sets ENS-compatible text records on RecordsV1 on MegaETH (gasless). Single or batch records. EIP-191 sig + per-node nonce replay protection.
 
 ## Status
 
@@ -20,9 +21,10 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 | Avatar Upload | `actions/avatar-upload-v1.js` | **Working** | `QmeA1zpz...` |
 | Story Register Sponsor | `actions/story-register-sponsor-v1.js` | **Working** | `QmcRrDj9...` |
 | Scrobble Submit V3 | `actions/scrobble-submit-v3.js` | **Working** | `QmW3mJc9...` |
-| Playlist v1 | `actions/playlist-v1.js` | **Working** | `QmeyKGbv...` |
+| Playlist v1 | `actions/playlist-v1.js` | **Working** | `QmdpkcmC...` |
 | Heaven Claim Name | `actions/heaven-claim-name-v1.js` | **Working** | (inline) |
-| Heaven Set Profile | `actions/heaven-set-profile-v1.js` | **Working** | (inline) |
+| Heaven Set Profile | `actions/heaven-set-profile-v1.js` | **Working** | `QmURxLHk...` |
+| Heaven Set Records | `actions/heaven-set-records-v1.js` | **Working** | `Qmcva6sj...` |
 
 ## TODO
 
@@ -98,16 +100,17 @@ Client                      Lit Action                  Story Aeneid
 
 | Contract | Address |
 |----------|---------|
-| ScrobbleV3 | `0x3117A73b265b38ad9cD3b37a5F8E1D312Ad29196` |
+| ScrobbleV3 | `0x144c450cd5B641404EEB5D5eD523399dD94049E0` |
 | PlaylistV1 | `0xF0337C4A335cbB3B31c981945d3bE5B914F7B329` |
+| RecordsV1 | `0x801b9A10a4088906d3d3D7bFf1f7ec9793302840` |
 
 ## Subgraph (Goldsky)
 
 | | Value |
 |--|-------|
-| Endpoint (v3) | `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/3.0.0/gn` |
+| Endpoint (v4) | `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/4.0.0/gn` |
 | Network | `megaeth-testnet-v2` (Goldsky identifier) |
-| Indexes | ScrobbleV3 `TrackRegistered` + `Scrobbled` events |
+| Indexes | ScrobbleV3 `TrackRegistered` + `TrackCoverSet` + `Scrobbled` events |
 
 Deploy: `goldsky subgraph deploy dotheaven-activity/<version> --path .` (from `subgraphs/activity-feed/`)
 
@@ -130,6 +133,7 @@ bun scripts/setup.ts scrobbleSubmitV3      # Deploy scrobble submit V3 action
 bun scripts/setup.ts playlistV1            # Deploy playlist v1 action
 bun scripts/setup.ts heavenClaimName       # Deploy heaven claim name action
 bun scripts/setup.ts heavenSetProfile      # Deploy heaven set profile action
+bun scripts/setup.ts heavenSetRecords      # Deploy heaven set records action
 bun scripts/deploy-spg-nft.ts             # Deploy own SPG NFT collection
 bun scripts/verify.ts                      # Verify all actions configured
 
@@ -143,6 +147,7 @@ bun tests/playlist-v1.test.ts               # Test playlist CRUD (create/setTrac
 bun tests/heaven-claim-name.test.ts        # Test .heaven name claim (MegaETH broadcast)
 bun tests/heaven-set-profile.test.ts       # Test profile write (MegaETH broadcast)
 bun tests/heaven-set-profile.test.ts --dry-run  # Dry run (sign only, no broadcast)
+bun tests/heaven-set-records.test.ts       # Test records write (claims name + sets text record)
 ```
 
 ## Updating an Action
@@ -168,7 +173,8 @@ lit-actions/
 │   ├── scrobble-submit-v3.js          # Track registry + scrobble events on ScrobbleV3
 │   ├── heaven-claim-name-v1.js        # Gasless .heaven name claim on MegaETH via sponsor PKP
 │   ├── heaven-set-profile-v1.js       # Gasless profile write to ProfileV1 on MegaETH via sponsor PKP
-│   └── playlist-v1.js                # Event-sourced playlist CRUD on PlaylistV1 via sponsor PKP
+│   ├── playlist-v1.js                # Event-sourced playlist CRUD on PlaylistV1 via sponsor PKP
+│   └── heaven-set-records-v1.js      # Gasless ENS text record writes on RecordsV1 via sponsor PKP
 ├── scripts/
 │   ├── mint-pkp.ts                    # Mint new PKP with EOA ownership
 │   ├── setup.ts                       # Deploy action + add permission + encrypt keys
@@ -185,6 +191,7 @@ lit-actions/
 │   ├── playlist-v1.test.ts             # E2E test for playlist CRUD (4 operations)
 │   ├── heaven-claim-name.test.ts      # E2E test for .heaven name claim
 │   ├── heaven-set-profile.test.ts     # E2E test for profile write
+│   ├── heaven-set-records.test.ts     # E2E test for records write (claims name + sets text record)
 │   └── shared/env.ts                  # Network detection + config loading
 ├── fixtures/
 │   └── test-song.mp3                  # Test audio file
@@ -222,7 +229,7 @@ Action verifies recovered address matches recipient. Prevents sponsor PKP abuse.
 ```
 message = `heaven:scrobble:${tracksHash}:${timestamp}:${nonce}`
 ```
-`tracksHash` is SHA-256 of `JSON.stringify(tracks)`. Each track has `{ artist, title, playedAt, mbid?, ipId?, album? }`. Action computes `trackId = keccak256(abi.encode(uint8(kind), bytes32(payload)))` per track, checks `isRegistered()`, broadcasts single `registerAndScrobbleBatch()` tx to ScrobbleV3 on MegaETH (chain 6343). Normalized strings for payload derivation, pretty strings stored on-chain. Contract at `0x3117A73b265b38ad9cD3b37a5F8E1D312Ad29196`.
+`tracksHash` is SHA-256 of `JSON.stringify(tracks)`. Each track has `{ artist, title, playedAt, mbid?, ipId?, album? }`. Action computes `trackId = keccak256(abi.encode(uint8(kind), bytes32(payload)))` per track, checks `isRegistered()`, broadcasts single `registerAndScrobbleBatch()` tx to ScrobbleV3 on MegaETH (chain 6343). Normalized strings for payload derivation, pretty strings stored on-chain. Contract at `0x144c450cd5B641404EEB5D5eD523399dD94049E0`.
 
 ### Playlist v1 (EIP-191)
 ```
@@ -244,3 +251,10 @@ Action verifies signature, checks name availability on RegistryV1, then sponsor 
 message = `heaven:profile:${user}:${profileHash}:${nonce}`
 ```
 `profileHash` = `keccak256(abi.encode(profileInput))`. Action verifies signature matches user, checks on-chain nonce, then sponsor PKP broadcasts `upsertProfileFor(user, profileInput, signature)` on MegaETH (chain 6343). Contract nonce provides replay protection. ProfileV1 at `0x0A6563122cB3515ff678A918B5F31da9b1391EA3`.
+
+### Heaven Set Records (EIP-191)
+```
+single:  heaven:records:${node}:${key}:${valueHash}:${nonce}
+batch:   heaven:records-batch:${node}:${payloadHash}:${nonce}
+```
+`valueHash` = `keccak256(utf8Bytes(value))`. `payloadHash` = `keccak256(abi.encode(string[], string[]))`. Action verifies signature matches name NFT owner, checks on-chain nonce per node, then sponsor PKP broadcasts `setTextFor()` or `setRecordsFor()` on MegaETH (chain 6343). RecordsV1 at `0x801b9A10a4088906d3d3D7bFf1f7ec9793302840`.

@@ -23,6 +23,8 @@ export interface ReadyScrobble {
   ipId: string | null
   /** Optional MusicBrainz Recording ID from ID3 tags */
   mbid: string | null
+  /** Optional IPFS CID for album cover art */
+  coverCid: string | null
 }
 
 export interface TrackMetadata {
@@ -34,6 +36,8 @@ export interface TrackMetadata {
   ipId?: string | null
   /** MusicBrainz Recording ID if available */
   mbid?: string | null
+  /** IPFS CID for album cover art (if already uploaded) */
+  coverCid?: string | null
 }
 
 // Scrobble thresholds (TEST: low for quick iteration — revert for production)
@@ -50,6 +54,7 @@ interface SessionState {
   durationMs: number | null
   ipId: string | null
   mbid: string | null
+  coverCid: string | null
   startedAtEpochSec: number | null
   accumulatedPlayMs: number
   lastUpdateTimeMs: number
@@ -67,6 +72,7 @@ function createSession(sessionKey: string): SessionState {
     durationMs: null,
     ipId: null,
     mbid: null,
+    coverCid: null,
     startedAtEpochSec: null,
     accumulatedPlayMs: 0,
     lastUpdateTimeMs: 0,
@@ -140,6 +146,7 @@ export class ScrobbleEngine {
     state.durationMs = metadata.durationMs ?? null
     state.ipId = metadata.ipId ?? null
     state.mbid = metadata.mbid ?? null
+    state.coverCid = metadata.coverCid ?? null
 
     // If playing and no start time, mark start
     if (newTrackKey != null && state.isPlaying && state.startedAtEpochSec == null) {
@@ -208,6 +215,7 @@ export class ScrobbleEngine {
           source: state.sessionKey,
           ipId: state.ipId,
           mbid: state.mbid,
+          coverCid: state.coverCid,
         })
       }
     }
@@ -266,6 +274,7 @@ export class ScrobbleEngine {
         source: state.sessionKey,
         ipId,
         mbid,
+        coverCid: state.coverCid,
       })
     }
   }

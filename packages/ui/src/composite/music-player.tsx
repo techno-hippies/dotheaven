@@ -40,8 +40,8 @@ export const MusicPlayer: Component<MusicPlayerProps> = (props) => {
     )}>
       {/* Left: Now playing info */}
       {!props.minimal && (
-        <div class="flex items-center gap-3 w-56">
-          <AlbumCover size="md" src={props.coverSrc} />
+        <div class="flex items-center gap-3 w-80">
+          <AlbumCover size="md" src={props.coverSrc} class="flex-shrink-0" />
           <div class="flex flex-col min-w-0">
             <span class="text-base font-medium text-[var(--text-primary)] truncate">
               {props.title || 'Now Playing'}
@@ -85,7 +85,7 @@ export const MusicPlayer: Component<MusicPlayerProps> = (props) => {
 
         {/* Progress bar */}
         <div class="flex items-center gap-2 w-full">
-          <span class="text-base text-[var(--text-muted)] w-10 text-right">
+          <span class="text-base text-[var(--text-muted)] w-12 text-right">
             {props.currentTime || '0:00'}
           </span>
           <Scrubber
@@ -95,7 +95,7 @@ export const MusicPlayer: Component<MusicPlayerProps> = (props) => {
             onChangeStart={props.onProgressChangeStart}
             onChangeEnd={props.onProgressChangeEnd}
           />
-          <span class="text-base text-[var(--text-muted)] w-10">
+          <span class="text-base text-[var(--text-muted)] w-12">
             {props.duration || '0:00'}
           </span>
         </div>

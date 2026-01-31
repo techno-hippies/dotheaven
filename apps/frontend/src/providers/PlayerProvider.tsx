@@ -23,6 +23,11 @@ import {
   createPlaybackSource,
   getMimeForPath,
   getExtensionForPath,
+  scanFolderNative,
+  getTracksNative,
+  getTrackCountNative,
+  getFolderNative,
+  setFolderNative,
   type LocalTrack,
 } from '../lib/local-music'
 import { createScrobbleService, type ScrobbleService } from '../lib/scrobble-service'
@@ -50,6 +55,11 @@ function parseDuration(value?: string | null): number {
 export interface PlayerContextType {
   // State
   tracks: () => LocalTrack[]
+  folderPath: () => string | null
+  initialLoading: () => boolean
+  scanning: () => boolean
+  scanProgress: () => { done: number; total: number } | null
+  libraryScrollTop: () => number
   currentIndex: () => number
   currentTrack: () => LocalTrack | null
   selectedTrackId: () => string | null
@@ -64,6 +74,9 @@ export interface PlayerContextType {
 
   // Actions
   setTracks: (tracks: LocalTrack[]) => void
+  setLibraryFolder: (path: string) => Promise<void>
+  rescanLibrary: (path?: string) => Promise<void>
+  setLibraryScrollTop: (value: number) => void
   setSelectedTrackId: (id: string | null) => void
   playTrack: (index: number) => Promise<void>
   togglePlay: () => Promise<void>
@@ -110,6 +123,11 @@ export const PlayerProvider: ParentComponent = (props) => {
 
   // State
   const [tracks, setTracks] = createSignal<LocalTrack[]>([])
+  const [folderPath, setFolderPath] = createSignal<string | null>(null)
+  const [initialLoading, setInitialLoading] = createSignal(isNative)
+  const [scanning, setScanning] = createSignal(false)
+  const [scanProgress, setScanProgress] = createSignal<{ done: number; total: number } | null>(null)
+  const [libraryScrollTop, setLibraryScrollTop] = createSignal(0)
   const [currentIndex, setCurrentIndex] = createSignal(-1)
   const [selectedTrackId, setSelectedTrackId] = createSignal<string | null>(null)
   const [isPlaying, setIsPlaying] = createSignal(false)
@@ -167,6 +185,76 @@ export const PlayerProvider: ParentComponent = (props) => {
     const track = currentTrack()
     return track ? parseDuration(track.duration) : 0
   }
+
+  const PAGE_SIZE = 500
+  async function loadAllTracks(folder: string) {
+    const count = await getTrackCountNative(folder)
+    if (count === 0) {
+      setTracks([])
+      return
+    }
+    const all: LocalTrack[] = []
+    for (let offset = 0; offset < count; offset += PAGE_SIZE) {
+      const page = await getTracksNative(folder, PAGE_SIZE, offset)
+      all.push(...page)
+    }
+    setTracks(all)
+  }
+
+  async function setLibraryFolder(path: string) {
+    setFolderPath(path)
+    if (!isNative) return
+    try {
+      await setFolderNative(path)
+    } catch (e) {
+      console.error('[Library] Failed to persist folder:', e)
+    }
+  }
+
+  async function rescanLibrary(path?: string) {
+    if (!isNative) return
+    const folder = path || folderPath()
+    if (!folder) return
+    setScanning(true)
+    setScanProgress(null)
+
+    let unlistenProgress: (() => void) | undefined
+    try {
+      unlistenProgress = await listen('music://scan-progress', (event) => {
+        const payload = event.payload as { done: number; total: number }
+        setScanProgress(payload)
+      })
+    } catch {
+      // listen may fail on web
+    }
+
+    try {
+      await scanFolderNative(folder)
+      await loadAllTracks(folder)
+    } catch (e) {
+      console.error('[Library] Scan failed:', e)
+    } finally {
+      unlistenProgress?.()
+      setScanning(false)
+      setScanProgress(null)
+    }
+  }
+
+  // Load persisted folder + tracks from native SQLite on mount
+  onMount(async () => {
+    if (!isNative) return
+    try {
+      const folder = await getFolderNative()
+      if (folder) {
+        setFolderPath(folder)
+        await loadAllTracks(folder)
+      }
+    } catch (e) {
+      console.error('[Library] Failed to load persisted folder:', e)
+    } finally {
+      setInitialLoading(false)
+    }
+  })
 
   // Audio setup
   onMount(() => {
@@ -374,6 +462,7 @@ export const PlayerProvider: ParentComponent = (props) => {
       durationMs: parseDuration(track.duration) * 1000 || null,
       mbid: track.mbid || null,
       ipId: null,
+      coverCid: track.coverCid || null,
     })
     setCurrentTime(0)
     const fallbackDuration = parseDuration(t[index].duration)
@@ -580,6 +669,11 @@ export const PlayerProvider: ParentComponent = (props) => {
 
   const ctx: PlayerContextType = {
     tracks,
+    folderPath,
+    initialLoading,
+    scanning,
+    scanProgress,
+    libraryScrollTop,
     currentIndex,
     currentTrack,
     selectedTrackId,
@@ -593,6 +687,9 @@ export const PlayerProvider: ParentComponent = (props) => {
     playbackError,
 
     setTracks,
+    setLibraryFolder,
+    rescanLibrary,
+    setLibraryScrollTop,
     setSelectedTrackId,
     playTrack: (index: number) => playTrack(index),
     togglePlay,

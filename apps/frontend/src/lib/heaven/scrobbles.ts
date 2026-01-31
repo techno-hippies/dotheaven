@@ -11,7 +11,7 @@ import type { Track } from '@heaven/ui'
  */
 
 const GOLDSKY_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/3.0.0/gn'
+  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/4.0.0/gn'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -23,6 +23,7 @@ export interface ScrobbleEntry {
   artist: string
   title: string
   album: string
+  coverCid: string          // IPFS CID for album art (empty if none)
   kind: number              // 1=MBID, 2=ipId, 3=meta
 }
 
@@ -95,6 +96,7 @@ export async function fetchScrobbleEntries(
       artist: meta?.artist ?? 'Unknown',
       title: meta?.title ?? `Track ${s.track.id.slice(0, 10)}...`,
       album: meta?.album ?? '',
+      coverCid: meta?.coverCid ?? '',
       kind: s.track.kind,
     }
   })
@@ -103,12 +105,17 @@ export async function fetchScrobbleEntries(
 /**
  * Convert ScrobbleEntry[] to Track[] for TrackList component.
  */
+const FILEBASE_GATEWAY = 'https://ipfs.filebase.io/ipfs'
+
 export function scrobblesToTracks(entries: ScrobbleEntry[]): Track[] {
   return entries.map((e) => ({
     id: e.id,
     title: e.title,
     artist: e.artist,
     album: e.album,
+    albumCover: e.coverCid
+      ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
+      : undefined,
     dateAdded: formatTimeAgo(e.playedAt),
     duration: '--:--',
     scrobbleStatus: 'verified' as const,
@@ -118,12 +125,13 @@ export function scrobblesToTracks(entries: ScrobbleEntry[]): Track[] {
 // ── Track metadata resolution (on-chain via MegaETH RPC) ──────────
 
 const MEGAETH_RPC = 'https://carrot.megaeth.com/rpc'
-const SCROBBLE_V3 = '0x3117A73b265b38ad9cD3b37a5F8E1D312Ad29196'
+const SCROBBLE_V3 = '0x144c450cd5B641404EEB5D5eD523399dD94049E0'
 
 interface TrackMeta {
   title: string
   artist: string
   album: string
+  coverCid: string
 }
 
 async function batchGetTracks(trackIds: string[]): Promise<Map<string, TrackMeta>> {
@@ -154,13 +162,17 @@ async function batchGetTracks(trackIds: string[]): Promise<Map<string, TrackMeta
 function decodeGetTrackResult(hex: string): TrackMeta | null {
   try {
     const data = hex.slice(2)
+    // 7-tuple: (string title, string artist, string album, uint8 kind, bytes32 payload, uint64 registeredAt, string coverCid)
+    // Slots 0,1,2 = offsets for title/artist/album; 3,4,5 = static; 6 = offset for coverCid
     const titleOffset = parseInt(data.slice(0, 64), 16) * 2
     const artistOffset = parseInt(data.slice(64, 128), 16) * 2
     const albumOffset = parseInt(data.slice(128, 192), 16) * 2
+    const coverCidOffset = parseInt(data.slice(384, 448), 16) * 2 // slot 6
     return {
       title: decodeString(data, titleOffset),
       artist: decodeString(data, artistOffset),
       album: decodeString(data, albumOffset),
+      coverCid: decodeString(data, coverCidOffset),
     }
   } catch {
     return null

@@ -103,6 +103,12 @@ const ACTIONS: Record<string, ActionDef> = {
     displayName: 'Playlist v1',
     keys: [], // No encrypted keys — sponsor PKP pays gas directly
   },
+  heavenSetRecords: {
+    name: 'heavenSetRecords',
+    path: 'actions/heaven-set-records-v1.js',
+    displayName: 'Heaven Set Records v1',
+    keys: [], // No encrypted keys — sponsor PKP pays gas directly
+  },
 };
 
 // Parse CLI args
