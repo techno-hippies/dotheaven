@@ -71,7 +71,7 @@ export const ActivityItem: Component<ActivityItemProps> = (props) => {
     <button
       type="button"
       class={cn(
-        'flex items-center gap-4 w-full p-4 rounded-lg text-left',
+        'flex items-center gap-4 w-full p-4 rounded-md text-left',
         'cursor-pointer hover:bg-[var(--bg-highlight-hover)] transition-colors',
         props.class
       )}
@@ -82,7 +82,7 @@ export const ActivityItem: Component<ActivityItemProps> = (props) => {
   ) : (
     <div
       class={cn(
-        'flex items-center gap-4 w-full p-4 rounded-lg',
+        'flex items-center gap-4 w-full p-4 rounded-md',
         props.class
       )}
     >

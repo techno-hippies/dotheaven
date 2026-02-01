@@ -17,8 +17,9 @@ import { createAuthManager, storagePlugins, ViemAccountAuthenticator } from "@li
 import { privateKeyToAccount } from "viem/accounts";
 import { Env } from "./shared/env";
 import { ethers } from "ethers";
-import { dirname } from "path";
+import { dirname, join } from "path";
 import { fileURLToPath } from "url";
+import { existsSync, readFileSync } from "fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -103,12 +104,21 @@ async function main() {
       ipId: "0x1234567890abcdef1234567890abcdef12345678",
       coverCid: "QmTestCoverDecentralizedLove456",
     },
-    // Kind 3 (meta) — unidentified track, no cover art
+    // Kind 3 (meta) — unidentified track with inline cover image for upload
     {
       artist: "Unknown Artist",
       title: "Mystery Track",
       album: "Lost Tapes",
       playedAt: now,
+      ...(process.env.FILEBASE_COVERS_KEY
+        ? {
+            coverImage: {
+              // 1x1 red PNG (smallest valid PNG)
+              base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==",
+              contentType: "image/png",
+            },
+          }
+        : {}),
     },
   ];
 
@@ -130,13 +140,28 @@ async function main() {
 
   // ── Execute Lit Action (internal signing — single executeJs) ───────
 
-  const jsParams = {
+  const jsParams: Record<string, any> = {
     userPkpPublicKey,
     tracks,
     // No signature — action signs internally using user's PKP
     timestamp,
     nonce,
   };
+
+  // Prefer encrypted key file (production path), fall back to plaintext env var (dev)
+  const encKeyPath = join(__dirname, `../keys/${Env.keyEnv}/scrobbleSubmitV3/filebase_covers_key_scrobbleSubmitV3.json`);
+  if (existsSync(encKeyPath)) {
+    jsParams.filebaseEncryptedKey = JSON.parse(readFileSync(encKeyPath, "utf-8"));
+    console.log(`   Filebase:    encrypted key loaded (will test cover upload)`);
+  } else {
+    const plaintextKey = process.env.FILEBASE_COVERS_KEY;
+    if (plaintextKey) {
+      jsParams.filebasePlaintextKey = plaintextKey;
+      console.log(`   Filebase:    plaintext key set (will test cover upload)`);
+    } else {
+      console.log(`   Filebase:    no key found (skipping cover upload test)`);
+    }
+  }
 
   console.log("\nExecuting Lit Action (internal signing, single executeJs)...");
   const t0 = performance.now();
@@ -204,9 +229,17 @@ async function main() {
     }
     console.log("   ✓ TX hash present");
 
-    // Covers set (2 tracks have coverCid)
+    // Covers set
     if (typeof response.coversSet === "number") {
       console.log(`   ✓ coversSet field present (${response.coversSet})`);
+    }
+
+    // Cover upload verification
+    if (response.coverCids && Object.keys(response.coverCids).length > 0) {
+      console.log(`   ✓ coverCids returned: ${JSON.stringify(response.coverCids)}`);
+    }
+    if (response.coverCid) {
+      console.log(`   ✓ coverCid returned: ${response.coverCid}`);
     }
 
     // Verify on MegaETH

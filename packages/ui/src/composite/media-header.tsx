@@ -1,4 +1,4 @@
-import type { Component, JSX } from 'solid-js'
+import { Show, type Component, type JSX } from 'solid-js'
 import { cn } from '../lib/utils'
 import { AlbumCover } from './album-cover'
 
@@ -7,6 +7,7 @@ export interface MediaHeaderProps {
   title: string
   type?: 'playlist' | 'album' | 'artist'
   creator?: string
+  creatorHref?: string
   description?: string
   coverImages?: string[] // Up to 4 images for playlist mosaic
   coverSrc?: string // Single image for albums/artists
@@ -56,7 +57,7 @@ export const MediaHeader: Component<MediaHeaderProps> = (props) => {
         >
           {props.coverImages && props.coverImages.length > 0 ? (
             // Playlist mosaic (2x2 grid)
-            <div class="w-56 h-56 grid grid-cols-2 grid-rows-2 gap-1 bg-[var(--bg-elevated)] rounded-lg overflow-hidden shadow-xl">
+            <div class="w-56 h-56 grid grid-cols-2 grid-rows-2 gap-1 bg-[var(--bg-elevated)] rounded-md overflow-hidden shadow-xl">
               {props.coverImages.slice(0, 4).map((src) => (
                 <AlbumCover
                   src={src}
@@ -110,14 +111,23 @@ export const MediaHeader: Component<MediaHeaderProps> = (props) => {
 
           {/* Creator and stats */}
           <div class="flex items-center gap-1 text-sm">
-            {props.creator && (
-              <>
-                <span class="font-semibold text-[var(--text-primary)]">
+            <Show when={props.creator}>
+              <Show
+                when={props.creatorHref}
+                fallback={
+                  <span class="font-semibold text-[var(--text-primary)]">
+                    {props.creator}
+                  </span>
+                }
+              >
+                <a href={props.creatorHref} class="font-semibold text-[var(--text-primary)] hover:underline">
                   {props.creator}
-                </span>
-                {props.stats && <span class="text-[var(--text-secondary)]">•</span>}
-              </>
-            )}
+                </a>
+              </Show>
+              <Show when={props.stats}>
+                <span class="text-[var(--text-secondary)]">•</span>
+              </Show>
+            </Show>
             {props.stats && (
               <span class="text-[var(--text-secondary)]">
                 {formatStats()}

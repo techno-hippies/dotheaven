@@ -19,7 +19,6 @@ export default defineConfig({
     ],
   },
   optimizeDeps: {
-    // Exclude XMTP packages from Vite's dep optimizer to prevent breaking worker/WASM initialization
     exclude: [
       '@heaven/platform',
       '@tauri-apps/api',
@@ -28,6 +27,19 @@ export default defineConfig({
       '@xmtp/browser-sdk',
       '@xmtp/wasm-bindings',
     ],
+    esbuildOptions: {
+      // @lit-protocol/networks pulls in Node-only deps (pino, node-localstorage, source-map-support)
+      // that use require('fs'). Mark Node builtins as external so esbuild doesn't choke on them.
+      plugins: [{
+        name: 'externalize-node-builtins',
+        setup(build) {
+          const nodeBuiltins = ['fs', 'path', 'os', 'crypto', 'stream', 'util', 'events', 'net', 'tls', 'http', 'https', 'child_process', 'worker_threads', 'perf_hooks']
+          for (const mod of nodeBuiltins) {
+            build.onResolve({ filter: new RegExp(`^${mod}$`) }, () => ({ path: mod, external: true }))
+          }
+        },
+      }],
+    },
   },
   define: {
     'import.meta.env.VITE_PLATFORM': JSON.stringify('web'),

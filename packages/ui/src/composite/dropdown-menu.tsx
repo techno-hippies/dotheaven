@@ -36,7 +36,7 @@ export const DropdownMenuSubTrigger: Component<
   return (
     <KobalteDropdownMenu.SubTrigger
       class={cn(
-        'flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] rounded-lg cursor-pointer',
+        'flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] rounded-md cursor-pointer',
         'hover:bg-[var(--bg-highlight-hover)] data-[highlighted]:bg-[var(--bg-highlight-hover)]',
         'data-[disabled]:opacity-50 data-[disabled]:pointer-events-none',
         local.class
@@ -55,7 +55,7 @@ export const DropdownMenuSubContent: Component<
   return (
     <KobalteDropdownMenu.SubContent
       class={cn(
-        'min-w-[180px] bg-[var(--bg-surface)] rounded-lg shadow-lg border border-[var(--bg-highlight)] p-1',
+        'min-w-[180px] bg-[var(--bg-surface)] rounded-md shadow-lg border border-[var(--bg-highlight)] p-1',
         'animate-in fade-in-0 zoom-in-95',
         'origin-[var(--kb-menu-content-transform-origin)]',
         local.class
@@ -73,7 +73,7 @@ export const DropdownMenuContent: Component<
     <KobalteDropdownMenu.Portal>
       <KobalteDropdownMenu.Content
         class={cn(
-          'min-w-[180px] bg-[var(--bg-surface)] rounded-lg shadow-lg border border-[var(--bg-highlight)] p-1 z-50',
+          'min-w-[180px] bg-[var(--bg-surface)] rounded-md shadow-lg border border-[var(--bg-highlight)] p-1 z-50',
           'animate-in fade-in-0 zoom-in-95',
           'origin-[var(--kb-menu-content-transform-origin)]',
           local.class
@@ -91,7 +91,7 @@ export const DropdownMenuItem: Component<
   return (
     <KobalteDropdownMenu.Item
       class={cn(
-        'flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] rounded-lg cursor-pointer outline-none',
+        'flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] rounded-md cursor-pointer outline-none',
         'hover:bg-[var(--bg-highlight-hover)] data-[highlighted]:bg-[var(--bg-highlight-hover)]',
         'data-[disabled]:opacity-50 data-[disabled]:pointer-events-none',
         local.class
@@ -136,7 +136,7 @@ export const DropdownMenuCheckboxItem: Component<
   return (
     <KobalteDropdownMenu.CheckboxItem
       class={cn(
-        'flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] rounded-lg cursor-pointer outline-none',
+        'flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] rounded-md cursor-pointer outline-none',
         'hover:bg-[var(--bg-highlight-hover)] data-[highlighted]:bg-[var(--bg-highlight-hover)]',
         'data-[disabled]:opacity-50 data-[disabled]:pointer-events-none',
         local.class
@@ -157,7 +157,7 @@ export const DropdownMenuRadioItem: Component<
   return (
     <KobalteDropdownMenu.RadioItem
       class={cn(
-        'flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] rounded-lg cursor-pointer outline-none',
+        'flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] rounded-md cursor-pointer outline-none',
         'hover:bg-[var(--bg-highlight-hover)] data-[highlighted]:bg-[var(--bg-highlight-hover)]',
         'data-[disabled]:opacity-50 data-[disabled]:pointer-events-none',
         local.class

@@ -38,6 +38,10 @@ export interface TrackMetadata {
   mbid?: string | null
   /** IPFS CID for album cover art (if already uploaded) */
   coverCid?: string | null
+  /** Local file path for the track (Tauri only) */
+  filePath?: string | null
+  /** Local cover image path (Tauri only) */
+  coverPath?: string | null
 }
 
 // Scrobble thresholds (TEST: low for quick iteration — revert for production)
@@ -243,7 +247,7 @@ export class ScrobbleEngine {
       this.accumulatePlayTime(state)
     }
 
-    const { artist, title, album, durationMs, startedAtEpochSec, accumulatedPlayMs, alreadyScrobbled, ipId, mbid } = state
+    const { artist, title, album, durationMs, startedAtEpochSec, accumulatedPlayMs, alreadyScrobbled, ipId, mbid, coverCid } = state
 
     // Reset for next track
     state.trackKey = null
@@ -253,6 +257,7 @@ export class ScrobbleEngine {
     state.durationMs = null
     state.ipId = null
     state.mbid = null
+    state.coverCid = null
     state.startedAtEpochSec = null
     state.accumulatedPlayMs = 0
     state.lastUpdateTimeMs = 0
@@ -274,7 +279,7 @@ export class ScrobbleEngine {
         source: state.sessionKey,
         ipId,
         mbid,
-        coverCid: state.coverCid,
+        coverCid,
       })
     }
   }

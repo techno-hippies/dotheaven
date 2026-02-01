@@ -9,11 +9,12 @@
 import { createPublicClient, http, parseAbi, keccak256, encodePacked, toBytes, type Address } from 'viem'
 import { megaTestnetV2 } from '../chains'
 import { getLitClient } from '../lit/client'
+import { HEAVEN_CLAIM_NAME_CID } from '../lit/action-cids'
 import type { PKPAuthContext } from '../lit/types'
 
 // Contract addresses (MegaETH Testnet)
-const REGISTRY_V1 = '0x61CAed8296a2eF78eCf9DCa5eDf3C44469c6b1E2' as const
-const RECORDS_V1 = '0x801b9A10a4088906d3d3D7bFf1f7ec9793302840' as const
+const REGISTRY_V1 = '0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2' as const
+const RECORDS_V1 = '0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3' as const
 const HEAVEN_NODE = '0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27' as const
 
 const registryAbi = parseAbi([
@@ -21,42 +22,15 @@ const registryAbi = parseAbi([
   'function price(bytes32 parentNode, string calldata label, uint256 duration) external view returns (uint256)',
   'function fullName(uint256 tokenId) external view returns (string)',
   'function expiries(uint256 tokenId) external view returns (uint256)',
+  'function ownerOf(uint256 tokenId) external view returns (address)',
+  'function primaryName(address) external view returns (string label, bytes32 parentNode)',
+  'function primaryNode(address) external view returns (bytes32)',
 ])
 
 const recordsAbi = parseAbi([
   'function text(bytes32 node, string calldata key) external view returns (string)',
   'function addr(bytes32 node) external view returns (address)',
 ])
-
-// Lit Action code for heaven-claim-name-v1
-// This will be loaded from IPFS CID in production; inline for dev
-const CLAIM_NAME_ACTION_URL = import.meta.env.VITE_HEAVEN_CLAIM_NAME_ACTION_CID
-  ? `https://ipfs.filebase.io/ipfs/${import.meta.env.VITE_HEAVEN_CLAIM_NAME_ACTION_CID}`
-  : null
-
-let _cachedActionCode: string | null = null
-
-async function getClaimNameActionCode(): Promise<string> {
-  if (_cachedActionCode) return _cachedActionCode
-
-  if (CLAIM_NAME_ACTION_URL) {
-    const res = await fetch(CLAIM_NAME_ACTION_URL)
-    if (!res.ok) throw new Error(`Failed to fetch Lit Action: ${res.status}`)
-    _cachedActionCode = await res.text()
-    return _cachedActionCode
-  }
-
-  // Dev fallback: import the action code directly
-  const res = await fetch('/lit-actions/heaven-claim-name-v1.js')
-  if (res.ok) {
-    _cachedActionCode = await res.text()
-    return _cachedActionCode
-  }
-
-  throw new Error(
-    'Heaven claim-name action not available. Set VITE_HEAVEN_CLAIM_NAME_ACTION_CID or serve the action file locally.'
-  )
-}
 
 function getClient() {
   return createPublicClient({
@@ -119,11 +93,21 @@ export async function registerHeavenName(
   const timestamp = Date.now()
   const nonce = Math.floor(Math.random() * 1_000_000_000)
 
-  // Single executeJs: action signs with user's PKP + sponsor PKP broadcasts
-  const actionCode = await getClaimNameActionCode()
+  // Pre-sign the EIP-191 message from the frontend using PKP signer.
+  // This is more reliable than signing inside the Lit Action (signAndCombineEcdsa)
+  // because it works with both WebAuthn and EOA auth contexts.
+  const { signMessageWithPKP } = await import('../lit/signer-pkp')
+  const message = `heaven:register:${label}:${recipientAddress}:${timestamp}:${nonce}`
+  const signature = await signMessageWithPKP(
+    { publicKey: pkpPublicKey, ethAddress: recipientAddress, tokenId: '' },
+    authContext,
+    message,
+  )
 
+  // Must use ipfsId (not inline code) so Lit nodes can verify the action
+  // is permitted to sign with the sponsor PKP
   const result = await litClient.executeJs({
-    code: actionCode,
+    ipfsId: HEAVEN_CLAIM_NAME_CID,
     authContext,
     jsParams: {
       recipient: recipientAddress,
@@ -131,6 +115,7 @@ export async function registerHeavenName(
       userPkpPublicKey: pkpPublicKey,
       timestamp,
       nonce,
+      signature,
     },
   })
 
@@ -156,11 +141,13 @@ export async function getTextRecord(node: `0x${string}`, key: string): Promise<s
  */
 export async function getAddr(node: `0x${string}`): Promise<Address> {
   const client = getClient()
+  // tokenId = uint256(node) in RegistryV1
+  const tokenId = BigInt(node)
   return client.readContract({
-    address: RECORDS_V1,
-    abi: recordsAbi,
-    functionName: 'addr',
-    args: [node],
+    address: REGISTRY_V1,
+    abi: registryAbi,
+    functionName: 'ownerOf',
+    args: [tokenId],
   })
 }
 
@@ -171,6 +158,49 @@ export async function getAddr(node: `0x${string}`): Promise<Address> {
 export function computeNode(label: string): `0x${string}` {
   const labelHash = keccak256(toBytes(label))
   return keccak256(encodePacked(['bytes32', 'bytes32'], [HEAVEN_NODE, labelHash]))
+}
+
+/**
+ * Reverse lookup: address → primary name.
+ * The contract validates ownership + expiry, returning empty if invalid.
+ * Returns null if the address has no valid primary name.
+ */
+/**
+ * Reverse lookup: address → primary node only (no label).
+ * Use when you need the node for record lookups but don't need to display the name.
+ * Validated on-chain (ownership + expiry).
+ */
+export async function getPrimaryNode(address: `0x${string}`): Promise<`0x${string}` | null> {
+  const client = getClient()
+  const node = await client.readContract({
+    address: REGISTRY_V1,
+    abi: registryAbi,
+    functionName: 'primaryNode',
+    args: [address],
+  })
+  if (!node || node === '0x0000000000000000000000000000000000000000000000000000000000000000') return null
+  return node as `0x${string}`
+}
+
+/**
+ * Reverse lookup: address → primary name (label + node).
+ * Use when you need both the display label and the node.
+ * Validated on-chain (ownership + expiry).
+ */
+export async function getPrimaryName(address: `0x${string}`): Promise<{ node: `0x${string}`; label: string } | null> {
+  const client = getClient()
+  const [label, parentNode] = await client.readContract({
+    address: REGISTRY_V1,
+    abi: registryAbi,
+    functionName: 'primaryName',
+    args: [address],
+  })
+  if (!label) return null
+
+  // Derive node from parentNode + label (same as computeNode but with arbitrary parent)
+  const labelHash = keccak256(toBytes(label))
+  const node = keccak256(encodePacked(['bytes32', 'bytes32'], [parentNode, labelHash]))
+  return { node, label }
 }
 
 export { REGISTRY_V1, RECORDS_V1, HEAVEN_NODE }

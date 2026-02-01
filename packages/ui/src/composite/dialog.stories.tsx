@@ -86,8 +86,8 @@ export const WithBodyContent: Story = {
         </DialogHeader>
         <DialogBody>
           <div class="space-y-4">
-            <div class="flex items-center gap-3 p-3 bg-[var(--bg-elevated)] rounded-lg">
-              <div class="w-12 h-12 bg-[var(--bg-highlight)] rounded-lg" />
+            <div class="flex items-center gap-3 p-3 bg-[var(--bg-elevated)] rounded-md">
+              <div class="w-12 h-12 bg-[var(--bg-highlight)] rounded-md" />
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-[var(--text-primary)] truncate">
                   Midnight Dreams
@@ -262,7 +262,7 @@ export const NewChatDialog: Story = {
               value={address()}
               onInput={(e) => setAddress(e.currentTarget.value)}
               placeholder="Message any ENS, .heaven, or 0x wallet address"
-              class="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
+              class="w-full px-4 py-2.5 rounded-md bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
             />
           </DialogBody>
           <DialogFooter>
@@ -314,7 +314,7 @@ export const AddToPlaylistDialog: Story = {
                   value={newName()}
                   onInput={(e) => setNewName(e.currentTarget.value)}
                   placeholder="Playlist name"
-                  class="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-highlight)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
+                  class="w-full px-4 py-2.5 rounded-md bg-[var(--bg-highlight)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
                 />
                 <div class="flex gap-2">
                   <Button variant="secondary" onClick={() => setShowCreate(false)} class="flex-1">Back</Button>
@@ -324,10 +324,10 @@ export const AddToPlaylistDialog: Story = {
             }>
               <div class="flex flex-col gap-1">
                 <button
-                  class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--bg-highlight)] transition-colors text-left"
+                  class="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-[var(--bg-highlight)] transition-colors text-left"
                   onClick={() => setShowCreate(true)}
                 >
-                  <div class="w-10 h-10 rounded-lg bg-[var(--bg-highlight)] flex items-center justify-center text-[var(--text-muted)]">
+                  <div class="w-10 h-10 rounded-md bg-[var(--bg-highlight)] flex items-center justify-center text-[var(--text-muted)]">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                       <path d="M12 5v14M5 12h14" />
                     </svg>
@@ -337,7 +337,7 @@ export const AddToPlaylistDialog: Story = {
 
                 {mockPlaylists.map((pl) => (
                   <button
-                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--bg-highlight)] transition-colors text-left disabled:opacity-50"
+                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-[var(--bg-highlight)] transition-colors text-left disabled:opacity-50"
                     onClick={() => handleAdd(pl.id)}
                     disabled={adding() !== null}
                   >
@@ -373,8 +373,8 @@ export const AddToPlaylistLoading: Story = {
         </DialogHeader>
         <DialogBody>
           <div class="flex flex-col gap-1">
-            <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--bg-highlight)] transition-colors text-left">
-              <div class="w-10 h-10 rounded-lg bg-[var(--bg-highlight)] flex items-center justify-center text-[var(--text-muted)]">
+            <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-[var(--bg-highlight)] transition-colors text-left">
+              <div class="w-10 h-10 rounded-md bg-[var(--bg-highlight)] flex items-center justify-center text-[var(--text-muted)]">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                   <path d="M12 5v14M5 12h14" />
                 </svg>
@@ -405,8 +405,8 @@ export const AddToPlaylistEmpty: Story = {
         </DialogHeader>
         <DialogBody>
           <div class="flex flex-col gap-1">
-            <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--bg-highlight)] transition-colors text-left">
-              <div class="w-10 h-10 rounded-lg bg-[var(--bg-highlight)] flex items-center justify-center text-[var(--text-muted)]">
+            <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-[var(--bg-highlight)] transition-colors text-left">
+              <div class="w-10 h-10 rounded-md bg-[var(--bg-highlight)] flex items-center justify-center text-[var(--text-muted)]">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                   <path d="M12 5v14M5 12h14" />
                 </svg>
@@ -446,7 +446,7 @@ export const EditPlaylistDialog: Story = {
               {/* Square cover image */}
               <div class="flex-shrink-0">
                 <div
-                  class="w-32 h-32 rounded-lg bg-[var(--bg-highlight)] flex items-center justify-center cursor-pointer hover:bg-[var(--bg-highlight-hover)] transition-colors overflow-hidden"
+                  class="w-32 h-32 rounded-md bg-[var(--bg-highlight)] flex items-center justify-center cursor-pointer hover:bg-[var(--bg-highlight-hover)] transition-colors overflow-hidden"
                   onClick={() => {
                     const url = prompt('Enter image URL:')
                     if (url) setCoverUrl(url)
@@ -471,14 +471,14 @@ export const EditPlaylistDialog: Story = {
                   value={title()}
                   onInput={(e) => setTitle(e.currentTarget.value)}
                   placeholder="Playlist name"
-                  class="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
+                  class="w-full px-4 py-2.5 rounded-md bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
                 />
                 <textarea
                   value={description()}
                   onInput={(e) => setDescription(e.currentTarget.value)}
                   placeholder="Add a description (optional)"
                   rows={3}
-                  class="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors resize-none"
+                  class="w-full px-4 py-2.5 rounded-md bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors resize-none"
                 />
               </div>
             </div>

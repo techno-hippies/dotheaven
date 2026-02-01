@@ -1,6 +1,15 @@
 import { type Component, Show, createSignal } from 'solid-js'
 import { usePlatform } from 'virtual:heaven-platform'
-import { Avatar, IconButton, Button } from '@heaven/ui'
+import {
+  Avatar,
+  IconButton,
+  Button,
+  Dialog,
+  DialogPortal,
+  DialogOverlay,
+  DialogContent,
+} from '@heaven/ui'
+import { AuthCard, type AuthStatus } from './auth-card'
 import { useAuth } from '../../providers'
 import { useNavigate } from '@solidjs/router'
 
@@ -28,22 +37,76 @@ const GearIcon = () => (
 
 /**
  * Shared header actions (notifications, wallet, avatar) with auth state handling.
- * Use this in all page headers to ensure consistent behavior.
+ * On web: shows an auth modal (AuthCard) with passkey + wallet options.
+ * On Tauri: opens browser for auth, shows waiting state in header.
  */
 export const HeaderActions: Component = () => {
   const platform = usePlatform()
   const auth = useAuth()
   const navigate = useNavigate()
-  const [authAction, setAuthAction] = createSignal<'login' | 'register' | null>(null)
+  const [showAuthModal, setShowAuthModal] = createSignal(false)
+  const [authMethod, setAuthMethod] = createSignal<'passkey' | 'eoa'>('passkey')
+  const [authMode, setAuthMode] = createSignal<'signin' | 'register'>('signin')
 
-  const handleLogin = () => {
-    setAuthAction('login')
-    auth.loginWithPasskey()
+  const authStatus = (): AuthStatus => {
+    if (auth.authError()) return 'error'
+    if (auth.isAuthenticating()) return 'authenticating'
+    return 'idle'
   }
 
-  const handleRegister = () => {
-    setAuthAction('register')
-    auth.registerWithPasskey()
+  const handleSignIn = async () => {
+    setAuthMethod('passkey')
+    setAuthMode('signin')
+    try {
+      await auth.loginWithPasskey()
+      setShowAuthModal(false)
+    } catch {
+      // error state handled by authStatus
+    }
+  }
+
+  const handleRegister = async () => {
+    setAuthMethod('passkey')
+    setAuthMode('register')
+    try {
+      await auth.registerWithPasskey()
+      setShowAuthModal(false)
+    } catch {
+      // error state handled by authStatus
+    }
+  }
+
+  const handleConnectWallet = async () => {
+    setAuthMethod('eoa')
+    setAuthMode('signin')
+    try {
+      await auth.connectWallet()
+      setShowAuthModal(false)
+    } catch {
+      // error state handled by authStatus
+    }
+  }
+
+  const handleRetry = () => {
+    auth.clearError()
+  }
+
+  const handleBack = () => {
+    auth.clearError()
+    auth.cancelAuth()
+  }
+
+  // Close modal when auth succeeds
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      // Only allow closing if not mid-auth
+      if (!auth.isAuthenticating()) {
+        setShowAuthModal(false)
+        auth.clearError()
+      }
+    } else {
+      setShowAuthModal(true)
+    }
   }
 
   return (
@@ -61,20 +124,54 @@ export const HeaderActions: Component = () => {
                 Cancel
               </Button>
             </Show>
-            {/* Web or not authenticating: show login/signup buttons */}
-            <Show when={!platform.isTauri || !auth.isAuthenticating()}>
+            {/* Web: show Login/Sign Up buttons that open the auth modal */}
+            <Show when={!platform.isTauri}>
               <Button
                 variant="secondary"
-                onClick={handleLogin}
-                loading={auth.isAuthenticating() && authAction() === 'login'}
+                onClick={() => { setAuthMode('signin'); setShowAuthModal(true) }}
                 class="w-[125px]"
               >
                 Login
               </Button>
               <Button
                 variant="default"
-                onClick={handleRegister}
-                loading={auth.isAuthenticating() && authAction() === 'register'}
+                onClick={() => { setAuthMode('register'); setShowAuthModal(true) }}
+                class="w-[125px]"
+              >
+                Sign Up
+              </Button>
+              <Dialog open={showAuthModal()} onOpenChange={handleOpenChange}>
+                <DialogPortal>
+                  <DialogOverlay />
+                  <DialogContent class="!p-0 !bg-transparent !border-none !shadow-none !max-w-md">
+                    <AuthCard
+                      status={authStatus()}
+                      authMode={authMode()}
+                      authMethod={authMethod()}
+                      error={auth.authError()}
+                      onSignIn={handleSignIn}
+                      onRegister={handleRegister}
+                      onConnectWallet={handleConnectWallet}
+                      onRetry={handleRetry}
+                      onBack={handleBack}
+                      appName="Heaven"
+                    />
+                  </DialogContent>
+                </DialogPortal>
+              </Dialog>
+            </Show>
+            {/* Tauri not authenticating: show buttons that trigger browser auth */}
+            <Show when={platform.isTauri && !auth.isAuthenticating()}>
+              <Button
+                variant="secondary"
+                onClick={() => auth.loginWithPasskey()}
+                class="w-[125px]"
+              >
+                Login
+              </Button>
+              <Button
+                variant="default"
+                onClick={() => auth.registerWithPasskey()}
                 class="w-[125px]"
               >
                 Sign Up

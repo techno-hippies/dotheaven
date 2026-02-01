@@ -36,7 +36,7 @@
 const CHAIN_ID = 6343;
 const RPC_URL = "https://carrot.megaeth.com/rpc";
 
-const RECORDS_V1 = "0x801b9A10a4088906d3d3D7bFf1f7ec9793302840";
+const RECORDS_V1 = "0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3";
 
 // Sponsor PKP
 const SPONSOR_PKP_PUBLIC_KEY =

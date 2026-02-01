@@ -8,11 +8,10 @@
 import { createPublicClient, http, parseAbi } from 'viem'
 import { megaTestnetV2 } from '../chains'
 import { getLitClient } from '../lit/client'
+import { HEAVEN_SET_RECORDS_CID } from '../lit/action-cids'
 import type { PKPAuthContext } from '../lit/types'
 
-const RECORDS_V1 = '0x801b9A10a4088906d3d3D7bFf1f7ec9793302840' as const
-
-const SET_RECORDS_ACTION_CID = 'Qmcva6sjUtnjNLrJGNatrZeesDCqERwT6s8EyY2PsJRc9n'
+const RECORDS_V1 = '0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3' as const
 
 const recordsAbi = parseAbi([
   'function nonces(bytes32 node) external view returns (uint256)',
@@ -63,7 +62,7 @@ export async function setTextRecord(
   })
 
   const result = await litClient.executeJs({
-    ipfsId: SET_RECORDS_ACTION_CID,
+    ipfsId: HEAVEN_SET_RECORDS_CID,
     authContext,
     jsParams: {
       node,
@@ -99,7 +98,7 @@ export async function setTextRecords(
   })
 
   const result = await litClient.executeJs({
-    ipfsId: SET_RECORDS_ACTION_CID,
+    ipfsId: HEAVEN_SET_RECORDS_CID,
     authContext,
     jsParams: {
       node,

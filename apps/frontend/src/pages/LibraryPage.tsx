@@ -4,12 +4,14 @@ import {
   TrackList,
   IconButton,
   PlayButton,
+  type Track,
   type SortField,
   type SortState,
 } from '@heaven/ui'
 import { usePlatform } from 'virtual:heaven-platform'
 import { pickFolder, type LocalTrack } from '../lib/local-music'
 import { usePlayer } from '../providers'
+import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 
 export const LibraryPage: Component = () => {
   const platform = usePlatform()
@@ -61,6 +63,10 @@ export const LibraryPage: Component = () => {
     setScrollRefEl(undefined)
     restored = false
   })
+
+  // Add to playlist dialog
+  const [playlistDialogOpen, setPlaylistDialogOpen] = createSignal(false)
+  const [playlistDialogTrack, setPlaylistDialogTrack] = createSignal<Track | null>(null)
 
   // Sort state
   const [sort, setSort] = createSignal<SortState | undefined>(undefined)
@@ -223,11 +229,20 @@ export const LibraryPage: Component = () => {
               }}
               menuActions={{
                 onAddToQueue: (track) => console.log('Add to queue:', track),
+                onAddToPlaylist: (track) => {
+                  setPlaylistDialogTrack(track)
+                  setPlaylistDialogOpen(true)
+                },
               }}
             />
           )}
         </Show>
       </Show>
+      <AddToPlaylistDialog
+        open={playlistDialogOpen()}
+        onOpenChange={setPlaylistDialogOpen}
+        track={playlistDialogTrack()}
+      />
     </div>
   )
 }

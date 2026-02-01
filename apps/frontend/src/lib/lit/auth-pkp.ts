@@ -63,7 +63,7 @@ async function attemptCreateAuthContext(
   const authManager = getAuthManager()
 
   const authContext = await authManager.createPkpAuthContext({
-    authData: authData,
+    authData: authData as any,
     pkpPublicKey: pkpInfo.publicKey,
     authConfig: {
       domain: typeof window !== 'undefined' ? window.location.host : 'localhost',

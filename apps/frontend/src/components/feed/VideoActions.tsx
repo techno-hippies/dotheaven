@@ -147,7 +147,7 @@ export const VideoActions: Component<VideoActionsProps> = (props) => {
           }}
           class="cursor-pointer group"
         >
-          <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-[var(--accent-blue)] to-[var(--accent-purple)] flex items-center justify-center overflow-hidden">
+          <div class="w-12 h-12 rounded-md bg-gradient-to-br from-[var(--accent-blue)] to-[var(--accent-purple)] flex items-center justify-center overflow-hidden">
             <Show
               when={props.trackCoverUrl}
               fallback={

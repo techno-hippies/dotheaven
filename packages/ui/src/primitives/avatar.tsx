@@ -18,7 +18,7 @@ const avatarVariants = cva(
       },
       shape: {
         circle: 'rounded-full',      // For people/profiles
-        square: 'rounded-lg',        // For albums/songs
+        square: 'rounded-md',        // For albums/songs
       },
     },
     defaultVariants: {

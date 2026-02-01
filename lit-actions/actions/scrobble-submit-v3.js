@@ -19,7 +19,8 @@
  *
  * Required jsParams:
  * - userPkpPublicKey: User's PKP public key
- * - tracks: Array of { playedAt, mbid?, ipId?, artist?, title?, album?, coverCid? }
+ * - tracks: Array of { playedAt, mbid?, ipId?, artist?, title?, album?, coverCid?, coverImage? }
+ * - filebaseEncryptedKey or filebasePlaintextKey (required if coverImage provided)
  * - timestamp: Request timestamp (ms)
  * - nonce: Unique nonce for replay protection
  * Action signs the message internally using the user's PKP (single executeJs).
@@ -79,6 +80,122 @@ async function sha256Hex(message) {
 /** Normalize string for trackId derivation: lowercase, trim, collapse whitespace */
 function normalize(s) {
   return (s || "").toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/bmp"];
+const MAX_COVER_BYTES = 5 * 1024 * 1024;
+
+// SHA-256 + FILEBASE S3 (AWS Sig V4)
+async function sha256Bytes(data) {
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return new Uint8Array(hashBuffer);
+}
+
+function bytesToHex(bytes) {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function sha256HexFromBuffer(buffer) {
+  const hash = await sha256Bytes(buffer);
+  return bytesToHex(hash);
+}
+
+async function hmacSha256(key, message) {
+  const encoder = new TextEncoder();
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    typeof key === "string" ? encoder.encode(key) : key,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  return crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(message));
+}
+
+async function hmacHex(key, message) {
+  const sig = await hmacSha256(key, message);
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function getSigningKey(secretKey, dateStamp, region, service) {
+  const encoder = new TextEncoder();
+  const kDate = await hmacSha256(encoder.encode("AWS4" + secretKey), dateStamp);
+  const kRegion = await hmacSha256(kDate, region);
+  const kService = await hmacSha256(kRegion, service);
+  return hmacSha256(kService, "aws4_request");
+}
+
+async function uploadToFilebase(filebaseApiKey, content, contentType, fileName) {
+  const decoded = atob(filebaseApiKey);
+  const [accessKey, secretKey, bucket] = decoded.split(":");
+  if (!accessKey || !secretKey || !bucket) {
+    throw new Error("Invalid Filebase API key format");
+  }
+
+  const endpoint = "s3.filebase.com";
+  const region = "us-east-1";
+  const service = "s3";
+
+  const date = new Date();
+  const amzDate = date.toISOString().replace(/[:-]|\.\d{3}/g, "");
+  const dateStamp = amzDate.slice(0, 8);
+
+  const canonicalUri = `/${bucket}/${fileName}`;
+
+  const payloadHash = await sha256HexFromBuffer(content);
+
+  const canonicalHeaders =
+    [`host:${endpoint}`, `x-amz-content-sha256:${payloadHash}`, `x-amz-date:${amzDate}`].join("\n") + "\n";
+  const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+
+  const canonicalRequest = ["PUT", canonicalUri, "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
+
+  const algorithm = "AWS4-HMAC-SHA256";
+  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const stringToSign = [algorithm, amzDate, credentialScope, await sha256Hex(canonicalRequest)].join("\n");
+
+  const signingKey = await getSigningKey(secretKey, dateStamp, region, service);
+  const signature = await hmacHex(signingKey, stringToSign);
+
+  const authHeader = [
+    `${algorithm} Credential=${accessKey}/${credentialScope}`,
+    `SignedHeaders=${signedHeaders}`,
+    `Signature=${signature}`,
+  ].join(", ");
+
+  const response = await fetch(`https://${endpoint}${canonicalUri}`, {
+    method: "PUT",
+    headers: {
+      Authorization: authHeader,
+      "x-amz-content-sha256": payloadHash,
+      "x-amz-date": amzDate,
+      "Content-Type": contentType,
+    },
+    body: content,
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Filebase upload failed: ${response.status} ${text}`);
+  }
+
+  const cid = response.headers.get("x-amz-meta-cid");
+  if (!cid) {
+    throw new Error("No CID returned from Filebase");
+  }
+
+  return cid;
+}
+
+function decodeBase64ToBytes(base64) {
+  const binaryStr = atob(base64);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+  return bytes;
 }
 
 // ============================================================
@@ -268,6 +385,7 @@ const main = async () => {
         artist: (t.artist || "").slice(0, 128),
         album: (t.album || "").slice(0, 128),
         coverCid: (t.coverCid || "").slice(0, 128),
+        coverImage: t.coverImage || null,
         playedAt: t.playedAt,
       };
     });
@@ -337,6 +455,68 @@ const main = async () => {
 
     const { registered, covers } = JSON.parse(registrationCheck);
 
+    // ========================================
+    // STEP 5: Upload covers (if needed)
+    // ========================================
+    const uploadedCoverCids = {};
+    const coverCache = new Map();
+    const needsCoverUpload = trackInfos.some((t) => !t.coverCid && t.coverImage && !(covers[t.trackId] && covers[t.trackId].length > 0));
+
+    let filebaseKey = null;
+    if (needsCoverUpload) {
+      const { filebaseEncryptedKey, filebasePlaintextKey } = jsParams || {};
+      if (filebasePlaintextKey) {
+        filebaseKey = filebasePlaintextKey;
+      } else if (filebaseEncryptedKey) {
+        filebaseKey = await Lit.Actions.decryptAndCombine({
+          accessControlConditions: filebaseEncryptedKey.accessControlConditions,
+          ciphertext: filebaseEncryptedKey.ciphertext,
+          dataToEncryptHash: filebaseEncryptedKey.dataToEncryptHash,
+          authSig: null,
+          chain: "ethereum",
+        });
+      } else {
+        throw new Error("filebaseEncryptedKey or filebasePlaintextKey is required for cover uploads");
+      }
+    }
+
+    for (const t of trackInfos) {
+      if (t.coverCid || !t.coverImage) continue;
+      const existingCover = covers[t.trackId];
+      if (existingCover && existingCover.length > 0) continue;
+
+      const base64 = t.coverImage.base64;
+      const contentType = (t.coverImage.contentType || "").split(";")[0].trim().toLowerCase();
+      if (!base64 || !contentType || !ALLOWED_IMAGE_TYPES.includes(contentType)) continue;
+
+      const bytes = decodeBase64ToBytes(base64);
+      if (bytes.byteLength > MAX_COVER_BYTES) continue;
+
+      const hash = await sha256HexFromBuffer(bytes);
+      if (coverCache.has(hash)) {
+        const cachedCid = coverCache.get(hash);
+        t.coverCid = cachedCid;
+        uploadedCoverCids[t.trackId] = cachedCid;
+        continue;
+      }
+
+      try {
+        const ext = contentType.split("/")[1] || "jpg";
+        const objectKey = `covers/${hash}.${ext}`;
+        const cid = await Lit.Actions.runOnce(
+          { waitForResponse: true, name: `uploadCover_${hash.slice(0, 8)}` },
+          async () => {
+            return await uploadToFilebase(filebaseKey, bytes, contentType, objectKey);
+          }
+        );
+        coverCache.set(hash, cid);
+        t.coverCid = cid;
+        uploadedCoverCids[t.trackId] = cid;
+      } catch {
+        // best-effort: skip cover on upload failure
+      }
+    }
+
     // Split into: tracks needing registration vs already registered
     const seen = new Set();
     const regKinds = [];
@@ -361,7 +541,7 @@ const main = async () => {
     const scrobbleTimestamps = trackInfos.map((t) => t.playedAt);
 
     // ========================================
-    // STEP 5: Build + broadcast registerAndScrobbleBatch
+    // STEP 6: Build + broadcast registerAndScrobbleBatch
     // ========================================
     const iface = new ethers.utils.Interface(SCROBBLE_V3_ABI);
 
@@ -399,7 +579,7 @@ const main = async () => {
     }, "registerAndScrobble");
 
     // ========================================
-    // STEP 6: Set covers for tracks that need them
+    // STEP 7: Set covers for tracks that need them
     // ========================================
     // Collect tracks that have a coverCid and whose on-chain cover is empty.
     // Newly registered tracks (no entry in covers{}) also need covers.
@@ -466,6 +646,8 @@ const main = async () => {
         scrobbled: scrobbleIds.length,
         coversSet: coverTrackIds.length,
         coverTxHash,
+        coverCids: uploadedCoverCids,
+        coverCid: Object.values(uploadedCoverCids)[0] || null,
       }),
     });
   } catch (err) {

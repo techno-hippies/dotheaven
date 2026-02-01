@@ -39,8 +39,12 @@ interface CIDs {
   avatarUpload: string;
   heavenClaimName: string;
   heavenSetProfile: string;
-  scrobbleSubmit: string;
-  scrobbleSubmitV2: string;
+  heavenSetRecords: string;
+  scrobbleSubmitV3: string;
+  playlistV1: string;
+  contentRegisterV1: string;
+  contentAccessV1: string;
+  contentDecryptV1: string;
   [key: string]: string;
 }
 
@@ -70,7 +74,20 @@ if (!envConfig) {
 
 // Load CIDs
 const cidPath = join(ROOT_DIR, envConfig.cidFile);
-let cids: CIDs = { songPublish: '', lyricsTranslate: '', storyRegisterSponsor: '', avatarUpload: '', heavenClaimName: '', heavenSetProfile: '', scrobbleSubmit: '', scrobbleSubmitV2: '' };
+let cids: CIDs = {
+  songPublish: '',
+  lyricsTranslate: '',
+  storyRegisterSponsor: '',
+  avatarUpload: '',
+  heavenClaimName: '',
+  heavenSetProfile: '',
+  heavenSetRecords: '',
+  scrobbleSubmitV3: '',
+  playlistV1: '',
+  contentRegisterV1: '',
+  contentAccessV1: '',
+  contentDecryptV1: '',
+};
 if (existsSync(cidPath)) {
   cids = JSON.parse(readFileSync(cidPath, 'utf-8'));
 }

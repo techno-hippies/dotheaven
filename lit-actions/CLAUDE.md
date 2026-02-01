@@ -6,7 +6,7 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 - **Song publish**: Upload audio/preview/cover/metadata to IPFS, align lyrics (ElevenLabs), translate lyrics (OpenRouter) — all in one action with 3 encrypted keys
 - **Lyrics translate**: Batch-translate lyrics into multiple target languages in parallel, upload each to IPFS — separate action callable anytime after publish
 - **Story IP registration**: Sponsor PKP mints NFT + registers IP Asset + attaches PIL license on Story Protocol (gasless for user)
-- **Scrobble submit V3**: Track Registry + Scrobble Events on ScrobbleV3. Registers tracks once (title/artist/album on-chain), scrobbles as cheap event refs. Single `registerAndScrobbleBatch()` tx. Checks `isRegistered()` to skip re-registration. Normalized IDs + pretty display strings.
+- **Scrobble submit V3**: Track Registry + Scrobble Events on ScrobbleV3. Registers tracks once (title/artist/album on-chain), scrobbles as cheap event refs. Single `registerAndScrobbleBatch()` tx. Checks `isRegistered()` to skip re-registration. Normalized IDs + pretty display strings. **Cover upload**: if track has `coverImage` (base64), uploads to Filebase via encrypted key, sets coverCid on-chain via `setTrackCoverBatch()`. Encrypted Filebase key (`filebase_covers_key`) decrypted at runtime.
 - **Playlist v1**: Create/update/delete event-sourced playlists on PlaylistV1. Registers missing tracks in ScrobbleV3 automatically. Supports coverCid for playlist artwork. Sponsor PKP pays gas. EIP-191 sig verification.
 - **Heaven claim name**: Sponsor PKP claims a `.heaven` name on MegaETH on behalf of user (gasless). EIP-191 sig verification.
 - **Heaven set profile**: Sponsor PKP writes user's on-chain profile to ProfileV1 on MegaETH (gasless). EIP-191 sig + nonce replay protection.
@@ -20,11 +20,11 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 | Lyrics Translate | `actions/lyrics-translate-v1.js` | **Working** | `QmUrbZY5...` |
 | Avatar Upload | `actions/avatar-upload-v1.js` | **Working** | `QmeA1zpz...` |
 | Story Register Sponsor | `actions/story-register-sponsor-v1.js` | **Working** | `QmcRrDj9...` |
-| Scrobble Submit V3 | `actions/scrobble-submit-v3.js` | **Working** | `QmW3mJc9...` |
+| Scrobble Submit V3 | `actions/scrobble-submit-v3.js` | **Working** | `QmNzCDJQ...` |
 | Playlist v1 | `actions/playlist-v1.js` | **Working** | `QmdpkcmC...` |
-| Heaven Claim Name | `actions/heaven-claim-name-v1.js` | **Working** | (inline) |
-| Heaven Set Profile | `actions/heaven-set-profile-v1.js` | **Working** | `QmURxLHk...` |
-| Heaven Set Records | `actions/heaven-set-records-v1.js` | **Working** | `Qmcva6sj...` |
+| Heaven Claim Name | `actions/heaven-claim-name-v1.js` | **Working** | `QmVx1YrP...` |
+| Heaven Set Profile | `actions/heaven-set-profile-v1.js` | **Working** | `QmYLHf2Q...` |
+| Heaven Set Records | `actions/heaven-set-records-v1.js` | **Working** | `QmNTJXB8...` |
 
 ## TODO
 
@@ -102,7 +102,9 @@ Client                      Lit Action                  Story Aeneid
 |----------|---------|
 | ScrobbleV3 | `0x144c450cd5B641404EEB5D5eD523399dD94049E0` |
 | PlaylistV1 | `0xF0337C4A335cbB3B31c981945d3bE5B914F7B329` |
-| RecordsV1 | `0x801b9A10a4088906d3d3D7bFf1f7ec9793302840` |
+| ProfileV1 | `0x0A6563122cB3515ff678A918B5F31da9b1391EA3` |
+| RegistryV1 | `0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2` |
+| RecordsV1 | `0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3` |
 
 ## Subgraph (Goldsky)
 
@@ -229,7 +231,7 @@ Action verifies recovered address matches recipient. Prevents sponsor PKP abuse.
 ```
 message = `heaven:scrobble:${tracksHash}:${timestamp}:${nonce}`
 ```
-`tracksHash` is SHA-256 of `JSON.stringify(tracks)`. Each track has `{ artist, title, playedAt, mbid?, ipId?, album? }`. Action computes `trackId = keccak256(abi.encode(uint8(kind), bytes32(payload)))` per track, checks `isRegistered()`, broadcasts single `registerAndScrobbleBatch()` tx to ScrobbleV3 on MegaETH (chain 6343). Normalized strings for payload derivation, pretty strings stored on-chain. Contract at `0x144c450cd5B641404EEB5D5eD523399dD94049E0`.
+`tracksHash` is SHA-256 of `JSON.stringify(tracks)`. Each track has `{ artist, title, playedAt, mbid?, ipId?, album?, coverCid?, coverImage? }`. Action computes `trackId = keccak256(abi.encode(uint8(kind), bytes32(payload)))` per track, checks `isRegistered()`, broadcasts single `registerAndScrobbleBatch()` tx to ScrobbleV3 on MegaETH (chain 6343). Normalized strings for payload derivation, pretty strings stored on-chain. If `coverImage` provided (base64 + contentType), uploads to Filebase S3 (IPFS-pinned), then calls `setTrackCoverBatch()` to set coverCid on-chain. Encrypted Filebase key decrypted via `Lit.Actions.decryptAndCombine`. Contract at `0x144c450cd5B641404EEB5D5eD523399dD94049E0`.
 
 ### Playlist v1 (EIP-191)
 ```
@@ -244,7 +246,7 @@ delete:     heaven:playlist:delete:${playlistId}:${timestamp}:${nonce}
 ```
 message = `heaven:register:${label}:${userAddress}:${timestamp}:${nonce}`
 ```
-Action verifies signature, checks name availability on RegistryV1, then sponsor PKP broadcasts `registerFor()` on MegaETH (chain 6343). Contract at `0x61CAed8296a2eF78eCf9DCa5eDf3C44469c6b1E2`.
+Action verifies signature, checks name availability on RegistryV1, then sponsor PKP broadcasts `registerFor()` on MegaETH (chain 6343). Contract at `0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2`.
 
 ### Heaven Set Profile (EIP-191)
 ```
@@ -257,4 +259,4 @@ message = `heaven:profile:${user}:${profileHash}:${nonce}`
 single:  heaven:records:${node}:${key}:${valueHash}:${nonce}
 batch:   heaven:records-batch:${node}:${payloadHash}:${nonce}
 ```
-`valueHash` = `keccak256(utf8Bytes(value))`. `payloadHash` = `keccak256(abi.encode(string[], string[]))`. Action verifies signature matches name NFT owner, checks on-chain nonce per node, then sponsor PKP broadcasts `setTextFor()` or `setRecordsFor()` on MegaETH (chain 6343). RecordsV1 at `0x801b9A10a4088906d3d3D7bFf1f7ec9793302840`.
+`valueHash` = `keccak256(utf8Bytes(value))`. `payloadHash` = `keccak256(abi.encode(string[], string[]))`. Action verifies signature matches name NFT owner, checks on-chain nonce per node, then sponsor PKP broadcasts `setTextFor()` or `setRecordsFor()` on MegaETH (chain 6343). RecordsV1 at `0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3`.

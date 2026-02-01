@@ -105,7 +105,7 @@ export async function fetchScrobbleEntries(
 /**
  * Convert ScrobbleEntry[] to Track[] for TrackList component.
  */
-const FILEBASE_GATEWAY = 'https://ipfs.filebase.io/ipfs'
+const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
 
 export function scrobblesToTracks(entries: ScrobbleEntry[]): Track[] {
   return entries.map((e) => ({

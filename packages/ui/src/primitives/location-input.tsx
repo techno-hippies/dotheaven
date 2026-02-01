@@ -254,7 +254,7 @@ export const LocationInput: Component<LocationInputProps> = (props) => {
             item={itemProps.item}
             class={cn(
               'px-3 py-2.5 text-left transition-colors flex items-center gap-3',
-              'cursor-pointer outline-none rounded-lg',
+              'cursor-pointer outline-none rounded-md',
               'data-[highlighted]:bg-[var(--bg-highlight-hover)]'
             )}
           >
@@ -269,7 +269,7 @@ export const LocationInput: Component<LocationInputProps> = (props) => {
       >
         <Combobox.Control
           class={cn(
-            'flex items-center gap-3 rounded-lg bg-[var(--bg-highlight)] px-3 h-11',
+            'flex items-center gap-3 rounded-md bg-[var(--bg-highlight)] px-3 h-11',
             'border-2 transition-colors',
             props.error
               ? 'border-[var(--accent-coral)]'
@@ -290,7 +290,7 @@ export const LocationInput: Component<LocationInputProps> = (props) => {
               <button
                 type="button"
                 onClick={handleClear}
-                class="p-2 text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors rounded-lg"
+                class="p-2 text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors rounded-md"
                 aria-label="Clear location"
               >
                 <XIcon />
@@ -302,7 +302,7 @@ export const LocationInput: Component<LocationInputProps> = (props) => {
         <Combobox.Portal>
           <Combobox.Content
             class={cn(
-              'z-50 mt-1 rounded-lg bg-[var(--bg-surface)] border border-[var(--bg-highlight)]',
+              'z-50 mt-1 rounded-md bg-[var(--bg-surface)] border border-[var(--bg-highlight)]',
               'shadow-xl w-[var(--kb-popper-anchor-width)] overflow-hidden'
             )}
           >

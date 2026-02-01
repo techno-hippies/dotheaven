@@ -26,7 +26,17 @@ export default defineConfig({
     target: ['es2021', 'chrome100', 'safari13'],
   },
   optimizeDeps: {
-    // Exclude XMTP packages from Vite's dep optimizer to prevent breaking worker/WASM initialization
     exclude: ['@xmtp/browser-sdk', '@xmtp/wasm-bindings'],
+    esbuildOptions: {
+      plugins: [{
+        name: 'externalize-node-builtins',
+        setup(build) {
+          const nodeBuiltins = ['fs', 'path', 'os', 'crypto', 'stream', 'util', 'events', 'net', 'tls', 'http', 'https', 'child_process', 'worker_threads', 'perf_hooks']
+          for (const mod of nodeBuiltins) {
+            build.onResolve({ filter: new RegExp(`^${mod}$`) }, () => ({ path: mod, external: true }))
+          }
+        },
+      }],
+    },
   },
 })

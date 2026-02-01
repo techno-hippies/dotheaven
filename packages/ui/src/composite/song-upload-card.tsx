@@ -149,7 +149,7 @@ export const SongUploadCard: Component<SongUploadCardProps> = (props) => {
   return (
     <form
       onSubmit={handleSubmit}
-      class={cn('flex flex-col gap-6 p-6 bg-[var(--bg-surface)] rounded-lg', props.class)}
+      class={cn('flex flex-col gap-6 p-6 bg-[var(--bg-surface)] rounded-md', props.class)}
     >
       <div class="flex flex-col gap-2">
         <h2 class="text-xl font-bold text-[var(--text-primary)]">Upload Song</h2>
@@ -242,7 +242,7 @@ export const SongUploadCard: Component<SongUploadCardProps> = (props) => {
             onChange={(e) => updateField('sourceLanguage', e.currentTarget.value)}
             disabled={props.loading}
             class={cn(
-              'px-4 py-2.5 rounded-lg bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base',
+              'px-4 py-2.5 rounded-md bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base',
               'border border-transparent outline-none',
               'focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20',
               'disabled:opacity-50 disabled:cursor-not-allowed'
@@ -312,7 +312,7 @@ export const SongUploadCard: Component<SongUploadCardProps> = (props) => {
         </Button>
 
         <Show when={showAdvanced()}>
-          <div class="flex flex-col gap-4 p-4 bg-[var(--bg-page)] rounded-lg">
+          <div class="flex flex-col gap-4 p-4 bg-[var(--bg-page)] rounded-md">
             <TextField
               label="Commercial Revenue Share (%)"
               value={String(formData().commercialRevShare)}

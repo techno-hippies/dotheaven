@@ -33,7 +33,7 @@ const ROOT_DIR = join(__dirname, "../");
 
 // MegaETH testnet
 const MEGAETH_RPC = "https://carrot.megaeth.com/rpc";
-const REGISTRY_V1 = "0x61CAed8296a2eF78eCf9DCa5eDf3C44469c6b1E2";
+const REGISTRY_V1 = "0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2";
 const HEAVEN_NODE = "0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27";
 
 const registryAbi = parseAbi([

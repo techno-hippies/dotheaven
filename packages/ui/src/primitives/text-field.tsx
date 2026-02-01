@@ -67,7 +67,7 @@ export const TextField: Component<TextFieldProps> = (props) => {
 
       <KobalteTextField.Input
         class={cn(
-          'px-4 py-2.5 rounded-lg bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base',
+          'px-4 py-2.5 rounded-md bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base',
           'placeholder:text-[var(--text-muted)] outline-none',
           'border border-transparent',
           'focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20',
@@ -137,7 +137,7 @@ export const TextArea: Component<TextAreaProps> = (props) => {
         submitOnEnter={local.submitOnEnter}
         onKeyDown={local.onKeyDown}
         class={cn(
-          'px-4 py-2.5 rounded-lg bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base',
+          'px-4 py-2.5 rounded-md bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base',
           'placeholder:text-[var(--text-muted)] outline-none',
           'border border-transparent',
           'focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20',

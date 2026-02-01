@@ -36,7 +36,7 @@ export const WalletAddress: Component<WalletAddressProps> = (props) => {
           value={props.address}
           readOnly
           class={cn(
-            'w-full bg-[var(--bg-elevated)] text-[var(--text-primary)] rounded-lg font-mono transition-colors',
+            'w-full bg-[var(--bg-elevated)] text-[var(--text-primary)] rounded-md font-mono transition-colors',
             'border border-transparent hover:border-[var(--bg-highlight-hover)] focus:border-[var(--accent-blue)] focus:outline-none',
             props.variant === 'compact'
               ? 'text-sm pl-3 pr-12 py-2.5'

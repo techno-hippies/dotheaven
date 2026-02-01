@@ -1,42 +1,17 @@
-import { Show, For, type Component, createSignal, createMemo, createEffect } from 'solid-js'
+import { Show, For, type Component, createSignal, createMemo } from 'solid-js'
 import {
   ActivityItem,
   AlbumCover,
   Scheduler,
   type TimeSlot,
   type DayAvailability,
-  EditableInfoCard,
-  EditableInfoCardSection,
-  EditableInfoCardRow,
-  cn,
-  GENDER_OPTIONS,
-  NATIONALITY_OPTIONS,
-  LANGUAGE_OPTIONS,
-  LEARNING_LANGUAGE_OPTIONS,
-  RELOCATE_OPTIONS,
-  DEGREE_OPTIONS,
-  FIELD_OPTIONS,
-  PROFESSION_OPTIONS,
-  INDUSTRY_OPTIONS,
-  RELATIONSHIP_OPTIONS,
-  SEXUALITY_OPTIONS,
-  ETHNICITY_OPTIONS,
-  DATING_STYLE_OPTIONS,
-  CHILDREN_OPTIONS,
-  WANTS_CHILDREN_OPTIONS,
-  LOOKING_FOR_OPTIONS,
-  DRINKING_OPTIONS,
-  SMOKING_OPTIONS,
-  DRUGS_OPTIONS,
-  RELIGION_OPTIONS,
-  PETS_OPTIONS,
-  DIET_OPTIONS,
-  OnboardingNameStep,
+  ProfileInfoSection,
+  type ProfileInput,
+  type EnsProfile,
 } from '@heaven/ui'
 import { ProfileHeader, type ProfileHeaderProps } from './profile-header'
 import { ProfileTabs, type ProfileTab } from './profile-tabs'
 import { VideoGrid, type VideoGridItem } from './video-grid'
-import type { ProfileInput } from '../../lib/heaven'
 
 export interface ProfileScrobble {
   id: string
@@ -45,6 +20,7 @@ export interface ProfileScrobble {
   album: string
   timestamp: string
   trackId: string
+  coverUrl?: string
 }
 
 export interface ProfilePageProps extends Omit<ProfileHeaderProps, 'class' | 'isEditing' | 'isSaving' | 'onEditClick' | 'onSaveClick'> {
@@ -65,6 +41,11 @@ export interface ProfilePageProps extends Omit<ProfileHeaderProps, 'class' | 'is
   onCheckNameAvailability?: (name: string) => Promise<boolean>
   nameClaiming?: boolean
   nameClaimError?: string | null
+  // ENS/wallet avatar import
+  eoaAddress?: `0x${string}` | null
+  ensProfile?: EnsProfile | null
+  ensLoading?: boolean
+  onImportAvatar?: (uri: string) => void
 }
 
 /**
@@ -94,6 +75,13 @@ export const ProfilePage: Component<ProfilePageProps> = (props) => {
         displayName={props.displayName}
         avatarUrl={props.avatarUrl}
         bannerGradient={props.bannerGradient}
+        bannerUrl={props.profileData?.coverPhoto || props.ensProfile?.header}
+        bio={props.profileData?.bio}
+        url={props.profileData?.url}
+        twitter={props.profileData?.twitter}
+        github={props.profileData?.github}
+        telegram={props.profileData?.telegram}
+        verificationState={props.verificationState}
         stats={props.stats}
         isFollowing={props.isFollowing}
         isOwnProfile={props.isOwnProfile}
@@ -136,38 +124,42 @@ export const ProfilePage: Component<ProfilePageProps> = (props) => {
           </Show>
         </Show>
 
+        {/* About Tab */}
+        <Show when={props.activeTab === 'about'}>
+          <div class="max-w-[600px]">
+            <Show
+              when={!props.profileLoading}
+              fallback={
+                <div class="py-12 text-center text-[var(--text-muted)]">
+                  Loading profile...
+                </div>
+              }
+            >
+              <ProfileInfoSection
+                profile={props.profileData || {}}
+                isOwnProfile={props.isOwnProfile}
+                isEditing={isEditing()}
+                isSaving={isSaving()}
+                onSave={props.onProfileSave}
+                setIsEditing={setIsEditing}
+                setIsSaving={setIsSaving}
+                heavenName={props.heavenName}
+                onClaimName={props.onClaimName}
+                onCheckNameAvailability={props.onCheckNameAvailability}
+                nameClaiming={props.nameClaiming}
+                nameClaimError={props.nameClaimError}
+                eoaAddress={props.eoaAddress}
+                ensProfile={props.ensProfile}
+                ensLoading={props.ensLoading}
+                onImportAvatar={props.onImportAvatar}
+              />
+            </Show>
+          </div>
+        </Show>
+
         {/* Activity Tab */}
         <Show when={props.activeTab === 'activity'}>
-          <div class="flex gap-8">
-            {/* Left: Profile Info */}
-            <div class="flex-shrink-0" style={{ width: '498px' }}>
-              <Show
-                when={!props.profileLoading}
-                fallback={
-                  <div class="py-12 text-center text-[var(--text-muted)]">
-                    Loading profile...
-                  </div>
-                }
-              >
-                <ProfileInfoSection
-                  profile={props.profileData || {}}
-                  isOwnProfile={props.isOwnProfile}
-                  isEditing={isEditing()}
-                  isSaving={isSaving()}
-                  onSave={props.onProfileSave}
-                  setIsEditing={setIsEditing}
-                  setIsSaving={setIsSaving}
-                  heavenName={props.heavenName}
-                  onClaimName={props.onClaimName}
-                  onCheckNameAvailability={props.onCheckNameAvailability}
-                  nameClaiming={props.nameClaiming}
-                  nameClaimError={props.nameClaimError}
-                />
-              </Show>
-            </div>
-
-            {/* Right: Activity Feed (Scrobbles) */}
-            <div class="flex flex-col flex-1">
+          <div class="max-w-[600px]">
               <Show when={props.scrobblesLoading}>
                 <div class="py-12 text-center text-[var(--text-muted)]">
                   Loading activity...
@@ -187,6 +179,7 @@ export const ProfilePage: Component<ProfilePageProps> = (props) => {
                     <ActivityItem
                       icon={
                         <AlbumCover
+                          src={scrobble.coverUrl}
                           alt={scrobble.album || scrobble.title}
                           size="lg"
                         />
@@ -199,7 +192,6 @@ export const ProfilePage: Component<ProfilePageProps> = (props) => {
                   )}
                 </For>
               </Show>
-            </div>
           </div>
         </Show>
 
@@ -244,496 +236,6 @@ export const ProfilePage: Component<ProfilePageProps> = (props) => {
           </div>
         </Show>
       </div>
-    </div>
-  )
-}
-
-// Profile info section with editable cards
-interface ProfileInfoSectionProps {
-  profile: ProfileInput
-  isOwnProfile?: boolean
-  isEditing: boolean
-  isSaving: boolean
-  onSave?: (data: ProfileInput) => Promise<void>
-  setIsEditing: (value: boolean) => void
-  setIsSaving: (value: boolean) => void
-  heavenName?: string | null
-  onClaimName?: (name: string) => Promise<boolean>
-  onCheckNameAvailability?: (name: string) => Promise<boolean>
-  nameClaiming?: boolean
-  nameClaimError?: string | null
-}
-
-const ProfileInfoSection: Component<ProfileInfoSectionProps> = (props) => {
-  const [formData, setFormData] = createSignal<ProfileInput>(props.profile)
-
-  // Photo upload state
-  const [avatarPreview, setAvatarPreview] = createSignal<string | null>(props.profile.avatar || null)
-  const [coverPreview, setCoverPreview] = createSignal<string | null>(props.profile.coverPhoto || null)
-  let avatarInputRef: HTMLInputElement | undefined
-  let coverInputRef: HTMLInputElement | undefined
-
-  // Sync form data when profile prop changes (e.g. query resolves)
-  createEffect(() => {
-    const profile = props.profile
-    if (profile && Object.keys(profile).length > 0) {
-      setFormData(profile)
-      setAvatarPreview(profile.avatar || null)
-      setCoverPreview(profile.coverPhoto || null)
-    }
-  })
-
-  // Update parent's save handler
-  createEffect(() => {
-    if (props.isSaving) {
-      handleSave()
-    }
-  })
-
-  const handleSave = async () => {
-    if (!props.onSave) return
-
-    try {
-      await props.onSave(formData())
-      props.setIsEditing(false)
-    } catch (error) {
-      console.error('Failed to save profile:', error)
-      alert('Failed to save profile. Please try again.')
-    } finally {
-      props.setIsSaving(false)
-    }
-  }
-
-  const updateField = (field: keyof ProfileInput, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
-  }
-
-  const handleFileUpload = (file: File, type: 'avatar' | 'cover') => {
-    if (!file.type.startsWith('image/')) return
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const preview = e.target?.result as string
-      if (type === 'avatar') {
-        setAvatarPreview(preview)
-        updateField('avatar', preview)
-        updateField('avatarFile', file)
-      } else {
-        setCoverPreview(preview)
-        updateField('coverPhoto', preview)
-        updateField('coverFile', file)
-      }
-    }
-    reader.readAsDataURL(file)
-  }
-
-  return (
-    <div class="flex flex-col gap-4">
-      {/* Identity */}
-      <EditableInfoCard>
-        <EditableInfoCardSection title="Identity" isEditing={props.isEditing}>
-          <div class="flex flex-col gap-4">
-            {/* Heaven Name */}
-            <div class="flex gap-3">
-              <span class="text-base text-[var(--text-secondary)] min-w-[140px] flex-shrink-0 py-2.5">
-                Heaven Name
-              </span>
-              <div class="flex-1 min-w-0 py-2.5">
-                <Show when={!props.isEditing}>
-                  <Show
-                    when={props.heavenName}
-                    fallback={
-                      <span class="text-base text-[var(--text-muted)] italic">
-                        + Add heaven name
-                      </span>
-                    }
-                  >
-                    <span class="text-base text-[var(--text-primary)]">
-                      {props.heavenName}.heaven
-                    </span>
-                  </Show>
-                </Show>
-                <Show when={props.isEditing}>
-                  <Show
-                    when={props.heavenName}
-                    fallback={
-                      <Show when={props.onClaimName && props.onCheckNameAvailability}>
-                        <OnboardingNameStep
-                          onClaim={props.onClaimName!}
-                          onCheckAvailability={props.onCheckNameAvailability!}
-                          claiming={props.nameClaiming ?? false}
-                          error={props.nameClaimError ?? null}
-                        />
-                      </Show>
-                    }
-                  >
-                    <span class="text-base text-[var(--text-primary)]">
-                      {props.heavenName}.heaven
-                    </span>
-                  </Show>
-                </Show>
-              </div>
-            </div>
-
-            {/* Display Name */}
-            <EditableInfoCardRow
-              label="Display Name"
-              value={formData().displayName}
-              isEditing={props.isEditing}
-              placeholder="Enter your display name"
-              onValueChange={(v: string | string[]) => updateField('displayName', typeof v === 'string' ? v : undefined)}
-            />
-          </div>
-        </EditableInfoCardSection>
-      </EditableInfoCard>
-
-      {/* Photos */}
-      <EditableInfoCard>
-        <EditableInfoCardSection title="Photos" isEditing={props.isEditing}>
-          <div class="flex flex-col gap-6">
-            {/* Cover Photo */}
-            <div class="flex flex-col gap-2">
-              <label class="text-base text-[var(--text-secondary)]">Cover Photo</label>
-              <Show when={props.isEditing}>
-                <div
-                  onClick={() => coverInputRef?.click()}
-                  class={cn(
-                    'w-full h-48 rounded-lg cursor-pointer transition-all',
-                    'border-2 border-dashed',
-                    coverPreview()
-                      ? 'border-transparent'
-                      : 'border-[var(--bg-highlight-hover)] bg-[var(--bg-elevated)] hover:border-[var(--accent-blue)]/50',
-                    'flex items-center justify-center overflow-hidden'
-                  )}
-                >
-                  <Show
-                    when={coverPreview()}
-                    fallback={
-                      <div class="flex flex-col items-center gap-2 text-[var(--text-muted)]">
-                        <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-                        </svg>
-                        <span class="text-sm font-medium">Upload cover photo</span>
-                      </div>
-                    }
-                  >
-                    <img src={coverPreview()!} alt="Cover" class="w-full h-full object-cover" />
-                  </Show>
-                </div>
-                <input
-                  ref={coverInputRef}
-                  type="file"
-                  accept="image/*"
-                  class="hidden"
-                  onChange={(e) => {
-                    const file = e.currentTarget.files?.[0]
-                    if (file) handleFileUpload(file, 'cover')
-                  }}
-                />
-              </Show>
-              <Show when={!props.isEditing && coverPreview()}>
-                <img src={coverPreview()!} alt="Cover" class="w-full h-48 rounded-lg object-cover" />
-              </Show>
-            </div>
-
-            {/* Avatar */}
-            <div class="flex flex-col gap-2">
-              <label class="text-base text-[var(--text-secondary)]">Avatar</label>
-              <div class="flex items-start gap-4">
-                <Show when={props.isEditing}>
-                  <div
-                    onClick={() => avatarInputRef?.click()}
-                    class={cn(
-                      'w-32 h-32 rounded-full overflow-hidden cursor-pointer transition-all shrink-0',
-                      'border-2 border-dashed',
-                      avatarPreview()
-                        ? 'border-transparent'
-                        : 'border-[var(--bg-highlight-hover)] bg-[var(--bg-elevated)] hover:border-[var(--accent-blue)]/50',
-                      'flex items-center justify-center'
-                    )}
-                  >
-                    <Show
-                      when={avatarPreview()}
-                      fallback={
-                        <div class="flex flex-col items-center gap-2 text-[var(--text-muted)]">
-                          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
-                          </svg>
-                        </div>
-                      }
-                    >
-                      <img src={avatarPreview()!} alt="Avatar" class="w-full h-full object-cover" />
-                    </Show>
-                  </div>
-                  <div class="flex flex-col gap-2 flex-1">
-                    <p class="text-sm text-[var(--text-secondary)]">
-                      Anime, cartoon, or illustrated avatars only. Realistic photos will be rejected.
-                    </p>
-                  </div>
-                </Show>
-                <Show when={!props.isEditing && avatarPreview()}>
-                  <img src={avatarPreview()!} alt="Avatar" class="w-32 h-32 rounded-full object-cover shrink-0" />
-                </Show>
-                <input
-                  ref={avatarInputRef}
-                  type="file"
-                  accept="image/*"
-                  class="hidden"
-                  onChange={(e) => {
-                    const file = e.currentTarget.files?.[0]
-                    if (file) handleFileUpload(file, 'avatar')
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        </EditableInfoCardSection>
-      </EditableInfoCard>
-
-      {/* Basics */}
-      <EditableInfoCard>
-        <EditableInfoCardSection title="Basics" isEditing={props.isEditing}>
-          <EditableInfoCardRow
-            label="Age"
-            value={formData().age?.toString()}
-            isEditing={props.isEditing}
-            placeholder="Enter your age"
-            onValueChange={(v: string | string[]) => updateField('age', typeof v === 'string' && v ? Number(v) : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Gender"
-            value={formData().gender}
-            isEditing={props.isEditing}
-            type="select"
-            options={GENDER_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('gender', typeof v === 'string' ? v : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Nationality"
-            value={formData().nationality}
-            isEditing={props.isEditing}
-            type="select"
-            options={NATIONALITY_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('nationality', typeof v === 'string' ? v : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Native language"
-            value={formData().nativeLanguage}
-            isEditing={props.isEditing}
-            type="select"
-            options={LANGUAGE_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('nativeLanguage', typeof v === 'string' ? v : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Learning"
-            value={formData().targetLanguage}
-            isEditing={props.isEditing}
-            type="multiselectdropdown"
-            options={LEARNING_LANGUAGE_OPTIONS}
-            placeholder="Select languages you're learning"
-            onValueChange={(v: string | string[]) => updateField('targetLanguage', Array.isArray(v) ? v.join(', ') : v as string)}
-          />
-        </EditableInfoCardSection>
-      </EditableInfoCard>
-
-      {/* Location */}
-      <EditableInfoCard>
-        <EditableInfoCardSection title="Location" isEditing={props.isEditing}>
-          <EditableInfoCardRow
-            label="Location"
-            value={formData().locationCityId}
-            isEditing={props.isEditing}
-            type="location"
-            placeholder="Search for a city"
-            onLocationChange={(loc) => updateField('locationCityId', loc.label)}
-          />
-          <EditableInfoCardRow
-            label="Flexibility"
-            value={formData().relocate}
-            isEditing={props.isEditing}
-            type="select"
-            options={RELOCATE_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('relocate', typeof v === 'string' ? v : undefined)}
-          />
-        </EditableInfoCardSection>
-      </EditableInfoCard>
-
-      {/* Education & Career */}
-      <EditableInfoCard>
-        <EditableInfoCardSection title="Education & Career" isEditing={props.isEditing}>
-          <EditableInfoCardRow
-            label="School"
-            value={formData().school}
-            isEditing={props.isEditing}
-            placeholder="Enter your school"
-            onValueChange={(v: string | string[]) => updateField('school', typeof v === 'string' ? v : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Degree"
-            value={formData().degree}
-            isEditing={props.isEditing}
-            type="select"
-            options={DEGREE_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('degree', typeof v === 'string' ? v : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Field of study"
-            value={formData().fieldBucket}
-            isEditing={props.isEditing}
-            type="select"
-            options={FIELD_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('fieldBucket', typeof v === 'string' ? v : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Profession"
-            value={formData().profession}
-            isEditing={props.isEditing}
-            type="select"
-            options={PROFESSION_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('profession', typeof v === 'string' ? v : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Industry"
-            value={formData().industry}
-            isEditing={props.isEditing}
-            type="select"
-            options={INDUSTRY_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('industry', typeof v === 'string' ? v : undefined)}
-          />
-        </EditableInfoCardSection>
-      </EditableInfoCard>
-
-      {/* Dating */}
-      <EditableInfoCard>
-        <EditableInfoCardSection title="Dating" isEditing={props.isEditing}>
-          <EditableInfoCardRow
-            label="Relationship status"
-            value={formData().relationshipStatus}
-            isEditing={props.isEditing}
-            type="select"
-            options={RELATIONSHIP_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('relationshipStatus', typeof v === 'string' ? v : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Height (cm)"
-            value={formData().heightCm?.toString()}
-            isEditing={props.isEditing}
-            placeholder="e.g. 170"
-            onValueChange={(v: string | string[]) => updateField('heightCm', typeof v === 'string' && v ? Number(v) : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Looking for"
-            value={formData().lookingFor}
-            isEditing={props.isEditing}
-            type="select"
-            options={LOOKING_FOR_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('lookingFor', typeof v === 'string' ? v : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Sexuality"
-            value={formData().sexuality}
-            isEditing={props.isEditing}
-            type="select"
-            options={SEXUALITY_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('sexuality', typeof v === 'string' ? v : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Ethnicity"
-            value={formData().ethnicity}
-            isEditing={props.isEditing}
-            type="select"
-            options={ETHNICITY_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('ethnicity', typeof v === 'string' ? v : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Dating style"
-            value={formData().datingStyle}
-            isEditing={props.isEditing}
-            type="select"
-            options={DATING_STYLE_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('datingStyle', typeof v === 'string' ? v : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Children"
-            value={formData().children}
-            isEditing={props.isEditing}
-            type="select"
-            options={CHILDREN_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('children', typeof v === 'string' ? v : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Wants children"
-            value={formData().wantsChildren}
-            isEditing={props.isEditing}
-            type="select"
-            options={WANTS_CHILDREN_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('wantsChildren', typeof v === 'string' ? v : undefined)}
-          />
-        </EditableInfoCardSection>
-      </EditableInfoCard>
-
-      {/* Lifestyle */}
-      <EditableInfoCard>
-        <EditableInfoCardSection title="Lifestyle" isEditing={props.isEditing}>
-          <EditableInfoCardRow
-            label="Hobbies"
-            value={formData().hobbiesCommit}
-            isEditing={props.isEditing}
-            type="textarea"
-            placeholder="What do you like to do for fun?"
-            maxLength={200}
-            onValueChange={(v: string | string[]) => updateField('hobbiesCommit', typeof v === 'string' ? v : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Drinking"
-            value={formData().drinking}
-            isEditing={props.isEditing}
-            type="select"
-            options={DRINKING_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('drinking', typeof v === 'string' ? v : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Smoking"
-            value={formData().smoking}
-            isEditing={props.isEditing}
-            type="select"
-            options={SMOKING_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('smoking', typeof v === 'string' ? v : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Drugs"
-            value={formData().drugs}
-            isEditing={props.isEditing}
-            type="select"
-            options={DRUGS_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('drugs', typeof v === 'string' ? v : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Religion"
-            value={formData().religion}
-            isEditing={props.isEditing}
-            type="select"
-            options={RELIGION_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('religion', typeof v === 'string' ? v : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Pets"
-            value={formData().pets}
-            isEditing={props.isEditing}
-            type="select"
-            options={PETS_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('pets', typeof v === 'string' ? v : undefined)}
-          />
-          <EditableInfoCardRow
-            label="Diet"
-            value={formData().diet}
-            isEditing={props.isEditing}
-            type="select"
-            options={DIET_OPTIONS}
-            onValueChange={(v: string | string[]) => updateField('diet', typeof v === 'string' ? v : undefined)}
-          />
-        </EditableInfoCardSection>
-      </EditableInfoCard>
     </div>
   )
 }

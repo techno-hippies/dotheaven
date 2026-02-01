@@ -9,9 +9,11 @@ export interface EditableInfoCardRowProps {
   value?: string
   placeholder?: string
   isEditing: boolean
+  isOwnProfile?: boolean
   type?: 'text' | 'select' | 'multiselect' | 'multiselectdropdown' | 'location' | 'textarea'
   options?: SelectOption[] | MultiSelectOption[] | PillOption[]
   maxLength?: number
+  icon?: JSX.Element
   onValueChange?: (value: string | string[]) => void
   onLocationChange?: (location: LocationResult) => void
 }
@@ -91,7 +93,10 @@ export const EditableInfoCardRow: Component<EditableInfoCardRowProps> = (props) 
   return (
     <div class={cn('flex items-center gap-3', props.class)}>
       {/* Label (always visible) */}
-      <span class="text-base text-[var(--text-secondary)] min-w-[140px] flex-shrink-0">
+      <span class="text-base text-[var(--text-secondary)] min-w-[140px] flex-shrink-0 flex items-center gap-2">
+        <Show when={props.icon}>
+          <span class="text-[var(--text-muted)]">{props.icon}</span>
+        </Show>
         {props.label}
       </span>
 
@@ -102,9 +107,11 @@ export const EditableInfoCardRow: Component<EditableInfoCardRowProps> = (props) 
           <Show
             when={props.value}
             fallback={
-              <span class="text-base text-[var(--text-muted)] italic">
-                + Add {props.label.toLowerCase()}
-              </span>
+              <Show when={props.isOwnProfile}>
+                <span class="text-base text-[var(--text-muted)] italic">
+                  + Add {props.label.toLowerCase()}
+                </span>
+              </Show>
             }
           >
             <span class="text-base text-[var(--text-primary)]">
@@ -211,7 +218,7 @@ export interface EditableInfoCardProps {
 export const EditableInfoCard: Component<EditableInfoCardProps> = (props) => {
   return (
     <div class={cn(
-      'bg-[var(--bg-surface)] rounded-lg p-6 flex flex-col gap-6',
+      'bg-[var(--bg-surface)] rounded-md p-6 flex flex-col gap-6',
       props.class
     )}>
       {props.children}

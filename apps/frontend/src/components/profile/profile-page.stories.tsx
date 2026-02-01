@@ -45,6 +45,7 @@ export const Default: Story = {
           following: 843,
           likes: 94200,
         }}
+        verificationState="verified"
         isFollowing={isFollowing()}
         isOwnProfile={false}
         onFollowClick={() => setIsFollowing(!isFollowing())}
@@ -73,6 +74,7 @@ export const OwnProfile: Story = {
           following: 843,
           likes: 94200,
         }}
+        verificationState="verified"
         isOwnProfile={true}
         onAvatarClick={() => console.log('Avatar clicked')}
         activeTab={activeTab()}

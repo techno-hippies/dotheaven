@@ -1,3 +1,5 @@
+import type { ProfileInput } from '@heaven/ui'
+
 /**
  * Heaven Profile - Set on-chain profile via Lit Action (gasless)
  *
@@ -6,8 +8,10 @@
  */
 
 import { createPublicClient, http, parseAbi, keccak256 } from 'viem'
+import { packTagIds, unpackTagIds } from '@heaven/ui'
 import { megaTestnetV2 } from '../chains'
 import { getLitClient } from '../lit/client'
+import { HEAVEN_SET_PROFILE_CID } from '../lit/action-cids'
 import type { PKPAuthContext } from '../lit/types'
 
 const PROFILE_V1 = '0x0A6563122cB3515ff678A918B5F31da9b1391EA3' as const
@@ -17,8 +21,6 @@ const profileAbi = parseAbi([
   'struct Profile { uint8 profileVersion; bool exists; uint8 age; uint16 heightCm; bytes2 nationality; bytes2 nativeLanguage; uint8 friendsOpenToMask; uint80 learningLanguagesPacked; bytes32 locationCityId; bytes32 schoolId; bytes32 skillsCommit; bytes32 hobbiesCommit; bytes32 nameHash; uint256 packed; string displayName; string photoURI; }',
   'function getProfile(address user) external view returns (Profile)',
 ])
-
-const SET_PROFILE_ACTION_CID = 'QmYLHf2QQfY52HmvNdrtQfG3bBz8oRJzo32RfybRbnrQui'
 
 function getClient() {
   return createPublicClient({
@@ -314,63 +316,50 @@ function langToBytes2(lang: string): string {
   return '0x' + hex
 }
 
+// bytes2 hex → 2-char code (uppercase for nationality, lowercase for language)
+function bytes2ToCode(hex: string, uppercase = false): string | undefined {
+  if (!hex || hex === '0x0000') return undefined
+  const n = parseInt(hex, 16)
+  if (!n) return undefined
+  const c1 = String.fromCharCode((n >> 8) & 0xff)
+  const c2 = String.fromCharCode(n & 0xff)
+  const code = c1 + c2
+  return uppercase ? code.toUpperCase() : code.toLowerCase()
+}
+
+// Decode learningLanguagesPacked uint80 → first language code (bits 79..64)
+function decodeLearningLanguage(packed: bigint | string): string | undefined {
+  const n = BigInt(packed)
+  if (n === 0n) return undefined
+  const val = Number((n >> 64n) & 0xFFFFn)
+  if (!val) return undefined
+  const c1 = String.fromCharCode((val >> 8) & 0xff)
+  const c2 = String.fromCharCode(val & 0xff)
+  return (c1 + c2).toLowerCase()
+}
+
 const ZERO_HASH = '0x0000000000000000000000000000000000000000000000000000000000000000'
 
-export interface ProfileInput {
-  // Identity
-  displayName?: string
-  nameHash?: string
-
-  // Photos
-  coverPhoto?: string
-  coverFile?: File   // raw File for IPFS upload; coverPhoto string used as preview only
-  avatar?: string
-  avatarFile?: File  // raw File for IPFS upload; avatar string used as preview only
-
-  // Basics
-  age?: number
-  heightCm?: number
-  gender?: string
-  nationality?: string
-  nativeLanguage?: string
-  targetLanguage?: string
-
-  // Location
-  locationCityId?: string
-  relocate?: string
-
-  // Education
-  degree?: string
-  fieldBucket?: string
-  school?: string
-
-  // Work
-  profession?: string
-  industry?: string
-
-  // Dating
-  relationshipStatus?: string
-  sexuality?: string
-  ethnicity?: string
-  datingStyle?: string
-  children?: string
-  wantsChildren?: string
-  lookingFor?: string
-
-  // Lifestyle
-  drinking?: string
-  smoking?: string
-  drugs?: string
-  religion?: string
-  pets?: string
-  diet?: string
-
-  // Other (not yet implemented in UI)
-  learningLanguagesPacked?: number
-  friendsOpenToMask?: number
-  skillsCommit?: string
-  hobbiesCommit?: string
+/** Parse a comma-separated string of tag IDs into a clean, deduped, sorted array (max 16) */
+export function parseTagCsv(csv?: string): number[] {
+  if (!csv) return []
+  const ids = csv
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(s => Number(s))
+    .filter(n => Number.isInteger(n) && n > 0 && n <= 0xFFFF)
+  return [...new Set(ids)].sort((a, b) => a - b).slice(0, 16)
 }
+
+/** Convert a string to bytes32: pass through if already hex, otherwise keccak256 hash it */
+function toBytes32(value: string | undefined): `0x${string}` {
+  if (!value) return ZERO_HASH as `0x${string}`
+  if (value.startsWith('0x') && value.length === 66) return value as `0x${string}`
+  return keccak256(new TextEncoder().encode(value))
+}
+
+export type { ProfileInput } from '@heaven/ui'
 
 export interface SetProfileResult {
   success: boolean
@@ -387,25 +376,24 @@ export interface SetProfileResult {
 function buildProfileInput(data: ProfileInput) {
   // Pack target language into learningLanguagesPacked (first slot of 5 x bytes2)
   // uint80 = 5 x uint16, left-to-right: [0]=bits 79..64, [1]=63..48, ...
-  let learningLanguagesPacked = data.learningLanguagesPacked || 0
+  let learningLanguagesPacked: string | number = data.learningLanguagesPacked ? String(data.learningLanguagesPacked) : '0'
   if (data.targetLanguage && !data.learningLanguagesPacked) {
     const code = data.targetLanguage.slice(0, 2).toUpperCase()
     const val = (code.charCodeAt(0) << 8) | code.charCodeAt(1)
-    learningLanguagesPacked = val * (2 ** 64) // shift to bits 79..64
+    learningLanguagesPacked = (BigInt(val) << 64n).toString() as any // shift to bits 79..64; string for ethers v5 BigNumber compat
   }
 
-  // Convert school string → schoolId (keccak256)
-  let schoolId = ZERO_HASH
-  if (data.school) {
-    schoolId = keccak256(new TextEncoder().encode(data.school))
-  }
+  // schoolId: zeroed out — plaintext stored in RecordsV1 only (no on-chain use yet)
+  const schoolId = ZERO_HASH
 
-  // photoURI: only store URIs (ipfs://, https://), never raw data URLs
-  let photoURI = ''
-  const avatar = data.avatar || ''
-  if (avatar && !avatar.startsWith('data:')) {
-    photoURI = avatar
-  }
+  // Pack hobby/skill tag IDs into bytes32
+  const hobbyIds = parseTagCsv(data.hobbiesCommit)
+  const skillIds = parseTagCsv(data.skillsCommit)
+  const hobbiesPacked = hobbyIds.length ? packTagIds(hobbyIds) : ZERO_HASH as `0x${string}`
+  const skillsPacked = skillIds.length ? packTagIds(skillIds) : ZERO_HASH as `0x${string}`
+
+  // photoURI is deprecated; avatar is stored in RecordsV1 only.
+  const photoURI = ''
 
   return {
     profileVersion: 1,
@@ -417,10 +405,10 @@ function buildProfileInput(data: ProfileInput) {
     nativeLanguage: langToBytes2(data.nativeLanguage || ''),
     learningLanguagesPacked,
     friendsOpenToMask: data.friendsOpenToMask || 0,
-    locationCityId: (data.locationCityId as `0x${string}`) || ZERO_HASH,
+    locationCityId: toBytes32(data.locationCityId),
     schoolId: schoolId as `0x${string}`,
-    skillsCommit: (data.skillsCommit as `0x${string}`) || ZERO_HASH,
-    hobbiesCommit: (data.hobbiesCommit as `0x${string}`) || ZERO_HASH,
+    skillsCommit: skillsPacked,
+    hobbiesCommit: hobbiesPacked,
     photoURI,
     gender: GENDER_TO_NUM[data.gender || ''] ?? 0,
     relocate: RELOCATE_TO_NUM[data.relocate || ''] ?? 0,
@@ -510,13 +498,13 @@ export async function getProfile(userAddress: `0x${string}`): Promise<ProfileInp
     return {
       displayName: profile.displayName || undefined,
       nameHash: profile.nameHash !== ZERO_HASH ? profile.nameHash : undefined,
-      avatar: profile.photoURI || undefined,
       age: profile.age || undefined,
       heightCm: profile.heightCm || undefined,
       gender: NUM_TO_GENDER[gender] || undefined,
-      nationality: undefined, // TODO: decode bytes2
-      nativeLanguage: undefined, // TODO: decode bytes2
-      locationCityId: profile.locationCityId !== ZERO_HASH ? profile.locationCityId : undefined,
+      nationality: bytes2ToCode(profile.nationality, true),  // uppercase: "AF", "US"
+      nativeLanguage: bytes2ToCode(profile.nativeLanguage),  // lowercase: "en", "fr"
+      // locationCityId is an on-chain hash; plaintext comes from RecordsV1 text records
+      locationCityId: undefined,
       relocate: NUM_TO_RELOCATE[relocate] || undefined,
       degree: NUM_TO_DEGREE[degree] || undefined,
       fieldBucket: NUM_TO_FIELD[fieldBucket] || undefined,
@@ -535,10 +523,12 @@ export async function getProfile(userAddress: `0x${string}`): Promise<ProfileInp
       religion: NUM_TO_RELIGION[religion] || undefined,
       pets: NUM_TO_PETS[pets] || undefined,
       diet: NUM_TO_DIET[diet] || undefined,
-      learningLanguagesPacked: Number(profile.learningLanguagesPacked),
+      targetLanguage: decodeLearningLanguage(profile.learningLanguagesPacked),
+      learningLanguagesPacked: profile.learningLanguagesPacked.toString() as any,
       friendsOpenToMask: profile.friendsOpenToMask,
-      skillsCommit: profile.skillsCommit !== ZERO_HASH ? profile.skillsCommit : undefined,
-      hobbiesCommit: profile.hobbiesCommit !== ZERO_HASH ? profile.hobbiesCommit : undefined,
+      // Unpack tag IDs from bytes32 → comma-separated ID strings for UI multi-select
+      skillsCommit: unpackTagIds(profile.skillsCommit).join(', ') || undefined,
+      hobbiesCommit: unpackTagIds(profile.hobbiesCommit).join(', ') || undefined,
     }
   } catch (error) {
     console.error('Failed to fetch profile:', error)
@@ -578,7 +568,7 @@ export async function setProfile(
 
   // 3. Single executeJs: action signs with user's PKP + sponsor PKP broadcasts
   const result = await litClient.executeJs({
-    ipfsId: SET_PROFILE_ACTION_CID,
+    ipfsId: HEAVEN_SET_PROFILE_CID,
     authContext,
     jsParams: {
       user: userAddress,

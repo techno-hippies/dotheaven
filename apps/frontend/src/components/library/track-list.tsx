@@ -69,7 +69,7 @@ export const TrackList: Component<TrackListProps> = (props) => {
             return (
               <div
                 class={cn(
-                  "group grid grid-cols-[48px_minmax(200px,4fr)_minmax(120px,2fr)_minmax(120px,1fr)_80px_48px] gap-4 px-4 py-2 rounded-lg transition-colors cursor-pointer",
+                  "group grid grid-cols-[48px_minmax(200px,4fr)_minmax(120px,2fr)_minmax(120px,1fr)_80px_48px] gap-4 px-4 py-2 rounded-md transition-colors cursor-pointer",
                   menuOpen() ? "bg-[var(--bg-highlight)]" : "hover:bg-[var(--bg-highlight)]"
                 )}
                 onClick={() => props.onTrackClick?.(track)}

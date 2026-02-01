@@ -78,7 +78,7 @@ export function Select<T extends SelectOption = SelectOption>(props: SelectProps
         <KobalteSelect.Item
           item={itemProps.item}
           class={cn(
-            'flex items-center justify-between gap-2 px-3 py-2.5 text-base rounded-lg cursor-pointer outline-none',
+            'flex items-center justify-between gap-2 px-3 py-2.5 text-base rounded-md cursor-pointer outline-none',
             'text-[var(--text-primary)]',
             'data-[highlighted]:bg-[var(--bg-highlight-hover)]',
             'data-[disabled]:opacity-50 data-[disabled]:cursor-not-allowed'
@@ -97,7 +97,7 @@ export function Select<T extends SelectOption = SelectOption>(props: SelectProps
       <div class={cn('relative', local.class)}>
         <KobalteSelect.Trigger
           class={cn(
-            'flex items-center justify-between gap-2 w-full h-11 px-3 rounded-lg',
+            'flex items-center justify-between gap-2 w-full h-11 px-3 rounded-md',
             'bg-[var(--bg-highlight)] text-base',
             'border-2 transition-colors',
             'focus:outline-none',
@@ -125,7 +125,7 @@ export function Select<T extends SelectOption = SelectOption>(props: SelectProps
         <KobalteSelect.Content
           class={cn(
             'z-50 min-w-[var(--kb-popper-anchor-width)] mt-1',
-            'bg-[var(--bg-surface)] rounded-lg border border-[var(--bg-highlight)]',
+            'bg-[var(--bg-surface)] rounded-md border border-[var(--bg-highlight)]',
             'shadow-xl overflow-hidden',
             'animate-in fade-in-0 zoom-in-95',
             'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95'

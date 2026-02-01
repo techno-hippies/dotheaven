@@ -92,7 +92,7 @@ export const FileInput: Component<FileInputProps> = (props) => {
 
       <FileField.Dropzone
         class={cn(
-          'relative flex flex-col items-center justify-center gap-2 px-6 py-8 rounded-lg',
+          'relative flex flex-col items-center justify-center gap-2 px-6 py-8 rounded-md',
           'bg-[var(--bg-highlight)] border-2 border-dashed border-[var(--bg-highlight-hover)]',
           'transition-colors cursor-pointer',
           'hover:bg-[var(--bg-highlight-hover)] hover:border-[var(--accent-blue)]/50',
@@ -107,7 +107,7 @@ export const FileInput: Component<FileInputProps> = (props) => {
         </p>
         <FileField.Trigger
           class={cn(
-            'px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer',
+            'px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer',
             'bg-[var(--accent-blue)] text-white',
             'hover:bg-[var(--accent-blue-hover)]',
             'focus:outline-none focus:ring-2 focus:ring-[var(--accent-blue)]/20',
@@ -124,11 +124,11 @@ export const FileInput: Component<FileInputProps> = (props) => {
         {() => (
           <FileField.Item
             class={cn(
-              'flex items-center gap-3 p-3 rounded-lg',
+              'flex items-center gap-3 p-3 rounded-md',
               'bg-[var(--bg-surface)] border border-[var(--bg-highlight)]'
             )}
           >
-            <FileField.ItemPreviewImage class="w-12 h-12 rounded-lg object-cover bg-[var(--bg-elevated)]" />
+            <FileField.ItemPreviewImage class="w-12 h-12 rounded-md object-cover bg-[var(--bg-elevated)]" />
 
             <div class="flex-1 min-w-0">
               <FileField.ItemName class="text-sm font-medium text-[var(--text-primary)] truncate block" />
@@ -140,7 +140,7 @@ export const FileInput: Component<FileInputProps> = (props) => {
 
             <FileField.ItemDeleteTrigger
               class={cn(
-                'p-2 rounded-lg text-[var(--text-muted)] transition-colors',
+                'p-2 rounded-md text-[var(--text-muted)] transition-colors',
                 'hover:bg-[var(--bg-highlight)] hover:text-[var(--accent-coral)]',
                 'focus:outline-none focus:ring-2 focus:ring-[var(--accent-coral)]/20'
               )}

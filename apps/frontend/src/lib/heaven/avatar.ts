@@ -6,14 +6,33 @@
  */
 
 import { getLitClient } from '../lit/client'
+import { AVATAR_UPLOAD_CID } from '../lit/action-cids'
 import type { PKPAuthContext } from '../lit/types'
-
-const AVATAR_UPLOAD_CID = 'QmTWwoC5zX2pUuSExsra5RVzChE9nCYRAkVVgppjvc196A'
 
 /** Encrypted Filebase key — only decryptable by the avatar upload Lit Action CID */
 const FILEBASE_ENCRYPTED_KEY = {
   ciphertext: 'pfbkdwk48PntH/CrTFsyRFLDxDak2yPMIvQMSss8iboeaa3bRGoY3M3ng11b1Ve5tH9A1lN7mVKpoDMYFGS+TClXG1JZKcKLIp9O8YVmBOxl8jGK+zGqCHiIU7JF/cFPpL5xAeZHgPjJL0XUlTWJiApU7lUqOGweTAwIiynpiEpfffxvcZM3Vt/oEIOvvbZfj/XXgOBHsQICM76Afx3r5rd9u1EwjjUAw1Az0qmtCRbvf43Kk7gC',
   dataToEncryptHash: '23ab539bda3900163da16db23be0e6e6c6003d35bd1ac54aeaada176f8f1e0d4',
+  accessControlConditions: [
+    {
+      conditionType: 'evmBasic',
+      contractAddress: '',
+      standardContractType: '',
+      chain: 'ethereum',
+      method: '',
+      parameters: [':currentActionIpfsId'],
+      returnValueTest: {
+        comparator: '=',
+        value: AVATAR_UPLOAD_CID,
+      },
+    },
+  ],
+}
+
+/** Encrypted OpenRouter key — only decryptable by the avatar upload Lit Action CID */
+const OPENROUTER_ENCRYPTED_KEY = {
+  ciphertext: 'iffXu9nj0mqXhp5FNoKJK6sShEeHqmpUx+ksYHf0a7Gd/13OwPyHB2Xnv4P9NRZPdmniU+lb7nUv6ELo+cdPs7I/DtijzO21qqllwqZRDRVKe++CDpVbYV0xtsmckoBZtWLYFydbWJasPdSv3EmUmklAH6NQKLGOJXAeQcHW/SSDM4fL1gQXq4pwmr+Ac/j3vxMdyukB2gFDuioC',
+  dataToEncryptHash: '2ca783d51c4bfd1a8b80e1c8aee5e94d3f17c3089f8bca45e48d40b3435ae092',
   accessControlConditions: [
     {
       conditionType: 'evmBasic',
@@ -86,7 +105,7 @@ export async function uploadAvatar(
       nonce,
       skipStyleCheck: options?.skipStyleCheck ?? false,
       filebaseEncryptedKey: FILEBASE_ENCRYPTED_KEY,
-      openrouterPlaintextKey: options?.skipStyleCheck ? undefined : (import.meta.env.VITE_OPENROUTER_API_KEY || undefined),
+      openrouterEncryptedKey: options?.skipStyleCheck ? undefined : OPENROUTER_ENCRYPTED_KEY,
     },
   })
 

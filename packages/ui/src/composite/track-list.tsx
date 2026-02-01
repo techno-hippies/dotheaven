@@ -177,7 +177,7 @@ export const TrackList: Component<TrackListProps> = (props) => {
               >
                 <div
                   class={cn(
-                    "group grid gap-4 px-4 h-full rounded-lg transition-colors cursor-pointer items-center",
+                    "group grid gap-4 px-4 h-full rounded-md transition-colors cursor-pointer items-center",
                     isSelected() || menuOpen()
                       ? "bg-[var(--bg-highlight)]"
                       : "hover:bg-[var(--bg-highlight)]"

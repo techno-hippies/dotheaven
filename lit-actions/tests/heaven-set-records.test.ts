@@ -29,7 +29,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = join(__dirname, "../");
 
 const MEGAETH_RPC = "https://carrot.megaeth.com/rpc";
-const RECORDS_V1 = "0x801b9A10a4088906d3d3D7bFf1f7ec9793302840";
+const RECORDS_V1 = "0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3";
 const HEAVEN_NODE = "0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27";
 
 const recordsAbi = parseAbi([

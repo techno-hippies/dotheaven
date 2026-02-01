@@ -75,7 +75,7 @@ export const TimeSlotList: Component<TimeSlotListProps> = (props) => {
                   type="button"
                   onClick={() => props.onSelect(slot)}
                   class={cn(
-                    'w-full py-3 px-4 rounded-lg text-base font-medium transition-all text-center border cursor-pointer',
+                    'w-full py-3 px-4 rounded-md text-base font-medium transition-all text-center border cursor-pointer',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface)]',
                     isSelected
                       ? 'bg-[var(--accent-blue)] border-[var(--accent-blue)] text-white hover:bg-[var(--accent-blue-hover)]'

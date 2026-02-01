@@ -58,7 +58,7 @@ export const Controlled: Story = {
           placeholder="Type a message..."
         />
         {lastSent() && (
-          <div class="p-4 bg-[var(--bg-surface)] rounded-lg">
+          <div class="p-4 bg-[var(--bg-surface)] rounded-md">
             <p class="text-sm text-[var(--text-secondary)] mb-1">Last sent message:</p>
             <p class="text-base text-[var(--text-primary)]">{lastSent()}</p>
           </div>

@@ -20,6 +20,7 @@
  * - userPkpPublicKey: User's PKP public key for internal signing
  *
  * Optional jsParams:
+ * - signature: Pre-signed EIP-191 signature (skips signAndCombineEcdsa if provided)
  * - dryRun: boolean (default false) — skip broadcast, return signed tx
  *
  * Returns: { success, tokenId, node, label, txHash }
@@ -33,8 +34,8 @@ const CHAIN_ID = 6343;
 const RPC_URL = "https://carrot.megaeth.com/rpc";
 
 // Deployed contracts (MegaETH Testnet)
-const REGISTRY_V1 = "0x61CAed8296a2eF78eCf9DCa5eDf3C44469c6b1E2";
-const RECORDS_V1 = "0x351ba82bAfDA1070bba8158852624653e3654929";
+const REGISTRY_V1 = "0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2";
+const RECORDS_V1 = "0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3";
 
 // Heaven parent node: namehash("heaven.hnsbridge.eth")
 const HEAVEN_NODE = "0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27";
@@ -94,14 +95,15 @@ const main = async () => {
       userPkpPublicKey,
       timestamp,
       nonce,
+      signature: preSignedSig,
       dryRun = false,
     } = jsParams || {};
 
     must(recipient, "recipient");
     must(label, "label");
-    must(userPkpPublicKey, "userPkpPublicKey");
     must(timestamp, "timestamp");
     must(nonce, "nonce");
+    if (!preSignedSig) must(userPkpPublicKey, "userPkpPublicKey");
 
     const recipientAddr = ethers.utils.getAddress(recipient);
 
@@ -115,23 +117,31 @@ const main = async () => {
 
     const message = `heaven:register:${label}:${recipientAddr}:${timestamp}:${nonce}`;
 
-    const msgHash = ethers.utils.hashMessage(message);
-    const sigResult = await Lit.Actions.signAndCombineEcdsa({
-      toSign: Array.from(ethers.utils.arrayify(msgHash)),
-      publicKey: userPkpPublicKey,
-      sigName: "user_register_sig",
-    });
-    if (typeof sigResult === "string" && sigResult.startsWith("[ERROR]")) {
-      throw new Error(`User PKP signing failed: ${sigResult}`);
+    let signature;
+
+    if (preSignedSig) {
+      // Use pre-signed signature (e.g. from frontend PKP signing)
+      signature = preSignedSig;
+    } else {
+      // Sign within Lit Action using user's PKP
+      const msgHash = ethers.utils.hashMessage(message);
+      const sigResult = await Lit.Actions.signAndCombineEcdsa({
+        toSign: Array.from(ethers.utils.arrayify(msgHash)),
+        publicKey: userPkpPublicKey,
+        sigName: "user_register_sig",
+      });
+      if (typeof sigResult === "string" && sigResult.startsWith("[ERROR]")) {
+        throw new Error(`User PKP signing failed: ${sigResult}`);
+      }
+      const sigObj = JSON.parse(sigResult);
+      let userV = Number(sigObj.recid ?? sigObj.recoveryId ?? sigObj.v);
+      if (userV === 0 || userV === 1) userV += 27;
+      signature = ethers.utils.joinSignature({
+        r: `0x${strip0x(sigObj.r)}`,
+        s: `0x${strip0x(sigObj.s)}`,
+        v: userV,
+      });
     }
-    const sigObj = JSON.parse(sigResult);
-    let userV = Number(sigObj.recid ?? sigObj.recoveryId ?? sigObj.v);
-    if (userV === 0 || userV === 1) userV += 27;
-    const signature = ethers.utils.joinSignature({
-      r: `0x${strip0x(sigObj.r)}`,
-      s: `0x${strip0x(sigObj.s)}`,
-      v: userV,
-    });
 
     const recovered = ethers.utils.verifyMessage(message, signature);
     if (recovered.toLowerCase() !== recipientAddr.toLowerCase()) {

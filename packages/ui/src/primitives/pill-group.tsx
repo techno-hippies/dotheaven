@@ -54,7 +54,7 @@ export const PillGroup: Component<PillGroupProps> = (props) => {
             onClick={() => handleClick(opt.value as string)}
             disabled={props.disabled}
             class={cn(
-              'h-11 px-4 rounded-lg text-sm font-medium transition-colors cursor-pointer',
+              'h-11 px-4 rounded-md text-sm font-medium transition-colors cursor-pointer',
               'border-2',
               isSelected(opt.value as string)
                 ? 'bg-[var(--accent-blue)]/15 border-[var(--accent-blue)] text-[var(--accent-blue)]'

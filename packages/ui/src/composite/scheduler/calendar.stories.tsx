@@ -90,7 +90,7 @@ export const Default: Story = {
 
     return (
       <div class="space-y-4">
-        <div class="w-[400px] bg-[var(--bg-surface)] rounded-lg p-6">
+        <div class="w-[400px] bg-[var(--bg-surface)] rounded-md p-6">
           <SchedulerCalendar
             currentMonth={currentMonth()}
             availability={availability}
@@ -99,7 +99,7 @@ export const Default: Story = {
             onMonthChange={setCurrentMonth}
           />
         </div>
-        <div class="w-[400px] p-4 bg-[var(--bg-elevated)] rounded-lg">
+        <div class="w-[400px] p-4 bg-[var(--bg-elevated)] rounded-md">
           <p class="text-sm text-[var(--text-secondary)]">
             Selected date: <span class="font-semibold text-[var(--text-primary)]">{selectedDate() || 'None'}</span>
           </p>
@@ -128,7 +128,7 @@ export const WithDateRange: Story = {
 
     return (
       <div class="space-y-4">
-        <div class="w-[400px] bg-[var(--bg-surface)] rounded-lg p-6">
+        <div class="w-[400px] bg-[var(--bg-surface)] rounded-md p-6">
           <SchedulerCalendar
             currentMonth={currentMonth()}
             availability={availability}
@@ -139,7 +139,7 @@ export const WithDateRange: Story = {
             maxDate={nextWeek.toISOString().split('T')[0]}
           />
         </div>
-        <div class="w-[400px] p-4 bg-[var(--bg-elevated)] rounded-lg">
+        <div class="w-[400px] p-4 bg-[var(--bg-elevated)] rounded-md">
           <p class="text-sm text-[var(--text-secondary)]">
             Selected date: <span class="font-semibold text-[var(--text-primary)]">{selectedDate()}</span>
           </p>
@@ -165,7 +165,7 @@ export const NoAvailability: Story = {
     const [selectedDate, setSelectedDate] = createSignal<string>('')
 
     return (
-      <div class="w-[400px] bg-[var(--bg-surface)] rounded-lg p-6">
+      <div class="w-[400px] bg-[var(--bg-surface)] rounded-md p-6">
         <SchedulerCalendar
           currentMonth={currentMonth()}
           availability={[]}
@@ -193,7 +193,7 @@ export const KeyboardNavigation: Story = {
 
     return (
       <div class="space-y-4">
-        <div class="w-[400px] bg-[var(--bg-surface)] rounded-lg p-6">
+        <div class="w-[400px] bg-[var(--bg-surface)] rounded-md p-6">
           <SchedulerCalendar
             currentMonth={currentMonth()}
             availability={availability}
@@ -202,7 +202,7 @@ export const KeyboardNavigation: Story = {
             onMonthChange={setCurrentMonth}
           />
         </div>
-        <div class="w-[400px] p-4 bg-[var(--bg-elevated)] rounded-lg">
+        <div class="w-[400px] p-4 bg-[var(--bg-elevated)] rounded-md">
           <p class="text-sm text-[var(--text-secondary)] mb-3">
             Selected date: <span class="font-semibold text-[var(--text-primary)]">{selectedDate() || 'None'}</span>
           </p>

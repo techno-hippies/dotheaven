@@ -69,7 +69,7 @@ export const Sizes: Story = {
 
 export const Variants: Story = {
   render: () => (
-    <div class="flex items-center gap-4 bg-[var(--bg-surface)] p-8 rounded-lg">
+    <div class="flex items-center gap-4 bg-[var(--bg-surface)] p-8 rounded-md">
       <PlayButton variant="primary" size="lg" />
       <PlayButton variant="white" size="lg" />
     </div>

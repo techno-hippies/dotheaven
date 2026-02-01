@@ -20,6 +20,11 @@ export const Default: Story = {
     username: 'samantha.heaven',
     displayName: 'Samantha',
     avatarUrl: 'https://i.pravatar.cc/300?img=1',
+    bio: 'Music lover. Tokyo based. Learning Japanese.',
+    url: 'https://samantha.dev',
+    twitter: 'samantha',
+    github: 'samantha',
+    telegram: 'samantha',
     stats: {
       followers: 12400,
       following: 843,
@@ -27,6 +32,7 @@ export const Default: Story = {
     },
     isFollowing: false,
     isOwnProfile: false,
+    verificationState: 'verified' as const,
   },
 }
 
@@ -50,12 +56,34 @@ export const OwnProfile: Story = {
     username: 'samantha.heaven',
     displayName: 'Samantha',
     avatarUrl: 'https://i.pravatar.cc/300?img=1',
+    bio: 'Designer & developer. Building things on the internet. Cat person.',
+    url: 'https://samantha.dev',
+    twitter: 'samantha',
+    github: 'samantha',
+    telegram: 'samantha',
     stats: {
       followers: 12400,
       following: 843,
       likes: 94200,
     },
     isOwnProfile: true,
+    verificationState: 'verified' as const,
+  },
+}
+
+export const Unverified: Story = {
+  args: {
+    username: 'newuser.heaven',
+    displayName: 'New User',
+    avatarUrl: 'https://i.pravatar.cc/300?img=8',
+    stats: {
+      followers: 0,
+      following: 12,
+      likes: 0,
+    },
+    isOwnProfile: true,
+    verificationState: 'unverified' as const,
+    onVerifyClick: () => console.log('Verify clicked'),
   },
 }
 

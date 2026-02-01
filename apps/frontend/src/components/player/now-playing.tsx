@@ -53,13 +53,13 @@ export const NowPlaying: Component<NowPlayingProps> = (props) => {
       </div>
 
       {/* Album Art - large, centered */}
-      <div class="w-full aspect-square rounded-lg overflow-hidden bg-[var(--bg-elevated)]">
+      <div class="w-full aspect-square rounded-md overflow-hidden bg-[var(--bg-elevated)]">
         <Show
           when={local.albumArtSrc}
           fallback={
             <AlbumCover
               size="xl"
-              class="w-full h-full rounded-lg"
+              class="w-full h-full rounded-md"
               icon="music"
             />
           }

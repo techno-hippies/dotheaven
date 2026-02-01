@@ -73,11 +73,11 @@ export const VideoPost: Component<VideoPostProps> = (props) => {
 
   return (
     <div class={cn(
-      'relative h-full w-full bg-[var(--bg-surface)] rounded-lg snap-start flex items-center justify-center py-4',
+      'relative h-full w-full bg-[var(--bg-surface)] rounded-md snap-start flex items-center justify-center py-4',
       props.class
     )}>
       {/* Video Container - responsive sizing for 9:16 */}
-      <div class="relative w-full md:w-auto md:h-full md:aspect-[9/16] md:max-w-[450px] bg-black md:rounded-lg overflow-hidden">
+      <div class="relative w-full md:w-auto md:h-full md:aspect-[9/16] md:max-w-[450px] bg-black md:rounded-md overflow-hidden">
         {/* Video Player */}
         <VideoPlayer
           videoUrl={props.videoUrl}

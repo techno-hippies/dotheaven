@@ -1,7 +1,21 @@
 import { defineChain } from 'viem'
-import { sepolia } from 'viem/chains'
+import { celo, sepolia } from 'viem/chains'
 
-export { sepolia }
+export { celo, sepolia }
+
+// Celo Sepolia (Self.xyz hub is deployed here, chain 11142220)
+export const celoSepolia = defineChain({
+  id: 11142220,
+  name: 'Celo Sepolia',
+  nativeCurrency: { name: 'Celo', symbol: 'CELO', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://forno.celo-sepolia.celo-testnet.org'] },
+  },
+  blockExplorers: {
+    default: { name: 'Blockscout', url: 'https://celo-sepolia.blockscout.com' },
+  },
+  testnet: true,
+})
 
 export const megaTestnetV2 = defineChain({
   id: 6343,

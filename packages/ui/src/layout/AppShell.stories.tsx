@@ -23,6 +23,12 @@ const MusicNotesIcon = () => (
   </svg>
 )
 
+const HomeIcon = () => (
+  <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
+    <path d="M219.31,108.68l-80-80a16,16,0,0,0-22.62,0l-80,80A15.87,15.87,0,0,0,32,120v96a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V160h32v56a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V120A15.87,15.87,0,0,0,219.31,108.68ZM208,208H160V152a8,8,0,0,0-8-8H104a8,8,0,0,0-8,8v56H48V120l80-80,80,80Z" />
+  </svg>
+)
+
 const PlusIcon = () => (
   <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
     <path d="M12 5v14M5 12h14" />
@@ -66,6 +72,15 @@ export const Default: Story = {
       }
       sidebar={
         <Sidebar>
+          <button
+            type="button"
+            class="flex items-center gap-2 px-3 py-3 rounded-md cursor-pointer transition-colors bg-[var(--bg-highlight)]"
+          >
+            <span class="w-6 h-6 flex items-center justify-center text-[var(--text-secondary)]">
+              <HomeIcon />
+            </span>
+            <span class="text-sm font-semibold text-[var(--text-secondary)]">Home</span>
+          </button>
           <SidebarSection
             title="Chat"
             icon={<ChatCircleIcon />}
@@ -122,7 +137,7 @@ export const Default: Story = {
         <RightPanel>
           <div class="p-4">
             <h3 class="text-base font-semibold text-[var(--text-primary)] mb-4">Now Playing</h3>
-            <div class="aspect-square bg-[var(--bg-highlight)] rounded-lg mb-4" />
+            <div class="aspect-square bg-[var(--bg-highlight)] rounded-md mb-4" />
             <p class="text-lg font-semibold text-[var(--text-primary)]">Neon Dreams</p>
             <p class="text-base text-[var(--text-secondary)]">Synthwave Collective</p>
           </div>

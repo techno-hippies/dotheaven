@@ -22,7 +22,7 @@ export const VideoThumbnail: Component<VideoThumbnailProps> = (props) => {
     <button
       onClick={() => props.onClick?.()}
       class={cn(
-        'group relative w-full rounded-lg overflow-hidden bg-[var(--bg-elevated)]',
+        'group relative w-full rounded-md overflow-hidden bg-[var(--bg-elevated)]',
         'transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]',
         'cursor-pointer',
         props.class

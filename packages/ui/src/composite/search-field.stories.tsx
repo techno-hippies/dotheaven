@@ -122,7 +122,7 @@ export const Interactive: Story = {
           sectionTitle={query() ? 'Search results' : 'Recent searches'}
         />
         {selected() && (
-          <div class="p-4 bg-[var(--bg-surface)] rounded-lg">
+          <div class="p-4 bg-[var(--bg-surface)] rounded-md">
             <p class="text-sm text-[var(--text-secondary)] mb-1">Selected:</p>
             <p class="text-base text-[var(--text-primary)] font-medium">{selected()!.title}</p>
             {selected()!.subtitle && (
@@ -150,7 +150,7 @@ export const InlineStyle: Story = {
     }
 
     return (
-      <div class="max-w-2xl mx-auto bg-[var(--bg-page)] p-6 rounded-lg">
+      <div class="max-w-2xl mx-auto bg-[var(--bg-page)] p-6 rounded-md">
         <SearchField
           inline
           placeholder="What do you want to play?"
@@ -220,7 +220,7 @@ export const WithCustomDebounce: Story = {
           debounce={500}
         />
         {searches().length > 0 && (
-          <div class="p-4 bg-[var(--bg-surface)] rounded-lg">
+          <div class="p-4 bg-[var(--bg-surface)] rounded-md">
             <p class="text-sm font-medium text-[var(--text-primary)] mb-2">Search log:</p>
             <ul class="space-y-1">
               {searches().map((search) => (

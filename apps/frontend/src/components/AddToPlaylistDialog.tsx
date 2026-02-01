@@ -11,9 +11,12 @@ import {
   type Track,
 } from '@heaven/ui'
 import { createQuery, useQueryClient } from '@tanstack/solid-query'
-import { fetchUserPlaylists, fetchPlaylistTracks, type OnChainPlaylist } from '../lib/heaven/playlists'
+import { fetchUserPlaylists, type OnChainPlaylist } from '../lib/heaven/playlists'
 import { createPlaylistService } from '../lib/playlist-service'
 import { useAuth } from '../providers'
+import { addToast, updateToast } from '../lib/toast'
+import { setCoverCache } from '../lib/cover-cache'
+import { readCoverBase64 } from '../lib/cover-image'
 
 interface AddToPlaylistDialogProps {
   open: boolean
@@ -21,13 +24,14 @@ interface AddToPlaylistDialogProps {
   track: Track | null
 }
 
+/** Delay invalidation so optimistic data isn't overwritten by stale subgraph. */
+const INVALIDATION_DELAY = 8000
+
 export const AddToPlaylistDialog: Component<AddToPlaylistDialogProps> = (props) => {
   const auth = useAuth()
   const queryClient = useQueryClient()
-  const [adding, setAdding] = createSignal<string | null>(null)
   const [showCreate, setShowCreate] = createSignal(false)
   const [newName, setNewName] = createSignal('')
-  const [creating, setCreating] = createSignal(false)
 
   const playlistService = createPlaylistService(
     () => auth.getAuthContext(),
@@ -43,69 +47,194 @@ export const AddToPlaylistDialog: Component<AddToPlaylistDialogProps> = (props) 
 
   const playlists = () => playlistsQuery.data ?? []
 
-  const handleAddToPlaylist = async (playlist: OnChainPlaylist) => {
+  const handleAddToPlaylist = (playlist: OnChainPlaylist) => {
     const track = props.track
     if (!track) return
 
-    setAdding(playlist.id)
-    try {
-      const existingTracks = await fetchPlaylistTracks(playlist.id)
-      const existingTrackIds = existingTracks.map((t) => t.trackId)
+    // Close dialog immediately
+    props.onOpenChange(false)
 
-      const result = await playlistService.setTracks({
-        playlistId: playlist.id,
-        existingTrackIds,
-        tracks: [{
-          artist: track.artist,
+    // Cache local cover so it survives refetch for unscrobbled tracks
+    if (track.albumCover) {
+      setCoverCache(track.artist, track.title, track.album, track.albumCover)
+    }
+
+    // Optimistic cache updates
+    const addr = auth.pkpAddress()
+    const cached = queryClient.getQueryData<{ playlist: OnChainPlaylist; tracks: Track[] }>(['playlist', playlist.id])
+    if (cached) {
+      queryClient.setQueryData(['playlist', playlist.id], {
+        playlist: { ...cached.playlist, trackCount: Number(cached.playlist.trackCount) + 1 },
+        tracks: [...cached.tracks, {
+          id: `optimistic-${Date.now()}`,
           title: track.title,
-          album: track.album || undefined,
+          artist: track.artist,
+          album: track.album || '',
+          albumCover: track.albumCover,
+          duration: track.duration || '--:--',
         }],
       })
-
-      if (result.success) {
-        queryClient.invalidateQueries({ queryKey: ['playlistTracks', playlist.id] })
-        queryClient.invalidateQueries({ queryKey: ['resolvedTracks', playlist.id] })
-        queryClient.invalidateQueries({ queryKey: ['userPlaylists'] })
-        props.onOpenChange(false)
-      } else {
-        console.error('[AddToPlaylist] Failed:', result.error)
-      }
-    } catch (err) {
-      console.error('[AddToPlaylist] Error:', err)
     }
-    setAdding(null)
+    const cachedPlaylists = queryClient.getQueryData<OnChainPlaylist[]>(['userPlaylists', addr])
+    if (cachedPlaylists) {
+      queryClient.setQueryData(['userPlaylists', addr],
+        cachedPlaylists.map((p) => p.id === playlist.id ? { ...p, trackCount: Number(p.trackCount) + 1 } : p),
+      )
+    }
+
+    // Background: run Lit Action + delayed invalidation
+    const toastId = addToast(`Adding to ${playlist.name}...`, 'info', 0)
+
+    ;(async () => {
+      try {
+        const local = track as Track & {
+          mbid?: string | null
+          ipId?: string | null
+          coverCid?: string | null
+          coverPath?: string | null
+        }
+        const coverImage = (!local.coverCid && local.coverPath)
+          ? await readCoverBase64(local.coverPath)
+          : null
+
+        const trackInput = {
+          artist: track.artist,
+          title: track.title,
+          ...(track.album ? { album: track.album } : {}),
+          ...(local.mbid ? { mbid: local.mbid } : {}),
+          ...(local.ipId ? { ipId: local.ipId } : {}),
+          ...(local.coverCid ? { coverCid: local.coverCid } : {}),
+          ...(coverImage ? { coverImage } : {}),
+        }
+
+        // Get existing trackIds from cache (preferred) or subgraph (fallback)
+        const existingTrackIds: string[] = cached?.tracks
+          ?.map((t) => t.id)
+          .filter((id) => /^0x[0-9a-fA-F]{64}$/.test(id)) ?? []
+
+        if (existingTrackIds.length === 0 && playlist.trackCount > 0) {
+          const { fetchPlaylistTracks } = await import('../lib/heaven/playlists')
+          const subgraphTracks = await fetchPlaylistTracks(playlist.id)
+          existingTrackIds.push(...subgraphTracks.map((t) => t.trackId))
+        }
+
+        const result = await playlistService.setTracks({
+          playlistId: playlist.id,
+          existingTrackIds,
+          tracks: [trackInput],
+        })
+
+        if (result.success) {
+          updateToast(toastId, `Added to ${playlist.name}`, 'success')
+        } else {
+          updateToast(toastId, `Failed to add to ${playlist.name}`, 'error')
+          console.error('[AddToPlaylist] Failed:', result.error)
+        }
+      } catch (err) {
+        updateToast(toastId, `Failed to add to ${playlist.name}`, 'error')
+        console.error('[AddToPlaylist] Error:', err)
+      }
+      // Delayed invalidation — give subgraph time to index
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['playlist', playlist.id] })
+        queryClient.invalidateQueries({ queryKey: ['userPlaylists'] })
+      }, INVALIDATION_DELAY)
+    })()
   }
 
-  const handleCreateAndAdd = async () => {
+  const handleCreateAndAdd = () => {
     const track = props.track
     const name = newName().trim()
     if (!track || !name) return
 
-    setCreating(true)
-    try {
-      const result = await playlistService.createPlaylist({
-        name,
-        coverCid: '',
-        visibility: 0,
-        tracks: [{
+    // Close dialog immediately
+    props.onOpenChange(false)
+    setShowCreate(false)
+    setNewName('')
+
+    // Cache local cover
+    if (track.albumCover) {
+      setCoverCache(track.artist, track.title, track.album, track.albumCover)
+    }
+
+    const toastId = addToast(`Creating "${name}"...`, 'info', 0)
+
+    ;(async () => {
+      try {
+        const local = track as Track & {
+          mbid?: string | null
+          ipId?: string | null
+          coverCid?: string | null
+          coverPath?: string | null
+        }
+        const coverImage = (!local.coverCid && local.coverPath)
+          ? await readCoverBase64(local.coverPath)
+          : null
+
+        const trackInput = {
           artist: track.artist,
           title: track.title,
-          album: track.album || undefined,
-        }],
-      })
+          ...(track.album ? { album: track.album } : {}),
+          ...(local.mbid ? { mbid: local.mbid } : {}),
+          ...(local.ipId ? { ipId: local.ipId } : {}),
+          ...(local.coverCid ? { coverCid: local.coverCid } : {}),
+          ...(coverImage ? { coverImage } : {}),
+        }
 
-      if (result.success) {
-        queryClient.invalidateQueries({ queryKey: ['userPlaylists'] })
-        props.onOpenChange(false)
-        setShowCreate(false)
-        setNewName('')
-      } else {
-        console.error('[AddToPlaylist] Create failed:', result.error)
+        const result = await playlistService.createPlaylist({
+          name,
+          coverCid: '',
+          visibility: 0,
+          tracks: [trackInput],
+        })
+
+        if (result.success && result.playlistId) {
+          const now = Math.floor(Date.now() / 1000)
+          const addr = auth.pkpAddress()
+          const optimisticPlaylist: OnChainPlaylist = {
+            id: result.playlistId,
+            owner: addr?.toLowerCase() ?? '',
+            name,
+            coverCid: '',
+            visibility: 0,
+            trackCount: 1,
+            version: 1,
+            exists: true,
+            tracksHash: '',
+            createdAt: now,
+            updatedAt: now,
+          }
+          // Seed playlist page cache
+          queryClient.setQueryData(['playlist', result.playlistId], {
+            playlist: optimisticPlaylist,
+            tracks: [{
+              id: `optimistic-${Date.now()}`,
+              title: track.title,
+              artist: track.artist,
+              album: track.album || '',
+              albumCover: track.albumCover,
+              duration: track.duration || '--:--',
+            }],
+          })
+          // Add to sidebar list
+          const cachedPlaylists = queryClient.getQueryData<OnChainPlaylist[]>(['userPlaylists', addr]) ?? []
+          queryClient.setQueryData(['userPlaylists', addr], [optimisticPlaylist, ...cachedPlaylists])
+
+          updateToast(toastId, `Created "${name}"`, 'success')
+
+          // Delayed invalidation
+          setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: ['userPlaylists'] })
+          }, INVALIDATION_DELAY)
+        } else {
+          updateToast(toastId, `Failed to create playlist`, 'error')
+          console.error('[AddToPlaylist] Create failed:', result.error)
+        }
+      } catch (err) {
+        updateToast(toastId, `Failed to create playlist`, 'error')
+        console.error('[AddToPlaylist] Create error:', err)
       }
-    } catch (err) {
-      console.error('[AddToPlaylist] Create error:', err)
-    }
-    setCreating(false)
+    })()
   }
 
   return (
@@ -133,8 +262,8 @@ export const AddToPlaylistDialog: Component<AddToPlaylistDialogProps> = (props) 
                 <Button variant="secondary" onClick={() => setShowCreate(false)} class="flex-1">
                   Back
                 </Button>
-                <Button onClick={handleCreateAndAdd} disabled={!newName().trim() || creating()} class="flex-1">
-                  {creating() ? 'Creating...' : 'Create & Add'}
+                <Button onClick={handleCreateAndAdd} disabled={!newName().trim()} class="flex-1">
+                  Create & Add
                 </Button>
               </div>
             </div>
@@ -161,22 +290,18 @@ export const AddToPlaylistDialog: Component<AddToPlaylistDialogProps> = (props) 
                 <For each={playlists()}>
                   {(pl) => (
                     <button
-                      class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--bg-highlight)] transition-colors text-left disabled:opacity-50"
+                      class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--bg-highlight)] transition-colors text-left"
                       onClick={() => handleAddToPlaylist(pl)}
-                      disabled={adding() !== null}
                     >
                       <AlbumCover
                         size="sm"
-                        src={pl.coverCid ? `https://ipfs.filebase.io/ipfs/${pl.coverCid}` : undefined}
+                        src={pl.coverCid ? `https://heaven.myfilebase.com/ipfs/${pl.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80` : undefined}
                         icon="playlist"
                       />
                       <div class="flex-1 min-w-0">
                         <p class="text-[var(--text-primary)] text-sm truncate">{pl.name}</p>
                         <p class="text-[var(--text-muted)] text-xs">{pl.trackCount} songs</p>
                       </div>
-                      <Show when={adding() === pl.id}>
-                        <span class="text-[var(--text-muted)] text-xs">Adding...</span>
-                      </Show>
                     </button>
                   )}
                 </For>

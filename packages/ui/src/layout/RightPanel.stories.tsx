@@ -60,7 +60,7 @@ export const NowPlayingPanel: Story = {
             </IconButton>
           </div>
         </div>
-        <div class="aspect-square bg-[var(--bg-highlight)] rounded-lg mb-4 overflow-hidden">
+        <div class="aspect-square bg-[var(--bg-highlight)] rounded-md mb-4 overflow-hidden">
           <img
             src="https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop"
             alt="Album art"
@@ -119,7 +119,7 @@ export const QueuePanel: Story = {
         <h3 class="text-base font-semibold text-[var(--text-primary)] mb-4">Queue</h3>
         <div class="mb-4">
           <p class="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-2">Now Playing</p>
-          <div class="flex items-center gap-3 p-2 bg-[var(--bg-highlight)] rounded-lg">
+          <div class="flex items-center gap-3 p-2 bg-[var(--bg-highlight)] rounded-md">
             <div class="w-10 h-10 bg-[var(--bg-elevated)] rounded" />
             <div class="flex-1 min-w-0">
               <p class="text-sm font-medium text-[var(--text-primary)] truncate">Neon Dreams</p>
@@ -130,7 +130,7 @@ export const QueuePanel: Story = {
         <div>
           <p class="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-2">Next Up</p>
           <div class="space-y-2">
-            <div class="flex items-center gap-3 p-2 rounded-lg hover:bg-[var(--bg-highlight)] transition-colors">
+            <div class="flex items-center gap-3 p-2 rounded-md hover:bg-[var(--bg-highlight)] transition-colors">
               <div class="w-10 h-10 bg-[var(--bg-elevated)] rounded" />
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-[var(--text-primary)] truncate">Midnight City</p>

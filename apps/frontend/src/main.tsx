@@ -11,7 +11,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/solid-query'
 import { PlatformProvider, platform } from 'virtual:heaven-platform'
 import { AuthProvider, WalletProvider, XMTPProvider, PlayerProvider } from './providers'
 
-const queryClient = new QueryClient({
+export const queryClient = new QueryClient({
   defaultOptions: {
     queries: { staleTime: 60_000, gcTime: 5 * 60_000, retry: 2 },
   },
@@ -24,7 +24,7 @@ import '@fontsource/geist/700.css'
 import { App } from './App'
 import { AppLayout } from './components/shell'
 import { AuthPage } from './pages/AuthPage'
-import { MyProfilePage } from './pages/ProfilePage'
+import { MyProfilePage, PublicProfilePage } from './pages/ProfilePage'
 import { LibraryPage } from './pages/LibraryPage'
 import { LikedSongsPage } from './pages/LikedSongsPage'
 import { FreeWeeklyPage } from './pages/FreeWeeklyPage'
@@ -34,13 +34,36 @@ import { AIChatPage } from './pages/AIChatPage'
 import { WalletPage } from './pages/WalletPage'
 import { PlaylistPage } from './pages/PlaylistPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { ChatListPage } from './pages/ChatListPage'
 
+function maybeRedirectHandshakeProfile() {
+  if (typeof window === 'undefined') return
+
+  const host = window.location.hostname
+  if (!host || host === 'localhost' || host === '127.0.0.1') return
+
+  const lowerHost = host.toLowerCase()
+  const supportedTlds = ['heaven', 'premium']
+  const hostParts = lowerHost.split('.')
+  const tld = hostParts[hostParts.length - 1]
+  if (!supportedTlds.includes(tld)) return
+
+  const label = hostParts.length >= 2 ? hostParts[hostParts.length - 2] : hostParts[0]
+  if (!label) return
+
+  const hash = window.location.hash
+  if (!hash || hash === '#' || hash === '#/' || hash === '#') {
+    window.location.hash = `#/u/${label}.${tld}`
+  }
+}
 
 const root = document.getElementById('root')
 
 if (!root) {
   throw new Error('Root element not found')
 }
+
+maybeRedirectHandshakeProfile()
 
 render(
   () => (
@@ -57,9 +80,11 @@ render(
                 <Route path="/" component={AppLayout}>
                   <Route path="/" component={App} />
                   <Route path="/profile" component={MyProfilePage} />
+                  <Route path="/u/:id" component={PublicProfilePage} />
                   <Route path="/library" component={LibraryPage} />
                   <Route path="/liked-songs" component={LikedSongsPage} />
                   <Route path="/free-weekly" component={FreeWeeklyPage} />
+                  <Route path="/chat" component={ChatListPage} />
                   <Route path="/chat/ai/:personalityId" component={AIChatPage} />
                   <Route path="/chat/:username" component={ChatPage} />
                   <Route path="/wallet" component={WalletPage} />

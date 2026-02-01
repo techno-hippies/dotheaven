@@ -58,7 +58,7 @@ export interface InfoCardProps {
 export const InfoCard: Component<InfoCardProps> = (props) => {
   return (
     <div class={cn(
-      'bg-[var(--bg-surface)] rounded-lg p-6 flex flex-col gap-6',
+      'bg-[var(--bg-surface)] rounded-md p-6 flex flex-col gap-6',
       props.class
     )}>
       {props.children}

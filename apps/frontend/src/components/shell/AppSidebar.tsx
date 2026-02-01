@@ -1,4 +1,4 @@
-import { type Component, createSignal, For, Show, createEffect } from 'solid-js'
+import { type Component, createSignal, For, Show, createEffect, onCleanup } from 'solid-js'
 import {
   Sidebar,
   SidebarSection,
@@ -19,8 +19,15 @@ import {
 import { useNavigate, useLocation } from '@solidjs/router'
 import { createQuery, useQueryClient } from '@tanstack/solid-query'
 import { useXMTP, useAuth, usePlayer } from '../../providers'
-import { fetchUserPlaylists } from '../../lib/heaven/playlists'
+import { fetchUserPlaylists, type OnChainPlaylist } from '../../lib/heaven/playlists'
 import { createPlaylistService } from '../../lib/playlist-service'
+import { addToast, updateToast } from '../../lib/toast'
+
+const HomeIcon = () => (
+  <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
+    <path d="M219.31,108.68l-80-80a16,16,0,0,0-22.62,0l-80,80A15.87,15.87,0,0,0,32,120v96a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V160h32v56a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V120A15.87,15.87,0,0,0,219.31,108.68ZM208,208H160V152a8,8,0,0,0-8-8H104a8,8,0,0,0-8,8v56H48V120l80-80,80,80Z" />
+  </svg>
+)
 
 const ChatCircleIcon = () => (
   <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
@@ -91,34 +98,70 @@ export const AppSidebar: Component = () => {
 
   const playlists = () => playlistsQuery.data ?? []
 
+  // AbortController for retry loops — scoped to component lifetime
+  const retryAbort = new AbortController()
+  onCleanup(() => retryAbort.abort())
+
   const handleCreatePlaylist = async () => {
     const name = newPlaylistName().trim()
+    console.log('[Sidebar] handleCreatePlaylist called, name:', JSON.stringify(name))
     if (!name) return
     setCreatingPlaylist(true)
     try {
+      console.log('[Sidebar] Calling playlistService.createPlaylist...')
       const result = await playlistService.createPlaylist({
         name,
         coverCid: '',
         visibility: 0,
         tracks: [],
       })
+      console.log('[Sidebar] createPlaylist result:', JSON.stringify(result))
       if (result.success && result.playlistId) {
+        const now = Math.floor(Date.now() / 1000)
+        const addr = auth.pkpAddress()
+        const optimisticPlaylist: OnChainPlaylist = {
+          id: result.playlistId,
+          owner: addr?.toLowerCase() ?? '',
+          name,
+          coverCid: '',
+          visibility: 0,
+          trackCount: 0,
+          version: 1,
+          exists: true,
+          tracksHash: '',
+          createdAt: now,
+          updatedAt: now,
+        }
+        // Seed playlist page cache so it renders immediately
+        queryClient.setQueryData(['playlist', result.playlistId], {
+          playlist: optimisticPlaylist,
+          tracks: [],
+        })
+        // Prepend to sidebar playlist list
+        const cached = queryClient.getQueryData<OnChainPlaylist[]>(['userPlaylists', addr]) ?? []
+        queryClient.setQueryData(['userPlaylists', addr], [optimisticPlaylist, ...cached])
+
         setCreatePlaylistOpen(false)
         setNewPlaylistName('')
         navigate(`/playlist/${result.playlistId}`)
-        // Retry invalidation until subgraph indexes the new playlist
-        const retryRefresh = async (attempts: number) => {
-          for (let i = 0; i < attempts; i++) {
-            await new Promise((r) => setTimeout(r, 3000))
+
+        // Background: delayed retry invalidation until subgraph indexes
+        const signal = retryAbort.signal
+        ;(async () => {
+          for (let i = 0; i < 5; i++) {
+            if (signal.aborted) break
+            await new Promise((r) => setTimeout(r, 5000))
+            if (signal.aborted) break
             queryClient.invalidateQueries({ queryKey: ['userPlaylists'] })
+            queryClient.invalidateQueries({ queryKey: ['playlist', result.playlistId] })
             const current = playlistsQuery.data ?? []
             if (current.some((p) => p.id === result.playlistId)) break
           }
-        }
-        retryRefresh(5)
+        })()
       }
     } catch (err) {
       console.error('[Sidebar] Create playlist failed:', err)
+      addToast('Failed to create playlist', 'error')
     }
     setCreatingPlaylist(false)
   }
@@ -147,9 +190,20 @@ export const AppSidebar: Component = () => {
   return (
     <>
       <Sidebar>
+        <button
+          type="button"
+          class={`flex items-center gap-2 px-3 py-3 rounded-md cursor-pointer transition-colors hover:bg-[var(--bg-highlight-hover)] ${isActive('/') ? 'bg-[var(--bg-highlight)]' : ''}`}
+          onClick={() => navigate('/')}
+        >
+          <span class="w-6 h-6 flex items-center justify-center text-[var(--text-secondary)]">
+            <HomeIcon />
+          </span>
+          <span class="text-sm font-semibold text-[var(--text-secondary)]">Home</span>
+        </button>
         <SidebarSection
           title="Chat"
           icon={<ChatCircleIcon />}
+          onTitleClick={() => navigate('/chat')}
           action={
             <div class="flex items-center gap-1">
               <IconButton
@@ -187,21 +241,6 @@ export const AppSidebar: Component = () => {
           </For>
 
           {/* XMTP Conversations */}
-          <Show when={xmtp.isConnecting()}>
-            <div class="px-3 py-2 text-sm text-[var(--text-muted)]">
-              Connecting...
-            </div>
-          </Show>
-          <Show when={xmtp.isConnected() && xmtp.conversations().length === 0}>
-            <div class="px-3 py-2 text-sm text-[var(--text-muted)]">
-              No conversations yet
-            </div>
-          </Show>
-          <Show when={!auth.isAuthenticated() && !xmtp.isConnecting()}>
-            <div class="px-3 py-2 text-sm text-[var(--text-muted)]">
-              Sign in to see chats
-            </div>
-          </Show>
           <For each={xmtp.conversations()}>
             {(chat) => (
               <ListItem
@@ -250,7 +289,7 @@ export const AppSidebar: Component = () => {
                 cover={
                   <AlbumCover
                     size="sm"
-                    src={pl.coverCid ? `https://ipfs.filebase.io/ipfs/${pl.coverCid}` : undefined}
+                    src={pl.coverCid ? `https://heaven.myfilebase.com/ipfs/${pl.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80` : undefined}
                     icon="playlist"
                   />
                 }
@@ -280,7 +319,7 @@ export const AppSidebar: Component = () => {
                 if (e.key === 'Enter') handleStartChat()
               }}
               placeholder="Message any ENS, .heaven, or 0x wallet address"
-              class="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
+              class="w-full px-4 py-2.5 rounded-md bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
               autofocus
             />
           </DialogBody>
@@ -315,7 +354,7 @@ export const AppSidebar: Component = () => {
                 if (e.key === 'Enter') handleCreatePlaylist()
               }}
               placeholder="Playlist name"
-              class="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
+              class="w-full px-4 py-2.5 rounded-md bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
               autofocus
             />
           </DialogBody>

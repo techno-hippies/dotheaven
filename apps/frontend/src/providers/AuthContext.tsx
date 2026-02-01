@@ -17,6 +17,8 @@ export interface AuthContextType {
   // State
   pkpInfo: Accessor<PKPInfo | null>
   pkpAddress: Accessor<`0x${string}` | null>
+  /** The original EOA address when authenticated via wallet connect (null for passkey auth) */
+  eoaAddress: Accessor<`0x${string}` | null>
   authData: Accessor<AuthData | null>
   isAuthenticated: Accessor<boolean>
   isAuthenticating: Accessor<boolean>
@@ -53,6 +55,22 @@ export const AuthProvider: ParentComponent = (props) => {
   // Derived
   const pkpAddress = () => pkpInfo()?.ethAddress ?? null
   const isAuthenticated = () => pkpInfo() !== null
+  // EOA address: extracted from authData when auth method is ETH_WALLET (type 1)
+  // The actual address is in accessToken JSON (authMethodId is a hash, not the address)
+  const eoaAddress = (): `0x${string}` | null => {
+    const data = authData()
+    if (data?.authMethodType === 1 && data.accessToken) {
+      try {
+        const token = typeof data.accessToken === 'string'
+          ? JSON.parse(data.accessToken)
+          : data.accessToken
+        if (token?.address) return token.address as `0x${string}`
+      } catch {
+        // accessToken not JSON parseable
+      }
+    }
+    return null
+  }
 
   // Restore session on mount
   onMount(async () => {
@@ -367,6 +385,7 @@ export const AuthProvider: ParentComponent = (props) => {
   const value: AuthContextType = {
     pkpInfo,
     pkpAddress,
+    eoaAddress,
     authData,
     isAuthenticated,
     isAuthenticating,

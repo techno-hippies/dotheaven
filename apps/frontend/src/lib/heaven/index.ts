@@ -8,6 +8,8 @@ export {
   REGISTRY_V1,
   RECORDS_V1,
   HEAVEN_NODE,
+  getPrimaryName,
+  getPrimaryNode,
   type RegisterResult,
 } from './registry'
 
@@ -15,6 +17,15 @@ export {
   uploadAvatar,
   type AvatarUploadResult,
 } from './avatar'
+
+export {
+  resolveAvatarUri,
+  resolveIpfsUri,
+  getEnsProfile,
+  resolveEnsName,
+  verifyNftOwnership,
+  parseNftRef,
+} from './avatar-resolver'
 
 export {
   getProfile,
@@ -36,6 +47,14 @@ export {
 } from './scrobbles'
 
 export {
+  getVerificationStatus,
+  buildSelfVerifyLink,
+  syncVerificationToMegaEth,
+  type VerificationStatus,
+  type MirrorResult,
+} from './verification'
+
+export {
   fetchUserPlaylists,
   fetchPlaylist,
   fetchPlaylistTracks,
@@ -44,4 +63,3 @@ export {
   type OnChainPlaylist,
   type OnChainPlaylistTrack,
 } from './playlists'
-

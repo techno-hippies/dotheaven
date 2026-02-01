@@ -15,6 +15,13 @@ import {
 } from '../composite/dialog'
 import { Avatar, IconButton, Button } from '../primitives'
 
+// Home icon (Phosphor-style)
+const HomeIcon = () => (
+  <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
+    <path d="M219.31,108.68l-80-80a16,16,0,0,0-22.62,0l-80,80A15.87,15.87,0,0,0,32,120v96a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V160h32v56a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V120A15.87,15.87,0,0,0,219.31,108.68ZM208,208H160V152a8,8,0,0,0-8-8H104a8,8,0,0,0-8,8v56H48V120l80-80,80,80Z" />
+  </svg>
+)
+
 // Chat circle icon (Phosphor-style)
 const ChatCircleIcon = () => (
   <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
@@ -62,6 +69,15 @@ type Story = StoryObj<typeof Sidebar>
 export const Default: Story = {
   render: () => (
     <Sidebar>
+      <button
+        type="button"
+        class="flex items-center gap-2 px-3 py-3 rounded-md cursor-pointer transition-colors bg-[var(--bg-highlight)]"
+      >
+        <span class="w-6 h-6 flex items-center justify-center text-[var(--text-secondary)]">
+          <HomeIcon />
+        </span>
+        <span class="text-sm font-semibold text-[var(--text-secondary)]">Home</span>
+      </button>
       <SidebarSection
         title="Chat"
         icon={<ChatCircleIcon />}
@@ -260,7 +276,7 @@ export const WithNewChatDialog: Story = {
               value={address()}
               onInput={(e) => setAddress(e.currentTarget.value)}
               placeholder="Message any ENS, .heaven, or 0x wallet address"
-              class="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
+              class="w-full px-4 py-2.5 rounded-md bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
             />
           </DialogBody>
           <DialogFooter>

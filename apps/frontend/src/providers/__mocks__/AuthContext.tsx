@@ -15,6 +15,7 @@ export const MockAuthProvider: ParentComponent<{ mockValue?: Partial<AuthContext
   const defaultValue: AuthContextType = {
     pkpInfo: () => null,
     pkpAddress,
+    eoaAddress: () => null,
     authData: () => null,
     isAuthenticated: () => true,
     isAuthenticating: () => false,

@@ -43,12 +43,12 @@ export const Interactive: Story = {
     const [activeTab, setActiveTab] = createSignal<ProfileTab>('videos')
 
     return (
-      <div class="bg-[var(--bg-page)] p-6 rounded-lg">
+      <div class="bg-[var(--bg-page)] p-6 rounded-md">
         <ProfileTabs
           activeTab={activeTab()}
           onTabChange={(tab) => setActiveTab(tab)}
         />
-        <div class="mt-6 p-6 bg-[var(--bg-surface)] rounded-lg">
+        <div class="mt-6 p-6 bg-[var(--bg-surface)] rounded-md">
           <p class="text-[var(--text-secondary)]">
             Active tab: <span class="text-[var(--text-primary)] font-semibold">{activeTab()}</span>
           </p>

@@ -14,6 +14,7 @@
 | `ProfileV1.sol` | On-chain dating/social profile (packed enums). Supports `msg.sender` and sponsored `upsertProfileFor()` with EIP-191 sig. |
 | `ScrobbleV3.sol` | Track Registry + Scrobble Events. Tracks registered once with metadata on-chain, scrobbles as cheap event refs. Deterministic `trackId = keccak256(abi.encode(kind, payload))`. Canonical payload checks. `updateTrack()` for typo fixes. |
 | `PlaylistV1.sol` | Event-sourced playlists. Stores header + `tracksHash`/`trackCount`/`version` in storage. Full track lists + name/coverCid emitted in events for subgraph. `onlySponsor` gated. `setTracks()` for reorder/add/remove (full list replace). Tombstone delete. |
+| `ContentRegistry.sol` | Filecoin content pointers + access control. `contentId = keccak256(trackId, owner)`. Stores encrypted file refs (pieceCid, algo, datasetOwner). `canAccess(user, contentId)` for Lit Action gating. Batch grant/revoke. `onlySponsor` gated. |
 
 ## Chain Info
 
@@ -30,11 +31,12 @@ All names are **FREE** (`pricePerYear = 0`). Tiered pricing for short names (2-4
 
 | Contract | Address |
 |----------|---------|
-| RegistryV1 | `0x61CAed8296a2eF78eCf9DCa5eDf3C44469c6b1E2` |
-| RecordsV1 | `0x801b9A10a4088906d3d3D7bFf1f7ec9793302840` |
+| RegistryV1 | `0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2` |
+| RecordsV1 | `0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3` |
 | ProfileV1 | `0x0A6563122cB3515ff678A918B5F31da9b1391EA3` |
 | ScrobbleV3 | `0x144c450cd5B641404EEB5D5eD523399dD94049E0` |
 | PlaylistV1 | `0xF0337C4A335cbB3B31c981945d3bE5B914F7B329` |
+| ContentRegistry | `0x9ca08C2D2170A43ecfA12AB35e06F2E1cEEB4Ef2` |
 
 Heaven Node: `0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27`
 
@@ -91,6 +93,18 @@ registerFor(parentNode, "alice", userAddress, 365 days)
 - `parentNode` = `namehash("heaven.hnsbridge.eth")`
 - `tokenId` = `uint256(keccak256(parentNode, keccak256("alice")))`
 - NFT minted to `userAddress`
+
+### Primary Name (Reverse Mapping)
+```solidity
+mapping(address => uint256) public primaryTokenId;
+primaryName(addr) → (label, parentNode)   // validated: ownership + expiry
+primaryNode(addr) → bytes32 node          // for record lookups
+setPrimaryName(tokenId)                   // manual set (must own + not expired)
+clearPrimaryName()                        // manual clear
+```
+- Auto-set on registration via `_autoSetPrimary()` — replaces expired/transferred primaries
+- Cleared on transfer in `_update()`, cleared on burn in `_clearToken()`
+- Views return empty if token expired or no longer owned
 
 ### Records
 ```
@@ -150,6 +164,7 @@ contracts/megaeth/
 │   ├── DeployScrobbleV3.s.sol # Deploy ScrobbleV3
 │   └── DeployPlaylistV1.s.sol # Deploy PlaylistV1
 ├── test/
+│   ├── RegistryV1.t.sol       # Primary name + transfer clearing tests
 │   ├── ProfileV1.t.sol        # Profile sig verification + replay tests
 │   ├── ScrobbleV3.t.sol       # Track registry + scrobble tests
 │   ├── PlaylistV1.t.sol       # Playlist CRUD + tombstone tests

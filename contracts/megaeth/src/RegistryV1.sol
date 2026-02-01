@@ -64,6 +64,8 @@ contract RegistryV1 is ERC721, Ownable, ReentrancyGuard {
     event TldAdminUpdated(bytes32 indexed parentNode, address indexed admin);
 
     event PaymentConfigUpdated(address indexed token, address indexed treasury);
+    event PrimaryNameSet(address indexed addr, uint256 indexed tokenId);
+    event PrimaryNameCleared(address indexed addr);
 
     /*//////////////////////////////////////////////////////////////
                                  CONSTANTS
@@ -127,6 +129,12 @@ contract RegistryV1 is ERC721, Ownable, ReentrancyGuard {
     mapping(uint256 => bytes32) public tokenIdToLabelHash;
     mapping(uint256 => string)  public tokenIdToLabel;
     mapping(uint256 => uint256) public expiries;
+
+    /*//////////////////////////////////////////////////////////////
+                             REVERSE MAPPING
+    //////////////////////////////////////////////////////////////*/
+    /// @notice Primary name tokenId for an address. 0 = no primary name.
+    mapping(address => uint256) public primaryTokenId;
 
     /*//////////////////////////////////////////////////////////////
                                  INTEGRATIONS
@@ -361,6 +369,8 @@ contract RegistryV1 is ERC721, Ownable, ReentrancyGuard {
 
         if (records != address(0)) IRecords(records).registerNode(node, tokenId);
 
+        _autoSetPrimary(to, tokenId);
+
         emit SubnameRegistered(parentNode, tokenId, label, to, expiry);
     }
 
@@ -401,6 +411,8 @@ contract RegistryV1 is ERC721, Ownable, ReentrancyGuard {
             ens.setSubnodeRecord(parentNode, labelHash, address(this), ensResolver, 0);
         }
         if (records != address(0)) IRecords(records).registerNode(node, tokenId);
+
+        _autoSetPrimary(to, tokenId);
 
         emit SubnameRegistered(parentNode, tokenId, label, to, expiries[tokenId]);
     }
@@ -448,6 +460,8 @@ contract RegistryV1 is ERC721, Ownable, ReentrancyGuard {
         }
         if (records != address(0)) IRecords(records).registerNode(node, tokenId);
 
+        _autoSetPrimary(to, tokenId);
+
         emit SubnameRegistered(parentNode, tokenId, label, to, expiries[tokenId]);
     }
 
@@ -472,6 +486,43 @@ contract RegistryV1 is ERC721, Ownable, ReentrancyGuard {
         expiries[tokenId] = newExpiry;
 
         emit SubnameRenewed(tokenId, newExpiry);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                           PRIMARY NAME
+    //////////////////////////////////////////////////////////////*/
+    /// @notice Set your primary name (must own the NFT and it must not be expired)
+    function setPrimaryName(uint256 tokenId) external {
+        if (ownerOf(tokenId) != msg.sender) revert NotAuthorized();
+        if (block.timestamp > expiries[tokenId]) revert Expired();
+        primaryTokenId[msg.sender] = tokenId;
+        emit PrimaryNameSet(msg.sender, tokenId);
+    }
+
+    /// @notice Clear your primary name
+    function clearPrimaryName() external {
+        delete primaryTokenId[msg.sender];
+        emit PrimaryNameCleared(msg.sender);
+    }
+
+    /// @notice Resolve an address to its primary name's node (convenience view)
+    /// @return node The namehash node (bytes32(tokenId)), or bytes32(0) if none/expired
+    function primaryNode(address addr) external view returns (bytes32) {
+        uint256 tid = primaryTokenId[addr];
+        if (tid == 0) return bytes32(0);
+        // Validate: still owned by addr and not expired
+        if (_ownerOf(tid) != addr) return bytes32(0);
+        if (block.timestamp > expiries[tid]) return bytes32(0);
+        return bytes32(tid);
+    }
+
+    /// @notice Resolve an address to its primary name label + parentNode (convenience view)
+    function primaryName(address addr) external view returns (string memory label, bytes32 parentNode) {
+        uint256 tid = primaryTokenId[addr];
+        if (tid == 0) return ("", bytes32(0));
+        if (_ownerOf(tid) != addr) return ("", bytes32(0));
+        if (block.timestamp > expiries[tid]) return ("", bytes32(0));
+        return (tokenIdToLabel[tid], tokenIdToParentNode[tid]);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -569,7 +620,24 @@ contract RegistryV1 is ERC721, Ownable, ReentrancyGuard {
         }
     }
 
+    /// @dev Auto-set primary if current primary is unset or invalid (expired/not owned)
+    function _autoSetPrimary(address to, uint256 tokenId) internal {
+        uint256 current = primaryTokenId[to];
+        if (current != 0 && _ownerOf(current) == to && block.timestamp <= expiries[current]) {
+            return; // current primary is still valid
+        }
+        primaryTokenId[to] = tokenId;
+        emit PrimaryNameSet(to, tokenId);
+    }
+
     function _clearToken(uint256 tokenId) internal {
+        // Clear primary name if this was the owner's primary
+        address prevOwner = _ownerOf(tokenId);
+        if (prevOwner != address(0) && primaryTokenId[prevOwner] == tokenId) {
+            delete primaryTokenId[prevOwner];
+            emit PrimaryNameCleared(prevOwner);
+        }
+
         delete tokenIdToParentNode[tokenId];
         delete tokenIdToLabelHash[tokenId];
         delete tokenIdToLabel[tokenId];
@@ -630,7 +698,7 @@ contract RegistryV1 is ERC721, Ownable, ReentrancyGuard {
         return true;
     }
 
-    // Block transfers when expired
+    // Block transfers when expired + clear primary name on transfer
     function _update(address to, uint256 tokenId, address auth)
         internal
         override
@@ -640,6 +708,13 @@ contract RegistryV1 is ERC721, Ownable, ReentrancyGuard {
         if (from != address(0) && to != address(0)) {
             if (block.timestamp > expiries[tokenId]) revert Expired();
         }
+
+        // Clear sender's primary name if they're transferring it away
+        if (from != address(0) && primaryTokenId[from] == tokenId) {
+            delete primaryTokenId[from];
+            emit PrimaryNameCleared(from);
+        }
+
         return super._update(to, tokenId, auth);
     }
 

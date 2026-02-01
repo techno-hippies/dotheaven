@@ -16,12 +16,12 @@ export interface AppShellProps {
  */
 export const AppShell: Component<AppShellProps> = (props) => {
   return (
-    <div class={cn('flex flex-col h-screen bg-[var(--bg-page)] text-white overflow-hidden', props.class)}>
+    <div class={cn('flex flex-col h-screen bg-[var(--bg-page)] text-white overflow-hidden max-w-[1440px] mx-auto w-full', props.class)}>
       {/* Header */}
       {props.header}
 
       {/* Main content area */}
-      <div class="flex flex-1 gap-2 overflow-hidden">
+      <div class="flex flex-1 overflow-hidden">
         {/* Left Sidebar */}
         {props.sidebar}
 

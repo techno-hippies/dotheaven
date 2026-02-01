@@ -9,6 +9,8 @@ export interface LocalTrack extends Track {
   mbid?: string
   /** IPFS CID for album cover art (set after uploading to Filebase) */
   coverCid?: string
+  /** Absolute path to local cover image (for Tauri file reads) */
+  coverPath?: string
 }
 
 // =============================================================================
@@ -45,6 +47,11 @@ export async function getFolderNative(): Promise<string | null> {
 /** Persist folder path in SQLite settings */
 export async function setFolderNative(folder: string): Promise<void> {
   return invoke('music_set_folder', { folder })
+}
+
+/** Update cover CID for a local track (propagates to all rows with same cover_path) */
+export async function setCoverCidNative(filePath: string, coverCid: string): Promise<void> {
+  return invoke('music_set_cover_cid', { filePath, coverCid })
 }
 
 // =============================================================================

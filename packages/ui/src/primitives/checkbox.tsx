@@ -47,7 +47,7 @@ export interface CheckboxProps {
  * - Syncs with form reset events
  * - ARIA labeling and description support
  * - Can be controlled or uncontrolled
- * - Matches Heaven design system (rounded-lg, accent colors)
+ * - Matches Heaven design system (rounded-md, accent colors)
  */
 export const Checkbox: Component<CheckboxProps> = (props) => {
   const [local, others] = splitProps(props, [
@@ -67,7 +67,7 @@ export const Checkbox: Component<CheckboxProps> = (props) => {
       <KobalteCheckbox.Input class="peer" />
       <KobalteCheckbox.Control
         class={cn(
-          'flex items-center justify-center w-5 h-5 rounded-lg border-2 transition-all',
+          'flex items-center justify-center w-5 h-5 rounded-md border-2 transition-all',
           'bg-[var(--bg-highlight)] border-[var(--bg-highlight)]',
           'peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--accent-blue)]/20',
           'peer-data-[checked]:bg-[var(--accent-blue)] peer-data-[checked]:border-[var(--accent-blue)]',

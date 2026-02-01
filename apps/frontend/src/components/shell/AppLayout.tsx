@@ -16,6 +16,7 @@ import {
 } from '@heaven/ui'
 import { AppSidebar, HeaderActions } from '.'
 import { NowPlaying } from '../player/now-playing'
+import { Toaster } from '../Toaster'
 import { usePlayer } from '../../providers'
 
 export const AppLayout: ParentComponent = (props) => {
@@ -87,6 +88,7 @@ export const AppLayout: ParentComponent = (props) => {
       }
     >
       {props.children}
+      <Toaster />
     </AppShell>
   )
 }

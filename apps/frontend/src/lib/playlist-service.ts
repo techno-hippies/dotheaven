@@ -10,9 +10,29 @@
 
 import type { PKPAuthContext } from './lit'
 import { getLitClient } from './lit/client'
+import { PLAYLIST_V1_CID } from './lit/action-cids'
 import { getUserNonce } from './heaven/playlists'
 
-const PLAYLIST_V1_CID = 'QmZkySDfK5rg6Xs8JGhi8GTWKuTfZvzv6sHDhkZZaTncGs'
+type EncryptedKey = {
+  ciphertext: string
+  dataToEncryptHash: string
+  accessControlConditions: unknown[]
+}
+
+/** Encrypted Filebase covers key — bound to the playlist-v1 action CID (update after redeploy). */
+const FILEBASE_COVERS_ENCRYPTED_KEY: EncryptedKey | null = {
+  ciphertext: 'qxpLzowVxe4MX3/jxS8k42JhPEXhS4ScIwQf61bg1UjFbnXAJ4WFIXufSJY1v2a8pKfStJ/npn4ZUuoq+EKZwN3zHWRRLAuszzok+Z29lK5tDBIXanoPXz2ynTrB4B84CudO4SAmG3rwPKJMLqlvMu7fRJYvjsJlM+89/IHcG0n1dXlNsOPAomtr5+YG0hzUfPYlTw5MNdw9Fw7SPSUVvFd8jZ/ftgCwq5jJPUyKQ5Ez0Y2wZvDLDwXu3xZ+CAI=',
+  dataToEncryptHash: 'c90b8bc304ece7f65c9af66ee9ca10472888cf1c0c324eaccead9f7edf6e1856',
+  accessControlConditions: [{
+    conditionType: 'evmBasic',
+    contractAddress: '',
+    standardContractType: '',
+    chain: 'ethereum',
+    method: '',
+    parameters: [':currentActionIpfsId'],
+    returnValueTest: { comparator: '=', value: 'QmYvozSnyUb3QCmsDLWQ1caYecokqeHpc8Cck5uqnuNf9R' },
+  }],
+}
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -22,6 +42,8 @@ export interface TrackInput {
   album?: string
   mbid?: string
   ipId?: string
+  coverCid?: string
+  coverImage?: { base64: string; contentType: string }
 }
 
 export interface PlaylistResult {
@@ -115,30 +137,43 @@ async function executePlaylistAction(
 ): Promise<PlaylistResult> {
   const pkpPublicKey = getPkpPublicKey()
   const pkpAddress = getPkpAddress()
+  console.log(`[Playlist] pkpPublicKey: ${pkpPublicKey?.slice(0, 16)}..., pkpAddress: ${pkpAddress}`)
   if (!pkpPublicKey || !pkpAddress) {
+    console.error('[Playlist] Not authenticated — missing pkpPublicKey or pkpAddress')
     return { success: false, error: 'Not authenticated' }
   }
 
   const operation = params.operation as string
   const timestamp = Date.now()
+  console.log(`[Playlist] ${operation} — fetching nonce for ${pkpAddress}...`)
   const nonce = await getUserNonce(pkpAddress)
+  console.log(`[Playlist] ${operation} — nonce: ${nonce}, timestamp: ${timestamp}`)
 
-  console.log(`[Playlist] ${operation} — submitting via Lit Action (internal signing)...`)
-
+  console.log(`[Playlist] ${operation} — getting Lit client...`)
   const litClient = await getLitClient()
+  console.log(`[Playlist] ${operation} — getting auth context...`)
   const authContext = await getAuthContext()
+  console.log(`[Playlist] ${operation} — executing Lit Action (CID: ${PLAYLIST_V1_CID})...`)
 
   // Single executeJs: action signs with user's PKP + sponsor PKP broadcasts
+  const jsParams: Record<string, unknown> = {
+    userPkpPublicKey: pkpPublicKey,
+    operation,
+    timestamp,
+    nonce,
+    ...params,
+  }
+
+  const tracks = params.tracks as TrackInput[] | undefined
+  const hasCoverImage = Array.isArray(tracks) && tracks.some((t) => t.coverImage)
+  if (hasCoverImage && FILEBASE_COVERS_ENCRYPTED_KEY) {
+    jsParams.filebaseEncryptedKey = FILEBASE_COVERS_ENCRYPTED_KEY
+  }
+
   const result = await litClient.executeJs({
     ipfsId: PLAYLIST_V1_CID,
     authContext,
-    jsParams: {
-      userPkpPublicKey: pkpPublicKey,
-      operation,
-      timestamp,
-      nonce,
-      ...params,
-    },
+    jsParams,
   })
 
   const response = typeof result.response === 'string' ? JSON.parse(result.response) : result.response
@@ -158,4 +193,3 @@ async function executePlaylistAction(
     registered: response.registered,
   }
 }
-

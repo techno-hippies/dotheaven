@@ -32,8 +32,6 @@ export { TrackList, type TrackListProps, type Track, type TrackMenuActions, type
 export { MediaHeader, type MediaHeaderProps } from './media-header'
 export { CommentItem, CommentSection, type CommentItemProps, type CommentSectionProps } from './comment-item'
 export { FollowButton, type FollowButtonProps } from './follow-button'
-export { ProfileEditCard, type ProfileEditCardProps } from './profile-edit-card'
-export { ProfileEditField, type ProfileEditFieldProps, type ProfileEditFieldType } from './profile-edit-field'
 export { OnboardingNameStep, type OnboardingNameStepProps } from './onboarding-name-step'
 export { OnboardingBasicsStep, type OnboardingBasicsStepProps, type OnboardingBasicsData } from './onboarding-basics-step'
 export { OnboardingAvatarStep, type OnboardingAvatarStepProps } from './onboarding-avatar-step'
@@ -62,3 +60,16 @@ export {
   type TimeSlot
 } from './scheduler'
 export { SongUploadCard, type SongUploadCardProps, type SongUploadFormData } from './song-upload-card'
+export { ProfileInfoSection, type ProfileInfoSectionProps, type ProfileInput, type EnsProfile } from './profile-info-section'
+export {
+  HOBBY_TAGS, SKILL_TAGS, HOBBY_BY_ID, SKILL_BY_ID,
+  getTagLabel, packTagIds, unpackTagIds,
+  tagIdsToString, stringToTagIds, tagIdsToValues, valuesToTagIds, tagsToOptions,
+  type Tag,
+} from '../data/tags'
+export { VerificationBadge, type VerificationBadgeProps, type VerificationState } from './verification-badge'
+export { VerifyIdentityDialog, type VerifyIdentityDialogProps, type VerifyStep } from './verify-identity-dialog'
+export { FeedPost, type FeedPostProps, type FeedPostMedia, type MediaItem } from './feed-post'
+export { PostComposer, type PostComposerProps } from './post-composer'
+export { ChatListItem, type ChatListItemProps } from './chat-list-item'
+

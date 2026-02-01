@@ -48,7 +48,7 @@ export const MediaHeader: Component<MediaHeaderProps> = (props) => {
       <div class="flex-shrink-0">
         {props.coverImages && props.coverImages.length > 0 ? (
           // Playlist mosaic (2x2 grid)
-          <div class="w-56 h-56 grid grid-cols-2 grid-rows-2 gap-1 bg-[var(--bg-elevated)] rounded-lg overflow-hidden shadow-xl">
+          <div class="w-56 h-56 grid grid-cols-2 grid-rows-2 gap-1 bg-[var(--bg-elevated)] rounded-md overflow-hidden shadow-xl">
             {props.coverImages.slice(0, 4).map((src) => (
               <AlbumCover
                 src={src}

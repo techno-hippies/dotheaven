@@ -72,7 +72,7 @@ export interface SearchInputProps {
 export const SearchInput: Component<SearchInputProps> = (props) => (
   <div
     class={cn(
-      'flex items-center gap-3 bg-[var(--bg-highlight)] rounded-lg px-4 py-2.5 w-full',
+      'flex items-center gap-3 bg-[var(--bg-highlight)] rounded-md px-4 py-2.5 w-full',
       props.class
     )}
   >

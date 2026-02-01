@@ -14,7 +14,7 @@ export const Sidebar: Component<SidebarProps> = (props) => {
   return (
     <aside
       class={cn(
-        'w-[340px] h-full bg-[var(--bg-surface)] rounded-tr-xl rounded-br-xl flex flex-col overflow-y-auto p-3',
+        'w-[280px] h-full border-r border-[var(--bg-highlight)] flex flex-col overflow-y-auto p-3',
         props.class
       )}
     >
@@ -29,6 +29,7 @@ export interface SidebarSectionProps {
   title?: string
   icon?: JSX.Element
   action?: JSX.Element
+  onTitleClick?: () => void
 }
 
 /**
@@ -40,7 +41,14 @@ export const SidebarSection: Component<SidebarSectionProps> = (props) => {
     <div class={cn('flex flex-col', props.class)}>
       {(props.title || props.action) && (
         <div class="flex items-center justify-between px-3 py-3">
-          <span class="text-[var(--text-secondary)] text-sm font-semibold flex items-center gap-2">
+          <span
+            class={cn(
+              'text-[var(--text-secondary)] text-sm font-semibold flex items-center gap-2',
+              props.onTitleClick && 'cursor-pointer hover:text-[var(--text-primary)] transition-colors',
+            )}
+            onClick={() => props.onTitleClick?.()}
+            role={props.onTitleClick ? 'button' : undefined}
+          >
             {props.icon && (
               <span class="w-6 h-6 flex items-center justify-center">
                 {props.icon}

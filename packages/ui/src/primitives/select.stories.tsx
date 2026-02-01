@@ -52,7 +52,7 @@ export const Default: Story = {
           onChange={setValue}
           placeholder="Select a fruit..."
         />
-        <div class="mt-4 p-3 bg-[var(--bg-highlight)] rounded-lg">
+        <div class="mt-4 p-3 bg-[var(--bg-highlight)] rounded-md">
           <p class="text-sm text-[var(--text-secondary)] mb-1">Selected value:</p>
           <p class="text-base text-[var(--text-primary)] font-medium">
             {value() || 'None'}
@@ -97,7 +97,7 @@ export const PreSelected: Story = {
           onChange={setValue}
           placeholder="Select a fruit..."
         />
-        <div class="mt-4 p-3 bg-[var(--bg-highlight)] rounded-lg">
+        <div class="mt-4 p-3 bg-[var(--bg-highlight)] rounded-md">
           <p class="text-sm text-[var(--text-secondary)] mb-1">Selected value:</p>
           <p class="text-base text-[var(--text-primary)] font-medium">{value()}</p>
         </div>
@@ -200,7 +200,7 @@ export const TwoSelects: Story = {
           </div>
         </div>
 
-        <div class="mt-4 p-3 bg-[var(--bg-highlight)] rounded-lg">
+        <div class="mt-4 p-3 bg-[var(--bg-highlight)] rounded-md">
           <p class="text-sm text-[var(--text-secondary)] mb-2">Selection:</p>
           <p class="text-sm text-[var(--text-primary)]">
             Native: {nativeLang() || 'None'}

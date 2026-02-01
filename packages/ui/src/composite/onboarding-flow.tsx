@@ -127,6 +127,14 @@ export const OnboardingFlow: Component<OnboardingFlowProps> = (props) => {
                   }
                   return result
                 }}
+                onImportAvatar={async (uri) => {
+                  const result = await props.avatarStepProps?.onImportAvatar?.(uri)
+                  if (result !== false) {
+                    setStep('complete')
+                    props.onComplete?.({ name: claimedName(), basics: basicsData() })
+                  }
+                  return result
+                }}
                 onSkip={() => {
                   setStep('complete')
                   props.onComplete?.({ name: claimedName(), basics: basicsData() })

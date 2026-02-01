@@ -72,7 +72,7 @@ export const SearchField: Component<SearchFieldProps> = (props) => {
         <Search.Item
           item={itemProps.item}
           class={cn(
-            'flex items-center gap-3 px-4 py-3 cursor-pointer rounded-lg',
+            'flex items-center gap-3 px-4 py-3 cursor-pointer rounded-md',
             'hover:bg-[var(--bg-highlight)] transition-colors',
             'data-[highlighted]:bg-[var(--bg-highlight)]'
           )}
@@ -99,7 +99,7 @@ export const SearchField: Component<SearchFieldProps> = (props) => {
     >
       <Search.Control
         class={cn(
-          'flex items-center gap-3 bg-[var(--bg-highlight)] rounded-lg px-4 py-2.5 w-full',
+          'flex items-center gap-3 bg-[var(--bg-highlight)] rounded-md px-4 py-2.5 w-full',
           'border border-transparent',
           'focus-within:border-[var(--accent-blue)] focus-within:ring-2 focus-within:ring-[var(--accent-blue)]/20',
           'transition-colors',
@@ -143,7 +143,7 @@ export const SearchField: Component<SearchFieldProps> = (props) => {
           <Search.Content
             class={cn(
               'w-[var(--kb-popper-anchor-width)] mt-2',
-              'bg-[var(--bg-surface)] rounded-lg border border-[var(--border-default)]',
+              'bg-[var(--bg-surface)] rounded-md border border-[var(--border-default)]',
               'shadow-xl overflow-hidden',
               'data-[expanded]:animate-in data-[expanded]:fade-in-0 data-[expanded]:zoom-in-95',
               'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95'

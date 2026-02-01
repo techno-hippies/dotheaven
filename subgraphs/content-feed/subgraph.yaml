@@ -1,0 +1,33 @@
+specVersion: 1.0.0
+indexerHints:
+  prune: auto
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: ContentRegistry
+    network: megaeth-testnet-v2
+    source:
+      address: "0x9ca08C2D2170A43ecfA12AB35e06F2E1cEEB4Ef2"
+      abi: ContentRegistry
+      startBlock: 10216192
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ContentEntry
+        - AccessGrant
+      abis:
+        - name: ContentRegistry
+          file: ./abis/ContentRegistry.json
+      eventHandlers:
+        - event: ContentRegistered(indexed bytes32,indexed bytes32,indexed address,address,bytes)
+          handler: handleContentRegistered
+        - event: AccessGranted(indexed bytes32,indexed address)
+          handler: handleAccessGranted
+        - event: AccessRevoked(indexed bytes32,indexed address)
+          handler: handleAccessRevoked
+        - event: ContentDeactivated(indexed bytes32)
+          handler: handleContentDeactivated
+      file: ./src/content.ts

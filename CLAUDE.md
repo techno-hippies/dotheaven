@@ -74,12 +74,15 @@ bun check            # Type check all packages
 
 ### Scrobbling (On-chain listening history)
 - **ScrobbleEngine** (`packages/core/src/scrobble/engine.ts`): State machine tracking play time per session. Threshold: `min(duration × 50%, 240s)`. Emits `ReadyScrobble` when met
-- **ScrobbleService** (`apps/frontend/src/lib/scrobble-service.ts`): Wires engine directly to Lit Action V2. Each scrobble fires immediately (no queue/batch)
-- **Lit Action V2** (`lit-actions/actions/scrobble-submit-v2.js`): Signs EIP-191, buckets tracks into MBID/ipId/meta, sponsor PKP broadcasts to ScrobbleV2 on MegaETH
-- **ScrobbleV2 contract**: `0xf42b285EEb9280860808fd3bC7b0D6c531EF53bd` on MegaETH (chain 6343)
-- **Subgraph**: Goldsky `dotheaven-activity/3.0.0` indexes `ScrobbleId` + `ScrobbleMeta` events
-- **Frontend**: `ScrobblesPage` fetches from subgraph, displays verified/unidentified status
+- **ScrobbleService** (`apps/frontend/src/lib/scrobble-service.ts`): Wires engine directly to Lit Action V3. Each scrobble fires immediately (no queue/batch)
+- **Lit Action V3** (`lit-actions/actions/scrobble-submit-v3.js`): Signs EIP-191, registers tracks + scrobbles via `registerAndScrobbleBatch()`. Uploads cover art to Filebase (encrypted key, decrypted at runtime), sets coverCid on-chain via `setTrackCoverBatch()`. Sponsor PKP broadcasts to ScrobbleV3 on MegaETH
+- **ScrobbleV3 contract**: `0x144c450cd5B641404EEB5D5eD523399dD94049E0` on MegaETH (chain 6343)
+- **Subgraph**: Goldsky `dotheaven-activity/4.0.0` indexes `TrackRegistered` + `TrackCoverSet` + `Scrobbled` events
+- **Frontend**: `ScrobblesPage` fetches from subgraph, displays verified/unidentified status with cover art
+- **Cover art pipeline** (Tauri): Rust extracts cover from audio tags → Tauri reads bytes → base64 sent to Lit Action → uploads to Filebase S3 (IPFS-pinned) → CID set on-chain → cached in local SQLite → displayed via `heaven.myfilebase.com` dedicated gateway with image optimization params
+- **Auto-refresh**: After scrobble, `queryClient.invalidateQueries(['scrobbles'])` refreshes profile. Waits for cover TX confirmation before invalidating.
 - **MBID extraction**: Rust `music_db.rs` reads MusicBrainz recording ID from tags via lofty
+- **IPFS gateway**: `https://heaven.myfilebase.com/ipfs/` (dedicated Filebase gateway) with optimization params (`?img-width=96&img-height=96&img-format=webp&img-quality=80`)
 - Three scrobble paths: MBID (MusicBrainz recording), ipId (Story Protocol IP), metadata hash (unidentified)
 
 ### Playlists (On-chain via PlaylistV1)
@@ -89,6 +92,63 @@ bun check            # Type check all packages
 - **Lit Action**: `playlist-v1.js` — signs EIP-191, registers tracks in ScrobbleV3, then executes playlist op
 - **Subgraph**: Goldsky `dotheaven-playlists/1.0.0` indexes PlaylistCreated, PlaylistTracksSet, PlaylistMetaUpdated, PlaylistDeleted
   - API: `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-playlists/1.0.0/gn`
+
+### Heaven Names (RegistryV1 — .heaven name NFTs)
+- **RegistryV1 contract**: `0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2` on MegaETH (chain 6343)
+- **RecordsV1 contract**: `0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3` on MegaETH (chain 6343)
+- ERC-721 name NFTs: `tokenId = uint256(node)` where `node = keccak256(parentNode, keccak256(label))`
+- `parentNode` = `namehash("heaven.hnsbridge.eth")` = `0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27`
+- **Primary name reverse mapping**: `mapping(address => uint256) primaryTokenId`
+  - Auto-set on registration (replaces expired/transferred primaries)
+  - `primaryName(addr)` → `(label, parentNode)` with on-chain ownership+expiry validation
+  - `primaryNode(addr)` → `bytes32 node` for record lookups
+  - `setPrimaryName(tokenId)` / `clearPrimaryName()` for manual control
+  - Cleared on transfer in `_update()`, cleared on burn in `_clearToken()`
+- **Public profile route**: `/#/u/:id` supports addresses (`0x...`), heaven labels (`alice`), ENS names (`alice.eth`), HNS TLDs (`alice.premium`)
+  - Address visits do reverse lookup via `primaryName()` to resolve heaven name + load text records
+  - Handshake hostname detection redirects `alice.heaven` → `/#/u/alice.heaven`
+- **Name → address resolution**: `getAddr(node)` calls `RegistryV1.ownerOf(uint256(node))` (NOT `RecordsV1.addr()` — addr records are never set during registration)
+- **Own profile heaven name discovery**: `MyProfilePage` uses a `primaryNameQuery` (TanStack) to discover the name on-chain, syncs to `heavenName` signal + localStorage. Handles cross-client (web↔Tauri) where localStorage differs.
+- **ProfileInfoSection**: Identity, Bio & Links, and Photos cards are wrapped in `Show when={isOwnProfile}` — only visible on own profile. Public viewers see the header (name, bio, links) + info cards (Basics, Location, etc.)
+- **Key files**:
+  - `apps/frontend/src/lib/heaven/registry.ts` — `getAddr()`, `getPrimaryName()`, `getPrimaryNode()`, `computeNode()`
+  - `apps/frontend/src/pages/ProfilePage.tsx` — `PublicProfilePage`, `MyProfilePage`, `parseProfileId()`, `resolveProfileId()`
+  - `packages/ui/src/composite/profile-info-section.tsx` — edit-only sections gated on `isOwnProfile`
+
+### Profile (On-chain via ProfileV1 + RecordsV1)
+- **ProfileV1 contract**: `0x0A6563122cB3515ff678A918B5F31da9b1391EA3` on MegaETH (chain 6343)
+- **RecordsV1 contract**: `0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3` on MegaETH (chain 6343)
+- **Lit Action**: `heaven-set-profile-v1.js` — sponsor PKP writes profile gaslessly
+- **Dual storage model**:
+  - **ProfileV1**: Structured data (enums, packed integers, bytes32). Used for matching/filtering.
+    - Numeric enums: age, gender, nationality, nativeLanguage, relocate, degree, profession, etc.
+    - `learningLanguagesPacked`: uint80 = 5 × uint16 language codes, big-endian
+    - `hobbiesCommit`/`skillsCommit`: bytes32 packed with 16 × uint16 tag IDs (not hashes)
+    - `locationCityId`: keccak256 hash of city label string
+    - `schoolId`: zeroed (no on-chain use yet, pending ZKEmail verification)
+  - **RecordsV1**: Key-value strings (ENS-compatible). Used for display.
+    - `avatar`, `header`, `description`, `url`, `com.twitter`, `com.github`, `org.telegram`
+    - `heaven.hobbies`, `heaven.skills`: human-readable labels (e.g. "Swimming, Cooking")
+    - `heaven.location`: city label (e.g. "Paris, Island of France, France")
+    - `heaven.school`: school name plaintext
+- **Tag dictionary** (`packages/ui/src/data/tags.ts`):
+  - Canonical uint16 IDs for hobbies (1–999) and skills (1000–1999)
+  - ~90 hobbies, ~40 skills. IDs are **stable forever** (never reuse/renumber)
+  - `packTagIds(ids)` → bytes32, `unpackTagIds(hex)` → number[]
+  - `parseTagCsv(csv)` → dedupe/sort/validate/cap at 16
+  - UI uses `multiselectdropdown` with tag options → stores comma-separated ID strings
+- **Profile save flow** (2 txs, both gasless via sponsor PKP):
+  1. `setRecordsFor()` / `setTextRecords()` — writes display strings to RecordsV1
+  2. `upsertProfileFor()` — writes structured data to ProfileV1
+- **Profile load flow**:
+  1. `getProfile()` reads ProfileV1 struct, decodes enums/bytes2/packed tags
+  2. `getTextRecord()` reads RecordsV1 for display strings (avatar, bio, social links, labels)
+  3. On-chain packed tag IDs are the source of truth for hobbies/skills (not RecordsV1 labels)
+- **Key files**:
+  - `apps/frontend/src/lib/heaven/profile.ts` — buildProfileInput, getProfile, parseTagCsv
+  - `apps/frontend/src/pages/ProfilePage.tsx` — save/load orchestration
+  - `packages/ui/src/composite/profile-info-section.tsx` — editable profile UI
+  - `packages/ui/src/data/tags.ts` — tag dictionary + pack/unpack helpers
 
 ### Local Music Library (Tauri-only)
 - **Rust SQLite backend** (`src-tauri/src/music_db.rs`): rusqlite + lofty + walkdir
@@ -120,6 +180,8 @@ bun check            # Type check all packages
 /library               # Music library
 /playlist/:id          # Playlist page
 /scrobbles             # On-chain scrobble history
+/u/:id                 # Public profile (address, heaven name, ENS, or HNS)
+/profile               # Own profile (edit mode)
 ```
 
 ## Environment Variables
@@ -157,14 +219,17 @@ VITE_AGORA_APP_ID      # Agora RTC app ID for voice calls
 ## Design Guidelines
 
 ### Border Radius System
-**Simple rule: Use `rounded-lg` (12px) for everything, except perfect circles which use `rounded-full`**
+**Simple rule: Use `rounded-md` (6px) for everything, except perfect circles which use `rounded-full`**
 
-- Buttons, inputs, search bars, cards, dropdowns: `rounded-lg`
-- List items, menu items, hover states: `rounded-lg`
-- Message bubbles, album covers: `rounded-lg`
+- Buttons, inputs, search bars, cards, dropdowns: `rounded-md`
+- List items, menu items, hover states: `rounded-md`
+- Dialogs, modals, content containers: `rounded-md`
+- Album covers (square images): `rounded-md`
 - Avatars (circle), play buttons, send buttons: `rounded-full`
 
-**Never use**: `rounded-md`, `rounded-sm`, `rounded-xl`, `rounded-2xl`, or `rounded-full` for non-circular elements!
+**Never use**: `rounded-sm`, `rounded-lg`, `rounded-xl`, `rounded-2xl`, or `rounded-full` for non-circular elements!
+
+**Rationale**: The 6px radius provides a subtle, modern look that works better for small UI elements (icon buttons, menu items, list rows) while avoiding the overly-rounded bubble appearance of larger radii.
 
 ### Component Reuse (IMPORTANT)
 **Always use existing reusable components from `@heaven/ui` before creating new ones.**

@@ -463,6 +463,8 @@ export const PlayerProvider: ParentComponent = (props) => {
       mbid: track.mbid || null,
       ipId: null,
       coverCid: track.coverCid || null,
+      coverPath: track.coverPath || null,
+      filePath: track.filePath || null,
     })
     setCurrentTime(0)
     const fallbackDuration = parseDuration(t[index].duration)

@@ -38,7 +38,7 @@ export const Scheduler: Component<SchedulerProps> = (props) => {
       {/* Calendar + Time Slots Side by Side */}
       <div class="flex gap-4">
         {/* Calendar Panel */}
-        <div class="bg-[var(--bg-surface)] rounded-lg p-6 flex-1">
+        <div class="bg-[var(--bg-surface)] rounded-md p-6 flex-1">
           <SchedulerCalendar
             currentMonth={currentMonth()}
             availability={props.availability}
@@ -54,7 +54,7 @@ export const Scheduler: Component<SchedulerProps> = (props) => {
         </div>
 
         {/* Time Slots Panel */}
-        <div class="bg-[var(--bg-surface)] rounded-lg p-6 flex-1">
+        <div class="bg-[var(--bg-surface)] rounded-md p-6 flex-1">
           <Show
             when={selectedDate() && selectedDayAvailability()}
             fallback={
@@ -83,7 +83,7 @@ export const Scheduler: Component<SchedulerProps> = (props) => {
 
       {/* Timezone Panel (if needed) */}
       <Show when={props.availableTimezones && props.onTimezoneChange}>
-        <div class="bg-[var(--bg-surface)] rounded-lg p-6">
+        <div class="bg-[var(--bg-surface)] rounded-md p-6">
           <TimezoneSelector
             timezone={selectedTimezone()}
             availableTimezones={props.availableTimezones}
@@ -97,7 +97,7 @@ export const Scheduler: Component<SchedulerProps> = (props) => {
 
       {/* Booking Confirmation Panel */}
       <Show when={props.selectedSlot && selectedDate() && props.selectedSlot}>
-        <div class="bg-[var(--bg-surface)] rounded-lg p-6">
+        <div class="bg-[var(--bg-surface)] rounded-md p-6">
           <BookingConfirmation
             date={selectedDate()}
             slot={props.selectedSlot!}

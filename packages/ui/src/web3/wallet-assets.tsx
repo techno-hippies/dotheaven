@@ -73,7 +73,7 @@ export const WalletAssets: Component<WalletAssetsProps> = (props) => {
         <div class="flex flex-col gap-3">
           <For each={props.assets}>
             {(asset) => (
-              <div class="flex items-center gap-6 p-5 rounded-lg bg-[var(--bg-elevated)] w-full cursor-default">
+              <div class="flex items-center gap-6 p-5 rounded-md bg-[var(--bg-elevated)] w-full cursor-default">
                 {/* Icon - fixed size container with chain badge */}
                 <div class="flex-shrink-0 relative">
                   {typeof asset.icon === 'string' ? (
@@ -91,7 +91,7 @@ export const WalletAssets: Component<WalletAssetsProps> = (props) => {
 
                   {/* Chain badge - bottom right overlay */}
                   {asset.chainBadge && (
-                    <div class="absolute -bottom-1 -right-1 w-7 h-7 bg-[var(--bg-elevated)] rounded-lg flex items-center justify-center border-2 border-[var(--bg-surface)]">
+                    <div class="absolute -bottom-1 -right-1 w-7 h-7 bg-[var(--bg-elevated)] rounded-md flex items-center justify-center border-2 border-[var(--bg-surface)]">
                       {typeof asset.chainBadge === 'string' ? (
                         <img src={asset.chainBadge} alt="chain" class="w-5 h-5" />
                       ) : (

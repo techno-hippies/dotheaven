@@ -33,8 +33,8 @@ const CHAIN_ID = 6343;
 const RPC_URL = "https://carrot.megaeth.com/rpc";
 
 // Deployed contracts (MegaETH Testnet)
-const REGISTRY_V1 = "0x61CAed8296a2eF78eCf9DCa5eDf3C44469c6b1E2";
-const RECORDS_V1 = "0x351ba82bAfDA1070bba8158852624653e3654929";
+const REGISTRY_V1 = "0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2";
+const RECORDS_V1 = "0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3";
 
 // Heaven parent node: namehash("heaven.hnsbridge.eth")
 const HEAVEN_NODE = "0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27";

@@ -1,0 +1,7 @@
+{
+  "name": "@heaven/contracts-celo",
+  "private": true,
+  "dependencies": {
+    "@selfxyz/contracts": "^1.2.3"
+  }
+}

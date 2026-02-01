@@ -95,19 +95,41 @@ const ACTIONS: Record<string, ActionDef> = {
     name: 'scrobbleSubmitV3',
     path: 'actions/scrobble-submit-v3.js',
     displayName: 'Scrobble Submit v3',
-    keys: [], // No encrypted keys — track registry + scrobble events, sponsor PKP pays gas
+    keys: [
+      { name: 'filebase_covers_key', envVar: 'FILEBASE_COVERS_KEY' },
+    ],
   },
   playlistV1: {
     name: 'playlistV1',
     path: 'actions/playlist-v1.js',
     displayName: 'Playlist v1',
-    keys: [], // No encrypted keys — sponsor PKP pays gas directly
+    keys: [
+      { name: 'filebase_covers_key', envVar: 'FILEBASE_COVERS_KEY' },
+    ],
   },
   heavenSetRecords: {
     name: 'heavenSetRecords',
     path: 'actions/heaven-set-records-v1.js',
     displayName: 'Heaven Set Records v1',
     keys: [], // No encrypted keys — sponsor PKP pays gas directly
+  },
+  contentRegisterV1: {
+    name: 'contentRegisterV1',
+    path: 'actions/content-register-v1.js',
+    displayName: 'Content Register v1',
+    keys: [], // No encrypted keys — sponsor PKP pays gas directly
+  },
+  contentAccessV1: {
+    name: 'contentAccessV1',
+    path: 'actions/content-access-v1.js',
+    displayName: 'Content Access v1',
+    keys: [], // No encrypted keys — sponsor PKP pays gas directly
+  },
+  contentDecryptV1: {
+    name: 'contentDecryptV1',
+    path: 'actions/content-decrypt-v1.js',
+    displayName: 'Content Decrypt v1',
+    keys: [], // No encrypted keys — Lit Action only
   },
 };
 

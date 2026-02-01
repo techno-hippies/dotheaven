@@ -225,6 +225,7 @@ pub fn run() {
             music_db::music_get_track_count,
             music_db::music_get_folder,
             music_db::music_set_folder,
+            music_db::music_set_cover_cid,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

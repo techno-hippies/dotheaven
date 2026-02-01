@@ -53,7 +53,7 @@ export const DialogContent: Component<
       <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
         <KobalteDialog.Content
           class={cn(
-            'relative w-full max-w-lg bg-[var(--bg-surface)] rounded-lg shadow-lg',
+            'relative w-full max-w-lg bg-[var(--bg-surface)] rounded-md shadow-lg',
             'border border-[var(--bg-highlight)]',
             'data-[expanded]:animate-in data-[expanded]:fade-in-0 data-[expanded]:zoom-in-95',
             'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95',

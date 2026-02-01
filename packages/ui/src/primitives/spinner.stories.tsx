@@ -53,7 +53,7 @@ export const CustomColor: Story = {
 
 export const InButton: Story = {
   render: () => (
-    <button class="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent-blue)] text-white rounded-lg">
+    <button class="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent-blue)] text-white rounded-md">
       <Spinner size="sm" />
       Loading...
     </button>

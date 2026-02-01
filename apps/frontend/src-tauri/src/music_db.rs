@@ -4,6 +4,7 @@ use std::time::UNIX_EPOCH;
 
 use rusqlite::{params, Connection};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
 use walkdir::WalkDir;
@@ -25,6 +26,8 @@ pub struct TrackRow {
     pub file_path: String,
     pub mbid: Option<String>,
     pub album_cover: Option<String>,
+    pub cover_path: Option<String>,
+    pub cover_cid: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -131,6 +134,16 @@ impl MusicDb {
             log::info!("MusicDb: migrated — added cover_path column");
         }
 
+        // Migrate: add cover_cid column if missing
+        let has_cover_cid: bool = conn
+            .prepare("SELECT cover_cid FROM tracks LIMIT 0")
+            .is_ok();
+        if !has_cover_cid {
+            conn.execute_batch("ALTER TABLE tracks ADD COLUMN cover_cid TEXT DEFAULT ''")
+                .map_err(|e| format!("Failed to add cover_cid column: {e}"))?;
+            log::info!("MusicDb: migrated — added cover_cid column");
+        }
+
         // Ensure covers cache directory exists
         let covers_dir = app_data_dir.join("covers");
         std::fs::create_dir_all(&covers_dir).ok();
@@ -163,7 +176,7 @@ impl MusicDb {
         let mut stmt = self
             .conn
             .prepare(
-                "SELECT file_path, title, artist, album, duration, mbid, rowid, cover_path
+                "SELECT file_path, title, artist, album, duration, mbid, rowid, cover_path, cover_cid
                  FROM tracks WHERE folder_path = ?1 ORDER BY title COLLATE NOCASE
                  LIMIT ?2 OFFSET ?3",
             )
@@ -172,6 +185,7 @@ impl MusicDb {
         let rows = stmt
             .query_map(params![folder, limit, offset], |row| {
                 let rowid: i64 = row.get(6)?;
+                let cover_cid: Option<String> = row.get(8)?;
                 Ok(TrackRow {
                     id: format!("local-{}", rowid),
                     file_path: row.get(0)?,
@@ -181,6 +195,8 @@ impl MusicDb {
                     duration: row.get(4)?,
                     mbid: row.get(5)?,
                     album_cover: row.get(7)?,
+                    cover_path: row.get(7)?,
+                    cover_cid: cover_cid.filter(|s| !s.is_empty()),
                 })
             })
             .map_err(|e| format!("Failed to query: {e}"))?;
@@ -247,25 +263,35 @@ impl MusicDb {
                 .unwrap_or(0);
 
             // Check if cached with same size+mtime
-            let cached: Option<(i64, i64)> = self
+            let cached: Option<(i64, i64, Option<String>, Option<String>)> = self
                 .conn
                 .query_row(
-                    "SELECT file_size, file_mtime FROM tracks WHERE file_path = ?1",
+                    "SELECT file_size, file_mtime, cover_path, cover_cid FROM tracks WHERE file_path = ?1",
                     params![&path_str],
-                    |row| Ok((row.get(0)?, row.get(1)?)),
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
                 )
                 .ok();
 
-            if let Some((sz, mt)) = cached {
+            let mut existing_cover_path: Option<String> = None;
+            let mut existing_cover_cid: Option<String> = None;
+            if let Some((sz, mt, cover_path_cached, cover_cid_cached)) = cached {
+                existing_cover_path = cover_path_cached;
+                existing_cover_cid = cover_cid_cached;
                 if sz == file_size && mt == file_mtime {
-                    // Cache hit
-                    cache_hits += 1;
-                    if i % 100 == 0 {
-                        if let Some(app) = app {
-                            let _ = app.emit("music://scan-progress", ScanProgress { done: i + 1, total });
+                    let cover_missing = existing_cover_path
+                        .as_deref()
+                        .filter(|p| !p.is_empty())
+                        .map(|p| !Path::new(p).exists())
+                        .unwrap_or(false);
+                    if !cover_missing {
+                        cache_hits += 1;
+                        if i % 100 == 0 {
+                            if let Some(app) = app {
+                                let _ = app.emit("music://scan-progress", ScanProgress { done: i + 1, total });
+                            }
                         }
+                        continue;
                     }
-                    continue;
                 }
             }
 
@@ -273,10 +299,20 @@ impl MusicDb {
             extracted += 1;
             let (title, artist, album, duration, mbid, cover_path) = extract_metadata(path, &path_str, &self.covers_dir);
 
+            // Preserve cover_cid only if cover_path is unchanged
+            let cover_cid = match (
+                existing_cover_cid.as_deref(),
+                existing_cover_path.as_deref(),
+                cover_path.as_deref(),
+            ) {
+                (Some(cid), Some(old_path), Some(new_path)) if !cid.is_empty() && old_path == new_path => cid,
+                _ => "",
+            };
+
             self.conn
                 .execute(
-                    "INSERT OR REPLACE INTO tracks (file_path, title, artist, album, duration_ms, duration, mbid, file_size, file_mtime, folder_path, cover_path)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                    "INSERT OR REPLACE INTO tracks (file_path, title, artist, album, duration_ms, duration, mbid, file_size, file_mtime, folder_path, cover_path, cover_cid)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                     params![
                         &path_str,
                         &title,
@@ -289,6 +325,7 @@ impl MusicDb {
                         file_mtime,
                         folder,
                         &cover_path,
+                        cover_cid,
                     ],
                 )
                 .ok();
@@ -335,6 +372,39 @@ impl MusicDb {
         // 4. Return count
         self.get_track_count(folder)
     }
+
+    pub fn set_cover_cid_for_file(&self, file_path: &str, cover_cid: &str) -> Result<(), String> {
+        if cover_cid.is_empty() {
+            return Ok(());
+        }
+
+        let cover_path: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT cover_path FROM tracks WHERE file_path = ?1",
+                params![file_path],
+                |row| row.get(0),
+            )
+            .ok();
+
+        if let Some(cover_path) = cover_path {
+            self.conn
+                .execute(
+                    "UPDATE tracks SET cover_cid = ?1 WHERE cover_path = ?2",
+                    params![cover_cid, cover_path],
+                )
+                .map_err(|e| format!("Failed to update cover_cid by cover_path: {e}"))?;
+        } else {
+            self.conn
+                .execute(
+                    "UPDATE tracks SET cover_cid = ?1 WHERE file_path = ?2",
+                    params![cover_cid, file_path],
+                )
+                .map_err(|e| format!("Failed to update cover_cid by file_path: {e}"))?;
+        }
+
+        Ok(())
+    }
 }
 
 // =============================================================================
@@ -377,22 +447,25 @@ fn extract_metadata(path: &Path, path_str: &str, covers_dir: &Path) -> (String, 
                     .map(|s| s.to_string())
             });
 
-            // Extract cover art
+            // Extract cover art — prefer CoverFront, then largest by byte size, then first
             let cover_path = tag.and_then(|t| {
-                let pic = t.pictures().first()?;
+                let pictures = t.pictures();
+                if pictures.is_empty() {
+                    return None;
+                }
+                let pic = pictures
+                    .iter()
+                    .find(|p| p.pic_type() == lofty::picture::PictureType::CoverFront)
+                    .or_else(|| pictures.iter().max_by_key(|p| p.data().len()))
+                    .or(pictures.first())?;
                 let ext = match pic.mime_type() {
                     Some(lofty::picture::MimeType::Png) => "png",
                     Some(lofty::picture::MimeType::Bmp) => "bmp",
                     _ => "jpg", // default to jpg for Jpeg and unknown
                 };
-                // Use a hash of the file path as the cover filename
-                let hash = {
-                    use std::hash::{Hash, Hasher};
-                    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                    path_str.hash(&mut hasher);
-                    hasher.finish()
-                };
-                let cover_filename = format!("{:016x}.{}", hash, ext);
+                // Use content hash as filename for dedup across tracks sharing album art
+                let content_hash = content_sha256(pic.data());
+                let cover_filename = format!("{}.{}", content_hash, ext);
                 let cover_file = covers_dir.join(&cover_filename);
 
                 // Only write if not already cached
@@ -412,6 +485,12 @@ fn extract_metadata(path: &Path, path_str: &str, covers_dir: &Path) -> (String, 
             (fb_title, fb_artist, String::new(), None, None, None)
         }
     }
+}
+
+fn content_sha256(data: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    hex::encode(hasher.finalize())
 }
 
 // =============================================================================
@@ -503,6 +582,21 @@ pub async fn music_set_folder(
     tokio::task::spawn_blocking(move || {
         let db = state.get()?.lock().map_err(|e| format!("lock: {e}"))?;
         db.set_setting("folder_path", &folder)
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))?
+}
+
+#[tauri::command]
+pub async fn music_set_cover_cid(
+    state: State<'_, MusicDbState>,
+    file_path: String,
+    cover_cid: String,
+) -> Result<(), String> {
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let db = state.get()?.lock().map_err(|e| format!("lock: {e}"))?;
+        db.set_cover_cid_for_file(&file_path, &cover_cid)
     })
     .await
     .map_err(|e| format!("join: {e}"))?

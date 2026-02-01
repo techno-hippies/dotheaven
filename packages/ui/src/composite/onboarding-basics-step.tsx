@@ -66,13 +66,6 @@ export const OnboardingBasicsStep: Component<OnboardingBasicsStepProps> = (props
   const [nativeLang, setNativeLang] = createSignal<SelectOption>()
   const [targetLang, setTargetLang] = createSignal<SelectOption>()
 
-  const hasAnyData = () =>
-    age().trim() !== '' ||
-    gender() !== '' ||
-    location() !== null ||
-    nativeLang() !== undefined ||
-    targetLang() !== undefined
-
   const parsedAge = () => {
     const n = parseInt(age(), 10)
     return !isNaN(n) && n >= 13 && n <= 120 ? n : null
@@ -112,7 +105,7 @@ export const OnboardingBasicsStep: Component<OnboardingBasicsStepProps> = (props
             value={age()}
             onInput={(e) => setAge(e.currentTarget.value)}
             class={cn(
-              'h-11 rounded-lg bg-[var(--bg-highlight)] px-3 text-base text-[var(--text-primary)]',
+              'h-11 rounded-md bg-[var(--bg-highlight)] px-3 text-base text-[var(--text-primary)]',
               'placeholder:text-[var(--text-muted)] focus:outline-none',
               'border-2 transition-colors',
               ageError()
@@ -171,7 +164,7 @@ export const OnboardingBasicsStep: Component<OnboardingBasicsStepProps> = (props
 
       {/* Error */}
       <Show when={props.error}>
-        <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--accent-coral)]/10 text-[var(--accent-coral)] text-sm">
+        <div class="flex items-center gap-2 px-3 py-2 rounded-md bg-[var(--accent-coral)]/10 text-[var(--accent-coral)] text-sm">
           <svg class="w-4 h-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
           </svg>

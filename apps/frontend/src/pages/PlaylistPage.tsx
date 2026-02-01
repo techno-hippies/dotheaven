@@ -1,5 +1,5 @@
-import { type Component, createSignal, Show } from 'solid-js'
-import { useParams, useNavigate } from '@solidjs/router'
+import { type Component, createSignal, createMemo, Show } from 'solid-js'
+import { useParams } from '@solidjs/router'
 import { createQuery } from '@tanstack/solid-query'
 import {
   MediaHeader,
@@ -22,21 +22,30 @@ import {
   DropdownMenuSeparator,
 } from '@heaven/ui'
 import { fetchPlaylistWithTracks } from '../lib/heaven/playlists'
+import { getPrimaryName } from '../lib/heaven'
+import { useTrackPlayback, usePlaylistDialog, buildMenuActions } from '../hooks/useTrackListActions'
+import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 
 export const PlaylistPage: Component = () => {
   const params = useParams<{ id: string }>()
-  const navigate = useNavigate()
   const [editOpen, setEditOpen] = createSignal(false)
   const [deleteOpen, setDeleteOpen] = createSignal(false)
   const [editTitle, setEditTitle] = createSignal('')
   const [editDescription, setEditDescription] = createSignal('')
   const [editCoverUrl, setEditCoverUrl] = createSignal('')
 
+  const playback = useTrackPlayback()
+  const plDialog = usePlaylistDialog()
+  const menuActions = buildMenuActions(plDialog)
+
   const query = createQuery(() => ({
     queryKey: ['playlist', params.id],
     queryFn: () => fetchPlaylistWithTracks(params.id),
     enabled: !!params.id,
-    staleTime: 60_000,
+    // Don't cache null results (subgraph indexing lag); cache real data for 60s
+    staleTime: (q: any) => q.state.data ? 60_000 : 0,
+    // Auto-retry every 3s when subgraph hasn't indexed yet
+    refetchInterval: (q: any) => q.state.data ? false : 3000,
   }))
 
   const playlist = () => query.data?.playlist ?? null
@@ -44,7 +53,32 @@ export const PlaylistPage: Component = () => {
 
   const coverUrl = () => {
     const p = playlist()
-    return p?.coverCid ? `https://ipfs.filebase.io/ipfs/${p.coverCid}` : undefined
+    return p?.coverCid ? `https://heaven.myfilebase.com/ipfs/${p.coverCid}?img-width=300&img-height=300&img-format=webp&img-quality=80` : undefined
+  }
+
+  // Resolve playlist owner to heaven name (falls back to truncated address)
+  const ownerAddress = () => playlist()?.owner as `0x${string}` | undefined
+  const creatorQuery = createQuery(() => ({
+    queryKey: ['primaryName', ownerAddress()],
+    queryFn: () => getPrimaryName(ownerAddress()!),
+    get enabled() { return !!ownerAddress() },
+    staleTime: 1000 * 60 * 5,
+  }))
+
+  const creatorName = () => {
+    const primary = creatorQuery.data
+    if (primary?.label) return primary.label
+    const addr = ownerAddress()
+    if (addr) return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+    return undefined
+  }
+
+  const creatorHref = () => {
+    const primary = creatorQuery.data
+    if (primary?.label) return `#/u/${primary.label}.heaven`
+    const addr = ownerAddress()
+    if (addr) return `#/u/${addr}`
+    return undefined
   }
 
   const openEditDialog = () => {
@@ -73,7 +107,7 @@ export const PlaylistPage: Component = () => {
   }
 
   const handlePlay = () => {
-    console.log('Play playlist')
+    playback.playFirst(tracks())
   }
 
   const handleAddCollaborator = () => {
@@ -88,7 +122,17 @@ export const PlaylistPage: Component = () => {
     }>
       <Show when={playlist()} fallback={
         <div class="h-full flex items-center justify-center">
-          <p class="text-[var(--text-muted)]">Playlist not found</p>
+          <Show when={query.isFetching} fallback={
+            <p class="text-[var(--text-muted)]">Playlist not found</p>
+          }>
+            <div class="flex items-center gap-3 text-[var(--text-muted)]">
+              <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span>Indexing playlist...</span>
+            </div>
+          </Show>
         </div>
       }>
         {(p) => (
@@ -96,6 +140,8 @@ export const PlaylistPage: Component = () => {
             <MediaHeader
                 type="playlist"
                 title={p().name}
+                creator={creatorName()}
+                creatorHref={creatorHref()}
                 description=""
                 coverSrc={coverUrl()}
                 stats={{
@@ -172,14 +218,11 @@ export const PlaylistPage: Component = () => {
               }>
                 <TrackList
                   tracks={tracks()}
-                  onTrackClick={(track) => console.log('Track clicked:', track)}
-                  onTrackPlay={(track) => console.log('Track play:', track)}
-                  menuActions={{
-                    onAddToPlaylist: (track) => console.log('Add to playlist:', track),
-                    onAddToQueue: (track) => console.log('Add to queue:', track),
-                    onGoToArtist: (track) => console.log('Go to artist:', track),
-                    onGoToAlbum: (track) => console.log('Go to album:', track),
-                  }}
+                  activeTrackId={playback.activeTrackId()}
+                  selectedTrackId={playback.selectedTrackId()}
+                  onTrackClick={(track) => playback.select(track)}
+                  onTrackPlay={(track) => playback.play(track)}
+                  menuActions={menuActions}
                 />
               </Show>
 
@@ -213,7 +256,7 @@ export const PlaylistPage: Component = () => {
                         />
                         <label
                           for="cover-upload"
-                          class="block w-48 h-48 rounded-lg bg-[var(--bg-highlight)] flex items-center justify-center cursor-pointer hover:bg-[var(--bg-highlight-hover)] transition-colors overflow-hidden"
+                          class="block w-48 h-48 rounded-md bg-[var(--bg-highlight)] flex items-center justify-center cursor-pointer hover:bg-[var(--bg-highlight-hover)] transition-colors overflow-hidden"
                         >
                           <Show when={editCoverUrl()} fallback={
                             <div class="text-center text-[var(--text-muted)]">
@@ -233,7 +276,7 @@ export const PlaylistPage: Component = () => {
                           value={editTitle()}
                           onInput={(e) => setEditTitle(e.currentTarget.value)}
                           placeholder="Playlist name"
-                          class="w-full px-4 py-3 rounded-lg bg-[var(--bg-highlight)] text-[var(--text-primary)] text-lg placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
+                          class="w-full px-4 py-3 rounded-md bg-[var(--bg-highlight)] text-[var(--text-primary)] text-lg placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
                           autofocus
                         />
                         <textarea
@@ -241,7 +284,7 @@ export const PlaylistPage: Component = () => {
                           onInput={(e) => setEditDescription(e.currentTarget.value)}
                           placeholder="Add a description (optional)"
                           rows={4}
-                          class="w-full px-4 py-3 rounded-lg bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors resize-none flex-1"
+                          class="w-full px-4 py-3 rounded-md bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors resize-none flex-1"
                         />
                       </div>
                     </div>
@@ -284,6 +327,11 @@ export const PlaylistPage: Component = () => {
           </div>
         )}
       </Show>
+      <AddToPlaylistDialog
+        open={plDialog.open()}
+        onOpenChange={plDialog.setOpen}
+        track={plDialog.track()}
+      />
     </Show>
   )
 }

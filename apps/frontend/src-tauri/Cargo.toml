@@ -35,6 +35,7 @@ rusqlite = { version = "0.37", features = ["bundled"] }
 lofty = "0.21"
 walkdir = "2"
 tracing = { version = "0.1", features = ["log"] }
+sha2 = "0.10"
 
 # XMTP (libxmtp) — pinned to local clone
 xmtp_mls = { path = "/media/t42/th42/Code/libxmtp/crates/xmtp_mls" }

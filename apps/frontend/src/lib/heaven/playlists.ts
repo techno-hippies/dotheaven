@@ -1,4 +1,5 @@
 import type { Track } from '@heaven/ui'
+import { getCoverCache } from '../cover-cache'
 
 /**
  * PlaylistV1 — reads playlist data from Goldsky subgraph + on-chain track metadata.
@@ -198,15 +199,21 @@ export async function resolvePlaylistTracks(
 
   return playlistTracks.map((pt) => {
     const meta = metaMap.get(pt.trackId)
-    const FILEBASE_GATEWAY = 'https://ipfs.filebase.io/ipfs'
+    const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
+    const title = meta?.title ?? `Track ${pt.trackId.slice(0, 10)}...`
+    const artist = meta?.artist ?? 'Unknown'
+    const album = meta?.album ?? ''
+    const onChainCover = meta?.coverCid
+      ? `${FILEBASE_GATEWAY}/${meta.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
+      : undefined
+    // Only try local cover cache if we have real metadata (not fallback strings)
+    const localCover = meta ? getCoverCache(artist, title, album) : undefined
     return {
       id: pt.trackId,
-      title: meta?.title ?? `Track ${pt.trackId.slice(0, 10)}...`,
-      artist: meta?.artist ?? 'Unknown',
-      album: meta?.album ?? '',
-      albumCover: meta?.coverCid
-        ? `${FILEBASE_GATEWAY}/${meta.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
-        : undefined,
+      title,
+      artist,
+      album,
+      albumCover: onChainCover ?? localCover,
       duration: '--:--',
     }
   })
@@ -235,8 +242,8 @@ function mapPlaylist(p: any): OnChainPlaylist {
     name: p.name,
     coverCid: p.coverCid,
     visibility: p.visibility,
-    trackCount: p.trackCount,
-    version: p.version,
+    trackCount: Number(p.trackCount) || 0,
+    version: Number(p.version) || 0,
     exists: p.exists,
     tracksHash: p.tracksHash,
     createdAt: parseInt(p.createdAt),

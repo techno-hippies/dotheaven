@@ -8,8 +8,8 @@ const iconButtonVariants = cva(
     variants: {
       variant: {
         ghost: 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
-        soft: 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-highlight-hover)] rounded-lg',
-        default: 'bg-[var(--bg-highlight)] text-[var(--text-primary)] hover:bg-[var(--bg-highlight-hover)] rounded-lg',
+        soft: 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-highlight-hover)] rounded-md',
+        default: 'bg-[var(--bg-highlight)] text-[var(--text-primary)] hover:bg-[var(--bg-highlight-hover)] rounded-md',
         play: 'bg-white text-black rounded-full hover:scale-105 transition-transform',
         send: 'bg-[var(--accent-blue)] hover:bg-[var(--accent-blue-hover)] text-white rounded-full disabled:bg-[var(--bg-highlight)] disabled:text-[var(--text-muted)]',
       },

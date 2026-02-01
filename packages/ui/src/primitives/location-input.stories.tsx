@@ -21,7 +21,7 @@ export const Default: Story = {
     return (
       <div class="max-w-md p-8">
         <LocationInput value={value()} onChange={setValue} />
-        <div class="mt-4 p-3 bg-[var(--bg-highlight)] rounded-lg">
+        <div class="mt-4 p-3 bg-[var(--bg-highlight)] rounded-md">
           <p class="text-sm text-[var(--text-secondary)] mb-2">Selected location:</p>
           {value() ? (
             <div class="text-sm space-y-1">
@@ -107,7 +107,7 @@ export const PrePopulated: Story = {
     return (
       <div class="max-w-md p-8">
         <LocationInput value={value()} onChange={setValue} />
-        <div class="mt-4 p-3 bg-[var(--bg-highlight)] rounded-lg">
+        <div class="mt-4 p-3 bg-[var(--bg-highlight)] rounded-md">
           <p class="text-sm text-[var(--text-secondary)] mb-2">Selected location:</p>
           {value() ? (
             <div class="text-sm space-y-1">
