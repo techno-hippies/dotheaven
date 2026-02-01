@@ -108,8 +108,8 @@ export const ChatPage: Component = () => {
 
       {/* Chat content */}
       <Show when={auth.isAuthenticated()}>
-        <div class="h-full overflow-y-auto bg-[var(--bg-page)]">
-          <div class="h-full flex flex-col bg-[var(--bg-surface)] rounded-t-lg">
+        <div class="h-full overflow-y-auto">
+          <div class="h-full flex flex-col">
             {/* Chat Header */}
             <div class="h-16 flex items-center justify-between px-6 border-b border-[var(--border-default)] flex-shrink-0">
               <div class="flex items-center gap-3">

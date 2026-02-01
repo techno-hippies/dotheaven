@@ -57,7 +57,7 @@ export const MediaHeader: Component<MediaHeaderProps> = (props) => {
         >
           {props.coverImages && props.coverImages.length > 0 ? (
             // Playlist mosaic (2x2 grid)
-            <div class="w-56 h-56 grid grid-cols-2 grid-rows-2 gap-1 bg-[var(--bg-elevated)] rounded-md overflow-hidden shadow-xl">
+            <div class="w-56 h-56 grid grid-cols-2 grid-rows-2 gap-1 bg-[var(--bg-elevated)] rounded-md overflow-hidden">
               {props.coverImages.slice(0, 4).map((src) => (
                 <AlbumCover
                   src={src}
@@ -77,7 +77,7 @@ export const MediaHeader: Component<MediaHeaderProps> = (props) => {
             <AlbumCover
               src={props.coverSrc}
               icon="playlist"
-              class="w-56 h-56 shadow-xl"
+              class="w-56 h-56"
             />
           )}
         </div>
@@ -86,7 +86,7 @@ export const MediaHeader: Component<MediaHeaderProps> = (props) => {
         <div class="flex-1 min-w-0 pb-4">
           {/* Type label */}
           {props.type && (
-            <div class="text-sm font-medium text-[var(--text-primary)] mb-2">
+            <div class="text-base font-medium text-[var(--text-primary)] mb-2">
               {props.type.charAt(0).toUpperCase() + props.type.slice(1)}
             </div>
           )}
@@ -104,13 +104,13 @@ export const MediaHeader: Component<MediaHeaderProps> = (props) => {
 
           {/* Description (if provided) */}
           {props.description && (
-            <p class="text-sm text-[var(--text-secondary)] mb-4 line-clamp-2">
+            <p class="text-base text-[var(--text-secondary)] mb-4 line-clamp-2">
               {props.description}
             </p>
           )}
 
           {/* Creator and stats */}
-          <div class="flex items-center gap-1 text-sm">
+          <div class="flex items-center gap-1 text-base">
             <Show when={props.creator}>
               <Show
                 when={props.creatorHref}

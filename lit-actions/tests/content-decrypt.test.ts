@@ -1,12 +1,18 @@
 #!/usr/bin/env bun
 /**
- * Test Content Decrypt v1 — full encrypt → decrypt round-trip
+ * Test Content Decrypt — full encrypt → decrypt round-trip
  *
  * Verifies:
  *  1. Register content on both chains (content-register-v1)
  *  2. Encrypt a test AES key with Lit using contract-gated ACC on Base
- *  3. Decrypt via content-decrypt-v1 Lit Action
+ *  3. Decrypt via litClient.decrypt() (client-side, Lit BLS enforces condition)
  *  4. Verify decrypted key matches original
+ *
+ * Note: Decryption uses the SDK's client-side decrypt (not a Lit Action).
+ * The Lit nodes still enforce the access condition (canAccess on Base) during
+ * BLS threshold decryption. No Lit Action is needed for decrypt because
+ * decryptAndCombine in Lit Actions only supports accessControlConditions
+ * (evmBasic), not evmContractConditions.
  *
  * Usage:
  *   bun tests/content-decrypt.test.ts
@@ -17,16 +23,40 @@ import { createAuthManager, storagePlugins, ViemAccountAuthenticator } from "@li
 import { privateKeyToAccount } from "viem/accounts";
 import { Env } from "./shared/env";
 import { randomBytes, hexlify, keccak256, AbiCoder } from "ethers";
-import { dirname } from "path";
-import { fileURLToPath } from "url";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 const abiCoder = AbiCoder.defaultAbiCoder();
 
 const CONTENT_ACCESS_MIRROR = "0x872E8E7E4a4088F41CeB0ccc14a7081D36aF5aa4";
 
+function buildAccessConditions(contentId: string) {
+  // Unified access control conditions with conditionType: "evmContract"
+  // This format is required for both encrypt and decrypt (SDK + Lit Action)
+  return [
+    {
+      conditionType: "evmContract" as const,
+      contractAddress: CONTENT_ACCESS_MIRROR,
+      chain: "baseSepolia",
+      functionName: "canAccess",
+      functionParams: [":userAddress", contentId],
+      functionAbi: {
+        type: "function" as const,
+        name: "canAccess",
+        stateMutability: "view" as const,
+        inputs: [
+          { type: "address", name: "user", internalType: "address" },
+          { type: "bytes32", name: "contentId", internalType: "bytes32" },
+        ],
+        outputs: [
+          { type: "bool", name: "", internalType: "bool" },
+        ],
+      },
+      returnValueTest: { key: "", comparator: "=", value: "true" },
+    },
+  ];
+}
+
 async function main() {
-  console.log("Test Content Decrypt v1 (encrypt → decrypt round-trip)");
+  console.log("Test Content Decrypt (encrypt → decrypt round-trip)");
   console.log("=".repeat(60));
   console.log(`   Env:         ${Env.name}`);
 
@@ -34,12 +64,10 @@ async function main() {
   console.log(`   PKP:         ${pkpCreds.ethAddress}`);
 
   const registerCid = Env.cids["contentRegisterV1"];
-  const decryptCid = Env.cids["contentDecryptV1"];
   console.log(`   Register CID: ${registerCid || "(not deployed)"}`);
-  console.log(`   Decrypt CID:  ${decryptCid || "(not deployed)"}`);
 
-  if (!registerCid || !decryptCid) {
-    console.error("\nMissing action CIDs. Run setup.ts first.");
+  if (!registerCid) {
+    console.error("\nMissing register action CID. Run setup.ts first.");
     process.exit(1);
   }
 
@@ -75,6 +103,7 @@ async function main() {
       resources: [
         ["pkp-signing", "*"],
         ["lit-action-execution", "*"],
+        ["access-control-condition-decryption", "*"],
       ],
       expiration: new Date(Date.now() + 1000 * 60 * 15).toISOString(),
       statement: "",
@@ -120,97 +149,60 @@ async function main() {
     console.log(`   ✓ Registered on both chains`);
 
     // ══════════════════════════════════════════════════════════════
-    // STEP 2: Encrypt a test AES key with Lit (contract-gated ACC)
+    // STEP 2: Encrypt a test AES key with Lit (unified ACC)
     // ══════════════════════════════════════════════════════════════
     console.log("\n── Step 2: Encrypt AES key with Lit ──");
 
-    // Generate a random 32-byte AES key and encode as base64
     const testKeyBytes = randomBytes(32);
     const testKeyBase64 = Buffer.from(testKeyBytes).toString("base64");
     console.log(`   Test key:    ${testKeyBase64.slice(0, 20)}...`);
 
-    // Build the payload (must match what content-decrypt-v1 expects)
     const payload = JSON.stringify({ contentId, key: testKeyBase64 });
 
-    // Contract-gated ACC matching the production encrypt path
-    const accessControlConditions = [
-      {
-        conditionType: "evmContract",
-        contractAddress: CONTENT_ACCESS_MIRROR,
-        chain: "baseSepolia",
-        functionName: "canAccess",
-        functionParams: [":userAddress", contentId],
-        functionAbi: {
-          type: "function",
-          name: "canAccess",
-          stateMutability: "view",
-          inputs: [
-            { type: "address", name: "user", internalType: "address" },
-            { type: "bytes32", name: "contentId", internalType: "bytes32" },
-          ],
-          outputs: [
-            { type: "bool", name: "", internalType: "bool" },
-          ],
-        },
-        returnValueTest: { key: "", comparator: "=", value: "true" },
-      },
-    ];
+    // Use unifiedAccessControlConditions — required for both SDK decrypt
+    // and Lit Action decryptAndCombine with evmContract conditions
+    const unifiedAcc = buildAccessConditions(contentId);
 
-    const { ciphertext, dataToEncryptHash } = await litClient.encrypt({
-      unifiedAccessControlConditions: accessControlConditions,
+    const encryptedData = await litClient.encrypt({
+      unifiedAccessControlConditions: unifiedAcc,
       dataToEncrypt: new TextEncoder().encode(payload),
-      authContext,
     });
 
-    console.log(`   ✓ Encrypted with Lit (ct: ${ciphertext.slice(0, 30)}...)`);
+    console.log(`   ✓ Encrypted with Lit (ct: ${encryptedData.ciphertext.slice(0, 30)}...)`);
+    console.log(`   dataToEncryptHash: ${encryptedData.dataToEncryptHash}`);
 
     // ══════════════════════════════════════════════════════════════
-    // STEP 3: Decrypt via content-decrypt-v1 Lit Action
+    // STEP 3: Decrypt via litClient.decrypt() (client-side)
     // ══════════════════════════════════════════════════════════════
-    console.log("\n── Step 3: Decrypt via Lit Action ──");
+    console.log("\n── Step 3: Decrypt via SDK ──");
 
-    const decryptResult = await litClient.executeJs({
-      ipfsId: decryptCid,
+    // Client-side decrypt — Lit nodes verify canAccess() on Base during BLS
+    const decryptResult = await litClient.decrypt({
+      unifiedAccessControlConditions: unifiedAcc,
+      ciphertext: encryptedData.ciphertext,
+      dataToEncryptHash: encryptedData.dataToEncryptHash,
       authContext,
-      jsParams: {
-        userPkpPublicKey,
-        contentId,
-        timestamp: Date.now(),
-        nonce: Math.floor(Math.random() * 1e6).toString(),
-        ciphertext,
-        dataToEncryptHash,
-        unifiedAccessControlConditions: accessControlConditions,
-      },
+      chain: "baseSepolia",
     });
 
-    const decryptResp = JSON.parse(decryptResult.response as string);
-    console.log("\nDecrypt response:");
-    console.log(JSON.stringify(decryptResp, null, 2));
-
-    if (!decryptResp.success) {
-      throw new Error(`Decrypt failed: ${decryptResp.error}`);
-    }
+    const decryptedPayload = new TextDecoder().decode(decryptResult.decryptedData);
+    console.log(`   ✓ Decrypted payload (${decryptedPayload.length} chars)`);
 
     // ══════════════════════════════════════════════════════════════
     // STEP 4: Verify decrypted key matches original
     // ══════════════════════════════════════════════════════════════
     console.log("\n── Step 4: Verify ──");
 
-    console.log(`   Version:      ${decryptResp.version}`);
-    console.log(`   User:         ${decryptResp.user}`);
+    const parsed = JSON.parse(decryptedPayload);
+    console.log(`   contentId:   ${parsed.contentId}`);
 
-    if (decryptResp.version !== "content-decrypt-v1") {
-      throw new Error(`Unexpected version: ${decryptResp.version}`);
+    if (parsed.contentId?.toLowerCase() !== contentId) {
+      throw new Error(`Content ID mismatch: expected ${contentId}, got ${parsed.contentId}`);
     }
-    console.log("   ✓ Version correct");
+    console.log("   ✓ Content ID matches");
 
-    if (decryptResp.user.toLowerCase() !== userAddress.toLowerCase()) {
-      throw new Error(`User mismatch: expected ${userAddress}, got ${decryptResp.user}`);
-    }
-    console.log("   ✓ User matches");
-
-    if (decryptResp.key !== testKeyBase64) {
-      throw new Error(`Key mismatch!\n  Expected: ${testKeyBase64}\n  Got:      ${decryptResp.key}`);
+    if (parsed.key !== testKeyBase64) {
+      throw new Error(`Key mismatch!\n  Expected: ${testKeyBase64}\n  Got:      ${parsed.key}`);
     }
     console.log("   ✓ Decrypted key matches original AES key");
 

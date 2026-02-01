@@ -1,0 +1,102 @@
+/**
+ * Upload Manager — signal-based queue for Filecoin content uploads.
+ *
+ * Each upload job tracks its step progression:
+ *   reading → encrypting → depositing → uploading → registering → done | error
+ *
+ * Jobs run sequentially (one at a time) to avoid nonce collisions on Filecoin.
+ */
+
+import { createSignal } from 'solid-js'
+
+export type UploadStep =
+  | 'queued'
+  | 'reading'
+  | 'encrypting'
+  | 'depositing'
+  | 'uploading'
+  | 'registering'
+  | 'done'
+  | 'error'
+
+export interface UploadJob {
+  id: string
+  title: string
+  artist: string
+  filePath: string
+  step: UploadStep
+  error?: string
+  startedAt?: number
+  completedAt?: number
+  pieceCid?: string
+  contentId?: string
+  trackId?: string
+}
+
+const [jobs, setJobs] = createSignal<UploadJob[]>([])
+const [isProcessing, setIsProcessing] = createSignal(false)
+
+export { jobs, isProcessing, setIsProcessing }
+
+let nextId = 0
+let processQueue: (() => Promise<void>) | null = null
+
+/**
+ * Register the queue processor (called once from the service layer).
+ * This avoids a circular dependency — the store doesn't import the service.
+ */
+export function setQueueProcessor(fn: () => Promise<void>) {
+  processQueue = fn
+}
+
+/** Enqueue a new upload job */
+export function enqueueUpload(track: {
+  id: string
+  title: string
+  artist: string
+  filePath: string
+}): string {
+  const jobId = `upload-${nextId++}`
+  const job: UploadJob = {
+    id: jobId,
+    title: track.title,
+    artist: track.artist,
+    filePath: track.filePath,
+    step: 'queued',
+  }
+  setJobs((prev) => [...prev, job])
+
+  // Kick the processor if not already running
+  if (!isProcessing() && processQueue) {
+    processQueue()
+  }
+
+  return jobId
+}
+
+/** Update a job's step */
+export function updateJob(jobId: string, updates: Partial<UploadJob>) {
+  setJobs((prev) =>
+    prev.map((j) => (j.id === jobId ? { ...j, ...updates } : j)),
+  )
+}
+
+/** Get the next queued job */
+export function nextQueuedJob(): UploadJob | undefined {
+  return jobs().find((j) => j.step === 'queued')
+}
+
+/** Remove a completed or errored job */
+export function removeJob(jobId: string) {
+  setJobs((prev) => prev.filter((j) => j.id !== jobId))
+}
+
+/** Clear all completed jobs */
+export function clearCompleted() {
+  setJobs((prev) => prev.filter((j) => j.step !== 'done'))
+}
+
+/** Check if there are any active (non-done, non-error) jobs */
+export function hasActiveJobs(): boolean {
+  return jobs().some((j) => j.step !== 'done' && j.step !== 'error' && j.step !== 'queued')
+}

@@ -14,7 +14,7 @@
  * - contentId: bytes32
  * - timestamp: Request timestamp (ms)
  * - nonce: Unique nonce for replay protection
- * - ciphertext, dataToEncryptHash, accessControlConditions (encrypted key payload)
+ * - ciphertext, dataToEncryptHash, unifiedAccessControlConditions (encrypted key payload)
  *
  * Either:
  * - userPkpPublicKey: User PKP public key (action signs on behalf)
@@ -114,6 +114,7 @@ const main = async () => {
       dataToEncryptHash,
       accessControlConditions,
       unifiedAccessControlConditions,
+      evmContractConditions,
       signature: preSignedSig,
     } = jsParams || {};
 
@@ -197,23 +198,23 @@ const main = async () => {
     // STEP 3: Decrypt AES key via Lit
     // ========================================
     const enc = encryptedKey || {};
-    const accs = enc.unifiedAccessControlConditions || unifiedAccessControlConditions
+    const accs = enc.evmContractConditions || evmContractConditions
+      || enc.unifiedAccessControlConditions || unifiedAccessControlConditions
       || enc.accessControlConditions || accessControlConditions;
     const ct = enc.ciphertext || ciphertext;
     const hash = enc.dataToEncryptHash || dataToEncryptHash;
 
     if (!accs || !ct || !hash) {
-      throw new Error("Missing encrypted key payload");
+      throw new Error(`Missing encrypted key payload: accs=${!!accs} ct=${!!ct} hash=${!!hash}`);
     }
 
     // Validate: must be contract-gated (evmContract), not action-bound
     assertContractGatedAccs(accs, cid);
 
     // Lit nodes independently evaluate canAccess() on Base ContentAccessMirror
-    // Lit Action runtime uses accessControlConditions for all condition types
-    // (conditionType field in each condition distinguishes evmContract from evmBasic)
+    // decryptAndCombine expects unifiedAccessControlConditions (evmContract included)
     const decryptedPayload = await Lit.Actions.decryptAndCombine({
-      accessControlConditions: accs,
+      unifiedAccessControlConditions: accs,
       ciphertext: ct,
       dataToEncryptHash: hash,
       authSig: null,

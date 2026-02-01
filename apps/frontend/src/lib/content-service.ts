@@ -8,8 +8,11 @@
  *
  * Download flow:
  *   1. Fetch encrypted blob from Beam CDN
- *   2. Parse header, call content-decrypt-v1 Lit Action for AES key
+ *   2. Parse header, decrypt AES key via litClient.decrypt() (client-side)
  *   3. Decrypt audio with AES key
+ *
+ * The Lit BLS nodes enforce the canAccess() contract condition on Base during
+ * threshold decryption. No Lit Action is needed for decrypt.
  *
  * Share flow:
  *   1. Call content-access-v1 Lit Action (grant/revoke/batch)
@@ -20,7 +23,6 @@ import type { PKPAuthContext } from './lit'
 import {
   CONTENT_REGISTER_V1_CID,
   CONTENT_ACCESS_V1_CID,
-  CONTENT_DECRYPT_V1_CID,
 } from './lit/action-cids'
 import { CONTENT_ACCESS_MIRROR } from './content-crypto'
 import {
@@ -30,7 +32,6 @@ import {
   beamUrl,
   computeContentId,
   ALGO_AES_GCM_256,
-  CONTENT_REGISTRY,
 } from './content-crypto'
 
 export { computeContentId } from './content-crypto'
@@ -125,11 +126,14 @@ export async function encryptForUpload(
 /**
  * Fetch and decrypt content from Beam CDN.
  *
+ * Decryption is client-side via litClient.decrypt(). The Lit BLS nodes enforce
+ * the canAccess() contract condition on Base ContentAccessMirror during threshold
+ * decryption — no Lit Action is needed.
+ *
  * @param datasetOwner - Address of the Synapse dataset owner
  * @param pieceCid - Filecoin piece CID
  * @param contentId - bytes32 content ID
- * @param authContext - Lit PKP auth context
- * @param pkpPublicKey - User's PKP public key
+ * @param authContext - Lit PKP auth context (must include access-control-condition-decryption resource)
  * @param network - 'calibration' or 'mainnet'
  */
 export async function fetchAndDecrypt(
@@ -137,9 +141,13 @@ export async function fetchAndDecrypt(
   pieceCid: string,
   contentId: string,
   authContext: PKPAuthContext,
-  pkpPublicKey: string,
   network: 'calibration' | 'mainnet' = 'calibration',
 ): Promise<DownloadResult> {
+  // Validate contentId format
+  if (!/^0x[0-9a-fA-F]{64}$/.test(contentId)) {
+    throw new Error(`Invalid contentId: expected 0x-prefixed bytes32 hex, got "${contentId}"`)
+  }
+
   // 1. Fetch encrypted blob from Beam CDN
   const url = beamUrl(datasetOwner, pieceCid, network)
   const response = await fetch(url)
@@ -151,18 +159,16 @@ export async function fetchAndDecrypt(
   // 2. Parse header to get Lit ciphertext + hash
   const header = parseHeader(blob)
 
-  // 3. Call content-decrypt-v1 Lit Action to get AES key
-  if (!CONTENT_DECRYPT_V1_CID) {
-    throw new Error('CONTENT_DECRYPT_V1_CID not set — deploy content-decrypt-v1 first')
-  }
+  // 3. Decrypt AES key via litClient.decrypt() (client-side)
+  //    Lit BLS nodes enforce canAccess() on Base ContentAccessMirror during threshold decryption.
   if (!CONTENT_ACCESS_MIRROR) {
     throw new Error('CONTENT_ACCESS_MIRROR not set — deploy ContentAccessMirror first')
   }
 
-  // Contract-gated condition matching what was used during encryption
-  const accessControlConditions = [
+  // Unified access control conditions matching what was used during encryption
+  const unifiedAccessControlConditions = [
     {
-      conditionType: 'evmContract',
+      conditionType: 'evmContract' as const,
       contractAddress: CONTENT_ACCESS_MIRROR,
       chain: 'baseSepolia',
       functionName: 'canAccess',
@@ -184,30 +190,32 @@ export async function fetchAndDecrypt(
   ]
 
   const litClient = await getLitClient()
-  const timestamp = Date.now().toString()
-  const nonce = crypto.randomUUID()
 
-  const result = await litClient.executeJs({
-    ipfsId: CONTENT_DECRYPT_V1_CID,
+  const decryptResult = await litClient.decrypt({
+    unifiedAccessControlConditions,
+    ciphertext: header.litCiphertext,
+    dataToEncryptHash: header.litDataToEncryptHash,
     authContext,
-    jsParams: {
-      userPkpPublicKey: pkpPublicKey,
-      contentId,
-      timestamp,
-      nonce,
-      ciphertext: header.litCiphertext,
-      dataToEncryptHash: header.litDataToEncryptHash,
-      unifiedAccessControlConditions: accessControlConditions,
-    },
+    chain: 'baseSepolia',
   })
 
-  const decryptResponse = JSON.parse(result.response as string)
-  if (!decryptResponse.success) {
-    throw new Error(`Content decrypt failed: ${decryptResponse.error}`)
+  // Parse JSON payload and extract the AES key
+  const decryptedPayload = new TextDecoder().decode(decryptResult.decryptedData)
+  let parsed: { key?: string; contentId?: string }
+  try {
+    parsed = JSON.parse(decryptedPayload)
+  } catch {
+    throw new Error('Decrypted payload is not valid JSON — possible key corruption or wrong access condition')
+  }
+  if (!parsed.key) {
+    throw new Error('Decrypted payload missing key')
+  }
+  if (parsed.contentId?.toLowerCase() !== contentId.toLowerCase()) {
+    throw new Error(`Content ID mismatch: payload bound to ${parsed.contentId}, requested ${contentId}`)
   }
 
   // 4. Decrypt audio with AES key
-  const audio = await decryptAudio(blob, decryptResponse.key)
+  const audio = await decryptAudio(blob, parsed.key)
 
   return { audio }
 }

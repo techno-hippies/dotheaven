@@ -218,7 +218,7 @@ export interface EditableInfoCardProps {
 export const EditableInfoCard: Component<EditableInfoCardProps> = (props) => {
   return (
     <div class={cn(
-      'bg-[var(--bg-surface)] rounded-md p-6 flex flex-col gap-6',
+      'border-b border-[var(--bg-highlight)] pb-6 flex flex-col gap-6',
       props.class
     )}>
       {props.children}

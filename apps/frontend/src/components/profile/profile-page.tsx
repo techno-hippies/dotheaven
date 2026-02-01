@@ -1,7 +1,7 @@
 import { Show, For, type Component, createSignal, createMemo } from 'solid-js'
 import {
-  ActivityItem,
   AlbumCover,
+  FeedPost,
   Scheduler,
   type TimeSlot,
   type DayAvailability,
@@ -159,7 +159,7 @@ export const ProfilePage: Component<ProfilePageProps> = (props) => {
 
         {/* Activity Tab */}
         <Show when={props.activeTab === 'activity'}>
-          <div class="max-w-[600px]">
+          <div class="-mx-8">
               <Show when={props.scrobblesLoading}>
                 <div class="py-12 text-center text-[var(--text-muted)]">
                   Loading activity...
@@ -174,23 +174,37 @@ export const ProfilePage: Component<ProfilePageProps> = (props) => {
                 </div>
               </Show>
               <Show when={!props.scrobblesLoading && props.scrobbles && props.scrobbles.length > 0}>
-                <For each={props.scrobbles}>
-                  {(scrobble) => (
-                    <ActivityItem
-                      icon={
-                        <AlbumCover
-                          src={scrobble.coverUrl}
-                          alt={scrobble.album || scrobble.title}
-                          size="lg"
-                        />
-                      }
-                      title={scrobble.title}
-                      subtitle={[scrobble.artist, scrobble.album].filter(Boolean).join(' \u00b7 ')}
-                      timestamp={scrobble.timestamp}
-                      onClick={props.onScrobbleClick ? () => props.onScrobbleClick!(scrobble) : undefined}
-                    />
-                  )}
-                </For>
+                <div class="divide-y divide-[var(--bg-highlight)]">
+                  <For each={props.scrobbles}>
+                    {(scrobble) => (
+                      <FeedPost
+                        authorName={props.displayName}
+                        timestamp={scrobble.timestamp}
+                        hideAuthor
+                        contentSlot={
+                          <div class="flex items-center gap-4">
+                            <AlbumCover
+                              src={scrobble.coverUrl}
+                              alt={scrobble.album || scrobble.title}
+                              class="w-14 h-14 flex-shrink-0"
+                            />
+                            <div class="flex-1 min-w-0">
+                              <div class="text-base font-semibold text-[var(--text-primary)] truncate">{scrobble.title}</div>
+                              <div class="text-base text-[var(--text-muted)] truncate">
+                                {[scrobble.artist, scrobble.album].filter(Boolean).join(' \u00b7 ')}
+                              </div>
+                            </div>
+                            <span class="text-base text-[var(--text-muted)] flex-shrink-0">{scrobble.timestamp}</span>
+                          </div>
+                        }
+                        likes={0}
+                        comments={0}
+                        onLike={() => {}}
+                        onComment={() => {}}
+                      />
+                    )}
+                  </For>
+                </div>
               </Show>
           </div>
         </Show>

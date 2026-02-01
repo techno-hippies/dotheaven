@@ -10,12 +10,23 @@ import {
 } from '@heaven/ui'
 import { usePlatform } from 'virtual:heaven-platform'
 import { pickFolder, type LocalTrack } from '../lib/local-music'
-import { usePlayer } from '../providers'
+import { usePlayer, useAuth } from '../providers'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
+import { enqueueUpload } from '../lib/upload-manager'
+import { initFilecoinUploadService } from '../lib/filecoin-upload-service'
 
 export const LibraryPage: Component = () => {
   const platform = usePlatform()
   const player = usePlayer()
+  const auth = useAuth()
+
+  // Initialize upload service once (idempotent — setQueueProcessor just replaces the fn)
+  if (platform.isTauri) {
+    initFilecoinUploadService({
+      getAuthContext: () => auth.getAuthContext(),
+      getPkp: () => auth.pkpInfo(),
+    })
+  }
   const [scrollRef, setScrollRef] = createSignal<HTMLDivElement | undefined>(undefined)
   let pendingScrollEl: HTMLDivElement | undefined
   const setScrollRefEl = (el: HTMLDivElement | undefined) => {
@@ -102,11 +113,11 @@ export const LibraryPage: Component = () => {
     <div
       ref={setScrollRefEl}
       onScroll={handleScroll}
-      class="h-full overflow-y-auto bg-gradient-to-b from-[#4a3a6a] via-[#2a2040] to-[var(--bg-page)] rounded-t-lg"
+      class="h-full overflow-y-auto"
     >
       <MediaHeader
         type="playlist"
-        title="Library"
+        title="Local Files"
         creator={player.folderPath() || 'No folder selected'}
         stats={{
           songCount: player.tracks().length,
@@ -233,6 +244,21 @@ export const LibraryPage: Component = () => {
                   setPlaylistDialogTrack(track)
                   setPlaylistDialogOpen(true)
                 },
+                onUploadToFilecoin: platform.isTauri
+                  ? (track) => {
+                      const lt = track as LocalTrack
+                      if (!lt.filePath) {
+                        console.warn('[Upload] No filePath for track:', track.title)
+                        return
+                      }
+                      enqueueUpload({
+                        id: lt.id,
+                        title: lt.title,
+                        artist: lt.artist,
+                        filePath: lt.filePath,
+                      })
+                    }
+                  : undefined,
               }}
             />
           )}

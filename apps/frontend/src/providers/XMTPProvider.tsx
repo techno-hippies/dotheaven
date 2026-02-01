@@ -192,6 +192,11 @@ export const XMTPProvider: ParentComponent = (props) => {
   }
 
   const formatAddress = (address: string): string => {
+    // Skip non-address strings (e.g. XMTP conversation IDs like "dm:abc123...")
+    if (!address.startsWith('0x')) {
+      console.log('[XMTPProvider] formatAddress: non-0x address, returning as-is:', address)
+      return address.length > 20 ? `${address.slice(0, 8)}...${address.slice(-4)}` : address
+    }
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
 
@@ -278,6 +283,8 @@ export const XMTPProvider: ParentComponent = (props) => {
         const msgAt = c.lastMessageAt ?? 0
         const isFromPeer = c.lastMessageSender ? c.lastMessageSender !== myId : false
         const hasUnread = isFromPeer && msgAt > lastReadAt
+
+        console.log('[XMTPProvider] convo:', c.id, 'peerAddress:', c.peerAddress, 'lastMessage:', c.lastMessage)
 
         return {
           id: c.id,

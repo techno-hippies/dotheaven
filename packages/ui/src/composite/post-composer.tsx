@@ -43,10 +43,10 @@ export const PostComposer: Component<PostComposerProps> = (props) => {
   }
 
   return (
-    <div class={cn('flex flex-col gap-3 p-4', props.class)}>
+    <div class={cn('flex flex-col gap-3 p-5', props.class)}>
       {/* Input row */}
       <div class="flex items-start gap-3">
-        <Avatar src={props.avatarUrl} size="md" shape="circle" />
+        <Avatar src={props.avatarUrl} size="lg" shape="circle" />
         <textarea
           ref={textareaRef}
           rows={1}

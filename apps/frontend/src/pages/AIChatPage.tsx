@@ -309,8 +309,8 @@ export const AIChatPage: Component = () => {
   }
 
   return (
-    <div class="h-full overflow-y-auto bg-[var(--bg-page)]">
-      <div class="h-full flex flex-col bg-[var(--bg-surface)] rounded-t-lg">
+    <div class="h-full overflow-y-auto">
+      <div class="h-full flex flex-col">
           {/* Chat header */}
           <div class="flex items-center justify-between px-4 py-3 border-b border-[var(--border-default)]">
             <div class="flex items-center gap-3">

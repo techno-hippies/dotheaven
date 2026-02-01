@@ -28,12 +28,16 @@ export interface FeedPostProps {
   // Content
   text?: string
   media?: FeedPostMedia
+  /** Custom content slot — renders instead of text+media when provided */
+  contentSlot?: JSX.Element
   // Engagement
   likes?: number
   comments?: number
   isLiked?: boolean
   onLike?: () => void
   onComment?: () => void
+  /** Hide the author header row (useful on profile pages where author is implicit) */
+  hideAuthor?: boolean
   // Menu
   menuSlot?: JSX.Element
 }
@@ -203,7 +207,7 @@ const VideoEmbed: Component<{
 
 /** Rounded/bubbly heart (Phosphor-style) */
 const HeartIcon: Component<{ filled?: boolean }> = (props) => (
-  <svg class="w-5 h-5" viewBox="0 0 256 256" fill="currentColor">
+  <svg class="w-6 h-6" viewBox="0 0 256 256" fill="currentColor">
     {props.filled ? (
       <path d="M240,94c0,70-103.79,126.66-108.21,129a8,8,0,0,1-7.58,0C119.79,220.66,16,164,16,94A62.07,62.07,0,0,1,78,32c20.65,0,38.73,8.88,50,23.89C139.27,40.88,157.35,32,178,32A62.07,62.07,0,0,1,240,94Z" />
     ) : (
@@ -213,7 +217,7 @@ const HeartIcon: Component<{ filled?: boolean }> = (props) => (
 )
 
 const ChatIcon: Component = () => (
-  <svg class="w-5 h-5" viewBox="0 0 256 256" fill="currentColor">
+  <svg class="w-6 h-6" viewBox="0 0 256 256" fill="currentColor">
     <path d="M216,48H40A16,16,0,0,0,24,64V224a15.85,15.85,0,0,0,9.24,14.5A16.13,16.13,0,0,0,40,240a15.89,15.89,0,0,0,10.25-3.78l.09-.07L83,208H216a16,16,0,0,0,16-16V64A16,16,0,0,0,216,48ZM216,192H83a8,8,0,0,0-5.23,1.95L40,224V64H216Z" />
   </svg>
 )
@@ -222,59 +226,65 @@ const ChatIcon: Component = () => (
 
 export const FeedPost: Component<FeedPostProps> = (props) => {
   return (
-    <div class={cn('flex flex-col gap-3 p-4', props.class)}>
+    <div class={cn('flex flex-col gap-4 p-5', props.class)}>
       {/* Header: avatar + name + timestamp */}
-      <div class="flex items-center gap-3">
-        <button
-          type="button"
-          class="cursor-pointer flex-shrink-0"
-          onClick={() => props.onAuthorClick?.()}
-        >
-          <Avatar
-            src={props.authorAvatarUrl}
-            size="md"
-            shape="circle"
-          />
-        </button>
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-1.5">
-            <button
-              type="button"
-              class="font-semibold text-base text-[var(--text-primary)] truncate cursor-pointer hover:underline"
-              onClick={() => props.onAuthorClick?.()}
-            >
-              {props.authorName}
-            </button>
-            <span class="text-base text-[var(--text-muted)]">·</span>
-            <span class="text-base text-[var(--text-muted)] flex-shrink-0">{props.timestamp}</span>
+      {!props.hideAuthor && (
+        <div class="flex items-center gap-3">
+          <button
+            type="button"
+            class="cursor-pointer flex-shrink-0"
+            onClick={() => props.onAuthorClick?.()}
+          >
+            <Avatar
+              src={props.authorAvatarUrl}
+              size="lg"
+              shape="circle"
+            />
+          </button>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-1.5">
+              <button
+                type="button"
+                class="font-semibold text-base text-[var(--text-primary)] truncate cursor-pointer hover:underline"
+                onClick={() => props.onAuthorClick?.()}
+              >
+                {props.authorName}
+              </button>
+              <span class="text-base text-[var(--text-muted)]">·</span>
+              <span class="text-base text-[var(--text-muted)] flex-shrink-0">{props.timestamp}</span>
+            </div>
+            <Show when={props.authorHandle}>
+              <div class="text-base text-[var(--text-muted)] truncate">{props.authorHandle}</div>
+            </Show>
           </div>
-          <Show when={props.authorHandle}>
-            <div class="text-base text-[var(--text-muted)] truncate">{props.authorHandle}</div>
+          <Show when={props.menuSlot}>
+            {props.menuSlot}
           </Show>
         </div>
-        <Show when={props.menuSlot}>
-          {props.menuSlot}
-        </Show>
-      </div>
+      )}
 
-      {/* Text content */}
-      <Show when={props.text}>
-        <p class="text-base text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap">{props.text}</p>
-      </Show>
-
-      {/* Media slot */}
-      <Show when={props.media}>
-        {(media) => (
-          <Switch>
-            <Match when={media().type === 'photo' && media() as Extract<FeedPostMedia, { type: 'photo' }>}>
-              {(m) => <PhotoGrid items={m().items} />}
-            </Match>
-            <Match when={media().type === 'video' && media() as Extract<FeedPostMedia, { type: 'video' }>}>
-              {(m) => <VideoEmbed src={m().src} thumbnailUrl={m().thumbnailUrl} aspect={m().aspect} />}
-            </Match>
-          </Switch>
-        )}
-      </Show>
+      {/* Content: custom slot or default text+media */}
+      {props.contentSlot ? (
+        props.contentSlot
+      ) : (
+        <>
+          <Show when={props.text}>
+            <p class="text-base font-medium text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap">{props.text}</p>
+          </Show>
+          <Show when={props.media}>
+            {(media) => (
+              <Switch>
+                <Match when={media().type === 'photo' && media() as Extract<FeedPostMedia, { type: 'photo' }>}>
+                  {(m) => <PhotoGrid items={m().items} />}
+                </Match>
+                <Match when={media().type === 'video' && media() as Extract<FeedPostMedia, { type: 'video' }>}>
+                  {(m) => <VideoEmbed src={m().src} thumbnailUrl={m().thumbnailUrl} aspect={m().aspect} />}
+                </Match>
+              </Switch>
+            )}
+          </Show>
+        </>
+      )}
 
       {/* Engagement bar */}
       <div class="flex items-center gap-5 pt-1">

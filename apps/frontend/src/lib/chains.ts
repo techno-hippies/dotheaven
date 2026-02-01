@@ -40,3 +40,15 @@ export const filecoinCalibration = defineChain({
     default: { name: 'Blockscout', url: 'https://filecoin-testnet.blockscout.com' },
   },
 })
+
+export const filecoin = defineChain({
+  id: 314,
+  name: 'Filecoin',
+  nativeCurrency: { name: 'Filecoin', symbol: 'FIL', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://api.node.glif.io/rpc/v1'] },
+  },
+  blockExplorers: {
+    default: { name: 'Filfox', url: 'https://filfox.info' },
+  },
+})

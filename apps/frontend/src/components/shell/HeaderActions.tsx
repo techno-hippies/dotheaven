@@ -180,32 +180,7 @@ export const HeaderActions: Component = () => {
           </>
         }
       >
-        <IconButton variant="ghost" size="md" aria-label="Notifications">
-          <BellIcon />
-        </IconButton>
-        <IconButton
-          variant="ghost"
-          size="md"
-          aria-label="Wallet"
-          onClick={() => navigate('/wallet')}
-        >
-          <WalletIcon />
-        </IconButton>
-        <IconButton
-          variant="ghost"
-          size="md"
-          aria-label="Settings"
-          onClick={() => navigate('/settings')}
-        >
-          <GearIcon />
-        </IconButton>
-        <button
-          onClick={() => navigate('/profile')}
-          class="flex items-center gap-2 hover:opacity-80 transition-opacity"
-          title={`Signed in as ${auth.pkpAddress()?.slice(0, 6)}...${auth.pkpAddress()?.slice(-4)}`}
-        >
-          <Avatar size="sm" class="cursor-pointer" />
-        </button>
+        {/* Authenticated — no actions needed, everything is in sidebar */}
       </Show>
     </div>
   )

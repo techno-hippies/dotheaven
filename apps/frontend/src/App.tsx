@@ -243,8 +243,8 @@ export const App: Component = () => {
         auth.dismissOnboarding()
       }}
     />
-    <div class="max-w-[600px] mx-auto py-4 px-4 flex flex-col gap-3 h-full overflow-y-auto">
-      <div class="bg-[var(--bg-surface)] rounded-md">
+    <div class="flex flex-col h-full overflow-y-auto">
+      <div class="border-b border-[var(--bg-highlight)]">
         <PostComposer
           avatarUrl="https://placewaifu.com/image/100"
           onPhotoClick={noop}
@@ -253,7 +253,7 @@ export const App: Component = () => {
           onSubmit={noop}
         />
       </div>
-      <div class="bg-[var(--bg-surface)] rounded-md divide-y divide-[var(--bg-highlight)]">
+      <div class="divide-y divide-[var(--bg-highlight)]">
         <FeedPost
           authorName="Yuki"
           authorHandle="yuki.heaven"

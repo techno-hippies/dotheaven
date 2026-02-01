@@ -30,5 +30,5 @@ export const CONTENT_REGISTER_V1_CID = 'QmPMPGkEUGTjHLhdbnHwbhKK1G9rj9NZRnJzxbY5
 /** Content Access v1 — grant/revoke access on ContentRegistry */
 export const CONTENT_ACCESS_V1_CID = 'QmRDyE4znmxKjmJSxyxoFfEWFkLhQZDU3HiA3rzjSR3im4'
 
-/** Content Decrypt v1 — decrypt AES key gated by ContentRegistry.canAccess() */
-export const CONTENT_DECRYPT_V1_CID = 'QmX9wsFn821XJZRuK5zmfFUZJqzvK8ju4dyPBFySKK4Do8'
+// Content decrypt is handled client-side via litClient.decrypt() — no Lit Action needed.
+// The Lit BLS nodes enforce canAccess() on Base ContentAccessMirror during threshold decryption.

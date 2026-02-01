@@ -5,7 +5,9 @@ import { Avatar } from '../primitives/avatar'
 
 export interface ChatListItemProps {
   class?: string
+  /** Primary display name (heaven name, ENS, or full address if no name) */
   name: string
+  /** Secondary text shown after name in muted color (e.g. truncated 0x address) */
   handle?: string
   avatarUrl?: string
   /** Last message preview text */
@@ -28,7 +30,7 @@ export const ChatListItem: Component<ChatListItemProps> = (props) => {
     <button
       type="button"
       class={cn(
-        'flex items-center gap-3 w-full p-3 rounded-md text-left cursor-pointer transition-colors',
+        'flex items-center gap-3 w-full px-4 py-3 text-left cursor-pointer transition-colors',
         props.active
           ? 'bg-[var(--bg-highlight)]'
           : 'hover:bg-[var(--bg-highlight-hover)]',
@@ -44,16 +46,17 @@ export const ChatListItem: Component<ChatListItemProps> = (props) => {
         </Show>
       </div>
 
-      {/* Text content */}
+      {/* Text content — always 2 rows: (name [handle]) + (lastMessage) */}
       <div class="flex-1 min-w-0">
+        {/* Row 1: name + handle inline, timestamp right */}
         <div class="flex items-center justify-between gap-2">
           <span class={cn(
-            'text-base truncate',
+            'truncate',
             hasUnread() ? 'font-bold text-[var(--text-primary)]' : 'font-medium text-[var(--text-primary)]',
           )}>
-            {props.name}
+            <span class="text-base">{props.name}</span>
             <Show when={props.handle}>
-              <span class="text-[var(--text-muted)] font-normal"> {props.handle}</span>
+              <span class="text-sm text-[var(--text-muted)] font-normal"> {props.handle}</span>
             </Show>
           </span>
           <Show when={props.timestamp}>
@@ -65,10 +68,11 @@ export const ChatListItem: Component<ChatListItemProps> = (props) => {
             </span>
           </Show>
         </div>
+        {/* Row 2: last message + unread badge */}
         <div class="flex items-center justify-between gap-2 mt-0.5">
           <Show when={props.lastMessage}>
             <span class={cn(
-              'text-base truncate',
+              'text-sm truncate',
               hasUnread() ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]',
             )}>
               {props.lastMessage}

@@ -113,11 +113,11 @@ function isStale(updatedAt?: number) {
 // ============ Asset Definitions ============
 const ASSET_CONFIGS: AssetConfig[] = [
   {
-    id: 'fil-calibration',
-    key: 'filCalib:native',
+    id: 'fil-mainnet',
+    key: 'fil:native',
     name: 'FIL',
     symbol: 'Filecoin',
-    chainKey: 'filCalib',
+    chainKey: 'fil',
     icon: FilecoinIcon,
     chainBadge: FilecoinIcon,
     isNative: true,
@@ -126,14 +126,14 @@ const ASSET_CONFIGS: AssetConfig[] = [
   },
   {
     id: 'usdfc-filecoin',
-    key: 'filCalib:erc20:0xb3042734b608a1B16e9e86B374A3f3e389B4cDf0',
+    key: 'fil:erc20:0x80B98d3aa09ffff255c3ba4A241111Ff1262F045',
     name: 'USDFC',
     symbol: 'Filecoin',
-    chainKey: 'filCalib',
+    chainKey: 'fil',
     icon: USDFCIcon,
     chainBadge: FilecoinIcon,
     isNative: false,
-    tokenAddress: '0xb3042734b608a1B16e9e86B374A3f3e389B4cDf0',
+    tokenAddress: '0x80B98d3aa09ffff255c3ba4A241111Ff1262F045',
     unitSymbol: 'USDFC',
     priceUsd: 1,
   },
@@ -330,7 +330,7 @@ export const WalletPage: Component = () => {
   })
 
   return (
-    <div class="h-full overflow-y-auto bg-[var(--bg-surface)] rounded-t-lg">
+    <div class="h-full overflow-y-auto">
       <Show
         when={auth.isAuthenticated()}
         fallback={

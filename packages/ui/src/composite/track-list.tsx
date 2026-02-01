@@ -32,6 +32,7 @@ export interface TrackMenuActions {
   onGoToAlbum?: (track: Track) => void
   onRemoveFromPlaylist?: (track: Track) => void
   onIdentify?: (track: Track) => void
+  onUploadToFilecoin?: (track: Track) => void
 }
 
 export type SortField = 'title' | 'artist' | 'album' | 'dateAdded' | 'duration'
@@ -331,6 +332,12 @@ export const TrackList: Component<TrackListProps> = (props) => {
                         <Show when={props.menuActions?.onRemoveFromPlaylist}>
                           <DropdownMenuItem onSelect={() => props.menuActions?.onRemoveFromPlaylist?.(track())}>
                             Remove from playlist
+                          </DropdownMenuItem>
+                        </Show>
+                        <Show when={props.menuActions?.onUploadToFilecoin}>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onSelect={() => props.menuActions?.onUploadToFilecoin?.(track())}>
+                            Upload to Filecoin
                           </DropdownMenuItem>
                         </Show>
                       </DropdownMenuContent>

@@ -60,7 +60,7 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
         when={props.bannerUrl}
         fallback={
           <div
-            class="h-48 w-full rounded-t-lg"
+            class="h-48 w-full"
             style={{
               background: props.bannerGradient ?? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
             }}
@@ -70,7 +70,7 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
         <img
           src={props.bannerUrl}
           alt="Banner"
-          class="h-48 w-full rounded-t-lg object-cover"
+          class="h-48 w-full object-cover"
         />
       </Show>
 

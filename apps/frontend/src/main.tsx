@@ -34,7 +34,7 @@ import { AIChatPage } from './pages/AIChatPage'
 import { WalletPage } from './pages/WalletPage'
 import { PlaylistPage } from './pages/PlaylistPage'
 import { SettingsPage } from './pages/SettingsPage'
-import { ChatListPage } from './pages/ChatListPage'
+import { ChatLayout } from './pages/ChatLayout'
 
 function maybeRedirectHandshakeProfile() {
   if (typeof window === 'undefined') return
@@ -84,9 +84,11 @@ render(
                   <Route path="/library" component={LibraryPage} />
                   <Route path="/liked-songs" component={LikedSongsPage} />
                   <Route path="/free-weekly" component={FreeWeeklyPage} />
-                  <Route path="/chat" component={ChatListPage} />
-                  <Route path="/chat/ai/:personalityId" component={AIChatPage} />
-                  <Route path="/chat/:username" component={ChatPage} />
+                  <Route path="/chat" component={ChatLayout}>
+                    <Route path="/" component={() => null} />
+                    <Route path="/ai/:personalityId" component={AIChatPage} />
+                    <Route path="/:username" component={ChatPage} />
+                  </Route>
                   <Route path="/wallet" component={WalletPage} />
                   <Route path="/playlist/:id" component={PlaylistPage} />
 

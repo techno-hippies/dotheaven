@@ -35,7 +35,11 @@ export const AppShell: Component<AppShellProps> = (props) => {
       </div>
 
       {/* Footer / Music Player */}
-      {props.footer}
+      {props.footer && (
+        <div class="border-t border-[var(--bg-highlight)]">
+          {props.footer}
+        </div>
+      )}
     </div>
   )
 }

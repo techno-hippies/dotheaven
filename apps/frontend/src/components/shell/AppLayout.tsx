@@ -7,7 +7,8 @@
  */
 
 import type { ParentComponent } from 'solid-js'
-import { Show } from 'solid-js'
+import { Show, createMemo } from 'solid-js'
+import { useLocation } from '@solidjs/router'
 import {
   AppShell,
   Header,
@@ -17,16 +18,19 @@ import {
 import { AppSidebar, HeaderActions } from '.'
 import { NowPlaying } from '../player/now-playing'
 import { Toaster } from '../Toaster'
+import { UploadQueue } from '../UploadQueue'
 import { usePlayer } from '../../providers'
 
 export const AppLayout: ParentComponent = (props) => {
   const player = usePlayer()
+  const location = useLocation()
+  const isChat = createMemo(() => location.pathname.startsWith('/chat'))
 
   return (
     <AppShell
       header={<Header rightSlot={<HeaderActions />} />}
       sidebar={<AppSidebar />}
-      rightPanel={
+      rightPanel={isChat() ? undefined :
         <RightPanel>
           <div class="p-4">
             <Show
@@ -89,6 +93,7 @@ export const AppLayout: ParentComponent = (props) => {
     >
       {props.children}
       <Toaster />
+      <UploadQueue />
     </AppShell>
   )
 }

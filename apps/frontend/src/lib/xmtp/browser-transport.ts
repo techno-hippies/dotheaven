@@ -197,7 +197,10 @@ export class BrowserTransport implements XmtpTransport {
       const myId = this.client.inboxId
       const peer = members.find((m) => m.inboxId !== myId)
       // @ts-expect-error - accountAddresses may not be typed
-      const peerAddress = (peer?.accountAddresses?.[0] as string) || dm.id
+      const rawAddr = peer?.accountAddresses?.[0] as string | undefined
+      // Fallback to dm.id if no account address found (e.g. dm:xxx conversation IDs)
+      const peerAddress = rawAddr || dm.id
+      console.log('[BrowserTransport] listConversations dm:', dm.id, 'peer:', peer?.inboxId, 'rawAddr:', rawAddr, 'peerAddress:', peerAddress)
 
       this.conversationCache.set(peerAddress.toLowerCase(), dm)
 

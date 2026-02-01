@@ -136,7 +136,7 @@ export const PlaylistPage: Component = () => {
         </div>
       }>
         {(p) => (
-          <div class="h-full overflow-y-auto bg-gradient-to-b from-[#4a3f6b] via-[#2a2440] to-[var(--bg-page)] rounded-t-lg">
+          <div class="h-full overflow-y-auto">
             <MediaHeader
                 type="playlist"
                 title={p().name}

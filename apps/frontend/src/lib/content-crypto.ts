@@ -10,8 +10,8 @@
  *
  * Decryption (playback):
  *   1. Parse header from fetched blob
- *   2. Call content-decrypt-v1 Lit Action for AES key (checks canAccess on MegaETH,
- *      then decryptAndCombine with contract-gated condition on Base)
+ *   2. Client-side litClient.decrypt() recovers AES key — Lit BLS nodes enforce
+ *      canAccess() on Base ContentAccessMirror during threshold decryption
  *   3. Decrypt audio with AES key via Web Crypto
  *   4. Return plaintext audio bytes
  *
@@ -23,7 +23,9 @@
  *   [1 byte: algo (1 = AES_GCM_256)]
  *   [1 byte: ivLen]
  *   [ivLen bytes: IV]
- *   [remaining: AES-GCM encrypted audio]
+ *   [4 bytes: audioLen (encrypted audio length, excludes any trailing padding)]
+ *   [audioLen bytes: AES-GCM encrypted audio]
+ *   [optional trailing padding bytes]
  *
  * Access condition architecture:
  * The AES key is Lit-encrypted with a contract-gated access condition that calls
@@ -101,6 +103,8 @@ export interface ContentHeader {
   litDataToEncryptHash: string
   algo: number
   iv: Uint8Array
+  /** Length of encrypted audio in bytes (excludes trailing padding) */
+  audioLen: number
   /** Byte offset where encrypted audio starts */
   audioOffset: number
 }
@@ -246,7 +250,15 @@ export function parseHeader(blob: Uint8Array): ContentHeader {
   const iv = blob.subarray(offset, offset + ivLen)
   offset += ivLen
 
-  return { litCiphertext, litDataToEncryptHash, algo, iv, audioOffset: offset }
+  // audioLen
+  if (offset + 4 > blob.length) throw new Error('Blob truncated before audioLen')
+  const audioLen = view.getUint32(offset)
+  offset += 4
+  if (audioLen === 0 || offset + audioLen > blob.length) {
+    throw new Error(`Invalid audioLen: ${audioLen} (available: ${blob.length - offset})`)
+  }
+
+  return { litCiphertext, litDataToEncryptHash, algo, iv, audioLen, audioOffset: offset }
 }
 
 /**
@@ -280,8 +292,8 @@ export async function decryptAudio(
   // Zero the raw key copy
   rawKey.fill(0)
 
-  // Decrypt
-  const encryptedAudio = blob.subarray(header.audioOffset)
+  // Decrypt — use audioLen to exclude trailing padding
+  const encryptedAudio = blob.subarray(header.audioOffset, header.audioOffset + header.audioLen)
   const decrypted = await crypto.subtle.decrypt(
     { name: 'AES-GCM', iv: header.iv },
     key,
@@ -320,8 +332,8 @@ function buildBlob(
   const ctBytes = new TextEncoder().encode(litCiphertext)
   const hashBytes = new TextEncoder().encode(dataToEncryptHash)
 
-  // Header: 4 + ctLen + 4 + hashLen + 1 (algo) + 1 (ivLen) + ivLen
-  const headerSize = 4 + ctBytes.length + 4 + hashBytes.length + 1 + 1 + iv.length
+  // Header: 4 + ctLen + 4 + hashLen + 1 (algo) + 1 (ivLen) + ivLen + 4 (audioLen)
+  const headerSize = 4 + ctBytes.length + 4 + hashBytes.length + 1 + 1 + iv.length + 4
   const total = headerSize + encryptedAudio.length
   const out = new Uint8Array(total)
   const view = new DataView(out.buffer)
@@ -349,6 +361,10 @@ function buildBlob(
   offset += 1
   out.set(iv, offset)
   offset += iv.length
+
+  // audioLen
+  view.setUint32(offset, encryptedAudio.length)
+  offset += 4
 
   // Encrypted audio
   out.set(encryptedAudio, offset)

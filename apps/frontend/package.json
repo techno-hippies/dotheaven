@@ -28,6 +28,8 @@
     "phosphor-icons-solid": "1.0.0",
     "qrcode": "1.5.4",
     "solid-js": "^1.9.3",
+    "@filoz/synapse-sdk": "0.36.1",
+    "ethers": "^6.13.4",
     "viem": "2.44.4"
   },
   "devDependencies": {

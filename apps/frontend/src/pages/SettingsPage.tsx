@@ -17,9 +17,9 @@ export const SettingsPage: Component = () => {
       <div class="max-w-2xl mx-auto px-6 py-8">
         <h1 class="text-2xl font-bold text-[var(--text-primary)] mb-6">Settings</h1>
 
-        <div class="bg-[var(--bg-surface)] rounded-md p-6 mb-4">
+        <div class="border-b border-[var(--bg-highlight)] pb-6 mb-6">
           <h2 class="text-lg font-semibold text-[var(--text-primary)] mb-2">Account</h2>
-          <p class="text-sm text-[var(--text-secondary)] mb-4">
+          <p class="text-base text-[var(--text-secondary)] mb-4">
             Signed in as {auth.pkpAddress()?.slice(0, 6)}...{auth.pkpAddress()?.slice(-4)}
           </p>
           <Button
