@@ -14,6 +14,7 @@ export default defineConfig({
       { find: '@heaven/ui/styles', replacement: resolve(__dirname, '../../packages/ui/src/styles/index.css') },
       { find: '@heaven/ui', replacement: resolve(__dirname, '../../packages/ui/src') },
       { find: '@heaven/core', replacement: resolve(__dirname, '../../packages/core/src') },
+      { find: /^events$/, replacement: resolve(__dirname, 'node_modules/events') },
       { find: /^@heaven\/platform$/, replacement: webPlatformPath },
       { find: 'virtual:heaven-platform', replacement: webPlatformPath },
     ],
@@ -33,7 +34,7 @@ export default defineConfig({
       plugins: [{
         name: 'externalize-node-builtins',
         setup(build) {
-          const nodeBuiltins = ['fs', 'path', 'os', 'crypto', 'stream', 'util', 'events', 'net', 'tls', 'http', 'https', 'child_process', 'worker_threads', 'perf_hooks']
+          const nodeBuiltins = ['fs', 'path', 'os', 'crypto', 'stream', 'util', 'net', 'tls', 'http', 'https', 'child_process', 'worker_threads', 'perf_hooks']
           for (const mod of nodeBuiltins) {
             build.onResolve({ filter: new RegExp(`^${mod}$`) }, () => ({ path: mod, external: true }))
           }

@@ -12,6 +12,7 @@ export default defineConfig({
       '@heaven/ui/styles': resolve(__dirname, '../../packages/ui/src/styles/index.css'),
       '@heaven/ui': resolve(__dirname, '../../packages/ui/src'),
       '@heaven/core': resolve(__dirname, '../../packages/core/src'),
+      events: resolve(__dirname, 'node_modules/events'),
     },
   },
   clearScreen: false,
@@ -28,10 +29,10 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['@xmtp/browser-sdk', '@xmtp/wasm-bindings'],
     esbuildOptions: {
-      plugins: [{
+          plugins: [{
         name: 'externalize-node-builtins',
         setup(build) {
-          const nodeBuiltins = ['fs', 'path', 'os', 'crypto', 'stream', 'util', 'events', 'net', 'tls', 'http', 'https', 'child_process', 'worker_threads', 'perf_hooks']
+          const nodeBuiltins = ['fs', 'path', 'os', 'crypto', 'stream', 'util', 'net', 'tls', 'http', 'https', 'child_process', 'worker_threads', 'perf_hooks']
           for (const mod of nodeBuiltins) {
             build.onResolve({ filter: new RegExp(`^${mod}$`) }, () => ({ path: mod, external: true }))
           }

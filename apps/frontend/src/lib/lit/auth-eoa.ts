@@ -1,4 +1,4 @@
-import { createWalletClient, custom, getAddress } from 'viem'
+import { createWalletClient, custom, getAddress, type WalletClient } from 'viem'
 import { mainnet } from 'viem/chains'
 import { getLitClient, getAuthManager } from './client'
 import { cacheEoaAuthContext } from './auth-pkp'
@@ -45,13 +45,13 @@ async function getInjectedWalletClient() {
  * Register new PKP with EOA wallet via relayer.
  * Relayer pays gas (free on naga-dev), user's EOA is added as auth method.
  */
-export async function registerWithEOA(): Promise<{
+export async function registerWithEOA(externalWalletClient?: WalletClient): Promise<{
   pkpInfo: PKPInfo
   authData: AuthData
 }> {
   console.log('[Lit] Registering with EOA via relayer...')
 
-  const walletClient = await getInjectedWalletClient()
+  const walletClient = externalWalletClient ?? await getInjectedWalletClient()
   const address = walletClient.account?.address
 
   if (!address) {
@@ -140,13 +140,13 @@ export async function registerWithEOA(): Promise<{
  * Sign in with an existing EOA wallet.
  * Authenticates via SIWE signature and looks up the associated PKP.
  */
-export async function authenticateWithEOA(): Promise<{
+export async function authenticateWithEOA(externalWalletClient?: WalletClient): Promise<{
   pkpInfo: PKPInfo
   authData: AuthData
 }> {
   console.log('[Lit] Authenticating with EOA...')
 
-  const walletClient = await getInjectedWalletClient()
+  const walletClient = externalWalletClient ?? await getInjectedWalletClient()
   const address = walletClient.account?.address
 
   if (!address) {

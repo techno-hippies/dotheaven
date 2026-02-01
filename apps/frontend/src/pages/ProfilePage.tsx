@@ -232,7 +232,7 @@ export const MyProfilePage: Component = () => {
   }
 
   const handleName = () => {
-    const addr = auth.pkpAddress()
+    const addr = auth.eoaAddress() ?? auth.pkpAddress()
     if (!addr) return '@unknown'
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`
   }
