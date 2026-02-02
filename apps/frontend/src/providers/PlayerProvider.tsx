@@ -31,7 +31,7 @@ import {
   type LocalTrack,
 } from '../lib/local-music'
 import { createScrobbleService, type ScrobbleService } from '../lib/scrobble-service'
-import { fetchAndDecrypt } from '../lib/content-service'
+import { fetchAndDecrypt, fetchPlaintext } from '../lib/content-service'
 
 export interface EncryptedContentInfo {
   contentId: string
@@ -40,6 +40,7 @@ export interface EncryptedContentInfo {
   datasetOwner: string
   title: string
   artist: string
+  algo?: number // 0 = plaintext, 1 = AES-GCM-256 (default)
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -324,6 +325,10 @@ export const PlayerProvider: ParentComponent = (props) => {
       }).then((unlisten) => {
         unlistenError = unlisten
       })
+      // Also create an HTMLAudioElement for Filecoin content playback
+      // (encrypted/public content fetched via JS needs a web audio element)
+      audio = new Audio()
+      audio.volume = volume() / 100
       return
     }
 
@@ -684,7 +689,17 @@ export const PlayerProvider: ParentComponent = (props) => {
   const decryptedCache = new Map<string, string>()
 
   async function playEncryptedContent(content: EncryptedContentInfo) {
-    if (!audio) return
+    console.log('[Player] playEncryptedContent called:', {
+      contentId: content.contentId,
+      pieceCid: content.pieceCid,
+      datasetOwner: content.datasetOwner,
+      algo: content.algo,
+      title: content.title,
+    })
+    if (!audio) {
+      console.error('[Player] No audio element')
+      return
+    }
     setPlaybackError(null)
 
     // Create a synthetic track so NowPlaying displays correctly
@@ -717,16 +732,25 @@ export const PlayerProvider: ParentComponent = (props) => {
       return
     }
 
-    // Fetch + decrypt
+    // Fetch + decrypt (or fetch plaintext if algo=0)
     setDecrypting(true)
+    console.log('[Player] Starting fetch, algo:', content.algo)
     try {
-      const authContext = await auth.getAuthContext()
-      const result = await fetchAndDecrypt(
-        content.datasetOwner,
-        content.pieceCid,
-        content.contentId,
-        authContext,
-      )
+      let result: { audio: Uint8Array }
+      if (content.algo === 0) {
+        console.log('[Player] Fetching plaintext from Beam...')
+        result = await fetchPlaintext(content.datasetOwner, content.pieceCid)
+      } else {
+        console.log('[Player] Fetching encrypted + decrypting via Lit...')
+        const authContext = await auth.getAuthContext()
+        result = await fetchAndDecrypt(
+          content.datasetOwner,
+          content.pieceCid,
+          content.contentId,
+          authContext,
+        )
+      }
+      console.log('[Player] Got audio bytes:', result.audio.length)
 
       // Create blob URL from decrypted audio bytes
       const blob = new Blob([result.audio.buffer], { type: 'audio/mpeg' })

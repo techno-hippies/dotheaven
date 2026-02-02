@@ -35,6 +35,7 @@ import { WalletPage } from './pages/WalletPage'
 import { PlaylistPage } from './pages/PlaylistPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ChatLayout } from './pages/ChatLayout'
+import { NotificationsPage } from './pages/NotificationsPage'
 
 function maybeRedirectHandshakeProfile() {
   if (typeof window === 'undefined') return
@@ -92,6 +93,7 @@ render(
                   <Route path="/wallet" component={WalletPage} />
                   <Route path="/playlist/:id" component={PlaylistPage} />
 
+                  <Route path="/notifications" component={NotificationsPage} />
                   <Route path="/settings" component={SettingsPage} />
                 </Route>
               </HashRouter>

@@ -12,11 +12,12 @@ import { usePlatform } from 'virtual:heaven-platform'
 import { pickFolder, type LocalTrack } from '../lib/local-music'
 import { usePlayer, useAuth } from '../providers'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
+import { ShareContentDialog } from '../components/ShareContentDialog'
 import { enqueueUpload, jobs } from '../lib/upload-manager'
 import { initFilecoinUploadService } from '../lib/filecoin-upload-service'
-import { fetchUploadedContent, type UploadedContentEntry } from '../lib/heaven/scrobbles'
+import { fetchUploadedContent, fetchSharedContent, type UploadedContentEntry, type SharedContentEntry } from '../lib/heaven/scrobbles'
 
-type LibraryTab = 'local' | 'uploaded'
+type LibraryTab = 'local' | 'uploaded' | 'shared'
 
 export const LibraryPage: Component = () => {
   const platform = usePlatform()
@@ -37,6 +38,12 @@ export const LibraryPage: Component = () => {
   const [uploadedTracks, { refetch: refetchUploaded }] = createResource(
     () => auth.pkpInfo()?.ethAddress,
     (addr) => fetchUploadedContent(addr),
+  )
+
+  // Shared with me — content others granted access to
+  const [sharedTracks] = createResource(
+    () => auth.pkpInfo()?.ethAddress,
+    (addr) => fetchSharedContent(addr),
   )
 
   // Refetch when new uploads complete (with delay for subgraph indexing)
@@ -104,6 +111,8 @@ export const LibraryPage: Component = () => {
   // Add to playlist dialog
   const [playlistDialogOpen, setPlaylistDialogOpen] = createSignal(false)
   const [playlistDialogTrack, setPlaylistDialogTrack] = createSignal<Track | null>(null)
+  const [shareDialogOpen, setShareDialogOpen] = createSignal(false)
+  const [shareEntry, setShareEntry] = createSignal<UploadedContentEntry | null>(null)
 
   // Sort state
   const [sort, setSort] = createSignal<SortState | undefined>(undefined)
@@ -143,9 +152,9 @@ export const LibraryPage: Component = () => {
     >
       <MediaHeader
         type="playlist"
-        title={tab() === 'local' ? 'Local Files' : 'Uploaded to Filecoin'}
-        creator={tab() === 'local' ? (player.folderPath() || 'No folder selected') : `${uploadedTracks()?.length ?? 0} tracks`}
-        stats={tab() === 'local' ? { songCount: player.tracks().length } : { songCount: uploadedTracks()?.length ?? 0 }}
+        title={tab() === 'local' ? 'Local Files' : tab() === 'uploaded' ? 'Uploaded to Filecoin' : 'Shared with Me'}
+        creator={tab() === 'local' ? (player.folderPath() || 'No folder selected') : tab() === 'uploaded' ? `${uploadedTracks()?.length ?? 0} tracks` : `${sharedTracks()?.length ?? 0} tracks`}
+        stats={tab() === 'local' ? { songCount: player.tracks().length } : { songCount: (tab() === 'uploaded' ? uploadedTracks()?.length : sharedTracks()?.length) ?? 0 }}
         actionsSlot={
           <Show when={tab() === 'local'}>
             <div class="flex items-center gap-4">
@@ -224,8 +233,8 @@ export const LibraryPage: Component = () => {
       />
 
       {/* Tab switcher */}
-      <Show when={platform.isTauri}>
-        <div class="flex gap-1 px-4 py-2">
+      <div class="flex gap-1 px-4 py-2">
+        <Show when={platform.isTauri}>
           <button
             class={`px-3 py-1 text-sm rounded-md transition-colors ${
               tab() === 'local'
@@ -236,21 +245,34 @@ export const LibraryPage: Component = () => {
           >
             Local Files
           </button>
-          <button
-            class={`px-3 py-1 text-sm rounded-md transition-colors ${
-              tab() === 'uploaded'
-                ? 'bg-[var(--bg-highlight)] text-[var(--text-primary)]'
-                : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-highlight-hover)]'
-            }`}
-            onClick={() => setTab('uploaded')}
-          >
-            Uploaded
-            <Show when={(uploadedTracks()?.length ?? 0) > 0}>
-              <span class="ml-1 text-[var(--text-muted)]">({uploadedTracks()!.length})</span>
-            </Show>
-          </button>
-        </div>
-      </Show>
+        </Show>
+        <button
+          class={`px-3 py-1 text-sm rounded-md transition-colors ${
+            tab() === 'uploaded'
+              ? 'bg-[var(--bg-highlight)] text-[var(--text-primary)]'
+              : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-highlight-hover)]'
+          }`}
+          onClick={() => setTab('uploaded')}
+        >
+          Uploaded
+          <Show when={(uploadedTracks()?.length ?? 0) > 0}>
+            <span class="ml-1 text-[var(--text-muted)]">({uploadedTracks()!.length})</span>
+          </Show>
+        </button>
+        <button
+          class={`px-3 py-1 text-sm rounded-md transition-colors ${
+            tab() === 'shared'
+              ? 'bg-[var(--bg-highlight)] text-[var(--text-primary)]'
+              : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-highlight-hover)]'
+          }`}
+          onClick={() => setTab('shared')}
+        >
+          Shared
+          <Show when={(sharedTracks()?.length ?? 0) > 0}>
+            <span class="ml-1 text-[var(--text-muted)]">({sharedTracks()!.length})</span>
+          </Show>
+        </button>
+      </div>
 
       {/* Local Files tab */}
       <Show when={tab() === 'local'}>
@@ -314,6 +336,23 @@ export const LibraryPage: Component = () => {
                           title: lt.title,
                           artist: lt.artist,
                           filePath: lt.filePath,
+                          encrypted: true,
+                        })
+                      }
+                    : undefined,
+                  onUploadToFilecoinPublic: platform.isTauri
+                    ? (track) => {
+                        const lt = track as LocalTrack
+                        if (!lt.filePath) {
+                          console.warn('[Upload] No filePath for track:', track.title)
+                          return
+                        }
+                        enqueueUpload({
+                          id: lt.id,
+                          title: lt.title,
+                          artist: lt.artist,
+                          filePath: lt.filePath,
+                          encrypted: false,
                         })
                       }
                     : undefined,
@@ -383,6 +422,92 @@ export const LibraryPage: Component = () => {
                       <div class="text-xs text-[var(--text-muted)] tabular-nums shrink-0">
                         {new Date(entry.uploadedAt * 1000).toLocaleDateString()}
                       </div>
+                      <IconButton
+                        variant="ghost"
+                        size="sm"
+                        aria-label="Share"
+                        class="opacity-0 group-hover:opacity-100 shrink-0"
+                        onClick={(e: MouseEvent) => {
+                          e.stopPropagation()
+                          setShareEntry(entry)
+                          setShareDialogOpen(true)
+                        }}
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z" />
+                        </svg>
+                      </IconButton>
+                    </div>
+                  )
+                }}
+              </For>
+            </div>
+          </Show>
+        </Show>
+      </Show>
+
+      {/* Shared tab */}
+      <Show when={tab() === 'shared'}>
+        <Show when={sharedTracks.loading}>
+          <div class="flex items-center justify-center py-20 text-[var(--text-muted)]">
+            <div class="flex items-center gap-3">
+              <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span>Loading shared tracks...</span>
+            </div>
+          </div>
+        </Show>
+        <Show when={!sharedTracks.loading}>
+          <Show
+            when={(sharedTracks()?.length ?? 0) > 0}
+            fallback={
+              <div class="flex flex-col items-center justify-center py-20 text-[var(--text-muted)]">
+                <p class="text-lg mb-2">No shared tracks yet</p>
+                <p>When someone shares content with you, it will appear here.</p>
+              </div>
+            }
+          >
+            <div class="px-4">
+              <For each={sharedTracks()}>
+                {(entry: SharedContentEntry) => {
+                  const isActive = () => player.currentTrack()?.id === entry.contentId
+                  const isEntryPlaying = () => isActive() && player.isPlaying()
+                  const isEntryDecrypting = () => isActive() && player.decrypting()
+                  return (
+                    <div
+                      class={`flex items-center gap-3 py-2 px-2 rounded-md cursor-pointer group ${isActive() ? 'bg-[var(--bg-highlight)]' : 'hover:bg-[var(--bg-highlight-hover)]'}`}
+                      onClick={() => player.playEncryptedContent(entry)}
+                    >
+                      <div class="w-8 h-8 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center shrink-0">
+                        <Show when={isEntryDecrypting()} fallback={
+                          <Show when={isEntryPlaying()} fallback={
+                            <svg class="w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--text-primary)]" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M8 5v14l11-7z" />
+                            </svg>
+                          }>
+                            <svg class="w-4 h-4 text-[var(--accent-blue)]" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                            </svg>
+                          </Show>
+                        }>
+                          <svg class="w-4 h-4 animate-spin text-[var(--accent-blue)]" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                        </Show>
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <div class={`truncate ${isActive() ? 'text-[var(--accent-blue)]' : 'text-[var(--text-primary)]'}`}>{entry.title}</div>
+                        <div class="text-sm text-[var(--text-muted)] truncate">{entry.artist}</div>
+                      </div>
+                      <div class="text-xs text-[var(--text-muted)] truncate shrink-0 max-w-[120px]">
+                        from {entry.sharedBy.slice(0, 6)}...{entry.sharedBy.slice(-4)}
+                      </div>
+                      <div class="text-xs text-[var(--text-muted)] tabular-nums shrink-0">
+                        {new Date(entry.uploadedAt * 1000).toLocaleDateString()}
+                      </div>
                     </div>
                   )
                 }}
@@ -397,6 +522,16 @@ export const LibraryPage: Component = () => {
         onOpenChange={setPlaylistDialogOpen}
         track={playlistDialogTrack()}
       />
+      <Show when={shareEntry()}>
+        {(entry) => (
+          <ShareContentDialog
+            open={shareDialogOpen()}
+            onOpenChange={setShareDialogOpen}
+            contentId={entry().contentId}
+            title={`${entry().title} - ${entry().artist}`}
+          />
+        )}
+      </Show>
     </div>
   )
 }

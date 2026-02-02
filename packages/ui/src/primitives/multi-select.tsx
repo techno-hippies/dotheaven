@@ -57,8 +57,8 @@ export const MultiSelect: Component<MultiSelectProps> = (props) => {
               {getLabel(itemProps.item.rawValue)}
             </KobalteSelect.ItemLabel>
             <KobalteSelect.ItemIndicator>
-              <svg class="w-5 h-5 text-[var(--accent-blue)]" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+              <svg class="w-5 h-5 text-[var(--accent-blue)]" fill="currentColor" viewBox="0 0 256 256">
+                <path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z" />
               </svg>
             </KobalteSelect.ItemIndicator>
           </KobalteSelect.Item>
@@ -83,8 +83,8 @@ export const MultiSelect: Component<MultiSelectProps> = (props) => {
               : props.placeholder || 'Select...'}
           </KobalteSelect.Value>
           <KobalteSelect.Icon class="ml-2">
-            <svg class="w-5 h-5 text-[var(--text-secondary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            <svg class="w-5 h-5 text-[var(--text-secondary)]" fill="currentColor" viewBox="0 0 256 256">
+              <path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z" />
             </svg>
           </KobalteSelect.Icon>
         </KobalteSelect.Trigger>
@@ -107,8 +107,8 @@ export const MultiSelect: Component<MultiSelectProps> = (props) => {
                 class="h-11 px-4 rounded-md bg-[var(--accent-blue)]/15 border-2 border-[var(--accent-blue)] text-[var(--accent-blue)] text-sm font-medium flex items-center gap-2 hover:bg-[var(--accent-blue)]/25 transition-colors cursor-pointer"
               >
                 <span>{getLabel(value)}</span>
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 256 256">
+                  <path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z" />
                 </svg>
               </button>
             )}

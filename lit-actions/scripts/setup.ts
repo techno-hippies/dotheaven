@@ -131,6 +131,12 @@ const ACTIONS: Record<string, ActionDef> = {
     displayName: 'Content Decrypt v1',
     keys: [], // No encrypted keys — Lit Action only
   },
+  linkEoaV1: {
+    name: 'linkEoaV1',
+    path: 'actions/link-eoa-v1.js',
+    displayName: 'Link EOA v1',
+    keys: [], // No encrypted keys — sponsor PKP pays gas directly
+  },
 };
 
 // Parse CLI args

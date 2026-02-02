@@ -310,6 +310,26 @@ export const AuthProvider: ParentComponent = (props) => {
         }
       }
 
+      // Helper: fire-and-forget linkEoa after EOA auth (non-blocking)
+      const backgroundLinkEoa = (result: { pkpInfo: PKPInfo; authData: AuthData; eoaAddress: `0x${string}` }) => {
+        // Run in background — don't block login
+        ;(async () => {
+          try {
+            const { createPKPAuthContext } = await import('../lib/lit')
+            const ctx = await createPKPAuthContext(result.pkpInfo, result.authData)
+            const { linkEoa } = await import('../lib/content-service')
+            const linkResult = await linkEoa(ctx, result.pkpInfo.publicKey, result.eoaAddress)
+            if (linkResult?.alreadyLinked) {
+              console.log('[Auth] EOA already linked to PKP on ContentAccessMirror')
+            } else if (linkResult?.txHash) {
+              console.log('[Auth] Linked EOA to PKP on ContentAccessMirror:', linkResult.txHash)
+            }
+          } catch (e) {
+            console.warn('[Auth] Background linkEoa failed (non-fatal):', e)
+          }
+        })()
+      }
+
       // Try authenticate first, auto-register if no PKP
       const { authenticateWithEOA } = await import('../lib/lit')
       try {
@@ -317,6 +337,7 @@ export const AuthProvider: ParentComponent = (props) => {
         await persistEoaResult(result)
         setIsAuthenticating(false)
         console.log('[Auth] Wallet login complete:', result.pkpInfo.ethAddress, 'EOA:', result.eoaAddress)
+        backgroundLinkEoa(result)
       } catch (authErr) {
         if (authErr instanceof Error && authErr.message.includes('No PKP found')) {
           console.log('[Auth] No PKP for wallet, auto-registering...')
@@ -326,6 +347,7 @@ export const AuthProvider: ParentComponent = (props) => {
           await persistEoaResult(result)
           setIsAuthenticating(false)
           console.log('[Auth] Wallet PKP minted:', result.pkpInfo.ethAddress, 'EOA:', result.eoaAddress)
+          backgroundLinkEoa(result)
         } else {
           throw authErr
         }

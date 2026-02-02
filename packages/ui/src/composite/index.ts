@@ -72,4 +72,5 @@ export { VerifyIdentityDialog, type VerifyIdentityDialogProps, type VerifyStep }
 export { FeedPost, type FeedPostProps, type FeedPostMedia, type MediaItem } from './feed-post'
 export { PostComposer, type PostComposerProps } from './post-composer'
 export { ChatListItem, type ChatListItemProps } from './chat-list-item'
+export { NotificationItem, type NotificationItemProps, type NotificationType } from './notification-item'
 

@@ -30,6 +30,7 @@ export interface UploadJob {
   pieceCid?: string
   contentId?: string
   trackId?: string
+  encrypted: boolean
 }
 
 const [jobs, setJobs] = createSignal<UploadJob[]>([])
@@ -54,6 +55,7 @@ export function enqueueUpload(track: {
   title: string
   artist: string
   filePath: string
+  encrypted?: boolean
 }): string {
   const jobId = `upload-${nextId++}`
   const job: UploadJob = {
@@ -62,6 +64,7 @@ export function enqueueUpload(track: {
     artist: track.artist,
     filePath: track.filePath,
     step: 'queued',
+    encrypted: track.encrypted !== false, // default true
   }
   setJobs((prev) => [...prev, job])
 
@@ -111,6 +114,7 @@ export interface UploadedTrack {
   contentId: string
   trackId: string
   uploadedAt: number
+  encrypted: boolean
 }
 
 /** Save a completed upload to persistent history */
@@ -126,6 +130,7 @@ export function persistUpload(job: UploadJob) {
     contentId: job.contentId,
     trackId: job.trackId,
     uploadedAt: job.completedAt || Date.now(),
+    encrypted: job.encrypted,
   })
   localStorage.setItem(UPLOAD_HISTORY_KEY, JSON.stringify(history))
 }

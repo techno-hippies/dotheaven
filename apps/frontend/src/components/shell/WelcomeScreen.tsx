@@ -60,17 +60,11 @@ export const WelcomeScreen: Component<WelcomeScreenProps> = (props) => {
 const FolderPlusIcon: Component<{ class?: string }> = (props) => {
   return (
     <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
+      viewBox="0 0 256 256"
+      fill="currentColor"
       class={cn("w-full h-full", props.class)}
     >
-      <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
-      <line x1="12" y1="10" x2="12" y2="16" />
-      <line x1="9" y1="13" x2="15" y2="13" />
+      <path d="M216,72H131.31L104,44.69A15.86,15.86,0,0,0,92.69,40H40A16,16,0,0,0,24,56V200.62A15.4,15.4,0,0,0,39.38,216H216.89A15.13,15.13,0,0,0,232,200.89V88A16,16,0,0,0,216,72ZM92.69,56l16,16H40V56ZM216,200H40V88H216Zm-88-88a8,8,0,0,1,8,8v16h16a8,8,0,0,1,0,16H136v16a8,8,0,0,1-16,0V152H104a8,8,0,0,1,0-16h16V120A8,8,0,0,1,128,112Z" />
     </svg>
   )
 }

@@ -241,18 +241,27 @@ async function processJob(job: UploadJob): Promise<void> {
     const contentId = computeContentId(trackId, pkp.ethAddress)
     updateJob(job.id, { trackId, contentId })
 
-    // ── Step 2: Encrypt ──
-    updateJob(job.id, { step: 'encrypting' })
-    console.log(`[Upload] Encrypting (contentId: ${contentId.slice(0, 10)}...)`)
     const authContext = await _deps.getAuthContext()
-    const encrypted = await encryptForUpload(audioBytes, contentId, authContext)
-    console.log(`[Upload] Encrypted blob: ${(encrypted.blob.length / 1024 / 1024).toFixed(1)} MB`)
+    let uploadBlob: Uint8Array
+
+    if (job.encrypted) {
+      // ── Step 2: Encrypt ──
+      updateJob(job.id, { step: 'encrypting' })
+      console.log(`[Upload] Encrypting (contentId: ${contentId.slice(0, 10)}...)`)
+      const encrypted = await encryptForUpload(audioBytes, contentId, authContext)
+      console.log(`[Upload] Encrypted blob: ${(encrypted.blob.length / 1024 / 1024).toFixed(1)} MB`)
+      uploadBlob = encrypted.blob
+    } else {
+      // Public upload — skip encryption
+      console.log(`[Upload] Public upload — skipping encryption`)
+      uploadBlob = audioBytes
+    }
 
     // ── Step 3: Pre-flight checks ──
     console.log('[Upload] Checking storage balance...')
 
     const { checkUploadReady } = await import('./storage-service')
-    const readiness = await checkUploadReady(pkp, authContext, encrypted.blob.length)
+    const readiness = await checkUploadReady(pkp, authContext, uploadBlob.length)
     if (!readiness.ready) {
       throw new Error(readiness.reason || 'Storage not ready. Add funds on the Wallet page.')
     }
@@ -262,7 +271,7 @@ async function processJob(job: UploadJob): Promise<void> {
 
     // ── Step 4: Upload blob to Filecoin via Synapse SDK ──
     updateJob(job.id, { step: 'uploading' })
-    console.log(`[Upload] Uploading ${(encrypted.blob.length / 1024 / 1024).toFixed(1)} MB to Filecoin...`)
+    console.log(`[Upload] Uploading ${(uploadBlob.length / 1024 / 1024).toFixed(1)} MB to Filecoin...`)
 
     // Patch fetch for WebKit streaming support
     const restoreFetch = patchFetchForWebKit()
@@ -276,7 +285,7 @@ async function processJob(job: UploadJob): Promise<void> {
       // causing a new $1 CDN dataset to be created on every upload.
       // createContext() also caches internally so subsequent calls reuse it.
       const ctx = await synapse.storage.createContext({ withCDN: true })
-      const uploadResult = await ctx.upload(encrypted.blob)
+      const uploadResult = await ctx.upload(uploadBlob)
       pieceCid = uploadResult.pieceCid.toString()
     } finally {
       restoreFetch()
@@ -299,6 +308,7 @@ async function processJob(job: UploadJob): Promise<void> {
       pkp.publicKey,
       pkp.ethAddress, // datasetOwner = self
       { title: job.title, artist: job.artist, album: '' },
+      job.encrypted ? undefined : 0, // algo: 0 = plaintext
     )
     console.log(`[Upload] Registered! tx: ${regResult.txHash}`)
 

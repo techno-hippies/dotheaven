@@ -28,7 +28,7 @@ const abiCoder = AbiCoder.defaultAbiCoder();
 const MEGAETH_RPC = "https://carrot.megaeth.com/rpc";
 const BASE_RPC = "https://sepolia.base.org";
 const CONTENT_REGISTRY = "0x9ca08C2D2170A43ecfA12AB35e06F2E1cEEB4Ef2";
-const CONTENT_ACCESS_MIRROR = "0x872E8E7E4a4088F41CeB0ccc14a7081D36aF5aa4";
+const CONTENT_ACCESS_MIRROR = "0xd4D3baB38a11D72e36F49a73D50Dbdc3c1Aa4e9A";
 
 const canAccessAbi = ["function canAccess(address user, bytes32 contentId) view returns (bool)"];
 

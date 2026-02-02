@@ -19,17 +19,18 @@ let activeWalletClient: WalletClient | null = null
  * Returns a viem WalletClient ready for Lit EOA auth.
  */
 export async function connectWalletConnect(): Promise<WalletClient> {
-  // Reuse active session if provider is still connected
+  // Reuse active in-memory session
   if (activeProvider && activeProvider.session && activeWalletClient) {
     console.log('[WC] Reusing active WalletConnect session')
     return activeWalletClient
   }
 
+  console.log('[WC] Importing EthereumProvider...')
   const { EthereumProvider } = await import('@walletconnect/ethereum-provider')
 
   const provider = await EthereumProvider.init({
     projectId: PROJECT_ID,
-    chains: [1], // mainnet — needed for SIWE
+    chains: [1],
     showQrModal: true,
     metadata: {
       name: 'Heaven',
@@ -39,7 +40,34 @@ export async function connectWalletConnect(): Promise<WalletClient> {
     },
   })
 
-  await provider.enable()
+  // If provider restored a session from storage, reuse it
+  if (provider.session) {
+    console.log('[WC] Restored existing session for', provider.accounts[0])
+    activeProvider = provider
+    const checksummedAddress = getAddress(provider.accounts[0])
+    activeWalletClient = createWalletClient({
+      account: checksummedAddress,
+      chain: mainnet,
+      transport: custom(provider),
+    })
+    return activeWalletClient
+  }
+
+  console.log('[WC] No existing session, showing QR...')
+
+  provider.on('display_uri', (uri: string) => {
+    console.log('[WC] display_uri fired, QR URI:', uri?.slice(0, 60) + '...')
+  })
+  provider.on('connect', () => console.log('[WC] connect event fired'))
+  provider.on('disconnect', () => console.log('[WC] disconnect event fired'))
+
+  // Timeout enable() — if relay is dead, don't hang forever
+  const enablePromise = provider.enable()
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('WalletConnect timed out after 30s — relay may be down')), 30_000)
+  )
+  await Promise.race([enablePromise, timeoutPromise])
+  console.log('[WC] enable() resolved, connected')
   activeProvider = provider
 
   const accounts = provider.accounts
@@ -57,7 +85,6 @@ export async function connectWalletConnect(): Promise<WalletClient> {
 
   activeWalletClient = walletClient
 
-  // Invalidate cached client on account/chain change or disconnect
   const invalidateCache = () => {
     activeProvider = null
     activeWalletClient = null

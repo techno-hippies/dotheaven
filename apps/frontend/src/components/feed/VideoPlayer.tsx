@@ -174,8 +174,8 @@ export const VideoPlayer: Component<VideoPlayerProps> = (props) => {
           }}
         >
           <div class="w-20 h-20 bg-black/40 backdrop-blur-sm rounded-full flex items-center justify-center group-hover:bg-black/50 transition-colors">
-            <svg class="w-10 h-10 text-white ml-1" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8 5v14l11-7z" />
+            <svg class="w-10 h-10 text-white ml-1" viewBox="0 0 256 256" fill="currentColor">
+              <path d="M232.4,114.49,88.32,26.35a16,16,0,0,0-16.2-.3A15.86,15.86,0,0,0,64,39.87V216.13A15.94,15.94,0,0,0,80,232a16.07,16.07,0,0,0,8.36-2.35L232.4,141.51a15.81,15.81,0,0,0,0-27ZM80,215.94V40l143.83,88Z" />
             </svg>
           </div>
         </div>

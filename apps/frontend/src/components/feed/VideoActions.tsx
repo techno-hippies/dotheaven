@@ -32,13 +32,13 @@ export const VideoActions: Component<VideoActionsProps> = (props) => {
           <Show
             when={!props.isMuted}
             fallback={
-              <svg class="w-7 h-7 md:w-6 md:h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
+              <svg class="w-7 h-7 md:w-6 md:h-6 text-white" viewBox="0 0 256 256" fill="currentColor">
+                <path d="M53.92,34.62A8,8,0,1,0,42.08,45.38L73.55,80H32A16,16,0,0,0,16,96v64a16,16,0,0,0,16,16H77.25l69.84,54.31A8,8,0,0,0,160,224V175.09l42.08,46.29a8,8,0,1,0,11.84-10.76ZM32,96H72v64H32ZM144,207.64,88,164.09V95.89l56,61.6Zm42-63.77a24,24,0,0,0,0-31.72,8,8,0,1,1,12-10.57,40,40,0,0,1,0,52.88,8,8,0,0,1-12-10.59Zm-80.16-76a8,8,0,0,1,1.4-11.23l39.85-31A8,8,0,0,1,160,32v74.83a8,8,0,0,1-16,0V48.36l-26.94,21A8,8,0,0,1,105.84,67.91ZM248,128a79.9,79.9,0,0,1-20.37,53.34,8,8,0,0,1-11.92-10.67,64,64,0,0,0,0-85.33,8,8,0,1,1,11.92-10.67A79.83,79.83,0,0,1,248,128Z" />
               </svg>
             }
           >
-            <svg class="w-7 h-7 md:w-6 md:h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+            <svg class="w-7 h-7 md:w-6 md:h-6 text-white" viewBox="0 0 256 256" fill="currentColor">
+              <path d="M155.51,24.81a8,8,0,0,0-8.42.88L77.25,80H32A16,16,0,0,0,16,96v64a16,16,0,0,0,16,16H77.25l69.84,54.31A8,8,0,0,0,160,224V32A8,8,0,0,0,155.51,24.81ZM32,96H72v64H32ZM144,207.64,88,164.09V91.91l56-43.55Zm54-106.08a40,40,0,0,1,0,52.88,8,8,0,0,1-12-10.58,24,24,0,0,0,0-31.72,8,8,0,0,1,12-10.58ZM248,128a79.9,79.9,0,0,1-20.37,53.34,8,8,0,0,1-11.92-10.67,64,64,0,0,0,0-85.33,8,8,0,1,1,11.92-10.67A79.83,79.83,0,0,1,248,128Z" />
             </svg>
           </Show>
         </div>
@@ -92,10 +92,10 @@ export const VideoActions: Component<VideoActionsProps> = (props) => {
               'w-7 h-7 md:w-6 md:h-6 transition-colors',
               props.isLiked ? 'text-red-500' : 'text-white'
             )}
-            viewBox="0 0 24 24"
+            viewBox="0 0 256 256"
             fill="currentColor"
           >
-            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+            <path d="M240,94c0,70-103.79,126.66-108.21,129a8,8,0,0,1-7.58,0C119.79,220.66,16,164,16,94A62.07,62.07,0,0,1,78,32c20.65,0,38.73,8.88,50,23.89C139.27,40.88,157.35,32,178,32A62.07,62.07,0,0,1,240,94Z" />
           </svg>
         </div>
         <Show when={props.likeCount !== undefined}>
@@ -113,8 +113,8 @@ export const VideoActions: Component<VideoActionsProps> = (props) => {
           class="flex flex-col items-center cursor-pointer"
         >
           <div class="rounded-full p-3 max-md:bg-transparent md:bg-black/30 md:backdrop-blur-sm md:hover:bg-black/40 transition-colors">
-            <svg class="w-7 h-7 md:w-6 md:h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M21.99 4c0-1.1-.89-2-1.99-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4-.01-18z" />
+            <svg class="w-7 h-7 md:w-6 md:h-6 text-white" viewBox="0 0 256 256" fill="currentColor">
+              <path d="M128,24A104,104,0,0,0,36.18,176.88L24.83,210.93a16,16,0,0,0,20.24,20.24l34.05-11.35A104,104,0,1,0,128,24Zm0,192a87.87,87.87,0,0,1-44.06-11.81,8,8,0,0,0-6.54-.67L40,216,52.47,178.6a8,8,0,0,0-.66-6.54A88,88,0,1,1,128,216Z" />
             </svg>
           </div>
           <Show when={props.commentCount !== undefined}>
@@ -132,8 +132,8 @@ export const VideoActions: Component<VideoActionsProps> = (props) => {
         class="flex flex-col items-center cursor-pointer"
       >
         <div class="rounded-full p-3 max-md:bg-transparent md:bg-black/30 md:backdrop-blur-sm md:hover:bg-black/40 transition-colors">
-          <svg class="w-7 h-7 md:w-6 md:h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z" />
+          <svg class="w-7 h-7 md:w-6 md:h-6 text-white" viewBox="0 0 256 256" fill="currentColor">
+            <path d="M176,160a39.89,39.89,0,0,0-28.62,12.09l-46.1-29.63a39.8,39.8,0,0,0,0-28.92l46.1-29.63a40,40,0,1,0-8.66-13.45l-46.1,29.63a40,40,0,1,0,0,55.82l46.1,29.63A40,40,0,1,0,176,160Zm0-128a24,24,0,1,1-24,24A24,24,0,0,1,176,32ZM64,152a24,24,0,1,1,24-24A24,24,0,0,1,64,152Zm112,72a24,24,0,1,1,24-24A24,24,0,0,1,176,224Z" />
           </svg>
         </div>
       </button>
@@ -151,8 +151,8 @@ export const VideoActions: Component<VideoActionsProps> = (props) => {
             <Show
               when={props.trackCoverUrl}
               fallback={
-                <svg class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+                <svg class="w-6 h-6 text-white" viewBox="0 0 256 256" fill="currentColor">
+                  <path d="M210.3,56.34l-80-24A8,8,0,0,0,120,40V148.26A48,48,0,1,0,136,184V98.75l69.7,20.91A8,8,0,0,0,216,112V64A8,8,0,0,0,210.3,56.34ZM88,216a32,32,0,1,1,32-32A32,32,0,0,1,88,216ZM200,101.25l-64-19.2V50.75L200,70Z" />
                 </svg>
               }
             >

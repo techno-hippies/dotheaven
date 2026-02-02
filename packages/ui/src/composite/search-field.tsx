@@ -5,9 +5,8 @@ import { AlbumCover } from './album-cover'
 import { Spinner } from '../primitives'
 
 const SearchIcon = () => (
-  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-    <circle cx="11" cy="11" r="8" />
-    <path d="M21 21l-4.35-4.35" />
+  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
+    <path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z" />
   </svg>
 )
 

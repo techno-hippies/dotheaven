@@ -157,17 +157,24 @@ export async function authenticateWithEOA(externalWalletClient?: WalletClient): 
 
   // Create AuthData via WalletClientAuthenticator (EOA SIWE auth sig)
   console.log('[Lit] Creating EOA auth data via WalletClientAuthenticator...')
+  console.log('[Lit] Wallet address:', address)
   const domain = typeof window !== 'undefined' ? window.location.host : 'localhost'
   const uri = typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
   const expiration = new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString() // 24 hours
+  console.log('[Lit] SIWE params:', { domain, uri, expiration })
+  console.log('[Lit] Calling WalletClientAuthenticator.authenticate() — waiting for wallet signature...')
+  const authStart = Date.now()
   const authData = await WalletClientAuthenticator.authenticate(walletClient, undefined, {
     domain,
     uri,
     statement: 'Authorize Heaven session',
     expiration,
   })
+  console.log('[Lit] ✓ SIWE auth completed in', Date.now() - authStart, 'ms')
 
+  console.log('[Lit] Getting Lit client...')
   const litClient = await getLitClient()
+  console.log('[Lit] ✓ Lit client ready')
 
   // Prefer authMethodId derived from the SIWE authSig; fall back to raw address if needed
   let pkpsResult = await litClient.viewPKPsByAuthData({

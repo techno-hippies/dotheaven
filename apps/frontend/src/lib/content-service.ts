@@ -23,6 +23,7 @@ import type { PKPAuthContext } from './lit'
 import {
   CONTENT_REGISTER_V1_CID,
   CONTENT_ACCESS_V1_CID,
+  LINK_EOA_V1_CID,
 } from './lit/action-cids'
 import { CONTENT_ACCESS_MIRROR } from './content-crypto'
 import {
@@ -72,6 +73,7 @@ export async function registerContent(
   pkpPublicKey: string,
   datasetOwner?: string,
   trackMeta?: { title: string; artist: string; album?: string },
+  algo?: number,
 ): Promise<{ contentId: string; txHash: string; blockNumber: number }> {
   if (!CONTENT_REGISTER_V1_CID) {
     throw new Error('CONTENT_REGISTER_V1_CID not set — deploy content-register-v1 first')
@@ -88,7 +90,7 @@ export async function registerContent(
       trackId,
       pieceCid,
       datasetOwner: datasetOwner || undefined,
-      algo: ALGO_AES_GCM_256,
+      algo: algo ?? ALGO_AES_GCM_256,
       title: trackMeta?.title || '',
       artist: trackMeta?.artist || '',
       album: trackMeta?.album || '',
@@ -224,7 +226,70 @@ export async function fetchAndDecrypt(
   return { audio }
 }
 
+/**
+ * Fetch plaintext (unencrypted) content from Beam CDN.
+ * Used when algo=0 (public uploads that skip Lit encryption).
+ */
+export async function fetchPlaintext(
+  datasetOwner: string,
+  pieceCid: string,
+  network: 'calibration' | 'mainnet' = 'mainnet',
+): Promise<DownloadResult> {
+  const url = beamUrl(datasetOwner, pieceCid, network)
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`Beam CDN fetch failed: ${response.status} ${response.statusText}`)
+  }
+  const audio = new Uint8Array(await response.arrayBuffer())
+  return { audio }
+}
+
 // ── Access Control ─────────────────────────────────────────────────────
+
+/**
+ * Grant or revoke access to content.
+ */
+/**
+ * Link a PKP to its originating EOA on ContentAccessMirror (Base).
+ * This allows content grants made to the EOA to also apply when the user
+ * authenticates via their PKP. Called once after EOA signup/login.
+ *
+ * No-ops if LINK_EOA_V1_CID is not deployed yet.
+ */
+export async function linkEoa(
+  authContext: PKPAuthContext,
+  pkpPublicKey: string,
+  eoaAddress: string,
+): Promise<{ txHash?: string; alreadyLinked?: boolean } | null> {
+  if (!LINK_EOA_V1_CID) {
+    console.warn('[ContentService] LINK_EOA_V1_CID not set — skipping linkEoa')
+    return null
+  }
+  const litClient = await getLitClient()
+  const timestamp = Date.now().toString()
+  const nonce = crypto.randomUUID()
+
+  const result = await litClient.executeJs({
+    ipfsId: LINK_EOA_V1_CID,
+    authContext,
+    jsParams: {
+      userPkpPublicKey: pkpPublicKey,
+      eoaAddress,
+      timestamp,
+      nonce,
+    },
+  })
+
+  const response = JSON.parse(result.response as string)
+  if (!response.success) {
+    throw new Error(`linkEoa failed: ${response.error}`)
+  }
+
+  return {
+    txHash: response.txHash,
+    alreadyLinked: response.alreadyLinked,
+  }
+}
 
 /**
  * Grant or revoke access to content.

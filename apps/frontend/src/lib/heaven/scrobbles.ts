@@ -215,6 +215,7 @@ export interface UploadedContentEntry {
   title: string
   artist: string
   uploadedAt: number // unix seconds
+  algo: number       // 0 = plaintext, 1 = AES-GCM-256
 }
 
 /**
@@ -238,6 +239,7 @@ export async function fetchUploadedContent(
       trackId
       pieceCid
       datasetOwner
+      algo
       createdAt
     }
   }`
@@ -254,6 +256,7 @@ export async function fetchUploadedContent(
     trackId: string
     pieceCid: string
     datasetOwner: string
+    algo: number
     createdAt: string
   }> = contentJson.data?.contentEntries ?? []
 
@@ -308,6 +311,122 @@ export async function fetchUploadedContent(
       title: meta?.title || `Track ${e.trackId.slice(0, 10)}...`,
       artist: meta?.artist || 'Unknown',
       uploadedAt: parseInt(e.createdAt),
+      algo: e.algo ?? 1, // default encrypted for legacy entries
+    }
+  })
+}
+
+// ── Shared content (content others granted me access to) ──────────
+
+export interface SharedContentEntry extends UploadedContentEntry {
+  sharedBy: string // content owner address
+}
+
+/**
+ * Fetch content shared with a user (where they have an active access grant but aren't the owner).
+ * Queries content-feed subgraph for AccessGrant entities.
+ */
+export async function fetchSharedContent(
+  userAddress: string,
+): Promise<SharedContentEntry[]> {
+  const addr = userAddress.toLowerCase()
+
+  // Query access grants where this user is the grantee
+  const grantQuery = `{
+    accessGrants(
+      where: { grantee: "${addr}", granted: true }
+      orderBy: updatedAt
+      orderDirection: desc
+      first: 100
+    ) {
+      content {
+        id
+        trackId
+        pieceCid
+        datasetOwner
+        owner
+        algo
+        active
+        createdAt
+      }
+    }
+  }`
+
+  const grantRes = await fetch(CONTENT_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: grantQuery }),
+  })
+  if (!grantRes.ok) throw new Error(`Content subgraph query failed: ${grantRes.status}`)
+  const grantJson = await grantRes.json()
+  const grants: Array<{
+    content: {
+      id: string
+      trackId: string
+      pieceCid: string
+      datasetOwner: string
+      owner: string
+      algo: number
+      active: boolean
+      createdAt: string
+    }
+  }> = grantJson.data?.accessGrants ?? []
+
+  // Filter out own content and inactive entries
+  const entries = grants
+    .map((g) => g.content)
+    .filter((c) => c.active && c.owner.toLowerCase() !== addr)
+
+  if (entries.length === 0) return []
+
+  // Get track metadata from activity-feed subgraph
+  const trackIds = [...new Set(entries.map((e) => e.trackId))]
+  const trackQuery = `{
+    tracks(where: { id_in: [${trackIds.map((id) => `"${id}"`).join(',')}] }) {
+      id
+      title
+      artist
+    }
+  }`
+
+  const trackRes = await fetch(GOLDSKY_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: trackQuery }),
+  })
+
+  const trackMap = new Map<string, { title: string; artist: string }>()
+  if (trackRes.ok) {
+    const trackJson = await trackRes.json()
+    for (const t of trackJson.data?.tracks ?? []) {
+      trackMap.set(t.id, { title: t.title, artist: t.artist })
+    }
+  }
+
+  return entries.map((e) => {
+    const meta = trackMap.get(e.trackId)
+    let pieceCid = e.pieceCid
+    if (e.pieceCid.startsWith('0x')) {
+      try {
+        const hex = e.pieceCid.slice(2)
+        if (hex.length > 0 && hex.length % 2 === 0 && /^[0-9a-fA-F]+$/.test(hex)) {
+          const bytes = new Uint8Array(hex.match(/.{2}/g)!.map((b: string) => parseInt(b, 16)))
+          pieceCid = new TextDecoder().decode(bytes)
+        }
+      } catch {
+        // Fall back to raw value
+      }
+    }
+    return {
+      contentId: e.id,
+      trackId: e.trackId,
+      pieceCid,
+      datasetOwner: e.datasetOwner,
+      title: meta?.title || `Track ${e.trackId.slice(0, 10)}...`,
+      artist: meta?.artist || 'Unknown',
+      uploadedAt: parseInt(e.createdAt),
+      algo: e.algo ?? 1,
+      sharedBy: e.owner,
     }
   })
 }

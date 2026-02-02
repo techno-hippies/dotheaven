@@ -33,6 +33,7 @@ export interface TrackMenuActions {
   onRemoveFromPlaylist?: (track: Track) => void
   onIdentify?: (track: Track) => void
   onUploadToFilecoin?: (track: Track) => void
+  onUploadToFilecoinPublic?: (track: Track) => void
 }
 
 export type SortField = 'title' | 'artist' | 'album' | 'dateAdded' | 'duration'
@@ -147,9 +148,8 @@ export const TrackList: Component<TrackListProps> = (props) => {
           </div>
         </Show>
         <div class={cn(headerClass, 'justify-center')} onClick={() => handleHeaderClick('duration')}>
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 6v6l4 2" />
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 256 256">
+            <path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z" />
           </svg>
           <Show when={sortIcon('duration')}>{(icon) => <span class="text-[var(--text-secondary)] text-xs">{icon()}</span>}</Show>
         </div>
@@ -202,8 +202,8 @@ export const TrackList: Component<TrackListProps> = (props) => {
                         props.onTrackPlay?.(track())
                       }}
                     >
-                      <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M8 5v14l11-7z" />
+                      <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 256 256">
+                        <path d="M232.4,114.49,88.32,26.35a16,16,0,0,0-16.2-.3A15.86,15.86,0,0,0,64,39.87V216.13A15.94,15.94,0,0,0,80,232a16.07,16.07,0,0,0,8.36-2.35L232.4,141.51a15.81,15.81,0,0,0,0-27ZM80,215.94V40l143.83,88Z" />
                       </svg>
                     </button>
                   </div>
@@ -334,11 +334,18 @@ export const TrackList: Component<TrackListProps> = (props) => {
                             Remove from playlist
                           </DropdownMenuItem>
                         </Show>
-                        <Show when={props.menuActions?.onUploadToFilecoin}>
+                        <Show when={props.menuActions?.onUploadToFilecoin || props.menuActions?.onUploadToFilecoinPublic}>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onSelect={() => props.menuActions?.onUploadToFilecoin?.(track())}>
-                            Upload to Filecoin
-                          </DropdownMenuItem>
+                          <Show when={props.menuActions?.onUploadToFilecoin}>
+                            <DropdownMenuItem onSelect={() => props.menuActions?.onUploadToFilecoin?.(track())}>
+                              Upload to Filecoin (Encrypted)
+                            </DropdownMenuItem>
+                          </Show>
+                          <Show when={props.menuActions?.onUploadToFilecoinPublic}>
+                            <DropdownMenuItem onSelect={() => props.menuActions?.onUploadToFilecoinPublic?.(track())}>
+                              Upload to Filecoin (Public)
+                            </DropdownMenuItem>
+                          </Show>
                         </Show>
                       </DropdownMenuContent>
                     </DropdownMenu>

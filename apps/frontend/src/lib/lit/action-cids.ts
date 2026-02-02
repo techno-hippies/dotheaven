@@ -25,10 +25,13 @@ export const HEAVEN_SET_RECORDS_CID = 'QmNTJXB8KioAsJt4ebJUJF9w87a57nHHrF1HqqVwm
 export const AVATAR_UPLOAD_CID = 'QmTWwoC5zX2pUuSExsra5RVzChE9nCYRAkVVgppjvc196A'
 
 /** Content Register v1 — register Filecoin content entry on ContentRegistry */
-export const CONTENT_REGISTER_V1_CID = 'QmSLEUEGBikzYs7KZv9X4hKbMf5va3sP3GgF2Dev8iGcJt'
+export const CONTENT_REGISTER_V1_CID = 'QmYvEJTMGgPaxdgxxwQXy6QkJZqGJzGi3gnfA1JBsULfpV'
 
 /** Content Access v1 — grant/revoke access on ContentRegistry */
-export const CONTENT_ACCESS_V1_CID = 'QmRDyE4znmxKjmJSxyxoFfEWFkLhQZDU3HiA3rzjSR3im4'
+export const CONTENT_ACCESS_V1_CID = 'QmXnhhG1aykZGZoPXTKihi4jRbygD2rvn5DZwTBz89LPfn'
+
+/** Link EOA v1 — link PKP to EOA on ContentAccessMirror for shared content access */
+export const LINK_EOA_V1_CID = 'QmYPeQEpUhb8eMULPmW7RM5k5yNMTWMmRDa8p3Gw4d966C'
 
 // Content decrypt is handled client-side via litClient.decrypt() — no Lit Action needed.
 // The Lit BLS nodes enforce canAccess() on Base ContentAccessMirror during threshold decryption.

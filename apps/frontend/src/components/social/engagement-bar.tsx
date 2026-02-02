@@ -68,15 +68,13 @@ export const HeartIcon: Component<{ filled?: boolean }> = (props) => (
 )
 
 export const CommentIcon: Component = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+  <svg viewBox="0 0 256 256" fill="currentColor">
+    <path d="M128,24A104,104,0,0,0,36.18,176.88L24.83,210.93a16,16,0,0,0,20.24,20.24l34.05-11.35A104,104,0,1,0,128,24Zm0,192a87.87,87.87,0,0,1-44.06-11.81,8,8,0,0,0-6.54-.67L40,216,52.47,178.6a8,8,0,0,0-.66-6.54A88,88,0,1,1,128,216Z" />
   </svg>
 )
 
 export const ShareIcon: Component = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-    <polyline points="16,6 12,2 8,6" />
-    <line x1="12" y1="2" x2="12" y2="15" />
+  <svg viewBox="0 0 256 256" fill="currentColor">
+    <path d="M176,160a39.89,39.89,0,0,0-28.62,12.09l-46.1-29.63a39.8,39.8,0,0,0,0-28.92l46.1-29.63a40,40,0,1,0-8.66-13.45l-46.1,29.63a40,40,0,1,0,0,55.82l46.1,29.63A40,40,0,1,0,176,160Zm0-128a24,24,0,1,1-24,24A24,24,0,0,1,176,32ZM64,152a24,24,0,1,1,24-24A24,24,0,0,1,64,152Zm112,72a24,24,0,1,1,24-24A24,24,0,0,1,176,224Z" />
   </svg>
 )
