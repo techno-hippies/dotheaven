@@ -25,7 +25,6 @@ const meta: Meta<typeof WalletAssets> = {
 export default meta
 type Story = StoryObj<typeof WalletAssets>
 
-// Ethereum logo SVG
 const EthereumIcon = () => (
   <svg viewBox="0 0 32 32" class="w-12 h-12">
     <g fill="none" fill-rule="evenodd">
@@ -42,8 +41,6 @@ const EthereumIcon = () => (
   </svg>
 )
 
-// MegaETH logo - using the provided icon path
-// For the story, we'll use a placeholder. In production, import from the actual path
 const MegaETHIcon = () => (
   <svg viewBox="0 0 100 100" class="w-12 h-12">
     <circle cx="50" cy="50" r="50" fill="#000"/>
@@ -54,93 +51,325 @@ const MegaETHIcon = () => (
   </svg>
 )
 
-// USDFC icon - using actual image from public/images
 const USDFCIcon = () => (
   <img src="/images/usdfc.png" alt="USDFC" class="w-12 h-12 object-contain" />
 )
 
-// Filecoin icon - using actual image from public/images
+const USDMIcon = () => (
+  <img src="/images/usdm.png" alt="USDM" class="w-12 h-12 object-contain" />
+)
+
 const FilecoinIcon = () => (
   <img src="/images/filecoin.png" alt="Filecoin" class="w-12 h-12 object-contain" />
 )
 
-export const Default: Story = {
+/** Passkey user — no tabs, single wallet view */
+export const PasskeyUser: Story = {
   args: {
-    address: '0x7a2F8b1234567890abcdef1234567890abcd8c4E',
-    totalBalance: '$53,795.12',
+    address: '0x80CBBBeD05396BfA69bC43Cb97655AB7EC18c0aA',
+    totalBalance: '$6,253.56',
     assets: [
       {
-        id: 'eth-ethereum',
-        name: 'Ethereum',
-        symbol: 'Ethereum',
-        icon: <EthereumIcon />,
-        chainBadge: <EthereumIcon />, // Ethereum chain badge
-        balance: '10.5',
-        balanceUSD: '$32,450.00',
-        amount: '10.5 ETH',
+        id: 'fil-mainnet',
+        name: 'FIL',
+        symbol: 'Filecoin',
+        icon: <FilecoinIcon />,
+        chainBadge: <FilecoinIcon />,
+        balance: '142.8',
+        balanceUSD: '$712.56',
+        amount: '142.8 FIL',
       },
       {
-        id: 'eth-megaeth',
-        name: 'Ethereum',
-        symbol: 'MegaETH',
-        icon: <EthereumIcon />, // ETH coin as main icon
-        chainBadge: <MegaETHIcon />, // MegaETH chain as badge
-        balance: '4.12',
-        balanceUSD: '$12,340.20',
-        amount: '4.12 ETH',
-      },
-      {
-        id: 'usdfc',
+        id: 'usdfc-filecoin',
         name: 'USDFC',
         symbol: 'Filecoin',
         icon: <USDFCIcon />,
-        chainBadge: <FilecoinIcon />, // Filecoin chain badge
+        chainBadge: <FilecoinIcon />,
         balance: '5250.00',
         balanceUSD: '$5,250.00',
         amount: '5,250.00 USDFC',
       },
       {
-        id: 'fil',
-        name: 'Filecoin',
+        id: 'eth-sepolia',
+        name: 'ETH',
+        symbol: 'Ethereum',
+        icon: <EthereumIcon />,
+        chainBadge: <EthereumIcon />,
+        balance: '0.5000',
+        balanceUSD: '$1,545.00',
+        amount: '0.5000 ETH',
+      },
+      {
+        id: 'eth-megaeth',
+        name: 'ETH',
+        symbol: 'MegaETH',
+        icon: <EthereumIcon />,
+        chainBadge: <MegaETHIcon />,
+        balance: '0.0940',
+        balanceUSD: '$291.00',
+        amount: '0.0940 ETH',
+      },
+      {
+        id: 'usdm-megaeth',
+        name: 'USDM',
+        symbol: 'MegaETH',
+        icon: <USDMIcon />,
+        chainBadge: <MegaETHIcon />,
+        balance: '1000.00',
+        balanceUSD: '$1,000.00',
+        amount: '1,000.00 USDM',
+      },
+    ],
+    onSend: () => console.log('Send'),
+    onReceive: () => console.log('Receive'),
+  },
+}
+
+/** EOA user with ENS — tabs visible, Heaven tab default. Click "Wallet" to see EOA. */
+export const EOAUserWithENS: Story = {
+  args: {
+    address: '0x80CBBBeD05396BfA69bC43Cb97655AB7EC18c0aA',
+    totalBalance: '$2,261.27',
+    assets: [
+      {
+        id: 'fil-mainnet',
+        name: 'FIL',
         symbol: 'Filecoin',
         icon: <FilecoinIcon />,
-        chainBadge: <FilecoinIcon />, // Filecoin chain badge
+        chainBadge: <FilecoinIcon />,
         balance: '142.8',
         balanceUSD: '$712.56',
         amount: '142.8 FIL',
       },
-    ],
-    onSend: () => console.log('Send clicked'),
-    onReceive: () => console.log('Receive clicked'),
-  },
-}
-
-export const SingleAsset: Story = {
-  args: {
-    address: '0x7a2F8b1234567890abcdef1234567890abcd8c4E',
-    totalBalance: '$32,450.00',
-    assets: [
       {
-        id: 'eth-ethereum',
-        name: 'Ethereum',
-        symbol: 'ETH',
+        id: 'usdfc-filecoin',
+        name: 'USDFC',
+        symbol: 'Filecoin',
+        icon: <USDFCIcon />,
+        chainBadge: <FilecoinIcon />,
+        balance: '500.00',
+        balanceUSD: '$500.00',
+        amount: '500.00 USDFC',
+      },
+      {
+        id: 'eth-sepolia',
+        name: 'ETH',
+        symbol: 'Ethereum',
         icon: <EthereumIcon />,
-        balance: '10.5',
-        balanceUSD: '$32,450.00',
-        amount: '10.5 ETH',
+        chainBadge: <EthereumIcon />,
+        balance: '0.3200',
+        balanceUSD: '$988.80',
+        amount: '0.3200 ETH',
+      },
+      {
+        id: 'eth-megaeth',
+        name: 'ETH',
+        symbol: 'MegaETH',
+        icon: <EthereumIcon />,
+        chainBadge: <MegaETHIcon />,
+        balance: '0.0012',
+        balanceUSD: '$3.71',
+        amount: '0.0012 ETH',
+      },
+      {
+        id: 'usdm-megaeth',
+        name: 'USDM',
+        symbol: 'MegaETH',
+        icon: <USDMIcon />,
+        chainBadge: <MegaETHIcon />,
+        balance: '56.20',
+        balanceUSD: '$56.20',
+        amount: '56.20 USDM',
       },
     ],
-    onSend: () => console.log('Send clicked'),
-    onReceive: () => console.log('Receive clicked'),
+    connectedWallet: {
+      address: '0x25B4048c3B3c58973571db2dbbF87103f7406966',
+      ensName: 'vitalik.eth',
+      ensAvatar: 'https://euc.li/vitalik.eth',
+      totalBalance: '$49,862.56',
+      assets: [
+        {
+          id: 'fil-mainnet',
+          name: 'FIL',
+          symbol: 'Filecoin',
+          icon: <FilecoinIcon />,
+          chainBadge: <FilecoinIcon />,
+          balance: '25.0000',
+          balanceUSD: '$125.00',
+          amount: '25.0000 FIL',
+        },
+        {
+          id: 'usdfc-filecoin',
+          name: 'USDFC',
+          symbol: 'Filecoin',
+          icon: <USDFCIcon />,
+          chainBadge: <FilecoinIcon />,
+          balance: '1200.00',
+          balanceUSD: '$1,200.00',
+          amount: '1,200.00 USDFC',
+        },
+        {
+          id: 'eth-sepolia',
+          name: 'ETH',
+          symbol: 'Ethereum',
+          icon: <EthereumIcon />,
+          chainBadge: <EthereumIcon />,
+          balance: '15.6129',
+          balanceUSD: '$48,244.00',
+          amount: '15.6129 ETH',
+        },
+        {
+          id: 'eth-megaeth',
+          name: 'ETH',
+          symbol: 'MegaETH',
+          icon: <EthereumIcon />,
+          chainBadge: <MegaETHIcon />,
+          balance: '0.0250',
+          balanceUSD: '$77.25',
+          amount: '0.0250 ETH',
+        },
+        {
+          id: 'usdm-megaeth',
+          name: 'USDM',
+          symbol: 'MegaETH',
+          icon: <USDMIcon />,
+          chainBadge: <MegaETHIcon />,
+          balance: '216.31',
+          balanceUSD: '$216.31',
+          amount: '216.31 USDM',
+        },
+      ],
+    },
+    onSend: () => console.log('Send'),
+    onReceive: () => console.log('Receive'),
   },
 }
 
+/** EOA user without ENS */
+export const EOAUserNoENS: Story = {
+  args: {
+    address: '0x80CBBBeD05396BfA69bC43Cb97655AB7EC18c0aA',
+    totalBalance: '$1,548.71',
+    assets: [
+      {
+        id: 'fil-mainnet',
+        name: 'FIL',
+        symbol: 'Filecoin',
+        icon: <FilecoinIcon />,
+        chainBadge: <FilecoinIcon />,
+        balance: '0.0000',
+        balanceUSD: '$0.00',
+        amount: '0.0000 FIL',
+      },
+      {
+        id: 'usdfc-filecoin',
+        name: 'USDFC',
+        symbol: 'Filecoin',
+        icon: <USDFCIcon />,
+        chainBadge: <FilecoinIcon />,
+        balance: '0.00',
+        balanceUSD: '$0.00',
+        amount: '0.00 USDFC',
+      },
+      {
+        id: 'eth-sepolia',
+        name: 'ETH',
+        symbol: 'Ethereum',
+        icon: <EthereumIcon />,
+        chainBadge: <EthereumIcon />,
+        balance: '0.5000',
+        balanceUSD: '$1,545.00',
+        amount: '0.5000 ETH',
+      },
+      {
+        id: 'eth-megaeth',
+        name: 'ETH',
+        symbol: 'MegaETH',
+        icon: <EthereumIcon />,
+        chainBadge: <MegaETHIcon />,
+        balance: '0.0012',
+        balanceUSD: '$3.71',
+        amount: '0.0012 ETH',
+      },
+      {
+        id: 'usdm-megaeth',
+        name: 'USDM',
+        symbol: 'MegaETH',
+        icon: <USDMIcon />,
+        chainBadge: <MegaETHIcon />,
+        balance: '0.00',
+        balanceUSD: '$0.00',
+        amount: '0.00 USDM',
+      },
+    ],
+    connectedWallet: {
+      address: '0x25B4048c3B3c58973571db2dbbF87103f7406966',
+      totalBalance: '$32,953.71',
+      assets: [
+        {
+          id: 'fil-mainnet',
+          name: 'FIL',
+          symbol: 'Filecoin',
+          icon: <FilecoinIcon />,
+          chainBadge: <FilecoinIcon />,
+          balance: '0.0000',
+          balanceUSD: '$0.00',
+          amount: '0.0000 FIL',
+        },
+        {
+          id: 'usdfc-filecoin',
+          name: 'USDFC',
+          symbol: 'Filecoin',
+          icon: <USDFCIcon />,
+          chainBadge: <FilecoinIcon />,
+          balance: '500.00',
+          balanceUSD: '$500.00',
+          amount: '500.00 USDFC',
+        },
+        {
+          id: 'eth-sepolia',
+          name: 'ETH',
+          symbol: 'Ethereum',
+          icon: <EthereumIcon />,
+          chainBadge: <EthereumIcon />,
+          balance: '10.5000',
+          balanceUSD: '$32,450.00',
+          amount: '10.5000 ETH',
+        },
+        {
+          id: 'eth-megaeth',
+          name: 'ETH',
+          symbol: 'MegaETH',
+          icon: <EthereumIcon />,
+          chainBadge: <MegaETHIcon />,
+          balance: '0.0012',
+          balanceUSD: '$3.71',
+          amount: '0.0012 ETH',
+        },
+        {
+          id: 'usdm-megaeth',
+          name: 'USDM',
+          symbol: 'MegaETH',
+          icon: <USDMIcon />,
+          chainBadge: <MegaETHIcon />,
+          balance: '0.00',
+          balanceUSD: '$0.00',
+          amount: '0.00 USDM',
+        },
+      ],
+    },
+    onSend: () => console.log('Send'),
+    onReceive: () => console.log('Receive'),
+  },
+}
+
+/** Empty wallet */
 export const EmptyWallet: Story = {
   args: {
     address: '0x7a2F8b1234567890abcdef1234567890abcd8c4E',
     totalBalance: '$0.00',
     assets: [],
-    onSend: () => console.log('Send clicked'),
-    onReceive: () => console.log('Receive clicked'),
+    onSend: () => console.log('Send'),
+    onReceive: () => console.log('Receive'),
   },
 }

@@ -11,3 +11,5 @@ export { LocationInput, type LocationInputProps, type LocationResult } from './l
 export { Select, type SelectProps, type SelectOption } from './select'
 export { MultiSelect, type MultiSelectProps, type MultiSelectOption } from './multi-select'
 export { Spinner, type SpinnerProps } from './spinner'
+export { ProgressBar, type ProgressBarProps } from './progress'
+export { Collapsible, CollapsibleTrigger, CollapsibleContent, type CollapsibleProps, type CollapsibleTriggerProps, type CollapsibleContentProps } from './collapsible'

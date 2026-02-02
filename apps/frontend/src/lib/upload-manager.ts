@@ -13,7 +13,6 @@ export type UploadStep =
   | 'queued'
   | 'reading'
   | 'encrypting'
-  | 'depositing'
   | 'uploading'
   | 'registering'
   | 'done'
@@ -99,4 +98,43 @@ export function clearCompleted() {
 /** Check if there are any active (non-done, non-error) jobs */
 export function hasActiveJobs(): boolean {
   return jobs().some((j) => j.step !== 'done' && j.step !== 'error' && j.step !== 'queued')
+}
+
+// ── Persistent upload history ─────────────────────────────────────────
+
+const UPLOAD_HISTORY_KEY = 'heaven:upload-history'
+
+export interface UploadedTrack {
+  title: string
+  artist: string
+  pieceCid: string
+  contentId: string
+  trackId: string
+  uploadedAt: number
+}
+
+/** Save a completed upload to persistent history */
+export function persistUpload(job: UploadJob) {
+  if (job.step !== 'done' || !job.pieceCid || !job.contentId || !job.trackId) return
+  const history = getUploadHistory()
+  // Dedupe by contentId
+  if (history.some((h) => h.contentId === job.contentId)) return
+  history.unshift({
+    title: job.title,
+    artist: job.artist,
+    pieceCid: job.pieceCid,
+    contentId: job.contentId,
+    trackId: job.trackId,
+    uploadedAt: job.completedAt || Date.now(),
+  })
+  localStorage.setItem(UPLOAD_HISTORY_KEY, JSON.stringify(history))
+}
+
+/** Get all persisted uploads */
+export function getUploadHistory(): UploadedTrack[] {
+  try {
+    return JSON.parse(localStorage.getItem(UPLOAD_HISTORY_KEY) || '[]')
+  } catch {
+    return []
+  }
 }

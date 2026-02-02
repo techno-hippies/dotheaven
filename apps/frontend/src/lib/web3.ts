@@ -9,7 +9,7 @@ import {
   type Address,
   type Chain,
 } from 'viem'
-import { sepolia, megaTestnetV2, filecoinCalibration, filecoin } from './chains'
+import { mainnet, sepolia, megaTestnetV2, megaMainnet, filecoinCalibration, filecoin } from './chains'
 
 declare global {
   interface Window {
@@ -22,8 +22,10 @@ declare global {
 }
 
 export const CHAINS = {
+  mainnet,
   sepolia,
   mega: megaTestnetV2,
+  megaMainnet,
   filCalib: filecoinCalibration,
   fil: filecoin,
 } as const
@@ -31,12 +33,14 @@ export const CHAINS = {
 export type ChainKey = keyof typeof CHAINS
 
 export const TOKENS: Record<ChainKey, Array<{ symbol: string; address: Address; name: string }>> = {
+  mainnet: [],
   sepolia: [],
-  mega: [
+  mega: [],
+  megaMainnet: [
     {
-      symbol: 'USDm',
-      name: 'USDm',
-      address: '0x0000000000000000000000000000000000000000', // Replace with actual address
+      symbol: 'USDM',
+      name: 'USDM',
+      address: '0xFAfDdbb3FC7688494971a79cc65DCa3EF82079E7',
     },
   ],
   filCalib: [

@@ -2,6 +2,8 @@
 
 type Track @entity(immutable: false) {
   id: ID!                      # trackId (bytes32 hex)
+  title: String!               # display title (from contract state)
+  artist: String!              # display artist (from contract state)
   kind: Int!                   # 1=MBID, 2=ipId, 3=meta
   payload: Bytes!              # raw derivation input
   metaHash: Bytes!             # keccak256(abi.encode(title, artist, album))

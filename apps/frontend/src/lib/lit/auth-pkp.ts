@@ -13,14 +13,9 @@ const IS_DEV = import.meta.env.DEV
 /**
  * In-memory cache for auth contexts
  * Cannot persist to localStorage due to callback functions
- *
- * For EOA: We cache the original eoaAuthContext from createEoaAuthContext()
- * For WebAuthn: We cache the pkpAuthContext from createPkpAuthContext()
  */
 let cachedAuthContext: PKPAuthContext | null = null
 let cachedPKPPublicKey: string | null = null
-let cachedEoaAuthContext: PKPAuthContext | null = null
-let cachedEoaAddress: string | null = null
 
 /**
  * Calculate expiration time (24 hours from now)
@@ -102,21 +97,13 @@ export async function createPKPAuthContext(
   pkpInfo: PKPInfo,
   authData: AuthData
 ): Promise<PKPAuthContext> {
-  // Check for cached EOA auth context first
-  // EOA contexts must be reused because they have their own session key pair
-  const cachedEoa = getEoaAuthContext(pkpInfo.publicKey)
-  if (cachedEoa) {
-    console.log('[Lit] Using cached EOA auth context (reusing session key pair)')
-    return cachedEoa
-  }
-
-  // Check for cached PKP auth context (WebAuthn flow)
+  // Check for cached PKP auth context (works for both WebAuthn and EOA flows)
   if (cachedAuthContext && cachedPKPPublicKey === pkpInfo.publicKey) {
     if (IS_DEV) console.log('[Lit] Using cached PKP auth context')
     return cachedAuthContext
   }
 
-  console.log('[Lit] Creating PKP auth context (WebAuthn flow)...')
+  console.log('[Lit] Creating PKP auth context...')
   console.log('[Lit] Input authData keys:', Object.keys(authData))
   console.log('[Lit] Input authData full:', authData)
   console.log('[Lit] Input authData type:', typeof authData)
@@ -160,32 +147,6 @@ export function getCachedAuthContext(pkpPublicKey: string): PKPAuthContext | nul
 }
 
 /**
- * Cache EOA auth context for reuse
- * EOA contexts have their own session key pair that must be reused
- *
- * IMPORTANT: EOA auth contexts cannot be recreated - they must be reused
- * because creating a new PKP auth context would generate a different session key pair
- * that isn't authorized by the original SIWE signature.
- */
-export function cacheEoaAuthContext(pkpPublicKey: string, eoaAuthContext: PKPAuthContext): void {
-  console.log('[Lit] ✓ Caching EOA auth context for PKP:', pkpPublicKey)
-  console.log('[Lit] EOA context has sessionKeyPair:', 'sessionKeyPair' in eoaAuthContext)
-  cachedEoaAuthContext = eoaAuthContext
-  cachedEoaAddress = pkpPublicKey // Using PKP public key as cache key
-}
-
-/**
- * Get cached EOA auth context if available
- */
-export function getEoaAuthContext(pkpPublicKey: string): PKPAuthContext | null {
-  if (cachedEoaAuthContext && cachedEoaAddress === pkpPublicKey) {
-    if (IS_DEV) console.log('[Lit] Using cached EOA auth context')
-    return cachedEoaAuthContext
-  }
-  return null
-}
-
-/**
  * Clear cached auth context
  * Call this on logout or when switching PKPs
  */
@@ -193,6 +154,4 @@ export function clearAuthContext(): void {
   if (IS_DEV) console.log('[Lit] Clearing cached auth contexts')
   cachedAuthContext = null
   cachedPKPPublicKey = null
-  cachedEoaAuthContext = null
-  cachedEoaAddress = null
 }

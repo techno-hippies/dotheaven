@@ -1,5 +1,6 @@
 import { BigInt } from "@graphprotocol/graph-ts";
 import {
+  ScrobbleV3,
   TrackRegistered as TrackRegisteredEvent,
   TrackCoverSet as TrackCoverSetEvent,
   Scrobbled as ScrobbledEvent,
@@ -16,6 +17,18 @@ export function handleTrackRegistered(event: TrackRegisteredEvent): void {
   track.registeredAt = BigInt.fromI64(event.params.registeredAt.toI64());
   track.blockNumber = event.block.number;
   track.transactionHash = event.transaction.hash;
+
+  // Read title/artist from contract state
+  let contract = ScrobbleV3.bind(event.address);
+  let result = contract.try_getTrack(event.params.trackId);
+  if (result.reverted) {
+    track.title = "";
+    track.artist = "";
+  } else {
+    track.title = result.value.value0;
+    track.artist = result.value.value1;
+  }
+
   track.save();
 }
 

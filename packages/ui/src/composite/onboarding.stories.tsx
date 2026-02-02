@@ -256,3 +256,93 @@ export const AvatarStepInDialog: StoryObj<typeof meta> = {
     )
   },
 }
+
+export const AvatarStepTooLarge: StoryObj<typeof meta> = {
+  name: 'Avatar Step (Image Too Large)',
+  render: () => {
+    const [open, setOpen] = createSignal(true)
+    return (
+      <>
+        <Button onClick={() => setOpen(true)}>Open Avatar Step</Button>
+        <Dialog open={open()} onOpenChange={setOpen}>
+          <DialogContent class="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Add a profile photo</DialogTitle>
+              <DialogDescription>
+                Looking good, alice.heaven. Add a photo so people recognize you.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogBody>
+              <OnboardingAvatarStep
+                claimedName="alice"
+                error="Image is too large (4.2 MB). Please use an image under 2 MB."
+                onUpload={(file) => console.log('Upload:', file.name)}
+                onSkip={() => console.log('Skipped')}
+              />
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
+      </>
+    )
+  },
+}
+
+export const AvatarStepStyleRejected: StoryObj<typeof meta> = {
+  name: 'Avatar Step (Style Rejected)',
+  render: () => {
+    const [open, setOpen] = createSignal(true)
+    return (
+      <>
+        <Button onClick={() => setOpen(true)}>Open Avatar Step</Button>
+        <Dialog open={open()} onOpenChange={setOpen}>
+          <DialogContent class="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Add a profile photo</DialogTitle>
+              <DialogDescription>
+                Looking good, alice.heaven. Add a photo so people recognize you.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogBody>
+              <OnboardingAvatarStep
+                claimedName="alice"
+                error="Only anime, cartoon, or illustrated avatars are allowed. Please choose a different image."
+                onUpload={(file) => console.log('Upload:', file.name)}
+                onSkip={() => console.log('Skipped')}
+              />
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
+      </>
+    )
+  },
+}
+
+export const AvatarStepNetworkError: StoryObj<typeof meta> = {
+  name: 'Avatar Step (Network Error)',
+  render: () => {
+    const [open, setOpen] = createSignal(true)
+    return (
+      <>
+        <Button onClick={() => setOpen(true)}>Open Avatar Step</Button>
+        <Dialog open={open()} onOpenChange={setOpen}>
+          <DialogContent class="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Add a profile photo</DialogTitle>
+              <DialogDescription>
+                Looking good, alice.heaven. Add a photo so people recognize you.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogBody>
+              <OnboardingAvatarStep
+                claimedName="alice"
+                error="Network error uploading image. Please try a smaller file or check your connection."
+                onUpload={(file) => console.log('Upload:', file.name)}
+                onSkip={() => console.log('Skipped')}
+              />
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
+      </>
+    )
+  },
+}

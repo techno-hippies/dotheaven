@@ -315,7 +315,7 @@ export async function decryptAudio(
 export function beamUrl(
   datasetOwner: string,
   pieceCid: string,
-  network: 'calibration' | 'mainnet' = 'calibration',
+  network: 'calibration' | 'mainnet' = 'mainnet',
 ): string {
   const host = network === 'mainnet' ? 'filbeam.io' : 'calibration.filbeam.io'
   return `https://${datasetOwner}.${host}/${pieceCid}`

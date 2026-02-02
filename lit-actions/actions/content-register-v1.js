@@ -17,15 +17,18 @@
  * - algo: uint8 (encryption algorithm enum)
  * - timestamp: Request timestamp (ms)
  * - nonce: Unique nonce for replay protection
+ * - title: Track title (for ScrobbleV3 registration)
+ * - artist: Track artist (for ScrobbleV3 registration)
  *
  * Optional jsParams:
+ * - album: Track album (defaults to "")
  * - datasetOwner: Beam dataset owner address (defaults to user)
  * - signature: Pre-signed EIP-191 signature
  * - contentRegistry: Override ContentRegistry address
  * - contentAccessMirror: Override ContentAccessMirror address
  * - dryRun: boolean (default false) — skip broadcast, return signed tx
  *
- * Returns: { success, contentId, txHash, blockNumber, mirrorTxHash }
+ * Returns: { success, contentId, txHash, blockNumber, mirrorTxHash, trackRegistered }
  */
 
 // ============================================================
@@ -159,6 +162,13 @@ async function broadcastSignedTx(signedTx, rpcUrl, label) {
 // ABI
 // ============================================================
 
+const SCROBBLE_V3 = "0x144c450cd5B641404EEB5D5eD523399dD94049E0";
+
+const SCROBBLE_V3_ABI = [
+  "function isRegistered(bytes32 trackId) external view returns (bool)",
+  "function registerTracksBatch(uint8[] kinds, bytes32[] payloads, string[] titles, string[] artists, string[] albums) external",
+];
+
 const CONTENT_REGISTRY_ABI = [
   "function registerContentFor(address contentOwner, bytes32 trackId, address datasetOwner, bytes pieceCid, uint8 algo) external",
 ];
@@ -181,6 +191,9 @@ const main = async () => {
       algo,
       timestamp,
       nonce,
+      title,
+      artist,
+      album = "",
       signature: preSignedSig,
       contentRegistry: contentRegistryOverride,
       contentAccessMirror: contentAccessMirrorOverride,
@@ -192,6 +205,8 @@ const main = async () => {
     must(algo, "algo");
     must(timestamp, "timestamp");
     must(nonce, "nonce");
+    must(title, "title");
+    must(artist, "artist");
     if (!preSignedSig) must(userPkpPublicKey, "userPkpPublicKey");
 
     let userAddress;
@@ -272,6 +287,78 @@ const main = async () => {
     const computedContentId = ethers.utils.keccak256(
       ethers.utils.defaultAbiCoder.encode(["bytes32", "address"], [trackId32, userAddress])
     );
+
+    // ========================================
+    // STEP 1b: Register track in ScrobbleV3 (if not already registered)
+    // ========================================
+    // ScrobbleV3 is the canonical track registry. Every uploaded track should
+    // have its metadata (title/artist/album) registered on-chain so subgraphs
+    // and other consumers can resolve human-readable names from trackId.
+    let trackRegistered = false;
+    const scrobbleContract = new ethers.Contract(SCROBBLE_V3, SCROBBLE_V3_ABI);
+
+    const isRegJson = await Lit.Actions.runOnce(
+      { waitForResponse: true, name: "checkTrackRegistered" },
+      async () => {
+        const provider = new ethers.providers.JsonRpcProvider(MEGAETH_RPC_URL);
+        const c = scrobbleContract.connect(provider);
+        const registered = await c.isRegistered(trackId32);
+        return JSON.stringify({ registered });
+      }
+    );
+    const isRegResult = JSON.parse(isRegJson);
+
+    if (!isRegResult.registered) {
+      // Derive kind + payload for the track (kind 3 = metadata hash)
+      const titleNorm = (title || "").toLowerCase().trim().replace(/\s+/g, " ");
+      const artistNorm = (artist || "").toLowerCase().trim().replace(/\s+/g, " ");
+      const albumNorm = (album || "").toLowerCase().trim().replace(/\s+/g, " ");
+
+      const metaPayload = ethers.utils.keccak256(
+        ethers.utils.defaultAbiCoder.encode(
+          ["string", "string", "string"],
+          [titleNorm, artistNorm, albumNorm]
+        )
+      );
+      const kind = 3; // metadata hash
+
+      const regIface = new ethers.utils.Interface(SCROBBLE_V3_ABI);
+      const regData = regIface.encodeFunctionData("registerTracksBatch", [
+        [kind],
+        [metaPayload],
+        [title],
+        [artist],
+        [album],
+      ]);
+
+      // Get nonce for track registration tx
+      const regNonceJson = await Lit.Actions.runOnce(
+        { waitForResponse: true, name: "getRegNonce" },
+        async () => {
+          const provider = new ethers.providers.JsonRpcProvider(MEGAETH_RPC_URL);
+          const n = await provider.getTransactionCount(SPONSOR_PKP_ADDRESS, "pending");
+          return JSON.stringify({ nonce: n.toString() });
+        }
+      );
+      const regNonceResult = JSON.parse(regNonceJson);
+
+      const unsignedRegTx = {
+        type: 0,
+        chainId: MEGAETH_CHAIN_ID,
+        nonce: toBigNumber(regNonceResult.nonce, "regNonce"),
+        to: SCROBBLE_V3,
+        data: regData,
+        gasLimit: toBigNumber("2000000", "gasLimit"),
+        gasPrice: toBigNumber(MEGAETH_GAS_PRICE, "gasPrice"),
+        value: 0,
+      };
+
+      const regSigned = await signTx(unsignedRegTx, "registerTrack_mega");
+      if (!dryRun) {
+        await broadcastSignedTx(regSigned.signedTx, MEGAETH_RPC_URL, "registerTrack_mega");
+        trackRegistered = true;
+      }
+    }
 
     // ========================================
     // STEP 2: Build + sign MegaETH tx
@@ -406,6 +493,7 @@ const main = async () => {
         txHash: megaBroadcast.txHash,
         blockNumber: megaBroadcast.blockNumber,
         mirrorTxHash: baseBroadcast.txHash,
+        trackRegistered,
       }),
     });
   } catch (err) {

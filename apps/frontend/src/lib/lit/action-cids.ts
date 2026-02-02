@@ -25,7 +25,7 @@ export const HEAVEN_SET_RECORDS_CID = 'QmNTJXB8KioAsJt4ebJUJF9w87a57nHHrF1HqqVwm
 export const AVATAR_UPLOAD_CID = 'QmTWwoC5zX2pUuSExsra5RVzChE9nCYRAkVVgppjvc196A'
 
 /** Content Register v1 — register Filecoin content entry on ContentRegistry */
-export const CONTENT_REGISTER_V1_CID = 'QmPMPGkEUGTjHLhdbnHwbhKK1G9rj9NZRnJzxbY5FAvCe6'
+export const CONTENT_REGISTER_V1_CID = 'QmSLEUEGBikzYs7KZv9X4hKbMf5va3sP3GgF2Dev8iGcJt'
 
 /** Content Access v1 — grant/revoke access on ContentRegistry */
 export const CONTENT_ACCESS_V1_CID = 'QmRDyE4znmxKjmJSxyxoFfEWFkLhQZDU3HiA3rzjSR3im4'

@@ -36,6 +36,9 @@ pub struct AuthResult {
     pub access_token: Option<String>,
     pub is_new_user: Option<bool>,
     pub error: Option<String>,
+    /// The original EOA wallet address (for WalletConnect/EOA auth)
+    #[serde(default)]
+    pub eoa_address: Option<String>,
 }
 
 /// Persisted auth data
@@ -48,6 +51,9 @@ pub struct PersistedAuth {
     pub auth_method_type: Option<u32>,
     pub auth_method_id: Option<String>,
     pub access_token: Option<String>,
+    /// The original EOA wallet address (for WalletConnect/EOA auth)
+    #[serde(default)]
+    pub eoa_address: Option<String>,
 }
 
 // =============================================================================
@@ -90,6 +96,7 @@ pub async fn start_passkey_auth(app: tauri::AppHandle) -> Result<(), String> {
                     access_token: None,
                     is_new_user: None,
                     error: Some("Authentication timed out. Please try again.".into()),
+                    eoa_address: None,
                 },
             );
         }
@@ -173,6 +180,7 @@ async fn handle_auth_callback(listener: TcpListener, app: tauri::AppHandle) {
                             access_token: None,
                             is_new_user: None,
                             error: Some("Invalid callback".into()),
+                            eoa_address: None,
                         },
                     );
                     break;

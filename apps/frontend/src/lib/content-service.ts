@@ -71,6 +71,7 @@ export async function registerContent(
   authContext: PKPAuthContext,
   pkpPublicKey: string,
   datasetOwner?: string,
+  trackMeta?: { title: string; artist: string; album?: string },
 ): Promise<{ contentId: string; txHash: string; blockNumber: number }> {
   if (!CONTENT_REGISTER_V1_CID) {
     throw new Error('CONTENT_REGISTER_V1_CID not set — deploy content-register-v1 first')
@@ -88,6 +89,9 @@ export async function registerContent(
       pieceCid,
       datasetOwner: datasetOwner || undefined,
       algo: ALGO_AES_GCM_256,
+      title: trackMeta?.title || '',
+      artist: trackMeta?.artist || '',
+      album: trackMeta?.album || '',
       timestamp,
       nonce,
     },
@@ -141,7 +145,7 @@ export async function fetchAndDecrypt(
   pieceCid: string,
   contentId: string,
   authContext: PKPAuthContext,
-  network: 'calibration' | 'mainnet' = 'calibration',
+  network: 'calibration' | 'mainnet' = 'mainnet',
 ): Promise<DownloadResult> {
   // Validate contentId format
   if (!/^0x[0-9a-fA-F]{64}$/.test(contentId)) {

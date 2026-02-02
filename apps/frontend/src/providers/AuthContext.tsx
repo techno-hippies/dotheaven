@@ -53,26 +53,14 @@ export const AuthProvider: ParentComponent = (props) => {
   const [isNewUser, setIsNewUser] = createSignal(false)
   // Track auth method type (1 = EOA, 3 = WebAuthn) — persists across authData being null
   const [lastAuthMethodType, setLastAuthMethodType] = createSignal<number | null>(null)
+  // Persisted EOA address — stored separately so it survives session restore
+  const [storedEoaAddress, setStoredEoaAddress] = createSignal<`0x${string}` | null>(null)
 
   // Derived
   const pkpAddress = () => pkpInfo()?.ethAddress ?? null
   const isAuthenticated = () => pkpInfo() !== null
-  // EOA address: extracted from authData when auth method is ETH_WALLET (type 1)
-  // The actual address is in accessToken JSON (authMethodId is a hash, not the address)
-  const eoaAddress = (): `0x${string}` | null => {
-    const data = authData()
-    if (data?.authMethodType === 1 && data.accessToken) {
-      try {
-        const token = typeof data.accessToken === 'string'
-          ? JSON.parse(data.accessToken)
-          : data.accessToken
-        if (token?.address) return token.address as `0x${string}`
-      } catch {
-        // accessToken not JSON parseable
-      }
-    }
-    return null
-  }
+  // EOA address: persisted separately so it survives session restore
+  const eoaAddress = (): `0x${string}` | null => storedEoaAddress()
 
   // Restore session on mount
   onMount(async () => {
@@ -89,18 +77,17 @@ export const AuthProvider: ParentComponent = (props) => {
           })
           if (auth.authMethodType && auth.authMethodId) {
             setLastAuthMethodType(auth.authMethodType)
-            // EOA sessions (type 1) can't be restored — the session key pair is in-memory only.
-            // User will need to re-auth via WalletConnect when a signing operation is needed.
-            if (auth.authMethodType === 1) {
-              console.log('[Auth] EOA session detected — skipping authData restore (requires re-auth)')
-            } else {
-              const restoredAuthData = {
-                authMethodType: auth.authMethodType,
-                authMethodId: auth.authMethodId,
-                accessToken: auth.accessToken || '',
-              }
-              setAuthData(restoredAuthData)
-              console.log('[Auth] Restored authData keys:', Object.keys(restoredAuthData))
+            const restoredAuthData = {
+              authMethodType: auth.authMethodType,
+              authMethodId: auth.authMethodId,
+              accessToken: auth.accessToken || '',
+            }
+            setAuthData(restoredAuthData)
+            console.log('[Auth] Restored authData keys:', Object.keys(restoredAuthData))
+            // Restore persisted EOA address if present
+            if ((auth as any).eoaAddress) {
+              setStoredEoaAddress((auth as any).eoaAddress as `0x${string}`)
+              console.log('[Auth] Restored EOA address:', (auth as any).eoaAddress)
             }
           }
           console.log('[Auth] Restored from Tauri storage:', auth.pkpAddress)
@@ -113,10 +100,14 @@ export const AuthProvider: ParentComponent = (props) => {
       try {
         const stored = localStorage.getItem(WEB_SESSION_KEY)
         if (stored) {
-          const session = JSON.parse(stored) as { pkpInfo: PKPInfo; authData: AuthData }
+          const session = JSON.parse(stored) as { pkpInfo: PKPInfo; authData: AuthData; eoaAddress?: string }
           setPkpInfo(session.pkpInfo)
           setAuthData(session.authData)
           if (session.authData?.authMethodType) setLastAuthMethodType(session.authData.authMethodType)
+          if (session.eoaAddress) {
+            setStoredEoaAddress(session.eoaAddress as `0x${string}`)
+            console.log('[Auth] Restored EOA address:', session.eoaAddress)
+          }
           console.log('[Auth] Restored from localStorage:', session.pkpInfo.ethAddress)
         }
       } catch (err) {
@@ -201,9 +192,9 @@ export const AuthProvider: ParentComponent = (props) => {
   }
 
   // Save session (web only - Tauri saves via command)
-  function saveWebSession(info: PKPInfo, data: AuthData) {
+  function saveWebSession(info: PKPInfo, data: AuthData, eoa?: `0x${string}` | null) {
     try {
-      localStorage.setItem(WEB_SESSION_KEY, JSON.stringify({ pkpInfo: info, authData: data }))
+      localStorage.setItem(WEB_SESSION_KEY, JSON.stringify({ pkpInfo: info, authData: data, eoaAddress: eoa || undefined }))
     } catch (err) {
       console.error('[Auth] Failed to save to localStorage:', err)
     }
@@ -291,15 +282,15 @@ export const AuthProvider: ParentComponent = (props) => {
         localStorage.removeItem(WEB_SESSION_KEY)
       }
 
-      // Try authenticate first, auto-register if no PKP
-      const { authenticateWithEOA } = await import('../lib/lit')
-      try {
-        const result = await authenticateWithEOA(walletClientForEoa)
+      // Helper to persist EOA auth result
+      const persistEoaResult = async (result: { pkpInfo: PKPInfo; authData: AuthData; eoaAddress: `0x${string}` }) => {
+        const eoa = result.eoaAddress
+        console.log('[Auth] EOA address from auth:', eoa)
         setPkpInfo(result.pkpInfo)
         setAuthData(result.authData)
         setLastAuthMethodType(1) // EOA
+        setStoredEoaAddress(eoa)
         if (platform.isTauri) {
-          // Save PKP info to Tauri storage (but EOA session won't survive restart)
           try {
             const { invoke } = await import('@tauri-apps/api/core')
             await invoke('save_auth', { authResult: {
@@ -309,43 +300,32 @@ export const AuthProvider: ParentComponent = (props) => {
               authMethodType: result.authData.authMethodType,
               authMethodId: result.authData.authMethodId,
               accessToken: serializeAccessToken(result.authData.accessToken),
+              eoaAddress: eoa,
             }})
           } catch (e) {
             console.log('[Auth] Failed to save to Tauri storage:', e)
           }
         } else {
-          saveWebSession(result.pkpInfo, result.authData)
+          saveWebSession(result.pkpInfo, result.authData, eoa)
         }
+      }
+
+      // Try authenticate first, auto-register if no PKP
+      const { authenticateWithEOA } = await import('../lib/lit')
+      try {
+        const result = await authenticateWithEOA(walletClientForEoa)
+        await persistEoaResult(result)
         setIsAuthenticating(false)
-        console.log('[Auth] Wallet login complete:', result.pkpInfo.ethAddress)
+        console.log('[Auth] Wallet login complete:', result.pkpInfo.ethAddress, 'EOA:', result.eoaAddress)
       } catch (authErr) {
         if (authErr instanceof Error && authErr.message.includes('No PKP found')) {
           console.log('[Auth] No PKP for wallet, auto-registering...')
           const { registerWithEOA } = await import('../lib/lit')
           const result = await registerWithEOA(walletClientForEoa)
           setIsNewUser(true)
-          setPkpInfo(result.pkpInfo)
-          setAuthData(result.authData)
-          setLastAuthMethodType(1) // EOA
-          if (platform.isTauri) {
-            try {
-              const { invoke } = await import('@tauri-apps/api/core')
-              await invoke('save_auth', { authResult: {
-                pkpPublicKey: result.pkpInfo.publicKey,
-                pkpAddress: result.pkpInfo.ethAddress,
-                pkpTokenId: result.pkpInfo.tokenId,
-                authMethodType: result.authData.authMethodType,
-                authMethodId: result.authData.authMethodId,
-                accessToken: serializeAccessToken(result.authData.accessToken),
-              }})
-            } catch (e) {
-              console.log('[Auth] Failed to save to Tauri storage:', e)
-            }
-          } else {
-            saveWebSession(result.pkpInfo, result.authData)
-          }
+          await persistEoaResult(result)
           setIsAuthenticating(false)
-          console.log('[Auth] Wallet PKP minted:', result.pkpInfo.ethAddress)
+          console.log('[Auth] Wallet PKP minted:', result.pkpInfo.ethAddress, 'EOA:', result.eoaAddress)
         } else {
           throw authErr
         }
@@ -363,6 +343,7 @@ export const AuthProvider: ParentComponent = (props) => {
     setAuthData(null)
     setAuthError(null)
     setLastAuthMethodType(null)
+    setStoredEoaAddress(null)
 
     // Clear Lit auth caches and stale session keys
     try {
@@ -425,12 +406,11 @@ export const AuthProvider: ParentComponent = (props) => {
     }
 
     let currentAuthData = authData()
+
     if (!currentAuthData) {
-      // No authData — need to re-authenticate lazily.
-      // Use lastAuthMethodType to decide which flow (EOA=1 vs WebAuthn)
       if (lastAuthMethodType() === 1) {
         // EOA: re-auth. Tauri uses WalletConnect, web uses injected wallet.
-        console.log('[Auth] No authData (EOA session), re-authenticating...')
+        console.log('[Auth] EOA session needs (re)authentication...')
         let walletClientForReauth: any = undefined
         if (platform.isTauri) {
           const { connectWalletConnect } = await import('../lib/walletconnect')
@@ -440,9 +420,10 @@ export const AuthProvider: ParentComponent = (props) => {
         const result = await authenticateWithEOA(walletClientForReauth)
         setPkpInfo(result.pkpInfo)
         setAuthData(result.authData)
+        setStoredEoaAddress(result.eoaAddress)
         currentAuthData = result.authData
-      } else {
-        // Passkey/WebAuthn: triggers a WebAuthn prompt
+      } else if (!currentAuthData) {
+        // Passkey/WebAuthn: triggers a WebAuthn prompt (only if authData missing)
         const { authenticateWithWebAuthn } = await import('../lib/lit')
         const result = await authenticateWithWebAuthn()
         setPkpInfo(result.pkpInfo)

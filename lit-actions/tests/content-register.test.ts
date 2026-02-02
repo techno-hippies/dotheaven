@@ -32,6 +32,7 @@ const MEGAETH_RPC = "https://carrot.megaeth.com/rpc";
 const BASE_RPC = "https://sepolia.base.org";
 const CONTENT_REGISTRY = "0x9ca08C2D2170A43ecfA12AB35e06F2E1cEEB4Ef2";
 const CONTENT_ACCESS_MIRROR = "0x872E8E7E4a4088F41CeB0ccc14a7081D36aF5aa4";
+const SCROBBLE_V3 = "0x144c450cd5B641404EEB5D5eD523399dD94049E0";
 
 async function main() {
   console.log("Test Content Register v1");
@@ -93,8 +94,24 @@ async function main() {
 
   // ── Build test params ──────────────────────────────────────────────
 
-  // Generate a random trackId (bytes32)
-  const trackId = hexlify(randomBytes(32));
+  // Test track metadata
+  const title = "Test Upload " + Date.now().toString(36);
+  const artist = "Content Register Test";
+  const album = "";
+
+  // Compute trackId from metadata (kind 3: metadata hash) — matches Lit Action logic
+  function normalize(s: string) {
+    return (s || "").toLowerCase().trim().replace(/\s+/g, " ");
+  }
+  const metaPayload = keccak256(
+    abiCoder.encode(
+      ["string", "string", "string"],
+      [normalize(title), normalize(artist), normalize(album)]
+    )
+  );
+  const trackId = keccak256(
+    abiCoder.encode(["uint8", "bytes32"], [3, metaPayload])
+  );
 
   // Use a test pieceCid (Filecoin piece CID placeholder)
   const pieceCid = "baga6ea4seaqtest" + Date.now().toString(36);
@@ -102,7 +119,9 @@ async function main() {
   const timestamp = Date.now();
   const nonce = Math.floor(Math.random() * 1000000).toString();
 
-  console.log(`\n   trackId:     ${trackId}`);
+  console.log(`\n   title:       ${title}`);
+  console.log(`   artist:      ${artist}`);
+  console.log(`   trackId:     ${trackId}`);
   console.log(`   pieceCid:    ${pieceCid}`);
   console.log(`   algo:        1 (AES_GCM_256)`);
   console.log(`   Timestamp:   ${timestamp}`);
@@ -121,6 +140,9 @@ async function main() {
     trackId,
     pieceCid,
     algo: 1,
+    title,
+    artist,
+    album,
     timestamp,
     nonce,
     dryRun,
@@ -177,6 +199,9 @@ async function main() {
     }
     console.log("   ✓ Content ID matches expected keccak256(trackId, user)");
 
+    // Track registered
+    console.log(`   Track reg'd:  ${response.trackRegistered}`);
+
     if (dryRun) {
       console.log("\n   Dry run complete — skipping on-chain verification");
       if (response.megaSignedTx) console.log("   ✓ MegaETH signed tx present");
@@ -216,6 +241,22 @@ async function main() {
         throw new Error("Base mirror canAccess returned false for owner");
       }
       console.log("   ✓ Base ContentAccessMirror.canAccess() = true");
+
+      // Check ScrobbleV3 track registration
+      const scrobbleAbi = [
+        "function isRegistered(bytes32 trackId) view returns (bool)",
+        "function getTrack(bytes32 trackId) view returns (string title, string artist, string album, uint8 kind, bytes32 payload, bytes32 metaHash, uint64 registeredAt)",
+      ];
+      const scrobbleContract = new Contract(SCROBBLE_V3, scrobbleAbi, megaProvider);
+      const isReg = await scrobbleContract.isRegistered(trackId);
+      if (!isReg) {
+        throw new Error("ScrobbleV3.isRegistered() returned false for trackId");
+      }
+      console.log("   ✓ ScrobbleV3.isRegistered() = true");
+
+      const trackData = await scrobbleContract.getTrack(trackId);
+      console.log(`   ✓ ScrobbleV3 title: "${trackData.title}"`);
+      console.log(`   ✓ ScrobbleV3 artist: "${trackData.artist}"`);
     }
 
     console.log("\n" + "=".repeat(60));

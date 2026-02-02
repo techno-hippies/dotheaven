@@ -1,7 +1,7 @@
 import { defineChain } from 'viem'
-import { celo, sepolia } from 'viem/chains'
+import { celo, mainnet, sepolia } from 'viem/chains'
 
-export { celo, sepolia }
+export { celo, mainnet, sepolia }
 
 // Celo Sepolia (Self.xyz hub is deployed here, chain 11142220)
 export const celoSepolia = defineChain({
@@ -26,6 +26,15 @@ export const megaTestnetV2 = defineChain({
   },
   blockExplorers: {
     default: { name: 'Blockscout', url: 'https://megaeth-testnet-v2.blockscout.com' },
+  },
+})
+
+export const megaMainnet = defineChain({
+  id: 6342,
+  name: 'MegaETH',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://mainnet.megaeth.com/rpc'] },
   },
 })
 

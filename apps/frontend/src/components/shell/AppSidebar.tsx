@@ -206,9 +206,7 @@ export const AppSidebar: Component = () => {
         <nav class="flex flex-col gap-1">
           <NavItem icon={HomeIcon} label="Home" path="/" active={isActive('/')} onClick={() => navigate('/')} />
           <NavItem icon={ChatCircleIcon} label="Messages" path="/chat" active={location.pathname.startsWith('/chat')} onClick={() => navigate('/chat')} badge={unreadMessageCount()} />
-          <Show when={platform.isTauri}>
-            <NavItem icon={MusicNotesIcon} label="Local Files" path="/library" active={isActive('/library')} onClick={() => navigate('/library')} />
-          </Show>
+          <NavItem icon={MusicNotesIcon} label="Library" path="/library" active={isActive('/library')} onClick={() => navigate('/library')} />
           <NavItem icon={BellIcon} label="Notifications" path="/notifications" active={isActive('/notifications')} onClick={() => {}} />
           <NavItem icon={WalletIcon} label="Wallet" path="/wallet" active={isActive('/wallet')} onClick={() => navigate('/wallet')} />
           <NavItem icon={UserIcon} label="Profile" path="/profile" active={isActive('/profile')} onClick={() => navigate('/profile')} />

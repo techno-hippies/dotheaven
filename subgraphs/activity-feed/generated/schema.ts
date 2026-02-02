@@ -51,6 +51,32 @@ export class Track extends Entity {
     this.set("id", Value.fromString(value));
   }
 
+  get title(): string {
+    let value = this.get("title");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set title(value: string) {
+    this.set("title", Value.fromString(value));
+  }
+
+  get artist(): string {
+    let value = this.get("artist");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set artist(value: string) {
+    this.set("artist", Value.fromString(value));
+  }
+
   get kind(): i32 {
     let value = this.get("kind");
     if (!value || value.kind == ValueKind.NULL) {

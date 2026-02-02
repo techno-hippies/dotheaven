@@ -31,6 +31,16 @@ import {
   type LocalTrack,
 } from '../lib/local-music'
 import { createScrobbleService, type ScrobbleService } from '../lib/scrobble-service'
+import { fetchAndDecrypt } from '../lib/content-service'
+
+export interface EncryptedContentInfo {
+  contentId: string
+  trackId: string
+  pieceCid: string
+  datasetOwner: string
+  title: string
+  artist: string
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -71,6 +81,7 @@ export interface PlayerContextType {
   currentTimeFormatted: () => string
   durationFormatted: () => string
   playbackError: () => string | null
+  decrypting: () => boolean
 
   // Actions
   setTracks: (tracks: LocalTrack[]) => void
@@ -86,6 +97,7 @@ export interface PlayerContextType {
   handleSeekStart: () => void
   handleSeekEnd: () => Promise<void>
   handleVolumeChange: (value: number) => void
+  playEncryptedContent: (content: EncryptedContentInfo) => Promise<void>
 
   // Scrobble service
   scrobbleService: ScrobbleService | null
@@ -135,6 +147,7 @@ export const PlayerProvider: ParentComponent = (props) => {
   const [duration, setDuration] = createSignal(0)
   const [volume, setVolume] = createSignal(75)
   const [playbackError, setPlaybackError] = createSignal<string | null>(null)
+  const [decrypting, setDecrypting] = createSignal(false)
 
   // Notify scrobble engine of play/pause changes
   createEffect(on(isPlaying, (playing) => {
@@ -667,6 +680,79 @@ export const PlayerProvider: ParentComponent = (props) => {
     if (audio) audio.volume = value / 100
   }
 
+  // In-memory cache for decrypted audio blob URLs (keyed by contentId)
+  const decryptedCache = new Map<string, string>()
+
+  async function playEncryptedContent(content: EncryptedContentInfo) {
+    if (!audio) return
+    setPlaybackError(null)
+
+    // Create a synthetic track so NowPlaying displays correctly
+    const syntheticTrack: LocalTrack = {
+      id: content.contentId,
+      title: content.title,
+      artist: content.artist,
+      album: '',
+      filePath: '', // no local file
+    }
+
+    // Set as current track immediately (shows title while decrypting)
+    setTracks([syntheticTrack])
+    setCurrentIndex(0)
+    setSelectedTrackId(content.contentId)
+    setCurrentTime(0)
+    setDuration(0)
+    setIsPlaying(false)
+
+    // Check cache first
+    const cached = decryptedCache.get(content.contentId)
+    if (cached) {
+      currentRevoke?.()
+      currentRevoke = undefined
+      audio.src = cached
+      audio.currentTime = 0
+      audio.load()
+      await audio.play()
+      setIsPlaying(true)
+      return
+    }
+
+    // Fetch + decrypt
+    setDecrypting(true)
+    try {
+      const authContext = await auth.getAuthContext()
+      const result = await fetchAndDecrypt(
+        content.datasetOwner,
+        content.pieceCid,
+        content.contentId,
+        authContext,
+      )
+
+      // Create blob URL from decrypted audio bytes
+      const blob = new Blob([result.audio.buffer], { type: 'audio/mpeg' })
+      const url = URL.createObjectURL(blob)
+      decryptedCache.set(content.contentId, url)
+
+      // Stop current playback
+      audio.pause()
+      currentRevoke?.()
+      currentRevoke = () => {
+        // Don't revoke cached URLs — they'll be GC'd with the page
+      }
+
+      audio.src = url
+      audio.currentTime = 0
+      audio.load()
+      await audio.play()
+      setIsPlaying(true)
+    } catch (e: any) {
+      console.error('[Player] Failed to decrypt content:', e)
+      setPlaybackError(e.message || 'Failed to decrypt content')
+    } finally {
+      setDecrypting(false)
+    }
+  }
+
   const progress = () => (duration() > 0 ? (currentTime() / duration()) * 100 : 0)
 
   const ctx: PlayerContextType = {
@@ -687,6 +773,7 @@ export const PlayerProvider: ParentComponent = (props) => {
     currentTimeFormatted: () => formatTime(currentTime()),
     durationFormatted: () => formatTime(duration()),
     playbackError,
+    decrypting,
 
     setTracks,
     setLibraryFolder,
@@ -701,6 +788,7 @@ export const PlayerProvider: ParentComponent = (props) => {
     handleSeekStart,
     handleSeekEnd,
     handleVolumeChange,
+    playEncryptedContent,
 
     scrobbleService,
   }

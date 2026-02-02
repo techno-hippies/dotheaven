@@ -165,6 +165,12 @@ export const App: Component = () => {
     const pkp = auth.pkpInfo()
     if (!pkp) return false
 
+    const MAX_AVATAR_SIZE = 2 * 1024 * 1024 // 2 MB
+    if (file.size > MAX_AVATAR_SIZE) {
+      setUploadError(`Image is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Please use an image under 2 MB.`)
+      return false
+    }
+
     setUploading(true)
     setUploadError(null)
     try {
@@ -206,7 +212,14 @@ export const App: Component = () => {
       }
     } catch (err) {
       console.error('[Onboarding] Avatar error:', err)
-      setUploadError(err instanceof Error ? err.message : 'Upload failed. Please try again.')
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.includes('413') || msg.toLowerCase().includes('payload too large') || msg.toLowerCase().includes('too large')) {
+        setUploadError('Image is too large. Please use a smaller image (under 2 MB).')
+      } else if (msg.includes('network_error') || msg.includes('Load failed')) {
+        setUploadError('Network error uploading image. Please try a smaller file or check your connection.')
+      } else {
+        setUploadError(msg || 'Upload failed. Please try again.')
+      }
       return false
     } finally {
       setUploading(false)

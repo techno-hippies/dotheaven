@@ -31,6 +31,7 @@ export interface AuthResult {
   accessToken?: string
   isNewUser?: boolean
   error?: string
+  eoaAddress?: string
 }
 
 /**
@@ -43,6 +44,7 @@ export interface PersistedAuth {
   authMethodType?: number
   authMethodId?: string
   accessToken?: string
+  eoaAddress?: string
 }
 
 /**

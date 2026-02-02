@@ -1,7 +1,7 @@
 import { createWalletClient, custom, getAddress, type WalletClient } from 'viem'
 import { mainnet } from 'viem/chains'
-import { getLitClient, getAuthManager } from './client'
-import { cacheEoaAuthContext } from './auth-pkp'
+import { WalletClientAuthenticator } from '@lit-protocol/auth'
+import { getLitClient } from './client'
 import type { PKPInfo, AuthData } from './types'
 
 // Relayer API for sponsored PKP minting (free on naga-dev)
@@ -48,6 +48,7 @@ async function getInjectedWalletClient() {
 export async function registerWithEOA(externalWalletClient?: WalletClient): Promise<{
   pkpInfo: PKPInfo
   authData: AuthData
+  eoaAddress: `0x${string}`
 }> {
   console.log('[Lit] Registering with EOA via relayer...')
 
@@ -88,52 +89,52 @@ export async function registerWithEOA(externalWalletClient?: WalletClient): Prom
     tokenId: data.pkpTokenId,
   }
 
-  // Create EOA Auth Context (NEW AUTH CONTEXT FLOW)
-  // This handles SIWE message creation, wallet signing, and session capabilities
-  console.log('[Lit] Creating EOA auth context...')
+  // Create AuthData via WalletClientAuthenticator (EOA SIWE auth sig)
+  console.log('[Lit] Creating EOA auth data via WalletClientAuthenticator...')
   console.log('[Lit] This will prompt your wallet to sign a SIWE message')
-  const litClient = await getLitClient()
-  const authManager = getAuthManager()
-
-  console.log('[Lit] Requesting SIWE signature from wallet...')
-  const eoaAuthContext = await authManager.createEoaAuthContext({
-    config: { account: walletClient },
-    authConfig: {
-      domain: typeof window !== 'undefined' ? window.location.host : 'localhost',
-      statement: 'Authorize Heaven session',
-      resources: [
-        ['pkp-signing', '*'],
-        ['lit-action-execution', '*'],
-        ['access-control-condition-decryption', '*'],
-      ],
-      expiration: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(), // 24 hours
-    },
-    litClient,
+  const domain = typeof window !== 'undefined' ? window.location.host : 'localhost'
+  const uri = typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
+  const expiration = new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString() // 24 hours
+  const authData = await WalletClientAuthenticator.authenticate(walletClient, undefined, {
+    domain,
+    uri,
+    statement: 'Authorize Heaven session',
+    expiration,
   })
   console.log('[Lit] ✓ SIWE signature received from wallet')
 
   console.log('[Lit] ✓ PKP registration complete')
 
-  // DEBUG: Inspect full eoaAuthContext structure
-  console.log('[Lit] EOA Auth Context keys:', Object.keys(eoaAuthContext))
-  console.log('[Lit] EOA Auth Context full object:', eoaAuthContext)
-  console.log('[Lit] EOA Auth Context.authData type:', typeof eoaAuthContext.authData)
-  console.log('[Lit] EOA Auth Context.authData:', eoaAuthContext.authData)
-
-  // Cache the ENTIRE eoaAuthContext for later use
-  // This is critical - we must reuse the session key pair from this context
-  cacheEoaAuthContext(pkpInfo.publicKey, eoaAuthContext)
-
-  // Extract authData from EOA context
-  const authData: AuthData = {
-    ...eoaAuthContext.authData as AuthData,
+  // Ensure authData authMethodId aligns with on-chain auth method if needed
+  const litClient = await getLitClient()
+  let pkpsResult = await litClient.viewPKPsByAuthData({
+    authData: {
+      authMethodType: 1,
+      authMethodId: authData.authMethodId,
+    },
+    pagination: { limit: 5, offset: 0 },
+  })
+  if (!pkpsResult?.pkps?.length) {
+    const fallbackId = address.toLowerCase()
+    if (fallbackId !== authData.authMethodId) {
+      console.warn('[Lit] No PKP found for authMethodId hash after register, retrying with address...')
+      pkpsResult = await litClient.viewPKPsByAuthData({
+        authData: {
+          authMethodType: 1,
+          authMethodId: fallbackId,
+        },
+        pagination: { limit: 5, offset: 0 },
+      })
+      if (pkpsResult?.pkps?.length) {
+        authData.authMethodId = fallbackId
+      }
+    }
   }
 
   console.log('[Lit] Registration authData keys:', Object.keys(authData))
   console.log('[Lit] Registration authData full:', authData)
-  console.log('[Lit] Cached EOA auth context for PKP:', pkpInfo.publicKey)
 
-  return { pkpInfo, authData }
+  return { pkpInfo, authData, eoaAddress: address as `0x${string}` }
 }
 
 /**
@@ -143,6 +144,7 @@ export async function registerWithEOA(externalWalletClient?: WalletClient): Prom
 export async function authenticateWithEOA(externalWalletClient?: WalletClient): Promise<{
   pkpInfo: PKPInfo
   authData: AuthData
+  eoaAddress: `0x${string}`
 }> {
   console.log('[Lit] Authenticating with EOA...')
 
@@ -153,47 +155,46 @@ export async function authenticateWithEOA(externalWalletClient?: WalletClient): 
     throw new Error('No account in wallet client')
   }
 
-  // Create EOA Auth Context (NEW AUTH CONTEXT FLOW)
-  console.log('[Lit] Creating EOA auth context...')
-  const litClient = await getLitClient()
-  const authManager = getAuthManager()
-
-  const eoaAuthContext = await authManager.createEoaAuthContext({
-    config: { account: walletClient },
-    authConfig: {
-      domain: typeof window !== 'undefined' ? window.location.host : 'localhost',
-      statement: 'Authorize Heaven session',
-      resources: [
-        ['pkp-signing', '*'],
-        ['lit-action-execution', '*'],
-        ['access-control-condition-decryption', '*'],
-      ],
-      expiration: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(), // 24 hours
-    },
-    litClient,
+  // Create AuthData via WalletClientAuthenticator (EOA SIWE auth sig)
+  console.log('[Lit] Creating EOA auth data via WalletClientAuthenticator...')
+  const domain = typeof window !== 'undefined' ? window.location.host : 'localhost'
+  const uri = typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
+  const expiration = new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString() // 24 hours
+  const authData = await WalletClientAuthenticator.authenticate(walletClient, undefined, {
+    domain,
+    uri,
+    statement: 'Authorize Heaven session',
+    expiration,
   })
 
-  // DEBUG: Inspect full eoaAuthContext structure
-  console.log('[Lit] EOA Auth Context keys:', Object.keys(eoaAuthContext))
-  console.log('[Lit] EOA Auth Context full object:', eoaAuthContext)
-  console.log('[Lit] EOA Auth Context.authData type:', typeof eoaAuthContext.authData)
-  console.log('[Lit] EOA Auth Context.authData:', eoaAuthContext.authData)
+  const litClient = await getLitClient()
 
-  // Extract authData from EOA context (needed for PKP lookup)
-  const authData: AuthData = {
-    ...eoaAuthContext.authData as AuthData,
-  }
-
-  // IMPORTANT: For EOA auth, authMethodId must be the lowercase address
-  // The SIWE auth context generates a hash, but the relayer uses the address
-  // We must use the address to find PKPs registered by the relayer
-  const pkpsResult = await litClient.viewPKPsByAuthData({
+  // Prefer authMethodId derived from the SIWE authSig; fall back to raw address if needed
+  let pkpsResult = await litClient.viewPKPsByAuthData({
     authData: {
       authMethodType: 1, // AUTH_METHOD_TYPE_ETH_WALLET
-      authMethodId: address.toLowerCase(), // Use address, not SIWE hash
+      authMethodId: authData.authMethodId,
     },
     pagination: { limit: 5, offset: 0 },
   })
+
+  if (!pkpsResult?.pkps?.length) {
+    const fallbackId = address.toLowerCase()
+    if (fallbackId !== authData.authMethodId) {
+      console.warn('[Lit] No PKP found for authMethodId hash, retrying with address...')
+      pkpsResult = await litClient.viewPKPsByAuthData({
+        authData: {
+          authMethodType: 1,
+          authMethodId: fallbackId,
+        },
+        pagination: { limit: 5, offset: 0 },
+      })
+      if (pkpsResult?.pkps?.length) {
+        // Align authData with the auth method ID that matched on-chain
+        authData.authMethodId = fallbackId
+      }
+    }
+  }
 
   console.log('[Lit] Found PKPs for EOA:', pkpsResult)
 
@@ -208,14 +209,9 @@ export async function authenticateWithEOA(externalWalletClient?: WalletClient): 
     tokenId: pkp.tokenId.toString(),
   }
 
-  // Cache the ENTIRE eoaAuthContext for later use
-  // This is critical - we must reuse the session key pair from this context
-  cacheEoaAuthContext(pkpInfo.publicKey, eoaAuthContext)
-
   console.log('[Lit] Using PKP:', pkpInfo.ethAddress)
   console.log('[Lit] Login authData keys:', Object.keys(authData))
   console.log('[Lit] Login authData full:', authData)
-  console.log('[Lit] Cached EOA auth context for PKP:', pkpInfo.publicKey)
 
-  return { pkpInfo, authData }
+  return { pkpInfo, authData, eoaAddress: address as `0x${string}` }
 }

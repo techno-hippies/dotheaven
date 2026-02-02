@@ -77,6 +77,7 @@ async fn save_auth(
         auth_method_type: auth_result.auth_method_type,
         auth_method_id: auth_result.auth_method_id,
         access_token: auth_result.access_token,
+        eoa_address: auth_result.eoa_address,
     };
 
     // Update in-memory state

@@ -11,7 +11,7 @@ import type { Track } from '@heaven/ui'
  */
 
 const GOLDSKY_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/4.0.0/gn'
+  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/5.0.0/gn'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -200,6 +200,116 @@ async function rpcCall(method: string, params: unknown[]): Promise<any> {
   const json = await res.json()
   if (json.error) throw new Error(`RPC error: ${json.error.message}`)
   return json.result
+}
+
+// ── Uploaded content (cross-device via subgraphs) ─────────────────
+
+const CONTENT_ENDPOINT =
+  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-content/1.0.0/gn'
+
+export interface UploadedContentEntry {
+  contentId: string
+  trackId: string
+  pieceCid: string
+  datasetOwner: string
+  title: string
+  artist: string
+  uploadedAt: number // unix seconds
+}
+
+/**
+ * Fetch all content uploaded by a user, with track metadata.
+ * Queries content-feed subgraph for ownership, activity-feed for title/artist.
+ */
+export async function fetchUploadedContent(
+  userAddress: string,
+): Promise<UploadedContentEntry[]> {
+  const addr = userAddress.toLowerCase()
+
+  // Step 1: Get content entries owned by this user
+  const contentQuery = `{
+    contentEntries(
+      where: { owner: "${addr}", active: true }
+      orderBy: createdAt
+      orderDirection: desc
+      first: 100
+    ) {
+      id
+      trackId
+      pieceCid
+      datasetOwner
+      createdAt
+    }
+  }`
+
+  const contentRes = await fetch(CONTENT_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: contentQuery }),
+  })
+  if (!contentRes.ok) throw new Error(`Content subgraph query failed: ${contentRes.status}`)
+  const contentJson = await contentRes.json()
+  const entries: Array<{
+    id: string
+    trackId: string
+    pieceCid: string
+    datasetOwner: string
+    createdAt: string
+  }> = contentJson.data?.contentEntries ?? []
+
+  if (entries.length === 0) return []
+
+  // Step 2: Get track metadata from activity-feed subgraph
+  const trackIds = [...new Set(entries.map((e) => e.trackId))]
+  const trackQuery = `{
+    tracks(where: { id_in: [${trackIds.map((id) => `"${id}"`).join(',')}] }) {
+      id
+      title
+      artist
+    }
+  }`
+
+  const trackRes = await fetch(GOLDSKY_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: trackQuery }),
+  })
+
+  const trackMap = new Map<string, { title: string; artist: string }>()
+  if (trackRes.ok) {
+    const trackJson = await trackRes.json()
+    for (const t of trackJson.data?.tracks ?? []) {
+      trackMap.set(t.id, { title: t.title, artist: t.artist })
+    }
+  }
+
+  // Step 3: Join
+  return entries.map((e) => {
+    const meta = trackMap.get(e.trackId)
+    // pieceCid from subgraph is hex-encoded bytes (Bytes type) — decode to UTF-8 string.
+    // If it's already a plain CID string (no 0x prefix, not valid hex), use as-is.
+    let pieceCid = e.pieceCid
+    if (e.pieceCid.startsWith('0x')) {
+      try {
+        const hex = e.pieceCid.slice(2)
+        if (hex.length > 0 && hex.length % 2 === 0 && /^[0-9a-fA-F]+$/.test(hex)) {
+          const bytes = new Uint8Array(hex.match(/.{2}/g)!.map((b: string) => parseInt(b, 16)))
+          pieceCid = new TextDecoder().decode(bytes)
+        }
+      } catch {
+        // Fall back to raw value
+      }
+    }
+    return {
+      contentId: e.id,
+      trackId: e.trackId,
+      pieceCid,
+      datasetOwner: e.datasetOwner,
+      title: meta?.title || `Track ${e.trackId.slice(0, 10)}...`,
+      artist: meta?.artist || 'Unknown',
+      uploadedAt: parseInt(e.createdAt),
+    }
+  })
 }
 
 // ── Helpers ───────────────────────────────────────────────────────

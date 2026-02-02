@@ -16,8 +16,8 @@ import { ethers } from 'ethers'
 import { getLitClient } from './client'
 import type { PKPInfo, PKPAuthContext } from './types'
 
-/** Filecoin Calibration chain ID */
-const FIL_CALIBRATION_CHAIN_ID = 314159n
+/** Filecoin mainnet chain ID */
+const FIL_CHAIN_ID = 314n
 
 /**
  * Extract r, s, v from a Lit signature result.
@@ -144,7 +144,7 @@ export class PKPEthersSigner extends ethers.AbstractSigner {
       txToSign.gasPrice = feeData.gasPrice
     }
     if (txToSign.chainId === undefined || txToSign.chainId === 0) {
-      txToSign.chainId = FIL_CALIBRATION_CHAIN_ID
+      txToSign.chainId = FIL_CHAIN_ID
     }
 
     // Force legacy type-0 — Filecoin doesn't support EIP-2930/1559
@@ -199,7 +199,7 @@ export class PKPEthersSigner extends ethers.AbstractSigner {
       populated.gasPrice = feeData.gasPrice
     }
     if (populated.chainId === undefined) {
-      populated.chainId = FIL_CALIBRATION_CHAIN_ID
+      populated.chainId = FIL_CHAIN_ID
     }
 
     return populated
