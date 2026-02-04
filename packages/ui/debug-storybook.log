@@ -1,32 +1,20 @@
-[21:07:58.588] [INFO] storybook v10.2.1
-[21:07:59.275] [DEBUG] Getting package.json info for /media/t42/th42/Code/dotheaven/packages/ui/package.json...
-[21:07:59.354] [DEBUG] Serving static files from packages/ui/public at /
-[21:07:59.357] [INFO] Starting...
-[21:07:59.371] [WARN] unable to find package.json for @kobalte/core
-[21:07:59.879] [DEBUG] Starting preview..
-[21:07:59.891] [WARN] 🚨 Unable to index ./src/composite/editable-info-card.stories.tsx:
-  SyntaxError: Unexpected token (254:40)
-    at constructor (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+46bd9398274173e4/node_modules/storybook/dist/_node-chunks/chunk-FLT5MUVI.js:12175:21)
-    at Parser.raise (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+46bd9398274173e4/node_modules/storybook/dist/_node-chunks/chunk-FLT5MUVI.js:16355:71)
-    at Parser.unexpected (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+46bd9398274173e4/node_modules/storybook/dist/_node-chunks/chunk-FLT5MUVI.js:16372:20)
-    at Parser.jsxParseIdentifier (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+46bd9398274173e4/node_modules/storybook/dist/_node-chunks/chunk-FLT5MUVI.js:14991:150)
-    at Parser.jsxParseNamespacedName (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+46bd9398274173e4/node_modules/storybook/dist/_node-chunks/chunk-FLT5MUVI.js:14994:57)
-    at Parser.jsxParseAttribute (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+46bd9398274173e4/node_modules/storybook/dist/_node-chunks/chunk-FLT5MUVI.js:15039:291)
-    at Parser.jsxParseOpeningElementAfterName (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+46bd9398274173e4/node_modules/storybook/dist/_node-chunks/chunk-FLT5MUVI.js:15048:32)
-    at Parser.jsxParseOpeningElementAfterName (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+46bd9398274173e4/node_modules/storybook/dist/_node-chunks/chunk-FLT5MUVI.js:18524:22)
-    at Parser.jsxParseOpeningElementAt (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+46bd9398274173e4/node_modules/storybook/dist/_node-chunks/chunk-FLT5MUVI.js:15043:124)
-    at Parser.jsxParseElementAt (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+46bd9398274173e4/node_modules/storybook/dist/_node-chunks/chunk-FLT5MUVI.js:15056:85)
-[21:07:59.900] [ERROR] Failed to build the preview
-[21:07:59.902] [ERROR] Error: Unable to index ./src/composite/editable-info-card.stories.tsx
-    at _StoryIndexGenerator.getIndexAndStats (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+46bd9398274173e4/node_modules/storybook/dist/core-server/index.js:6082:15)
-    at async _StoryIndexGenerator.getIndex (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+46bd9398274173e4/node_modules/storybook/dist/core-server/index.js:6071:13)
-    at async getOptimizeDeps (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/@storybook+builder-vite@10.2.1+880ce7ec686e1d56/node_modules/@storybook/builder-vite/dist/index.js:1845:15)
-    at async createViteServer (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/@storybook+builder-vite@10.2.1+880ce7ec686e1d56/node_modules/@storybook/builder-vite/dist/index.js:1871:19)
-    at async Module.start (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/@storybook+builder-vite@10.2.1+880ce7ec686e1d56/node_modules/@storybook/builder-vite/dist/index.js:1906:17)
-    at async storybookDevServer (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+46bd9398274173e4/node_modules/storybook/dist/core-server/index.js:7207:83)
-    at async buildOrThrow (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+46bd9398274173e4/node_modules/storybook/dist/core-server/index.js:4504:12)
-    at async buildDevStandalone (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+46bd9398274173e4/node_modules/storybook/dist/core-server/index.js:7577:66)
-    at async withTelemetry (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+46bd9398274173e4/node_modules/storybook/dist/_node-chunks/chunk-KNMEGL7N.js:218:12)
-    at async dev (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+46bd9398274173e4/node_modules/storybook/dist/bin/core.js:2734:3)
-[21:07:59.906] [WARN] Broken build, fix the error above.
+[13:34:45.263] [INFO] storybook v10.2.1
+[13:34:45.878] [DEBUG] Getting package.json info for /media/t42/th42/Code/dotheaven/packages/ui/package.json...
+[13:34:45.975] [DEBUG] Serving static files from packages/ui/public at /
+[13:34:45.978] [INFO] Starting...
+[13:34:45.992] [WARN] unable to find package.json for @kobalte/core
+[13:34:46.490] [ERROR] [38;2;241;97;97mError: Build failed with 2 errors:
+.storybook/manager.ts:1:23: ERROR: Could not resolve "@storybook/manager-api"
+.storybook/manager.ts:2:23: ERROR: Could not resolve "@storybook/theming"[39m
+    at failureErrorWithLog (/media/t42/th42/Code/dotheaven/node_modules/.bun/esbuild@0.27.2/node_modules/esbuild/lib/main.js:1467:15)
+    at /media/t42/th42/Code/dotheaven/node_modules/.bun/esbuild@0.27.2/node_modules/esbuild/lib/main.js:926:25
+    at runOnEndCallbacks (/media/t42/th42/Code/dotheaven/node_modules/.bun/esbuild@0.27.2/node_modules/esbuild/lib/main.js:1307:45)
+    at buildResponseToResult (/media/t42/th42/Code/dotheaven/node_modules/.bun/esbuild@0.27.2/node_modules/esbuild/lib/main.js:924:7)
+    at /media/t42/th42/Code/dotheaven/node_modules/.bun/esbuild@0.27.2/node_modules/esbuild/lib/main.js:951:16
+    at responseCallbacks.<computed> (/media/t42/th42/Code/dotheaven/node_modules/.bun/esbuild@0.27.2/node_modules/esbuild/lib/main.js:603:9)
+    at handleIncomingPacket (/media/t42/th42/Code/dotheaven/node_modules/.bun/esbuild@0.27.2/node_modules/esbuild/lib/main.js:658:12)
+    at Socket.readFromStdout (/media/t42/th42/Code/dotheaven/node_modules/.bun/esbuild@0.27.2/node_modules/esbuild/lib/main.js:581:7)
+    at Socket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+[13:34:46.496] [WARN] Broken build, fix the error above.
 You may need to refresh the browser.

@@ -1,7 +1,8 @@
-import { convertFileSrc, invoke } from '@tauri-apps/api/core'
-import { open } from '@tauri-apps/plugin-dialog'
-import { readFile } from '@tauri-apps/plugin-fs'
 import type { Track } from '@heaven/ui'
+
+const tauriCore = () => import('@tauri-apps/api/core')
+const tauriDialog = () => import('@tauri-apps/plugin-dialog')
+const tauriFs = () => import('@tauri-apps/plugin-fs')
 
 export interface LocalTrack extends Track {
   filePath: string
@@ -19,11 +20,13 @@ export interface LocalTrack extends Track {
 
 /** Scan folder on disk, extract/cache metadata in SQLite, return total count */
 export async function scanFolderNative(folder: string): Promise<number> {
+  const { invoke } = await tauriCore()
   return invoke<number>('music_scan_folder', { folder })
 }
 
 /** Get a page of cached tracks from SQLite */
 export async function getTracksNative(folder: string, limit: number, offset: number): Promise<LocalTrack[]> {
+  const { invoke, convertFileSrc } = await tauriCore()
   const tracks = await invoke<LocalTrack[]>('music_get_tracks', { folder, limit, offset })
   // Convert local cover paths to asset URLs serveable by Tauri
   for (const t of tracks) {
@@ -36,21 +39,25 @@ export async function getTracksNative(folder: string, limit: number, offset: num
 
 /** Get total track count for a folder */
 export async function getTrackCountNative(folder: string): Promise<number> {
+  const { invoke } = await tauriCore()
   return invoke<number>('music_get_track_count', { folder })
 }
 
 /** Get persisted folder path from SQLite settings */
 export async function getFolderNative(): Promise<string | null> {
+  const { invoke } = await tauriCore()
   return invoke<string | null>('music_get_folder')
 }
 
 /** Persist folder path in SQLite settings */
 export async function setFolderNative(folder: string): Promise<void> {
+  const { invoke } = await tauriCore()
   return invoke('music_set_folder', { folder })
 }
 
 /** Update cover CID for a local track (propagates to all rows with same cover_path) */
 export async function setCoverCidNative(filePath: string, coverCid: string): Promise<void> {
+  const { invoke } = await tauriCore()
   return invoke('music_set_cover_cid', { filePath, coverCid })
 }
 
@@ -59,6 +66,7 @@ export async function setCoverCidNative(filePath: string, coverCid: string): Pro
 // =============================================================================
 
 export async function pickFolder(): Promise<string | null> {
+  const { open } = await tauriDialog()
   const selected = await open({ directory: true, multiple: false })
   return selected as string | null
 }
@@ -108,8 +116,10 @@ export async function createPlaybackSource(
 ): Promise<PlaybackSource> {
   const mime = guessMime(filePath)
   if (mode === 'stream') {
+    const { convertFileSrc } = await tauriCore()
     return { url: convertFileSrc(filePath), mime, mode }
   }
+  const { readFile } = await tauriFs()
   const bytes = await readFile(filePath)
   const blob = new Blob([bytes], { type: mime })
   const url = URL.createObjectURL(blob)

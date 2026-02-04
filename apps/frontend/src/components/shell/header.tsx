@@ -47,7 +47,7 @@ export interface AppLogoProps {
 export const AppLogo: Component<AppLogoProps> = (props) => (
   <a href="/" class="flex items-center gap-2 cursor-pointer group">
     <img
-      src={props.logoSrc || "/images/heaven.png"}
+      src={props.logoSrc || `${import.meta.env.BASE_URL}images/heaven.png`}
       alt="Heaven logo"
       class="object-contain hover:opacity-90 transition-opacity"
       style={{ width: `${props.size || 32}px`, height: `${props.size || 32}px` }}

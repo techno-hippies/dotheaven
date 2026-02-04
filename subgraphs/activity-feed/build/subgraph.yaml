@@ -29,3 +29,23 @@ dataSources:
         - event: Scrobbled(indexed address,indexed bytes32,uint64)
           handler: handleScrobbled
       file: ScrobbleV3/ScrobbleV3.wasm
+  - kind: ethereum
+    name: PostsV1
+    network: megaeth-testnet-v2
+    source:
+      address: "0xFe674F421c2bBB6D664c7F5bc0D5A0204EE0bFA6"
+      abi: PostsV1
+      startBlock: 10347129
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Post
+      abis:
+        - name: PostsV1
+          file: PostsV1/PostsV1.json
+      eventHandlers:
+        - event: PostCreated(indexed bytes32,indexed address,uint8,string,bool)
+          handler: handlePostCreated
+      file: PostsV1/PostsV1.wasm

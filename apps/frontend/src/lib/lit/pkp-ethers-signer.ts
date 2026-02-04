@@ -143,7 +143,10 @@ export class PKPEthersSigner extends ethers.AbstractSigner {
       const feeData = await this.provider.getFeeData()
       txToSign.gasPrice = feeData.gasPrice
     }
-    if (txToSign.chainId === undefined || txToSign.chainId === 0) {
+    if ((txToSign.chainId === undefined || txToSign.chainId === 0) && this.provider) {
+      const network = await this.provider.getNetwork()
+      txToSign.chainId = network.chainId
+    } else if (txToSign.chainId === undefined || txToSign.chainId === 0) {
       txToSign.chainId = FIL_CHAIN_ID
     }
 
@@ -154,7 +157,7 @@ export class PKPEthersSigner extends ethers.AbstractSigner {
     const { from: _from, ...txWithoutFrom } = txToSign
 
     // Compute tx hash client-side (ethers not available in Lit Actions)
-    const unsignedTx = ethers.Transaction.from(txWithoutFrom)
+    const unsignedTx = ethers.Transaction.from(txWithoutFrom as ethers.TransactionLike)
     const txHash = ethers.keccak256(unsignedTx.unsignedSerialized)
     const txHashBytes = Array.from(ethers.getBytes(txHash))
 
@@ -163,7 +166,7 @@ export class PKPEthersSigner extends ethers.AbstractSigner {
     const signedTx = ethers.Transaction.from({
       ...txWithoutFrom,
       signature: { r, s, v },
-    })
+    } as ethers.TransactionLike)
 
     return signedTx.serialized
   }
@@ -176,10 +179,10 @@ export class PKPEthersSigner extends ethers.AbstractSigner {
   }
 
   async populateTransaction(tx: ethers.TransactionRequest): Promise<ethers.TransactionLike> {
-    const populated: ethers.TransactionLike = {
+    const populated = {
       ...tx,
       from: this._pkp.ethAddress,
-    }
+    } as ethers.TransactionLike
 
     if (populated.nonce === undefined && this.provider) {
       populated.nonce = await this.provider.getTransactionCount(this._pkp.ethAddress)
@@ -198,7 +201,10 @@ export class PKPEthersSigner extends ethers.AbstractSigner {
       const feeData = await this.provider.getFeeData()
       populated.gasPrice = feeData.gasPrice
     }
-    if (populated.chainId === undefined) {
+    if (populated.chainId === undefined && this.provider) {
+      const network = await this.provider.getNetwork()
+      populated.chainId = network.chainId
+    } else if (populated.chainId === undefined) {
       populated.chainId = FIL_CHAIN_ID
     }
 

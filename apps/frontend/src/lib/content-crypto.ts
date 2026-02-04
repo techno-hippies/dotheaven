@@ -149,7 +149,7 @@ export async function encryptAudio(
 
   // 3. Encrypt audio with AES-GCM
   const encryptedAudio = new Uint8Array(
-    await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, audio),
+    await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, audio as BufferSource),
   )
 
   // 4. Encrypt the AES key with Lit (contract-gated condition on Base)
@@ -160,7 +160,7 @@ export async function encryptAudio(
   // Contract-gated: Lit nodes call canAccess(:userAddress, contentId) on Base
   const accessControlConditions = [
     {
-      conditionType: 'evmContract',
+      conditionType: 'evmContract' as const,
       contractAddress: CONTENT_ACCESS_MIRROR,
       chain: LIT_CHAIN,
       functionName: 'canAccess',
@@ -182,7 +182,7 @@ export async function encryptAudio(
   ]
 
   const litClient = await getLitClient()
-  const { ciphertext, dataToEncryptHash } = await litClient.encrypt({
+  const { ciphertext, dataToEncryptHash } = await (litClient as any).encrypt({
     unifiedAccessControlConditions: accessControlConditions,
     dataToEncrypt: new TextEncoder().encode(payload),
     authContext,
@@ -295,9 +295,9 @@ export async function decryptAudio(
   // Decrypt — use audioLen to exclude trailing padding
   const encryptedAudio = blob.subarray(header.audioOffset, header.audioOffset + header.audioLen)
   const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: header.iv },
+    { name: 'AES-GCM', iv: header.iv as unknown as ArrayBuffer },
     key,
-    encryptedAudio,
+    encryptedAudio.buffer.slice(encryptedAudio.byteOffset, encryptedAudio.byteOffset + encryptedAudio.byteLength) as ArrayBuffer,
   )
 
   return new Uint8Array(decrypted)

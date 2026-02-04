@@ -1,45 +1,58 @@
-import type { Component, JSX } from 'solid-js'
+import { type Component, type JSX, Show } from 'solid-js'
 import { cn } from '../lib/utils'
+import { useIsMobile } from '../lib/use-media-query'
 
 export interface HeaderProps {
   class?: string
   logo?: JSX.Element
-  searchSlot?: JSX.Element
+  /** Right slot content for desktop */
   rightSlot?: JSX.Element
-  /** Hide logo for centered layout (e.g., feed view) */
-  hideLogo?: boolean
+  /** Right slot content for mobile (if different from desktop). If not provided, rightSlot is hidden on mobile. */
+  mobileRightSlot?: JSX.Element
+  /** Left slot content for mobile (e.g., wallet icon on Profile). Replaces logo on mobile. */
+  mobileLeftSlot?: JSX.Element
+  /** Hide logo on mobile (default: true) */
+  hideLogoOnMobile?: boolean
 }
 
 /**
- * Global header bar with logo, search, and user actions.
+ * Global header bar with logo and user actions.
+ * On mobile: logo hidden by default, only mobileRightSlot shown.
  */
 export const Header: Component<HeaderProps> = (props) => {
+  const isMobile = useIsMobile()
+  const hideLogoOnMobile = () => props.hideLogoOnMobile !== false
+
+  const showLogo = () => !(isMobile() && hideLogoOnMobile())
+
   return (
     <header
       class={cn(
-        'h-16 bg-[var(--bg-page)] flex items-center px-6 gap-4',
-        props.hideLogo ? 'justify-center' : 'justify-between',
+        'h-16 bg-[var(--bg-page)] flex items-center justify-between px-4 md:px-6 gap-4',
         props.class
       )}
     >
-      {/* Left: Logo */}
-      {!props.hideLogo && (
-        <div class="flex items-center gap-4">
+      {/* Left: Logo on desktop, mobileLeftSlot on mobile */}
+      <Show when={showLogo()}>
+        <div class="flex items-center gap-4 flex-shrink-0">
           {props.logo || <AppLogo size={36} />}
         </div>
-      )}
-
-      {/* Center: Search */}
-      <div class={cn('flex-1 max-w-lg', props.hideLogo && 'flex-none w-full max-w-2xl')}>
-        {props.searchSlot || <SearchInput />}
-      </div>
-
-      {/* Right: Actions */}
-      {!props.hideLogo && (
-        <div class="flex items-center gap-2">
-          {props.rightSlot}
+      </Show>
+      <Show when={isMobile() && !showLogo() && props.mobileLeftSlot}>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          {props.mobileLeftSlot}
         </div>
-      )}
+      </Show>
+
+      {/* Spacer to push right slot to the right */}
+      <div class="flex-1" />
+
+      {/* Right: Actions - different content for mobile vs desktop */}
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <Show when={isMobile()} fallback={props.rightSlot}>
+          {props.mobileRightSlot}
+        </Show>
+      </div>
     </header>
   )
 }
@@ -54,7 +67,7 @@ export interface AppLogoProps {
 export const AppLogo: Component<AppLogoProps> = (props) => (
   <a href="/" class="flex items-center gap-2 cursor-pointer group">
     <img
-      src={props.logoSrc || "/images/heaven.png"}
+      src={props.logoSrc || `${import.meta.env.BASE_URL}images/heaven.png`}
       alt="Heaven logo"
       class="object-contain hover:opacity-90 transition-opacity"
       style={{ width: `${props.size || 32}px`, height: `${props.size || 32}px` }}

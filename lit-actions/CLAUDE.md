@@ -11,6 +11,9 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 - **Heaven claim name**: Sponsor PKP claims a `.heaven` name on MegaETH on behalf of user (gasless). EIP-191 sig verification.
 - **Heaven set profile**: Sponsor PKP writes user's on-chain profile to ProfileV1 on MegaETH (gasless). EIP-191 sig + nonce replay protection.
 - **Heaven set records**: Sponsor PKP sets ENS-compatible text records on RecordsV1 on MegaETH (gasless). Single or batch records. EIP-191 sig + per-node nonce replay protection.
+- **Post create v1**: Full photo post pipeline — image upload (resize/watermark via fal.ai), AI safety check (OpenRouter multimodal), IPFS upload, optional Story IP registration, MegaETH mirror. Encrypted keys: filebase, openrouter, fal.
+- **Post register v1**: Unified post registration for text AND photo posts. Text posts: AI safety check + metadata upload + MegaETH mirror (no Story). Photo posts: metadata upload + Story IP + MegaETH mirror. Supports attribution for shared content.
+- **Photo reveal v1**: 24h pay-per-view photo reveals. Verifies payment window (EngagementV2), checks nullifier ban, computes deterministic watermark code, calls heaven-images service for multi-layer watermarks, logs reveal on-chain. Owner bypass (free, no watermark).
 
 ## Status
 
@@ -25,6 +28,9 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 | Heaven Claim Name | `actions/heaven-claim-name-v1.js` | **Working** | `QmVx1YrP...` |
 | Heaven Set Profile | `actions/heaven-set-profile-v1.js` | **Working** | `QmYLHf2Q...` |
 | Heaven Set Records | `actions/heaven-set-records-v1.js` | **Working** | `QmNTJXB8...` |
+| Post Create v1 | `actions/post-create-v1.js` | **Working** | `QmQKXuRW...` |
+| Post Register v1 | `actions/post-register-v1.js` | **Working** | `QmeVChS4...` |
+| Photo Reveal v1 | `actions/photo-reveal-v1.js` | **Working** | `QmPnDcmp...` |
 
 ## TODO
 
@@ -105,12 +111,14 @@ Client                      Lit Action                  Story Aeneid
 | ProfileV1 | `0x0A6563122cB3515ff678A918B5F31da9b1391EA3` |
 | RegistryV1 | `0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2` |
 | RecordsV1 | `0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3` |
+| PostsV1 | `0xFe674F421c2bBB6D664c7F5bc0D5A0204EE0bFA6` |
+| EngagementV2 | `0xAF769d204e51b64D282083Eb0493F6f37cd93138` |
 
 ## Subgraph (Goldsky)
 
 | | Value |
 |--|-------|
-| Endpoint (v4) | `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/4.0.0/gn` |
+| Endpoint (v6) | `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/6.0.0/gn` |
 | Network | `megaeth-testnet-v2` (Goldsky identifier) |
 | Indexes | ScrobbleV3 `TrackRegistered` + `TrackCoverSet` + `Scrobbled` events |
 

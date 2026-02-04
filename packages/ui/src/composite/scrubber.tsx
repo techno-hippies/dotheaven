@@ -54,13 +54,7 @@ export const Scrubber: Component<ScrubberProps> = (props) => {
     const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width))
     const percentage = (x / rect.width) * 100
 
-    props.onChange?.(Math.round(percentage))
-  }
-
-  const handleClick = (e: MouseEvent) => {
-    if (!isDragging()) {
-      updateValue(e)
-    }
+    props.onChange?.(percentage)
   }
 
   return (
@@ -73,7 +67,6 @@ export const Scrubber: Component<ScrubberProps> = (props) => {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onMouseDown={handleMouseDown}
-      onClick={handleClick}
     >
       {/* Background bar */}
       <div class="relative h-1.5 rounded-full bg-[var(--bg-highlight)] overflow-visible">

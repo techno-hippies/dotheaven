@@ -56,7 +56,7 @@ export function createScrobbleService(
     const ctx = trackKey ? trackContext.get(trackKey) : null
     // Fire after a brief delay to avoid competing with audio/UI in WebKitGTK
     setTimeout(() => {
-      submitScrobble(scrobble, ctx, getAuthContext, getPkpPublicKey)
+      submitScrobble(scrobble, ctx ?? null, getAuthContext, getPkpPublicKey)
         .catch((err) => {
           console.error('[Scrobble] Submit failed:', err)
         })
@@ -170,21 +170,28 @@ async function submitScrobble(
 
   console.log(`[Scrobble] On-chain! tx: ${response.txHash} (registered: ${response.registered}, scrobbled: ${response.scrobbled}, covers: ${response.coversSet ?? 0})`)
 
-  // If a cover was set on-chain in a separate TX, wait for it to confirm
-  // so the profile page query sees the coverCid when it refetches
-  if (response.coverTxHash) {
-    console.log(`[Scrobble] Waiting for cover TX ${response.coverTxHash} to confirm...`)
-    await waitForTx(response.coverTxHash, 5000).catch(() => {
-      console.warn('[Scrobble] Cover TX wait timed out, profile may need manual refresh for cover art')
-    })
-  }
-
-  // Invalidate scrobbles query so profile page auto-refreshes
+  // Invalidate scrobbles query immediately so profile page shows the scrobble
   try {
     const { queryClient } = await import('../main')
     queryClient.invalidateQueries({ queryKey: ['scrobbles'] })
   } catch {
     // Not fatal — user can refresh manually
+  }
+
+  // If a cover was set on-chain in a separate TX, wait for it then re-invalidate
+  // so the profile page picks up the coverCid
+  if (response.coverTxHash) {
+    console.log(`[Scrobble] Waiting for cover TX ${response.coverTxHash} to confirm...`)
+    waitForTx(response.coverTxHash, 20_000)
+      .then(() => {
+        console.log(`[Scrobble] Cover TX confirmed: ${response.coverTxHash}`)
+        import('../main').then(({ queryClient }) => {
+          queryClient.invalidateQueries({ queryKey: ['scrobbles'] })
+        }).catch(() => {})
+      })
+      .catch(() => {
+        console.warn('[Scrobble] Cover TX wait timed out, profile may need manual refresh for cover art')
+      })
   }
 }
 
@@ -204,13 +211,22 @@ const MEGAETH_RPC = 'https://carrot.megaeth.com/rpc'
 async function waitForTx(txHash: string, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
-    const res = await fetch(MEGAETH_RPC, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionReceipt', params: [txHash] }),
-    })
-    const json = await res.json()
-    if (json.result?.status) return
+    const abort = new AbortController()
+    const fetchTimeout = setTimeout(() => abort.abort(), 4000)
+    try {
+      const res = await fetch(MEGAETH_RPC, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionReceipt', params: [txHash] }),
+        signal: abort.signal,
+      })
+      const json = await res.json()
+      if (json.result?.status) return
+    } catch {
+      // fetch timed out or failed — retry on next iteration
+    } finally {
+      clearTimeout(fetchTimeout)
+    }
     await new Promise((r) => setTimeout(r, 500))
   }
 }

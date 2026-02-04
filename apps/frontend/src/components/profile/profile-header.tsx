@@ -1,6 +1,5 @@
 import { type Component, Show } from 'solid-js'
-import { cn, Avatar, Button, VerificationBadge, type VerificationState } from '@heaven/ui'
-import { FollowButton } from '../social/follow-button'
+import { cn, Avatar, Button, VerificationBadge, type VerificationState, FollowButton } from '@heaven/ui'
 
 export interface ProfileHeaderProps {
   class?: string
@@ -14,11 +13,6 @@ export interface ProfileHeaderProps {
   twitter?: string
   github?: string
   telegram?: string
-  stats: {
-    followers: number
-    following: number
-    likes: number
-  }
   isFollowing?: boolean
   isOwnProfile?: boolean
   verificationState?: VerificationState
@@ -43,16 +37,6 @@ export interface ProfileHeaderProps {
  * - Stats row (followers, following, likes)
  */
 export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
-  const formatCount = (count: number): string => {
-    if (count >= 1000000) {
-      return (count / 1000000).toFixed(1) + 'M'
-    }
-    if (count >= 1000) {
-      return (count / 1000).toFixed(1) + 'K'
-    }
-    return count.toString()
-  }
-
   return (
     <div class={cn('relative', props.class)}>
       {/* Banner - image or gradient background */}
@@ -60,7 +44,7 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
         when={props.bannerUrl}
         fallback={
           <div
-            class="h-48 w-full"
+            class="h-32 md:h-48 w-full"
             style={{
               background: props.bannerGradient ?? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
             }}
@@ -70,15 +54,15 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
         <img
           src={props.bannerUrl}
           alt="Banner"
-          class="h-48 w-full object-cover"
+          class="h-32 md:h-48 w-full object-cover"
         />
       </Show>
 
       {/* Content container with avatar overlapping banner */}
-      <div class="px-8 pb-6">
+      <div class="px-4 md:px-8 pb-6">
         {/* Avatar - positioned to overlap banner */}
         <div
-          class="-mt-20 mb-4 cursor-pointer inline-block"
+          class="-mt-12 md:-mt-20 mb-4 cursor-pointer inline-block"
           onClick={() => props.onAvatarClick?.()}
           role={props.onAvatarClick ? 'button' : undefined}
           tabIndex={props.onAvatarClick ? 0 : undefined}
@@ -86,14 +70,15 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
           <Avatar
             src={props.avatarUrl}
             alt={props.displayName}
-            size="4xl"
+            size="2xl"
+            class="md:!w-32 md:!h-32"
           />
         </div>
 
         {/* Name and buttons row */}
-        <div class="flex items-start justify-between mb-4">
+        <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-4">
           <div>
-            <h1 class="text-2xl font-bold text-[var(--text-primary)] inline-flex items-center gap-1.5">
+            <h1 class="text-xl md:text-2xl font-bold text-[var(--text-primary)] inline-flex items-center gap-1.5">
               {props.displayName}
               <VerificationBadge state={props.verificationState ?? 'none'} size="md" />
             </h1>
@@ -103,7 +88,7 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
           </div>
 
           {/* Action buttons */}
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-2 md:gap-3">
             {props.isOwnProfile ? (
               props.isEditing ? (
                 <Button
@@ -111,6 +96,7 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
                   size="md"
                   onClick={() => props.onSaveClick?.()}
                   disabled={props.isSaving}
+                  class="flex-1 md:flex-none"
                 >
                   {props.isSaving ? 'Saving...' : 'Save'}
                 </Button>
@@ -121,14 +107,16 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
                       variant="secondary"
                       size="md"
                       onClick={() => props.onVerifyClick?.()}
+                      class="flex-1 md:flex-none"
                     >
-                      Verify Identity
+                      Verify
                     </Button>
                   </Show>
                   <Button
                     variant="secondary"
                     size="md"
                     onClick={() => props.onEditClick?.()}
+                    class="flex-1 md:flex-none"
                   >
                     Edit Profile
                   </Button>
@@ -140,11 +128,13 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
                   isFollowing={props.isFollowing ?? false}
                   onClick={() => props.onFollowClick?.()}
                   size="md"
+                  class="flex-1 md:flex-none"
                 />
                 <Button
                   variant="secondary"
                   size="md"
                   onClick={() => props.onMessageClick?.()}
+                  class="flex-1 md:flex-none"
                 >
                   Message
                 </Button>
@@ -208,35 +198,6 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
           </div>
         </Show>
 
-        {/* Stats row */}
-        <div class="flex items-center gap-6">
-          <button class="group">
-            <span class="text-lg font-bold text-[var(--text-primary)] group-hover:text-[var(--accent-blue)]">
-              {formatCount(props.stats.followers)}
-            </span>
-            <span class="ml-1.5 text-sm text-[var(--text-secondary)]">
-              Followers
-            </span>
-          </button>
-
-          <button class="group">
-            <span class="text-lg font-bold text-[var(--text-primary)] group-hover:text-[var(--accent-blue)]">
-              {formatCount(props.stats.following)}
-            </span>
-            <span class="ml-1.5 text-sm text-[var(--text-secondary)]">
-              Following
-            </span>
-          </button>
-
-          <div>
-            <span class="text-lg font-bold text-[var(--text-primary)]">
-              {formatCount(props.stats.likes)}
-            </span>
-            <span class="ml-1.5 text-sm text-[var(--text-secondary)]">
-              Likes
-            </span>
-          </div>
-        </div>
       </div>
     </div>
   )

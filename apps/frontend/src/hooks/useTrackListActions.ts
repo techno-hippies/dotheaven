@@ -41,6 +41,23 @@ export function useTrackPlayback() {
 
   const select = (track: Track) => player.setSelectedTrackId(track.id)
 
+  const playCloud = (track: Track) => {
+    if (track.pieceCid && track.contentId && track.datasetOwner) {
+      player.playEncryptedContent({
+        contentId: track.contentId,
+        trackId: track.id,
+        pieceCid: track.pieceCid,
+        datasetOwner: track.datasetOwner,
+        title: track.title,
+        artist: track.artist,
+        algo: track.algo,
+        coverUrl: track.albumCover,
+      })
+      return true
+    }
+    return false
+  }
+
   const play = (track: Track) => {
     // If clicking the already-active track, toggle play/pause
     if (player.currentTrack()?.id === track.id || findLocalIndex(track) === player.currentIndex()) {
@@ -48,14 +65,21 @@ export function useTrackPlayback() {
       return
     }
     const idx = findLocalIndex(track)
-    if (idx >= 0) player.playTrack(idx)
+    if (idx >= 0) { player.playTrack(idx); return }
+    // Fallback: play from Filecoin if cloud metadata available
+    playCloud(track)
   }
 
   /** Play the first matching track from a list */
   const playFirst = (tracks: Track[]) => {
+    // Try local match first
     for (const t of tracks) {
       const idx = findLocalIndex(t)
       if (idx >= 0) { player.playTrack(idx); return }
+    }
+    // Fallback: try cloud playback for the first track with content metadata
+    for (const t of tracks) {
+      if (playCloud(t)) return
     }
   }
 

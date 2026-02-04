@@ -1,0 +1,1 @@
+import{e as a,w as c}from"./index-BpYvc_Sf.js";function r(t){const{key:e="wallet",name:l="Wallet Client",transport:n}=t;return a({...t,key:e,name:l,transport:n,type:"walletClient"}).extend(c)}export{r as c};

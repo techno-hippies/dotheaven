@@ -49,6 +49,14 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    watch: {
+      // Watch the monorepo packages for HMR
+      ignored: ['**/node_modules/**', '**/src-tauri/**'],
+    },
+    fs: {
+      // Allow serving files from monorepo packages
+      allow: ['../..'],
+    },
   },
   build: {
     target: ['es2021', 'chrome100', 'safari13'],

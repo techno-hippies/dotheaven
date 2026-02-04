@@ -197,7 +197,7 @@ export const AuthPage: Component = () => {
         authMode={authMode()}
         authMethod={authMethod()}
         error={error()}
-        logoSrc="/images/heaven.png"
+        logoSrc={`${import.meta.env.BASE_URL}images/heaven.png`}
         onSignIn={performSignIn}
         onRegister={performRegister}
         onConnectWallet={performConnectWallet}

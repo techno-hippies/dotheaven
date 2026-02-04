@@ -13,6 +13,8 @@ export interface TabsProps {
   tabs: TabItem[]
   activeTab: string
   onTabChange?: (tabId: string) => void
+  /** Add horizontal padding to align with page content */
+  padded?: boolean
 }
 
 /**
@@ -29,7 +31,8 @@ export const Tabs: Component<TabsProps> = (props) => {
   return (
     <div
       class={cn(
-        'flex items-center border-b border-[var(--bg-highlight)]',
+        'flex items-center border-b border-[var(--bg-highlight)] overflow-x-auto scrollbar-hide',
+        props.padded && 'md:px-8',
         props.class
       )}
     >
@@ -42,7 +45,8 @@ export const Tabs: Component<TabsProps> = (props) => {
               onClick={() => !tab.disabled && props.onTabChange?.(tab.id)}
               disabled={tab.disabled}
               class={cn(
-                'flex items-center gap-2.5 px-6 py-4 text-base font-medium transition-colors relative cursor-pointer',
+                'flex items-center gap-2 py-3 md:py-4 text-base font-medium transition-colors relative cursor-pointer whitespace-nowrap',
+                'flex-1 justify-center px-2 md:px-6', // Spread evenly & center on all screen sizes
                 'hover:text-[var(--text-primary)]',
                 isActive()
                   ? 'text-[var(--text-primary)]'
@@ -57,8 +61,8 @@ export const Tabs: Component<TabsProps> = (props) => {
                 </span>
               )}
 
-              {/* Label */}
-              <span>{tab.label}</span>
+              {/* Label - hide on mobile, show on md+ */}
+              <span class="hidden md:inline">{tab.label}</span>
 
               {/* Active indicator - bottom border */}
               {isActive() && (

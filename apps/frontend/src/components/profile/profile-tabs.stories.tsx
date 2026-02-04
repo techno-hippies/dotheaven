@@ -20,27 +20,15 @@ export const Activity: Story = {
   },
 }
 
-export const Videos: Story = {
-  args: {
-    activeTab: 'videos',
-  },
-}
-
 export const Music: Story = {
   args: {
     activeTab: 'music',
   },
 }
 
-export const Health: Story = {
-  args: {
-    activeTab: 'health',
-  },
-}
-
 export const Interactive: Story = {
   render: () => {
-    const [activeTab, setActiveTab] = createSignal<ProfileTab>('videos')
+    const [activeTab, setActiveTab] = createSignal<ProfileTab>('about')
 
     return (
       <div class="bg-[var(--bg-page)] p-6 rounded-md">

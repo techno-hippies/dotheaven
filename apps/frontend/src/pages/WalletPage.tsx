@@ -45,15 +45,15 @@ const MegaETHIcon = () => (
 )
 
 const USDFCIcon = () => (
-  <img src="/images/usdfc.png" alt="USDFC" class="w-12 h-12 object-contain" />
+  <img src={`${import.meta.env.BASE_URL}images/usdfc.png`} alt="USDFC" class="w-12 h-12 object-contain" />
 )
 
 const USDMIcon = () => (
-  <img src="/images/usdm.png" alt="USDM" class="w-12 h-12 object-contain" />
+  <img src={`${import.meta.env.BASE_URL}images/usdm.png`} alt="USDM" class="w-12 h-12 object-contain" />
 )
 
 const FilecoinIcon = () => (
-  <img src="/images/filecoin.png" alt="Filecoin" class="w-12 h-12 object-contain" />
+  <img src={`${import.meta.env.BASE_URL}images/filecoin.png`} alt="Filecoin" class="w-12 h-12 object-contain" />
 )
 
 // ============ Types ============

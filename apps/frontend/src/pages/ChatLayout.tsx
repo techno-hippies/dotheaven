@@ -5,8 +5,8 @@
  * Right panel: active conversation via <Outlet />
  */
 
-import type { ParentComponent } from 'solid-js'
-import { For, Show, createSignal } from 'solid-js'
+import type { Component, ParentComponent } from 'solid-js'
+import { For, Show, createSignal, createMemo } from 'solid-js'
 import { useNavigate, useLocation } from '@solidjs/router'
 import {
   ChatListItem,
@@ -20,8 +20,10 @@ import {
   DialogDescription,
   DialogCloseButton,
   Button,
+  useIsMobile,
 } from '@heaven/ui'
-import { useXMTP } from '../providers'
+import { useXMTP, type ChatListItem as XMTPChatItem } from '../providers'
+import { usePeerName } from '../lib/hooks/usePeerName'
 
 const PenIcon = () => (
   <svg class="w-5 h-5" viewBox="0 0 256 256" fill="currentColor">
@@ -29,19 +31,60 @@ const PenIcon = () => (
   </svg>
 )
 
-const PLACEHOLDER_CHATS = [
-  { name: 'miku.heaven', address: '0x1234567890abcdef1234567890abcdef12345678', avatar: 'https://placewaifu.com/image/101', lastMessage: 'Have you heard the new album?', timestamp: '2m ago', unread: 2, online: true },
-  { name: 'rei.heaven', address: '0x2345678901abcdef2345678901abcdef23456789', avatar: 'https://placewaifu.com/image/102', lastMessage: 'Check out this playlist I made', timestamp: '15m ago', unread: 1, online: false },
-  { name: 'asuka.eth', address: '0x3456789012abcdef3456789012abcdef34567890', avatar: 'https://placewaifu.com/image/103', lastMessage: 'That concert was insane last night', timestamp: '1h ago', unread: 0, online: false },
-  { name: 'sakura.heaven', address: '0x4567890123abcdef4567890123abcdef45678901', avatar: 'https://placewaifu.com/image/104', lastMessage: 'Want to go to the show tonight?', timestamp: '3h ago', unread: 0, online: true },
-  { name: '', address: '0x5678901234abcdef5678901234abcdef56789012', avatar: 'https://placewaifu.com/image/105', lastMessage: "I'll send you the link later", timestamp: 'Yesterday', unread: 0, online: false },
-  { name: 'kaworu.heaven', address: '0x6789012345abcdef6789012345abcdef67890123', avatar: 'https://placewaifu.com/image/107', lastMessage: 'You need to listen to this', timestamp: '2d ago', unread: 5, online: true },
-]
-
 const formatAddress = (addr: string) => {
   if (!addr) return ''
   if (addr.length <= 12) return addr
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+}
+
+/** Format timestamp for chat list display */
+const formatTimestamp = (date: Date | undefined): string => {
+  if (!date) return ''
+  const now = new Date()
+  const diff = now.getTime() - date.getTime()
+  const minutes = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days = Math.floor(diff / 86400000)
+
+  if (minutes < 1) return 'now'
+  if (minutes < 60) return `${minutes}m`
+  if (hours < 24) return `${hours}h`
+  if (days === 1) return 'Yesterday'
+  if (days < 7) return `${days}d`
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+/**
+ * Conversation item with name resolution.
+ * Uses usePeerName hook to resolve heaven/ENS names.
+ */
+const ConversationItem: Component<{
+  chat: XMTPChatItem
+  active: boolean
+  onClick: () => void
+}> = (props) => {
+  const peerName = usePeerName(() => props.chat.peerAddress)
+
+  // Show truncated address as secondary handle when we have a resolved name
+  const handle = () => {
+    if (peerName.heavenName || peerName.ensName) {
+      return formatAddress(props.chat.peerAddress)
+    }
+    return undefined
+  }
+
+  return (
+    <ChatListItem
+      name={peerName.displayName}
+      handle={handle()}
+      avatarUrl={peerName.avatarUrl ?? undefined}
+      lastMessage={props.chat.lastMessage}
+      timestamp={formatTimestamp(props.chat.timestamp)}
+      unreadCount={props.chat.hasUnread ? 1 : 0}
+      active={props.active}
+      onClick={props.onClick}
+    />
+  )
 }
 
 const EmptyChat = () => (
@@ -52,17 +95,38 @@ const EmptyChat = () => (
       </svg>
     </div>
     <h2 class="text-xl font-bold text-[var(--text-primary)] mb-2">Start Conversation</h2>
-    <p class="text-base text-[var(--text-muted)]">Choose from your existing conversations, or start a new one.</p>
+    <p class="text-base text-[var(--text-muted)]">Messages are e2e encrypted over XMTP.</p>
   </div>
 )
+
+// Default intro message for Scarlett
+const SCARLETT_INTRO = "Hey, I'm Scarlett. I will match you with other users who like your music and meet your preferences to make new friends or date!"
 
 export const ChatLayout: ParentComponent = (props) => {
   const navigate = useNavigate()
   const location = useLocation()
   const xmtp = useXMTP()
+  const isMobile = useIsMobile()
 
   const [newChatOpen, setNewChatOpen] = createSignal(false)
   const [newChatAddress, setNewChatAddress] = createSignal('')
+
+  // Get Scarlett's last message from localStorage, or use intro
+  const scarlettLastMessage = createMemo(() => {
+    try {
+      const stored = localStorage.getItem('ai-chat-scarlett')
+      if (stored) {
+        const messages = JSON.parse(stored)
+        if (messages.length > 0) {
+          const last = messages[messages.length - 1]
+          return last.content as string
+        }
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return SCARLETT_INTRO
+  })
 
   const handleStartChat = () => {
     const addr = newChatAddress().trim()
@@ -73,83 +137,67 @@ export const ChatLayout: ParentComponent = (props) => {
   }
 
   const conversations = () => xmtp.conversations()
-  const hasReal = () => conversations().length > 0
 
   // Check if we're on a specific chat (not just /chat index)
   const hasActiveChat = () => location.pathname !== '/chat'
 
+  // Mobile: show list OR conversation, not both
+  // Desktop: show both side by side
   return (
     <div class="flex h-full">
-      {/* Left: Conversation list */}
-      <div class="w-[360px] flex-shrink-0 border-r border-[var(--bg-highlight)] flex flex-col h-full overflow-hidden">
-        {/* Header */}
-        <div class="flex items-center justify-between px-4 py-3 flex-shrink-0">
-          <h1 class="text-xl font-bold text-[var(--text-primary)]">Messages</h1>
-          <IconButton
-            variant="soft"
-            size="md"
-            aria-label="New message"
-            onClick={() => setNewChatOpen(true)}
-          >
-            <PenIcon />
-          </IconButton>
-        </div>
+      {/* Left: Conversation list - hidden on mobile when viewing a chat */}
+      <Show when={!isMobile() || !hasActiveChat()}>
+        <div class={`${isMobile() ? 'w-full' : 'w-[360px]'} flex-shrink-0 border-r border-[var(--bg-highlight)] flex flex-col h-full overflow-hidden`}>
+          {/* Header */}
+          <div class="flex items-center justify-between px-4 py-3 flex-shrink-0">
+            <h1 class="text-xl font-bold text-[var(--text-primary)]">Messages</h1>
+            <IconButton
+              variant="soft"
+              size="md"
+              aria-label="New message"
+              onClick={() => setNewChatOpen(true)}
+            >
+              <PenIcon />
+            </IconButton>
+          </div>
 
-        {/* Conversation list */}
-        <div class="flex-1 overflow-y-auto">
-          {/* AI Chat pinned at top */}
-          <ChatListItem
-            name="Scarlett"
-            avatarUrl="https://picsum.photos/seed/scarlett/200/200"
-            lastMessage="How can I help you today?"
-            timestamp=""
-            online
-            active={location.pathname === '/chat/ai/scarlett'}
-            onClick={() => navigate('/chat/ai/scarlett')}
-          />
+          {/* Conversation list */}
+          <div class="flex-1 overflow-y-auto">
+            {/* AI Chat pinned at top */}
+            <ChatListItem
+              name="Scarlett"
+              avatarUrl="https://picsum.photos/seed/scarlett/200/200"
+              lastMessage={scarlettLastMessage()}
+              timestamp=""
+              online
+              active={location.pathname === '/chat/ai/scarlett'}
+              onClick={() => navigate('/chat/ai/scarlett')}
+            />
 
-          {/* Real XMTP conversations */}
-          <For each={conversations()}>
-            {(chat) => {
-              console.log('[ChatLayout] rendering convo:', { name: chat.name, peerAddress: chat.peerAddress, lastMessage: chat.lastMessage })
-              return (
-                <ChatListItem
-                  name={chat.name}
-                  lastMessage={chat.lastMessage}
-                  timestamp={chat.timestamp}
-                  unreadCount={chat.hasUnread ? 1 : 0}
+            {/* Real XMTP conversations */}
+            <For each={conversations()}>
+              {(chat) => (
+                <ConversationItem
+                  chat={chat}
                   active={location.pathname === `/chat/${encodeURIComponent(chat.peerAddress)}`}
                   onClick={() => navigate(`/chat/${encodeURIComponent(chat.peerAddress)}`)}
                 />
-              )
-            }}
-          </For>
+              )}
+            </For>
 
-          {/* Placeholder when no real conversations */}
-          <For each={hasReal() ? [] : PLACEHOLDER_CHATS}>
-            {(chat) => (
-              <ChatListItem
-                name={chat.name || chat.address}
-                handle={chat.name ? formatAddress(chat.address) : undefined}
-                avatarUrl={chat.avatar}
-                lastMessage={chat.lastMessage}
-                timestamp={chat.timestamp}
-                unreadCount={chat.unread}
-                online={chat.online}
-                active={location.pathname === `/chat/${encodeURIComponent(chat.address)}`}
-                onClick={() => navigate(`/chat/${encodeURIComponent(chat.address)}`)}
-              />
-            )}
-          </For>
+          </div>
         </div>
-      </div>
+      </Show>
 
       {/* Right: Active conversation or empty state */}
-      <div class="flex-1 h-full overflow-hidden">
-        <Show when={hasActiveChat()} fallback={<EmptyChat />}>
-          {props.children}
-        </Show>
-      </div>
+      {/* On mobile: full width when viewing a chat, hidden when on list */}
+      <Show when={!isMobile() || hasActiveChat()}>
+        <div class="flex-1 h-full overflow-hidden">
+          <Show when={hasActiveChat()} fallback={<EmptyChat />}>
+            {props.children}
+          </Show>
+        </div>
+      </Show>
       {/* New Chat Dialog */}
       <Dialog open={newChatOpen()} onOpenChange={setNewChatOpen}>
         <DialogContent class="max-w-md">

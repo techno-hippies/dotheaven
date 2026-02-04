@@ -14,6 +14,9 @@ import { getCoverCache } from '../cover-cache'
 const PLAYLIST_ENDPOINT =
   'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-playlists/1.0.0/gn'
 
+const CONTENT_ENDPOINT =
+  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-content/1.0.0/gn'
+
 const MEGAETH_RPC = 'https://carrot.megaeth.com/rpc'
 const SCROBBLE_V3 = '0x144c450cd5B641404EEB5D5eD523399dD94049E0'
 const PLAYLIST_V1 = '0xF0337C4A335cbB3B31c981945d3bE5B914F7B329'
@@ -195,10 +198,14 @@ export async function resolvePlaylistTracks(
   if (playlistTracks.length === 0) return []
 
   const uniqueIds = [...new Set(playlistTracks.map((t) => t.trackId))]
-  const metaMap = await batchGetTracks(uniqueIds)
+  const [metaMap, contentMap] = await Promise.all([
+    batchGetTracks(uniqueIds),
+    batchGetContentMeta(uniqueIds),
+  ])
 
   return playlistTracks.map((pt) => {
     const meta = metaMap.get(pt.trackId)
+    const content = contentMap.get(pt.trackId)
     const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
     const title = meta?.title ?? `Track ${pt.trackId.slice(0, 10)}...`
     const artist = meta?.artist ?? 'Unknown'
@@ -215,6 +222,12 @@ export async function resolvePlaylistTracks(
       album,
       albumCover: onChainCover ?? localCover,
       duration: '--:--',
+      ...(content ? {
+        contentId: content.contentId,
+        pieceCid: content.pieceCid,
+        datasetOwner: content.datasetOwner,
+        algo: content.algo,
+      } : {}),
     }
   })
 }
@@ -304,6 +317,80 @@ function decodeString(data: string, offset: number): string {
     bytes[i / 2] = parseInt(hexStr.slice(i, i + 2), 16)
   }
   return new TextDecoder().decode(bytes)
+}
+
+interface ContentMeta {
+  contentId: string
+  pieceCid: string
+  datasetOwner: string
+  algo: number
+}
+
+/** Batch-fetch cloud content metadata for a set of trackIds from the content-feed subgraph. */
+async function batchGetContentMeta(trackIds: string[]): Promise<Map<string, ContentMeta>> {
+  const results = new Map<string, ContentMeta>()
+  if (trackIds.length === 0) return results
+
+  const ids = trackIds.map((id) => `"${id.toLowerCase()}"`).join(',')
+  const query = `{
+    contentEntries(
+      where: { trackId_in: [${ids}], active: true }
+      first: 1000
+    ) {
+      id
+      trackId
+      pieceCid
+      datasetOwner
+      algo
+    }
+  }`
+
+  try {
+    const res = await fetch(CONTENT_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    })
+    if (!res.ok) return results
+    const json = await res.json()
+    const entries: Array<{
+      id: string
+      trackId: string
+      pieceCid: string
+      datasetOwner: string
+      algo: number
+    }> = json.data?.contentEntries ?? []
+
+    for (const e of entries) {
+      // Only take the first content entry per trackId (in case of duplicates)
+      if (results.has(e.trackId)) continue
+
+      // pieceCid from subgraph is hex-encoded Bytes — decode to UTF-8 string
+      let pieceCid = e.pieceCid
+      if (e.pieceCid.startsWith('0x')) {
+        try {
+          const hex = e.pieceCid.slice(2)
+          if (hex.length > 0 && hex.length % 2 === 0 && /^[0-9a-fA-F]+$/.test(hex)) {
+            const bytes = new Uint8Array(hex.match(/.{2}/g)!.map((b: string) => parseInt(b, 16)))
+            pieceCid = new TextDecoder().decode(bytes)
+          }
+        } catch {
+          // Fall back to raw value
+        }
+      }
+
+      results.set(e.trackId, {
+        contentId: e.id,
+        pieceCid,
+        datasetOwner: e.datasetOwner,
+        algo: e.algo ?? 1,
+      })
+    }
+  } catch {
+    // Content subgraph unavailable — degrade gracefully (no cloud playback)
+  }
+
+  return results
 }
 
 async function rpcCall(method: string, params: unknown[]): Promise<any> {

@@ -1,104 +1,63 @@
-import { type Component, splitProps } from 'solid-js'
-import { Checkbox as KobalteCheckbox } from '@kobalte/core/checkbox'
+import type { Component, JSX } from 'solid-js'
+import { splitProps } from 'solid-js'
+import { Checkbox as KCheckbox } from '@kobalte/core/checkbox'
 import { cn } from '../lib/utils'
 
-const CheckIcon = () => (
-  <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 256 256">
+export interface CheckboxProps {
+  checked?: boolean
+  defaultChecked?: boolean
+  onChange?: (checked: boolean) => void
+  disabled?: boolean
+  class?: string
+  label?: string
+  description?: string
+  children?: JSX.Element
+}
+
+const CheckIcon: Component = () => (
+  <svg class="w-3 h-3" viewBox="0 0 256 256" fill="currentColor">
     <path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z" />
   </svg>
 )
 
-export interface CheckboxProps {
-  /** Controlled checked state */
-  checked?: boolean
-  /** Default checked state (uncontrolled) */
-  defaultChecked?: boolean
-  /** Change handler */
-  onChange?: (checked: boolean) => void
-  /** Indeterminate state */
-  indeterminate?: boolean
-  /** Name for form submission */
-  name?: string
-  /** Value for form submission */
-  value?: string
-  /** Validation state */
-  validationState?: 'valid' | 'invalid'
-  /** Required field */
-  required?: boolean
-  /** Disabled state */
-  disabled?: boolean
-  /** Read-only state */
-  readOnly?: boolean
-  /** Label text */
-  label?: string
-  /** Description text */
-  description?: string
-  /** Error message */
-  errorMessage?: string
-  /** Additional class for root */
-  class?: string
-}
-
-/**
- * Checkbox - Styled checkbox component built with Kobalte
- *
- * Features:
- * - Built with native <input> element
- * - Syncs with form reset events
- * - ARIA labeling and description support
- * - Can be controlled or uncontrolled
- * - Matches Heaven design system (rounded-md, accent colors)
- */
 export const Checkbox: Component<CheckboxProps> = (props) => {
-  const [local, others] = splitProps(props, [
-    'class',
-    'label',
-    'description',
-    'errorMessage',
-    'validationState',
-  ])
+  const [local, rest] = splitProps(props, ['checked', 'defaultChecked', 'onChange', 'disabled', 'class', 'label', 'description', 'children'])
 
   return (
-    <KobalteCheckbox
-      class={cn('flex items-start gap-3', local.class)}
-      validationState={local.validationState}
-      {...others}
+    <KCheckbox
+      checked={local.checked}
+      defaultChecked={local.defaultChecked}
+      onChange={local.onChange}
+      disabled={local.disabled}
+      class={cn('group flex items-center gap-3 cursor-pointer select-none', local.class)}
+      {...rest}
     >
-      <KobalteCheckbox.Input class="peer" />
-      <KobalteCheckbox.Control
+      <KCheckbox.Input class="sr-only" />
+      <KCheckbox.Control
         class={cn(
-          'flex items-center justify-center w-5 h-5 rounded-md border-2 transition-all',
-          'bg-[var(--bg-highlight)] border-[var(--bg-highlight)]',
-          'peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--accent-blue)]/20',
-          'peer-data-[checked]:bg-[var(--accent-blue)] peer-data-[checked]:border-[var(--accent-blue)]',
-          'peer-data-[indeterminate]:bg-[var(--accent-blue)] peer-data-[indeterminate]:border-[var(--accent-blue)]',
-          'peer-data-[invalid]:border-[var(--accent-coral)]',
-          'peer-data-[disabled]:opacity-50 peer-data-[disabled]:cursor-not-allowed',
-          'hover:border-[var(--accent-blue)] peer-data-[checked]:hover:bg-[var(--accent-blue-hover)]'
+          'flex items-center justify-center w-5 h-5 rounded-sm border-2 transition-colors',
+          'border-[var(--bg-highlight)] bg-[var(--bg-elevated)]',
+          'group-data-[checked]:bg-[var(--accent-blue)] group-data-[checked]:border-[var(--accent-blue)]',
+          'group-data-[disabled]:opacity-50 group-data-[disabled]:cursor-not-allowed',
         )}
       >
-        <KobalteCheckbox.Indicator class="text-white">
+        <KCheckbox.Indicator class="text-white">
           <CheckIcon />
-        </KobalteCheckbox.Indicator>
-      </KobalteCheckbox.Control>
-
-      <div class="flex-1 flex flex-col gap-1">
+        </KCheckbox.Indicator>
+      </KCheckbox.Control>
+      <div class="flex flex-col gap-0.5">
         {local.label && (
-          <KobalteCheckbox.Label class="text-sm font-medium text-[var(--text-primary)] cursor-pointer select-none">
+          <KCheckbox.Label class="text-sm text-[var(--text-primary)] leading-tight">
             {local.label}
-          </KobalteCheckbox.Label>
+          </KCheckbox.Label>
         )}
         {local.description && (
-          <KobalteCheckbox.Description class="text-sm text-[var(--text-secondary)]">
+          <KCheckbox.Description class="text-xs text-[var(--text-muted)]">
             {local.description}
-          </KobalteCheckbox.Description>
+          </KCheckbox.Description>
         )}
-        {local.errorMessage && (
-          <KobalteCheckbox.ErrorMessage class="text-sm text-[var(--accent-coral)]">
-            {local.errorMessage}
-          </KobalteCheckbox.ErrorMessage>
-        )}
+        {local.children}
       </div>
-    </KobalteCheckbox>
+    </KCheckbox>
   )
 }

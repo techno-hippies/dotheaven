@@ -12,6 +12,171 @@ import {
   Int8,
 } from "@graphprotocol/graph-ts";
 
+export class Post extends Entity {
+  constructor(id: string) {
+    super();
+    this.set("id", Value.fromString(id));
+  }
+
+  save(): void {
+    let id = this.get("id");
+    assert(id != null, "Cannot save Post entity without an ID");
+    if (id) {
+      assert(
+        id.kind == ValueKind.STRING,
+        `Entities of type Post must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
+      );
+      store.set("Post", id.toString(), this);
+    }
+  }
+
+  static loadInBlock(id: string): Post | null {
+    return changetype<Post | null>(store.get_in_block("Post", id));
+  }
+
+  static load(id: string): Post | null {
+    return changetype<Post | null>(store.get("Post", id));
+  }
+
+  get id(): string {
+    let value = this.get("id");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set id(value: string) {
+    this.set("id", Value.fromString(value));
+  }
+
+  get creator(): Bytes {
+    let value = this.get("creator");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set creator(value: Bytes) {
+    this.set("creator", Value.fromBytes(value));
+  }
+
+  get contentType(): i32 {
+    let value = this.get("contentType");
+    if (!value || value.kind == ValueKind.NULL) {
+      return 0;
+    } else {
+      return value.toI32();
+    }
+  }
+
+  set contentType(value: i32) {
+    this.set("contentType", Value.fromI32(value));
+  }
+
+  get metadataUri(): string {
+    let value = this.get("metadataUri");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set metadataUri(value: string) {
+    this.set("metadataUri", Value.fromString(value));
+  }
+
+  get ipfsHash(): string | null {
+    let value = this.get("ipfsHash");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toString();
+    }
+  }
+
+  set ipfsHash(value: string | null) {
+    if (!value) {
+      this.unset("ipfsHash");
+    } else {
+      this.set("ipfsHash", Value.fromString(<string>value));
+    }
+  }
+
+  get contentId(): Bytes | null {
+    let value = this.get("contentId");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set contentId(value: Bytes | null) {
+    if (!value) {
+      this.unset("contentId");
+    } else {
+      this.set("contentId", Value.fromBytes(<Bytes>value));
+    }
+  }
+
+  get isAdult(): boolean {
+    let value = this.get("isAdult");
+    if (!value || value.kind == ValueKind.NULL) {
+      return false;
+    } else {
+      return value.toBoolean();
+    }
+  }
+
+  set isAdult(value: boolean) {
+    this.set("isAdult", Value.fromBoolean(value));
+  }
+
+  get blockNumber(): BigInt {
+    let value = this.get("blockNumber");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set blockNumber(value: BigInt) {
+    this.set("blockNumber", Value.fromBigInt(value));
+  }
+
+  get blockTimestamp(): BigInt {
+    let value = this.get("blockTimestamp");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set blockTimestamp(value: BigInt) {
+    this.set("blockTimestamp", Value.fromBigInt(value));
+  }
+
+  get transactionHash(): Bytes {
+    let value = this.get("transactionHash");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set transactionHash(value: Bytes) {
+    this.set("transactionHash", Value.fromBytes(value));
+  }
+}
+
 export class Track extends Entity {
   constructor(id: string) {
     super();

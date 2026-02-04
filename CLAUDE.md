@@ -93,6 +93,27 @@ bun check            # Type check all packages
 - **Subgraph**: Goldsky `dotheaven-playlists/1.0.0` indexes PlaylistCreated, PlaylistTracksSet, PlaylistMetaUpdated, PlaylistDeleted
   - API: `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-playlists/1.0.0/gn`
 
+### Identity Verification (Self.xyz)
+- **Passport verification** via Self.xyz zero-knowledge proofs
+- User scans QR on profile page → Self app verifies passport → proof submitted to Celo
+- **SelfProfileVerifier contract**: `0x9F0fFF861b502118336bCf498606fEa664a8DAdA` on Celo Sepolia (11142220)
+- **VerificationMirror contract**: `0xb0864603A4d6b62eACB53fbFa32E7665BADCc7Fb` on MegaETH (6343)
+- **Stored on-chain**: `verifiedAt` (timestamp), `nationality` (3-letter ISO e.g. "GBR"). No age/DOB — privacy by design.
+- **Disclosures requested**: minimumAge 18 (binary gate, proof fails if under 18), nationality
+- **Verified data overrides self-reported**: when `verifiedAt > 0`, nationality from the verifier contract overrides ProfileV1 value. Age is always self-reported via ProfileV1.
+- **Zero gas for user**: Self app pays Celo gas, sponsor PKP pays MegaETH mirror gas
+- **Frontend flow**: "Verify Identity" button next to "Edit Profile" → QR dialog → polls Celo → mirrors to MegaETH → badge shown
+- **SDK quirk**: `endpointType` must be `'staging_celo'` (not `'celo-staging'`) in `@selfxyz/sdk-common` v1.0.0
+- See `contracts/celo/CLAUDE.md` for full details
+- **Key files**:
+  - `apps/frontend/src/lib/heaven/verification.ts` — `getVerificationStatus()`, `buildSelfVerifyLink()`, `syncVerificationToMegaEth()`
+  - `apps/frontend/src/pages/ProfilePage.tsx` — dialog + polling wiring in `MyProfilePage`
+  - `packages/ui/src/composite/verify-identity-dialog.tsx` — QR code dialog
+  - `packages/ui/src/composite/verification-badge.tsx` — verified/unverified badge
+  - `contracts/celo/src/SelfProfileVerifier.sol` — Celo verifier (stores nationality + age)
+  - `contracts/megaeth/src/VerificationMirror.sol` — MegaETH mirror
+  - `lit-actions/actions/self-verify-mirror-v1.js` — Celo→MegaETH sync
+
 ### Heaven Names (RegistryV1 — .heaven name NFTs)
 - **RegistryV1 contract**: `0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2` on MegaETH (chain 6343)
 - **RecordsV1 contract**: `0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3` on MegaETH (chain 6343)
@@ -186,8 +207,10 @@ bun check            # Type check all packages
 
 ## Environment Variables
 ```bash
-VITE_CHAT_WORKER_URL   # Cloudflare Worker for AI chat
-VITE_AGORA_APP_ID      # Agora RTC app ID for voice calls
+VITE_CHAT_WORKER_URL     # Cloudflare Worker for AI chat
+VITE_AGORA_APP_ID        # Agora RTC app ID for voice calls
+VITE_MEDIA_WORKER_URL    # Media Worker for photo upload + AI conversion
+VITE_HEAVEN_IMAGES_URL   # Heaven Images service for watermarking
 ```
 
 ## Color Scheme (Heaven Dark Theme)

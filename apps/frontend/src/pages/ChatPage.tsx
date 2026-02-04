@@ -11,9 +11,10 @@ import {
   MessageBubble,
   MessageList,
   MessageInput,
+  useIsMobile,
 } from '@heaven/ui'
 import { useAuth, useXMTP, type XMTPMessage } from '../providers'
-import { useParams } from '@solidjs/router'
+import { useParams, useNavigate } from '@solidjs/router'
 
 const MoreIcon = () => (
   <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -23,10 +24,18 @@ const MoreIcon = () => (
   </svg>
 )
 
+const ChevronLeftIcon = () => (
+  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
+    <path d="M165.66,202.34a8,8,0,0,1-11.32,11.32l-80-80a8,8,0,0,1,0-11.32l80-80a8,8,0,0,1,11.32,11.32L91.31,128Z" />
+  </svg>
+)
+
 export const ChatPage: Component = () => {
   const auth = useAuth()
   const xmtp = useXMTP()
   const params = useParams<{ username: string }>()
+  const navigate = useNavigate()
+  const isMobile = useIsMobile()
 
   // Messages state
   const [messages, setMessages] = createSignal<XMTPMessage[]>([])
@@ -111,14 +120,25 @@ export const ChatPage: Component = () => {
         <div class="h-full overflow-y-auto">
           <div class="h-full flex flex-col">
             {/* Chat Header */}
-            <div class="h-16 flex items-center justify-between px-6 border-b border-[var(--border-default)] flex-shrink-0">
+            <div class="h-16 flex items-center justify-between px-4 border-b border-[var(--border-default)] flex-shrink-0">
               <div class="flex items-center gap-3">
+                {/* Back button on mobile */}
+                <Show when={isMobile()}>
+                  <IconButton
+                    variant="ghost"
+                    size="md"
+                    aria-label="Back to messages"
+                    onClick={() => navigate('/chat')}
+                  >
+                    <ChevronLeftIcon />
+                  </IconButton>
+                </Show>
                 <Avatar size="md" />
                 <div>
                   <span class="text-base font-medium text-[var(--text-primary)]">
                     {formatAddress(peerAddressOrId())}
                   </span>
-                  <p class="text-sm text-[var(--text-muted)]">
+                  <p class="text-base text-[var(--text-muted)]">
                     <Show when={xmtp.isConnected()} fallback="Connecting...">
                       XMTP
                     </Show>

@@ -14,6 +14,10 @@ export interface EditableInfoCardRowProps {
   options?: SelectOption[] | MultiSelectOption[] | PillOption[]
   maxLength?: number
   icon?: JSX.Element
+  /** When true, renders as read-only even in edit mode (e.g. verified fields) */
+  locked?: boolean
+  /** Optional element shown after the value (e.g. verification badge) */
+  suffix?: JSX.Element
   onValueChange?: (value: string | string[]) => void
   onLocationChange?: (location: LocationResult) => void
 }
@@ -102,25 +106,26 @@ export const EditableInfoCardRow: Component<EditableInfoCardRowProps> = (props) 
 
       {/* Value or input field */}
       <div class="flex-1 min-w-0">
-        <Show when={!props.isEditing}>
-          {/* Display mode */}
+        <Show when={!props.isEditing || props.locked}>
+          {/* Display mode (or locked in edit mode) */}
           <Show
             when={props.value}
             fallback={
-              <Show when={props.isOwnProfile}>
+              <Show when={props.isOwnProfile && !props.locked}>
                 <span class="text-base text-[var(--text-muted)] italic">
                   + Add {props.label.toLowerCase()}
                 </span>
               </Show>
             }
           >
-            <span class="text-base text-[var(--text-primary)]">
+            <span class="text-base text-[var(--text-primary)] inline-flex items-center gap-1.5">
               {getDisplayValue()}
+              {props.suffix}
             </span>
           </Show>
         </Show>
 
-        <Show when={props.isEditing}>
+        <Show when={props.isEditing && !props.locked}>
           {/* Edit mode - use Switch/Match for mutually exclusive rendering */}
           <Switch>
             <Match when={props.type === 'textarea'}>

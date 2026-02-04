@@ -69,10 +69,11 @@ const toBigNumber = (value, label) => {
 
 const CELO_VERIFIER_ABI = [
   "function verifiedAt(address user) external view returns (uint64)",
+  "function nationality(address user) external view returns (string)",
 ];
 
 const MIRROR_ABI = [
-  "function mirror(address user, uint64 celoVerifiedAt, uint256 nonce, uint256 deadline) external",
+  "function mirror(address user, uint64 celoVerifiedAt, string calldata celoNationality, uint256 nonce, uint256 deadline) external",
   "function nonces(address user) external view returns (uint256)",
   "function verifiedAt(address user) external view returns (uint64)",
 ];
@@ -104,13 +105,17 @@ const main = async () => {
       async () => {
         const provider = new ethers.providers.JsonRpcProvider(celoRpcUrl);
         const verifier = new ethers.Contract(celoVerifierAddress, CELO_VERIFIER_ABI, provider);
-        const ts = await verifier.verifiedAt(userAddress);
-        return JSON.stringify({ verifiedAt: ts.toString() });
+        const [ts, nat] = await Promise.all([
+          verifier.verifiedAt(userAddress),
+          verifier.nationality(userAddress),
+        ]);
+        return JSON.stringify({ verifiedAt: ts.toString(), nationality: nat });
       }
     );
 
     const celoData = JSON.parse(celoDataJson);
     const celoVerifiedAt = Number(celoData.verifiedAt);
+    const celoNationality = celoData.nationality || "";
 
     if (celoVerifiedAt === 0) {
       Lit.Actions.setResponse({
@@ -175,6 +180,7 @@ const main = async () => {
     const txData = iface.encodeFunctionData("mirror", [
       userAddress,
       celoVerifiedAt,
+      celoNationality,
       toBigNumber(megaData.nonce, "nonce"),
       toBigNumber(deadline, "deadline"),
     ]);

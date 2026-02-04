@@ -12,12 +12,14 @@ import {
   DialogTitle,
   DialogDescription,
   DialogCloseButton,
+  AppLogo,
 } from '@heaven/ui'
 import { useNavigate, useLocation } from '@solidjs/router'
 import { createQuery, useQueryClient } from '@tanstack/solid-query'
-import { useXMTP, useAuth, usePlayer } from '../../providers'
 import { usePlatform } from 'virtual:heaven-platform'
+import { useXMTP, useAuth, usePlayer } from '../../providers'
 import { fetchUserPlaylists, type OnChainPlaylist } from '../../lib/heaven/playlists'
+import { fetchUploadedContent, fetchSharedContent } from '../../lib/heaven/scrobbles'
 import { createPlaylistService } from '../../lib/playlist-service'
 import { addToast } from '../../lib/toast'
 
@@ -34,23 +36,12 @@ const ChatCircleIcon = () => (
   </svg>
 )
 
-const MusicNotesIcon = () => (
-  <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
-    <path d="M212.92,17.69a8,8,0,0,0-6.86-1.45l-128,32A8,8,0,0,0,72,56V166.08A36,36,0,1,0,88,196V62.25l112-28V134.08A36,36,0,1,0,216,164V24A8,8,0,0,0,212.92,17.69ZM52,216a20,20,0,1,1,20-20A20,20,0,0,1,52,216Zm128-32a20,20,0,1,1,20-20A20,20,0,0,1,180,184Z" />
-  </svg>
-)
-
 const UserIcon = () => (
   <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
     <path d="M230.92,212c-15.23-26.33-38.7-45.21-66.09-54.16a72,72,0,1,0-73.66,0C63.78,166.78,40.31,185.66,25.08,212a8,8,0,1,0,13.85,8c18.84-32.56,52.14-52,89.07-52s70.23,19.44,89.07,52a8,8,0,1,0,13.85-8ZM72,96a56,56,0,1,1,56,56A56.06,56.06,0,0,1,72,96Z" />
   </svg>
 )
 
-const BellIcon = () => (
-  <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
-    <path d="M168,224a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,224Zm53.85-32A15.8,15.8,0,0,1,208,200H48a16,16,0,0,1-13.8-24.06C39.75,166.38,48,139.34,48,104a80,80,0,1,1,160,0c0,35.33,8.26,62.38,13.81,71.94A15.89,15.89,0,0,1,221.85,192ZM208,184c-7.73-13.27-16-43.95-16-80a64,64,0,1,0-128,0c0,36.06-8.28,66.74-16,80Z" />
-  </svg>
-)
 
 const WalletIcon = () => (
   <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
@@ -67,6 +58,23 @@ const GearIcon = () => (
 const PlusIcon = () => (
   <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
     <path d="M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z" />
+  </svg>
+)
+
+// Music library sub-nav icons
+const FolderIcon = () => (
+  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
+    <path d="M216,72H131.31L104,44.69A15.86,15.86,0,0,0,92.69,40H40A16,16,0,0,0,24,56V200.62A15.4,15.4,0,0,0,39.38,216H216.89A15.13,15.13,0,0,0,232,200.89V88A16,16,0,0,0,216,72ZM40,56H92.69l16,16H40ZM216,200H40V88H216Z" />
+  </svg>
+)
+const CloudIcon = () => (
+  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
+    <path d="M160,40A88.09,88.09,0,0,0,81.29,88.67,64,64,0,1,0,72,216h88a88,88,0,0,0,0-176Zm0,160H72a48,48,0,0,1,0-96c1.1,0,2.2,0,3.29.11A88,88,0,0,0,72,128a8,8,0,0,0,16,0,72,72,0,1,1,72,72Z" />
+  </svg>
+)
+const ShareIcon = () => (
+  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
+    <path d="M176,160a39.89,39.89,0,0,0-28.62,12.09l-46.1-29.63a39.8,39.8,0,0,0,0-28.92l46.1-29.63a40,40,0,1,0-8.66-13.45l-46.1,29.63a40,40,0,1,0,0,55.82l46.1,29.63A40,40,0,1,0,176,160Zm0-128a24,24,0,1,1-24,24A24,24,0,0,1,176,32ZM64,152a24,24,0,1,1,24-24A24,24,0,0,1,64,152Zm112,72a24,24,0,1,1,24-24A24,24,0,0,1,176,224Z" />
   </svg>
 )
 
@@ -100,12 +108,11 @@ const NavItem: Component<NavItemProps> = (props) => (
 export const AppSidebar: Component = () => {
   const navigate = useNavigate()
   const location = useLocation()
+  const platform = usePlatform()
   const auth = useAuth()
   const xmtp = useXMTP()
-  const queryClient = useQueryClient()
   const player = usePlayer()
-  const platform = usePlatform()
-
+  const queryClient = useQueryClient()
   const [createPlaylistOpen, setCreatePlaylistOpen] = createSignal(false)
   const [newPlaylistName, setNewPlaylistName] = createSignal('')
   const [creatingPlaylist, setCreatingPlaylist] = createSignal(false)
@@ -123,6 +130,23 @@ export const AppSidebar: Component = () => {
   }))
 
   const playlists = () => playlistsQuery.data ?? []
+
+  // Cloud/Shared track counts
+  const cloudTracksQuery = createQuery(() => ({
+    queryKey: ['uploadedContent', auth.pkpInfo()?.ethAddress],
+    queryFn: () => fetchUploadedContent(auth.pkpInfo()!.ethAddress),
+    get enabled() { return !!auth.pkpInfo()?.ethAddress },
+  }))
+
+  const sharedTracksQuery = createQuery(() => ({
+    queryKey: ['sharedContent', auth.pkpInfo()?.ethAddress],
+    queryFn: () => fetchSharedContent(auth.pkpInfo()!.ethAddress),
+    get enabled() { return !!auth.pkpInfo()?.ethAddress },
+  }))
+
+  const localTrackCount = () => player.tracks().length
+  const cloudTrackCount = () => cloudTracksQuery.data?.length ?? 0
+  const sharedTrackCount = () => sharedTracksQuery.data?.length ?? 0
 
   const retryAbort = new AbortController()
   onCleanup(() => retryAbort.abort())
@@ -202,27 +226,74 @@ export const AppSidebar: Component = () => {
   return (
     <>
       <Sidebar>
+        {/* Logo */}
+        <div class="px-3 py-4 mb-2">
+          <AppLogo size={36} />
+        </div>
+
         {/* Main navigation */}
         <nav class="flex flex-col gap-1">
           <NavItem icon={HomeIcon} label="Home" path="/" active={isActive('/')} onClick={() => navigate('/')} />
           <NavItem icon={ChatCircleIcon} label="Messages" path="/chat" active={location.pathname.startsWith('/chat')} onClick={() => navigate('/chat')} badge={unreadMessageCount()} />
-          <NavItem icon={MusicNotesIcon} label="Library" path="/library" active={isActive('/library')} onClick={() => navigate('/library')} />
-          <NavItem icon={BellIcon} label="Notifications" path="/notifications" active={isActive('/notifications')} onClick={() => navigate('/notifications')} />
           <NavItem icon={WalletIcon} label="Wallet" path="/wallet" active={isActive('/wallet')} onClick={() => navigate('/wallet')} />
           <NavItem icon={UserIcon} label="Profile" path="/profile" active={isActive('/profile')} onClick={() => navigate('/profile')} />
           <NavItem icon={GearIcon} label="Settings" path="/settings" active={isActive('/settings')} onClick={() => navigate('/settings')} />
         </nav>
 
-        {/* Playlists section */}
-        <div class="mt-6 border-t border-[var(--bg-highlight)] pt-4">
+        {/* Music section - unified library + playlists */}
+        <div class="mt-6 -mx-3 px-3 border-t border-[var(--bg-highlight)] pt-4">
           <div class="flex items-center justify-between px-3 mb-2">
-            <span class="text-base text-[var(--text-muted)] font-medium">Playlists</span>
+            <span class="text-base text-[var(--text-muted)] font-medium">Music</span>
             <IconButton variant="soft" size="md" aria-label="Create playlist" onClick={() => setCreatePlaylistOpen(true)}>
               <PlusIcon />
             </IconButton>
           </div>
 
           <div class="flex flex-col gap-0.5">
+            {/* System collections (Local, Cloud, Shared) */}
+            <Show when={platform.isTauri}>
+              <button
+                type="button"
+                class={`flex items-center gap-3 w-full px-3 py-2 rounded-md cursor-pointer transition-colors hover:bg-[var(--bg-highlight-hover)] ${isActive('/music/local') ? 'bg-[var(--bg-highlight)]' : ''}`}
+                onClick={() => navigate('/music/local')}
+              >
+                <div class="w-10 h-10 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)]">
+                  <FolderIcon />
+                </div>
+                <div class="flex flex-col min-w-0 text-left">
+                  <span class="text-base text-[var(--text-primary)]">Local</span>
+                  <span class="text-sm text-[var(--text-muted)]">{localTrackCount().toLocaleString()} songs</span>
+                </div>
+              </button>
+            </Show>
+            <button
+              type="button"
+              class={`flex items-center gap-3 w-full px-3 py-2 rounded-md cursor-pointer transition-colors hover:bg-[var(--bg-highlight-hover)] ${isActive('/music/cloud') ? 'bg-[var(--bg-highlight)]' : ''}`}
+              onClick={() => navigate('/music/cloud')}
+            >
+              <div class="w-10 h-10 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)]">
+                <CloudIcon />
+              </div>
+              <div class="flex flex-col min-w-0 text-left">
+                <span class="text-base text-[var(--text-primary)]">Cloud</span>
+                <span class="text-sm text-[var(--text-muted)]">{cloudTrackCount()} songs</span>
+              </div>
+            </button>
+            <button
+              type="button"
+              class={`flex items-center gap-3 w-full px-3 py-2 rounded-md cursor-pointer transition-colors hover:bg-[var(--bg-highlight-hover)] ${isActive('/music/shared') ? 'bg-[var(--bg-highlight)]' : ''}`}
+              onClick={() => navigate('/music/shared')}
+            >
+              <div class="w-10 h-10 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)]">
+                <ShareIcon />
+              </div>
+              <div class="flex flex-col min-w-0 text-left">
+                <span class="text-base text-[var(--text-primary)]">Shared</span>
+                <span class="text-sm text-[var(--text-muted)]">{sharedTrackCount()} songs</span>
+              </div>
+            </button>
+
+            {/* User playlists */}
             <For each={playlists()}>
               {(pl) => (
                 <button
@@ -242,9 +313,6 @@ export const AppSidebar: Component = () => {
                 </button>
               )}
             </For>
-            <Show when={playlists().length === 0}>
-              <p class="px-3 py-2 text-sm text-[var(--text-muted)]">No playlists yet</p>
-            </Show>
           </div>
         </div>
 

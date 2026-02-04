@@ -1,6 +1,5 @@
 import { type Component, createSignal, splitProps } from 'solid-js'
 import { cn } from '../lib/utils'
-import { TextArea } from '../primitives/text-field'
 import { IconButton } from '../primitives/icon-button'
 
 const SendIcon = () => (
@@ -22,17 +21,15 @@ export interface MessageInputProps {
   disabled?: boolean
   /** Additional class for container */
   class?: string
-  /** Max height for textarea before scrolling */
-  maxHeight?: number
 }
 
 /**
- * MessageInput - Message input field with send button
+ * MessageInput - Single-line message input with send button
  *
  * Features:
- * - Auto-resizing textarea
+ * - Single-line input (like X/Twitter)
  * - Send button (disabled when empty)
- * - Enter to send (Shift+Enter for new line)
+ * - Enter to send
  * - Consistent styling with Heaven color scheme
  */
 export const MessageInput: Component<MessageInputProps> = (props) => {
@@ -43,7 +40,6 @@ export const MessageInput: Component<MessageInputProps> = (props) => {
     'onSubmit',
     'placeholder',
     'disabled',
-    'maxHeight',
   ])
 
   // Internal state for uncontrolled mode
@@ -67,8 +63,7 @@ export const MessageInput: Component<MessageInputProps> = (props) => {
   }
 
   const handleKeyDown = (e: KeyboardEvent) => {
-    // Submit on Enter (without Shift)
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter') {
       e.preventDefault()
       handleSubmit()
     }
@@ -77,28 +72,23 @@ export const MessageInput: Component<MessageInputProps> = (props) => {
   return (
     <div
       class={cn(
-        'flex items-end gap-2 p-4 bg-[var(--bg-page)] border-t border-[var(--border-default)]',
+        'flex items-center gap-3 p-4 bg-[var(--bg-page)] border-t border-[var(--border-default)]',
         local.class
       )}
       {...others}
     >
-      <TextArea
+      <input
+        type="text"
         placeholder={local.placeholder || 'Type a message...'}
         value={currentValue()}
-        onChange={setValue}
-        disabled={local.disabled}
-        autoResize
-        class="flex-1"
-        textAreaClass={cn(
-          'min-h-[44px]',
-          local.maxHeight ? `max-h-[${local.maxHeight}px]` : 'max-h-[120px]',
-          'overflow-y-auto'
-        )}
+        onInput={(e) => setValue(e.currentTarget.value)}
         onKeyDown={handleKeyDown}
+        disabled={local.disabled}
+        class="flex-1 bg-[var(--bg-elevated)] text-base text-[var(--text-primary)] placeholder:text-[var(--text-muted)] px-4 py-3 rounded-md border-none outline-none focus:ring-2 focus:ring-[var(--accent-blue)]/50"
       />
       <IconButton
         variant="send"
-        size="xl"
+        size="lg"
         aria-label="Send message"
         disabled={!currentValue().trim() || local.disabled}
         onClick={handleSubmit}

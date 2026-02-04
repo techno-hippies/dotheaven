@@ -10,13 +10,14 @@
 const IS_DEV = import.meta.env.DEV
 
 import { Component, createSignal, createMemo, For, createEffect, Show, onCleanup } from 'solid-js'
-import { useParams, useSearchParams } from '@solidjs/router'
+import { useParams, useSearchParams, useNavigate } from '@solidjs/router'
 import {
   IconButton,
   MessageBubble,
   MessageList,
   MessageInput,
   Avatar,
+  useIsMobile,
 } from '@heaven/ui'
 import { useAuth } from '../providers'
 import { useVoice, type VoiceState } from '../lib/voice'
@@ -80,6 +81,12 @@ const EndCallIcon = () => (
   </svg>
 )
 
+const ChevronLeftIcon = () => (
+  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
+    <path d="M165.66,202.34a8,8,0,0,1-11.32,11.32l-80-80a8,8,0,0,1,0-11.32l80-80a8,8,0,0,1,11.32,11.32L91.31,128Z" />
+  </svg>
+)
+
 const formatDuration = (seconds: number): string => {
   const mins = Math.floor(seconds / 60)
   const secs = seconds % 60
@@ -94,6 +101,8 @@ export const AIChatPage: Component = () => {
   const params = useParams<{ personalityId: string }>()
   const [searchParams, setSearchParams] = useSearchParams<{ call?: string }>()
   const auth = useAuth()
+  const navigate = useNavigate()
+  const isMobile = useIsMobile()
 
   // Messages state
   const [messages, setMessages] = createSignal<Message[]>([])
@@ -314,6 +323,17 @@ export const AIChatPage: Component = () => {
           {/* Chat header */}
           <div class="flex items-center justify-between px-4 py-3 border-b border-[var(--border-default)]">
             <div class="flex items-center gap-3">
+              {/* Back button on mobile */}
+              <Show when={isMobile()}>
+                <IconButton
+                  variant="ghost"
+                  size="md"
+                  aria-label="Back to messages"
+                  onClick={() => navigate('/chat')}
+                >
+                  <ChevronLeftIcon />
+                </IconButton>
+              </Show>
               <div class="relative">
                 <Avatar size="md" src={p.avatarUrl} alt={p.name} />
                 <Show when={isCallActive() && voiceState() === 'connected'}>
@@ -330,9 +350,9 @@ export const AIChatPage: Component = () => {
                 <h2 class="text-lg font-semibold text-[var(--text-primary)]">{p.name}</h2>
                 <Show
                   when={isCallActive()}
-                  fallback={<p class="text-sm text-[var(--text-muted)]">AI Assistant</p>}
+                  fallback={<p class="text-base text-[var(--text-muted)]">AI Assistant</p>}
                 >
-                  <p class="text-sm text-[var(--accent-purple)]">
+                  <p class="text-base text-[var(--accent-purple)]">
                     {voiceState() === 'connecting' && 'Connecting...'}
                     {voiceState() === 'connected' && formatDuration(voiceDuration())}
                     {voiceState() === 'error' && 'Connection failed'}
@@ -387,9 +407,13 @@ export const AIChatPage: Component = () => {
           <div ref={messagesContainer} class="flex-1 overflow-y-auto">
             <MessageList>
               <Show when={messages().length === 0}>
-                <div class="flex items-center justify-center py-12">
-                  <p class="text-[var(--text-muted)]">Start a conversation with {p.name}!</p>
-                </div>
+                <MessageBubble
+                  message={`Hey, I'm ${p.name}. I will match you with other users who like your music and meet your preferences to make new friends or date!\n\nThen one of you can book a karaoke room and sing with each other. A great way to break the ice and make new friends in the metaverse.`}
+                  username={p.name}
+                  avatarUrl={p.avatarUrl}
+                  isOwn={false}
+                  isFirstInGroup={true}
+                />
               </Show>
               <For each={messages()}>
                 {(message, index) => {

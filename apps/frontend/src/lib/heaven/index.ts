@@ -55,6 +55,12 @@ export {
 } from './verification'
 
 export {
+  fetchPosts,
+  timeAgo,
+  type FeedPostEntry,
+} from './posts'
+
+export {
   fetchUserPlaylists,
   fetchPlaylist,
   fetchPlaylistTracks,
@@ -63,3 +69,7 @@ export {
   type OnChainPlaylist,
   type OnChainPlaylistTrack,
 } from './playlists'
+
+export {
+  getLinkedEoa,
+} from './linked-eoa'

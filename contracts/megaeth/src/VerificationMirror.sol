@@ -12,10 +12,13 @@ contract VerificationMirror {
     /// @notice Timestamp when user was last verified (0 = never)
     mapping(address => uint64) public verifiedAt;
 
+    /// @notice 3-letter ISO nationality code from passport
+    mapping(address => string) public nationality;
+
     /// @notice Nonce per user to prevent replay of mirror txs
     mapping(address => uint256) public nonces;
 
-    event Mirrored(address indexed user, uint64 verifiedAt, uint256 nonce);
+    event Mirrored(address indexed user, uint64 verifiedAt, string nationality, uint256 nonce);
     event SponsorUpdated(address indexed oldSponsor, address indexed newSponsor);
 
     error OnlySponsor();
@@ -53,6 +56,7 @@ contract VerificationMirror {
     function mirror(
         address user,
         uint64 celoVerifiedAt,
+        string calldata celoNationality,
         uint256 nonce,
         uint256 deadline
     ) external onlySponsor {
@@ -62,9 +66,10 @@ contract VerificationMirror {
         // Only allow setting to a newer verification
         if (celoVerifiedAt > verifiedAt[user]) {
             verifiedAt[user] = celoVerifiedAt;
+            nationality[user] = celoNationality;
         }
 
         nonces[user] = nonce + 1;
-        emit Mirrored(user, verifiedAt[user], nonce);
+        emit Mirrored(user, verifiedAt[user], celoNationality, nonce);
     }
 }

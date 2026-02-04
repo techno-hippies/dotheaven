@@ -45,6 +45,8 @@ interface CIDs {
   contentRegisterV1: string;
   contentAccessV1: string;
   contentDecryptV1: string;
+  postCreateV1: string;
+  postTextV1: string;
   [key: string]: string;
 }
 
@@ -87,6 +89,8 @@ let cids: CIDs = {
   contentRegisterV1: '',
   contentAccessV1: '',
   contentDecryptV1: '',
+  postCreateV1: '',
+  postTextV1: '',
 };
 if (existsSync(cidPath)) {
   cids = JSON.parse(readFileSync(cidPath, 'utf-8'));

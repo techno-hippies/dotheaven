@@ -15,7 +15,7 @@
 
 import { ethers } from 'ethers'
 import { keccak256, encodeAbiParameters, type Hex } from 'viem'
-import { Synapse, RPC_URLS, TOKENS } from '@filoz/synapse-sdk'
+import { Synapse, RPC_URLS } from '@filoz/synapse-sdk'
 import type { PKPAuthContext, PKPInfo } from './lit'
 import { PKPEthersSigner } from './lit/pkp-ethers-signer'
 import {
@@ -36,7 +36,6 @@ import {
 // ── Constants ──────────────────────────────────────────────────────────
 
 const FIL_RPC = RPC_URLS.mainnet.http
-const USDFC_DECIMALS = 18
 
 // ── TrackId computation ────────────────────────────────────────────────
 
@@ -301,6 +300,37 @@ async function processJob(job: UploadJob): Promise<void> {
     updateJob(job.id, { step: 'registering' })
     console.log('[Upload] Registering on ContentRegistry...')
 
+    // Read cover art if available
+    let coverImage: { base64: string; contentType: string } | undefined
+    if (job.coverPath) {
+      try {
+        const { readFile } = await import('@tauri-apps/plugin-fs')
+        const coverBytes = await readFile(job.coverPath)
+        if (coverBytes && coverBytes.length > 0 && coverBytes.length <= 5 * 1024 * 1024) {
+          // Determine content type from extension
+          const ext = job.coverPath.split('.').pop()?.toLowerCase() || 'jpg'
+          const mimeMap: Record<string, string> = {
+            jpg: 'image/jpeg',
+            jpeg: 'image/jpeg',
+            png: 'image/png',
+            webp: 'image/webp',
+            bmp: 'image/bmp',
+          }
+          const contentType = mimeMap[ext] || 'image/jpeg'
+          // Convert to base64
+          let binary = ''
+          for (let i = 0; i < coverBytes.length; i++) {
+            binary += String.fromCharCode(coverBytes[i])
+          }
+          const base64 = btoa(binary)
+          coverImage = { base64, contentType }
+          console.log(`[Upload] Cover art loaded: ${(coverBytes.length / 1024).toFixed(1)} KB (${contentType})`)
+        }
+      } catch (err) {
+        console.warn('[Upload] Failed to read cover art:', err)
+      }
+    }
+
     const regResult = await registerContent(
       trackId,
       pieceCid,
@@ -309,8 +339,12 @@ async function processJob(job: UploadJob): Promise<void> {
       pkp.ethAddress, // datasetOwner = self
       { title: job.title, artist: job.artist, album: '' },
       job.encrypted ? undefined : 0, // algo: 0 = plaintext
+      coverImage,
     )
     console.log(`[Upload] Registered! tx: ${regResult.txHash}`)
+    if (regResult.coverCid) {
+      console.log(`[Upload] Cover uploaded! cid: ${regResult.coverCid}`)
+    }
 
     // ── Done ──
     updateJob(job.id, { step: 'done', completedAt: Date.now() })

@@ -14,13 +14,16 @@ contract SelfProfileVerifier is SelfVerificationRoot {
     /// @notice Timestamp when user was last verified (0 = never)
     mapping(address => uint64) public verifiedAt;
 
+    /// @notice 3-letter ISO nationality code from passport (e.g. "USA", "GBR")
+    mapping(address => string) public nationality;
+
     /// @notice Maps nullifier → wallet that used it (allows re-verify by same wallet)
     mapping(uint256 => address) public nullifierOwner;
 
     SelfStructs.VerificationConfigV2 public verificationConfig;
     bytes32 public verificationConfigId;
 
-    event Verified(address indexed user, uint64 timestamp, uint256 nullifier);
+    event Verified(address indexed user, uint64 timestamp, uint256 nullifier, string nationality);
 
     error NullifierAlreadyUsed();
     error UserIdentifierNotAddress();
@@ -58,7 +61,8 @@ contract SelfProfileVerifier is SelfVerificationRoot {
         nullifierOwner[output.nullifier] = user;
         uint64 ts = uint64(block.timestamp);
         verifiedAt[user] = ts;
+        nationality[user] = output.nationality;
 
-        emit Verified(user, ts, output.nullifier);
+        emit Verified(user, ts, output.nullifier, output.nationality);
     }
 }

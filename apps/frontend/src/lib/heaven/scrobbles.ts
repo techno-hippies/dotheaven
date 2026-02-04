@@ -11,7 +11,7 @@ import type { Track } from '@heaven/ui'
  */
 
 const GOLDSKY_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/5.0.0/gn'
+  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/6.0.0/gn'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -214,6 +214,7 @@ export interface UploadedContentEntry {
   datasetOwner: string
   title: string
   artist: string
+  coverCid: string   // IPFS CID for album art (empty if none)
   uploadedAt: number // unix seconds
   algo: number       // 0 = plaintext, 1 = AES-GCM-256
 }
@@ -269,6 +270,7 @@ export async function fetchUploadedContent(
       id
       title
       artist
+      coverCid
     }
   }`
 
@@ -278,11 +280,11 @@ export async function fetchUploadedContent(
     body: JSON.stringify({ query: trackQuery }),
   })
 
-  const trackMap = new Map<string, { title: string; artist: string }>()
+  const trackMap = new Map<string, { title: string; artist: string; coverCid: string }>()
   if (trackRes.ok) {
     const trackJson = await trackRes.json()
     for (const t of trackJson.data?.tracks ?? []) {
-      trackMap.set(t.id, { title: t.title, artist: t.artist })
+      trackMap.set(t.id, { title: t.title, artist: t.artist, coverCid: t.coverCid ?? '' })
     }
   }
 
@@ -310,6 +312,7 @@ export async function fetchUploadedContent(
       datasetOwner: e.datasetOwner,
       title: meta?.title || `Track ${e.trackId.slice(0, 10)}...`,
       artist: meta?.artist || 'Unknown',
+      coverCid: meta?.coverCid ?? '',
       uploadedAt: parseInt(e.createdAt),
       algo: e.algo ?? 1, // default encrypted for legacy entries
     }
@@ -386,6 +389,7 @@ export async function fetchSharedContent(
       id
       title
       artist
+      coverCid
     }
   }`
 
@@ -395,11 +399,11 @@ export async function fetchSharedContent(
     body: JSON.stringify({ query: trackQuery }),
   })
 
-  const trackMap = new Map<string, { title: string; artist: string }>()
+  const trackMap = new Map<string, { title: string; artist: string; coverCid: string }>()
   if (trackRes.ok) {
     const trackJson = await trackRes.json()
     for (const t of trackJson.data?.tracks ?? []) {
-      trackMap.set(t.id, { title: t.title, artist: t.artist })
+      trackMap.set(t.id, { title: t.title, artist: t.artist, coverCid: t.coverCid ?? '' })
     }
   }
 
@@ -424,6 +428,7 @@ export async function fetchSharedContent(
       datasetOwner: e.datasetOwner,
       title: meta?.title || `Track ${e.trackId.slice(0, 10)}...`,
       artist: meta?.artist || 'Unknown',
+      coverCid: meta?.coverCid ?? '',
       uploadedAt: parseInt(e.createdAt),
       algo: e.algo ?? 1,
       sharedBy: e.owner,

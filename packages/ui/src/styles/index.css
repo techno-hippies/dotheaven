@@ -34,62 +34,50 @@
 }
 
 :root {
-  /* Heaven Dark Theme - Pastel Blue Edition
-   * Inspired by legacy website (#1a1625)
-   * Deep purple-blue background with soft pastel blue accents
-   */
+  /* Tailwind neutral backgrounds + Catppuccin accents */
+  --background: #171717;          /* neutral-900 */
+  --foreground: #fafafa;          /* neutral-50 */
 
-  /* Background colors - deep purple-blue tones */
-  --background: oklch(0.18 0.04 280);        /* Deep purple-blue #1a1625 inspired */
-  --foreground: oklch(0.95 0.01 260);        /* Soft white with slight blue tint */
+  --card: #262626;                /* neutral-800 */
+  --card-foreground: #fafafa;
 
-  /* Card colors - slightly lighter than background */
-  --card: oklch(0.22 0.035 280);             /* Elevated purple-blue surface */
-  --card-foreground: oklch(0.95 0.01 260);   /* Soft white text on cards */
+  --secondary: #1c1c1c;
+  --secondary-foreground: #e5e5e5;
 
-  /* Primary - Pastel blue accent */
-  --primary: oklch(0.65 0.12 240);           /* Soft pastel blue */
-  --primary-foreground: oklch(0.98 0.005 280); /* Near white for text on primary */
+  --muted: #1c1c1c;
+  --muted-foreground: #a3a3a3;    /* neutral-400 */
 
-  /* Secondary - Muted purple-blue */
-  --secondary: oklch(0.28 0.03 280);         /* Darker elevated surface */
-  --secondary-foreground: oklch(0.85 0.02 260); /* Lighter text */
+  /* Catppuccin blue */
+  --primary: #89b4fa;             /* catppuccin blue */
+  --primary-foreground: #0c0c0c;
 
-  /* Muted - Very subtle purple-blue */
-  --muted: oklch(0.25 0.025 280);            /* Subtle background variation */
-  --muted-foreground: oklch(0.60 0.03 260);  /* Muted text with blue hint */
+  --accent: #b4befe;              /* catppuccin lavender */
+  --accent-foreground: #0c0c0c;
 
-  /* Accent - Brighter pastel blue for highlights */
-  --accent: oklch(0.55 0.15 240);            /* Vibrant pastel blue */
-  --accent-foreground: oklch(0.98 0.005 260); /* White text on accent */
+  --destructive: #f38ba8;         /* catppuccin red */
+  --destructive-foreground: #fafafa;
 
-  /* Destructive - Soft coral/rose for errors */
-  --destructive: oklch(0.60 0.18 15);        /* Soft coral-red */
-  --destructive-foreground: oklch(0.98 0 0); /* White text */
+  --border: #404040;              /* neutral-700 */
+  --ring: #89b4fa;
 
-  /* Borders and inputs - subtle purple-blue tones */
-  --border: oklch(0.30 0.03 280);            /* Subtle border */
-  --ring: oklch(0.65 0.12 240);              /* Pastel blue focus ring */
+  /* legacy compatibility */
+  --bg-page: #171717;             /* neutral-900 */
+  --bg-surface: #1c1c1c;
+  --bg-elevated: #262626;         /* neutral-800 */
+  --bg-highlight: #363636;
+  --bg-highlight-hover: #404040;  /* neutral-700 */
 
-  /* Legacy compatibility - keeping existing hex values for gradual migration */
-  --bg-page: #1a1625;        /* Original dark purple-blue */
-  --bg-surface: #1f1b2e;     /* Slightly lighter surface */
-  --bg-elevated: #252139;    /* Elevated surface */
-  --bg-highlight: #2d2645;   /* Highlight/hover state */
-  --bg-highlight-hover: #342d52; /* Lighter hover state for better contrast */
+  --text-primary: #fafafa;
+  --text-secondary: #d4d4d4;      /* neutral-300 */
+  --text-muted: #a3a3a3;          /* neutral-400 */
 
-  --text-primary: #f0f0f5;   /* Soft white with blue tint */
-  --text-secondary: #b8b8d0; /* Muted blue-gray */
-  --text-muted: #7878a0;     /* Muted purple-blue */
+  --border-default: #404040;
+  --border-subtle: #363636;
 
-  --border-default: #2d2645; /* Border color */
-  --border-subtle: #252139;  /* Subtle border */
-
-  /* Accent colors */
-  --accent-blue: oklch(0.65 0.12 240);      /* Pastel blue accent */
-  --accent-blue-hover: oklch(0.70 0.14 240); /* Lighter blue on hover */
-  --accent-purple: oklch(0.60 0.15 290);    /* Soft purple accent */
-  --accent-coral: oklch(0.65 0.18 15);      /* Warm coral accent */
+  --accent-blue: #89b4fa;         /* catppuccin blue */
+  --accent-blue-hover: #b4befe;   /* catppuccin lavender */
+  --accent-purple: #cba6f7;       /* catppuccin mauve */
+  --accent-coral: #fab387;        /* catppuccin peach */
 
   /* Radius */
   --radius-sm: 4px;

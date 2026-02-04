@@ -31,7 +31,6 @@ import {
   decryptAudio,
   parseHeader,
   beamUrl,
-  computeContentId,
   ALGO_AES_GCM_256,
 } from './content-crypto'
 
@@ -65,6 +64,9 @@ export interface DownloadResult {
  * @param authContext - Lit PKP auth context
  * @param pkpPublicKey - User's PKP public key
  * @param datasetOwner - Beam dataset owner address (defaults to user)
+ * @param trackMeta - Track metadata (title, artist, album)
+ * @param algo - Encryption algorithm (0=plaintext, 1=AES-GCM-256)
+ * @param coverImage - Optional album art to upload
  */
 export async function registerContent(
   trackId: string,
@@ -74,7 +76,8 @@ export async function registerContent(
   datasetOwner?: string,
   trackMeta?: { title: string; artist: string; album?: string },
   algo?: number,
-): Promise<{ contentId: string; txHash: string; blockNumber: number }> {
+  coverImage?: { base64: string; contentType: string },
+): Promise<{ contentId: string; txHash: string; blockNumber: number; coverCid?: string; coverTxHash?: string }> {
   if (!CONTENT_REGISTER_V1_CID) {
     throw new Error('CONTENT_REGISTER_V1_CID not set — deploy content-register-v1 first')
   }
@@ -82,21 +85,35 @@ export async function registerContent(
   const timestamp = Date.now().toString()
   const nonce = crypto.randomUUID()
 
+  // Build jsParams
+  const jsParams: Record<string, unknown> = {
+    userPkpPublicKey: pkpPublicKey,
+    trackId,
+    pieceCid,
+    datasetOwner: datasetOwner || undefined,
+    algo: algo ?? ALGO_AES_GCM_256,
+    title: trackMeta?.title || '',
+    artist: trackMeta?.artist || '',
+    album: trackMeta?.album || '',
+    timestamp,
+    nonce,
+  }
+
+  // Add cover image if provided
+  if (coverImage) {
+    jsParams.coverImage = coverImage
+    // Use plaintext key for now (encrypted key would require setup.ts deployment)
+    // The Lit Action will decrypt if filebaseEncryptedKey is provided instead
+    const filebaseKey = import.meta.env.VITE_FILEBASE_COVERS_KEY
+    if (filebaseKey) {
+      jsParams.filebasePlaintextKey = filebaseKey
+    }
+  }
+
   const result = await litClient.executeJs({
     ipfsId: CONTENT_REGISTER_V1_CID,
     authContext,
-    jsParams: {
-      userPkpPublicKey: pkpPublicKey,
-      trackId,
-      pieceCid,
-      datasetOwner: datasetOwner || undefined,
-      algo: algo ?? ALGO_AES_GCM_256,
-      title: trackMeta?.title || '',
-      artist: trackMeta?.artist || '',
-      album: trackMeta?.album || '',
-      timestamp,
-      nonce,
-    },
+    jsParams,
   })
 
   const response = JSON.parse(result.response as string)
@@ -108,6 +125,8 @@ export async function registerContent(
     contentId: response.contentId,
     txHash: response.txHash,
     blockNumber: response.blockNumber,
+    coverCid: response.coverCid || undefined,
+    coverTxHash: response.coverTxHash || undefined,
   }
 }
 
@@ -198,7 +217,7 @@ export async function fetchAndDecrypt(
   const litClient = await getLitClient()
 
   const decryptResult = await litClient.decrypt({
-    unifiedAccessControlConditions,
+    unifiedAccessControlConditions: unifiedAccessControlConditions as any,
     ciphertext: header.litCiphertext,
     dataToEncryptHash: header.litDataToEncryptHash,
     authContext,

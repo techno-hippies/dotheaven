@@ -1,11 +1,20 @@
 import '../src/styles/index.css'
+import type { Preview } from 'storybook-solidjs-vite'
 
-// Set Storybook canvas background to match app
-if (typeof document !== 'undefined') {
-  document.documentElement.style.setProperty('background', 'var(--bg-page, #1a1625)')
-  document.body.style.background = 'var(--bg-page, #1a1625)'
+const preview: Preview = {
+  parameters: {
+    backgrounds: {
+      disable: true,
+      default: 'dark',
+      values: [
+        {
+          name: 'dark',
+          value: '#171717',
+        },
+      ],
+    },
+    layout: 'fullscreen',
+  },
 }
 
-export const parameters = {
-  backgrounds: { disable: true },
-}
+export default preview

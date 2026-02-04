@@ -385,3 +385,40 @@ export const LEARNING_LANGUAGE_OPTIONS: SelectOption[] = [
   { value: 'mr', label: 'Marathi' },
   { value: 'ca', label: 'Catalan' },
 ]
+
+/**
+ * ISO 3166-1 alpha-3 → alpha-2 mapping.
+ * Used to convert Self.xyz passport nationality (alpha-3) to profile system (alpha-2).
+ * Only includes countries present in NATIONALITY_OPTIONS.
+ */
+export const ALPHA3_TO_ALPHA2: Record<string, string> = {
+  AFG: 'AF', ALB: 'AL', DZA: 'DZ', ARG: 'AR', ARM: 'AM',
+  AUS: 'AU', AUT: 'AT', AZE: 'AZ', BHR: 'BH', BGD: 'BD',
+  BLR: 'BY', BEL: 'BE', BOL: 'BO', BIH: 'BA', BRA: 'BR',
+  BGR: 'BG', KHM: 'KH', CMR: 'CM', CAN: 'CA', CHL: 'CL',
+  CHN: 'CN', COL: 'CO', CRI: 'CR', HRV: 'HR', CUB: 'CU',
+  CYP: 'CY', CZE: 'CZ', DNK: 'DK', DOM: 'DO', ECU: 'EC',
+  EGY: 'EG', SLV: 'SV', EST: 'EE', ETH: 'ET', FIN: 'FI',
+  FRA: 'FR', GEO: 'GE', DEU: 'DE', GHA: 'GH', GRC: 'GR',
+  GTM: 'GT', HTI: 'HT', HND: 'HN', HKG: 'HK', HUN: 'HU',
+  ISL: 'IS', IND: 'IN', IDN: 'ID', IRN: 'IR', IRQ: 'IQ',
+  IRL: 'IE', ISR: 'IL', ITA: 'IT', JAM: 'JM', JPN: 'JP',
+  JOR: 'JO', KAZ: 'KZ', KEN: 'KE', KWT: 'KW', KGZ: 'KG',
+  LVA: 'LV', LBN: 'LB', LBY: 'LY', LTU: 'LT', LUX: 'LU',
+  MYS: 'MY', MEX: 'MX', MDA: 'MD', MNG: 'MN', MNE: 'ME',
+  MAR: 'MA', NPL: 'NP', NLD: 'NL', NZL: 'NZ', NIC: 'NI',
+  NGA: 'NG', NOR: 'NO', OMN: 'OM', PAK: 'PK', PAN: 'PA',
+  PRY: 'PY', PER: 'PE', PHL: 'PH', POL: 'PL', PRT: 'PT',
+  PRI: 'PR', QAT: 'QA', ROU: 'RO', RUS: 'RU', SAU: 'SA',
+  SRB: 'RS', SGP: 'SG', SVK: 'SK', SVN: 'SI', ZAF: 'ZA',
+  KOR: 'KR', ESP: 'ES', LKA: 'LK', SWE: 'SE', CHE: 'CH',
+  SYR: 'SY', TWN: 'TW', TJK: 'TJ', TZA: 'TZ', THA: 'TH',
+  TUN: 'TN', TUR: 'TR', TKM: 'TM', UGA: 'UG', UKR: 'UA',
+  ARE: 'AE', GBR: 'GB', USA: 'US', URY: 'UY', UZB: 'UZ',
+  VEN: 'VE', VNM: 'VN', YEM: 'YE', ZMB: 'ZM', ZWE: 'ZW',
+}
+
+/** Convert an alpha-3 nationality code to alpha-2. Returns undefined if unknown. */
+export function alpha3ToAlpha2(alpha3: string): string | undefined {
+  return ALPHA3_TO_ALPHA2[alpha3.toUpperCase()]
+}

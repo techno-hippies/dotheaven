@@ -5,8 +5,12 @@
  */
 
 import { createSignal, onCleanup } from 'solid-js'
-import { invoke } from '@tauri-apps/api/core'
 import type { VoiceState } from './types'
+
+const tauriInvoke = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T> => {
+  const { invoke } = await import('@tauri-apps/api/core')
+  return invoke<T>(cmd, args)
+}
 import type { UseAgoraVoiceOptions } from './useAgoraVoice'
 
 const IS_DEV = import.meta.env.DEV
@@ -73,7 +77,7 @@ const resolvePorts = (ports: string[]): JackTripPorts => {
 
 const connectPair = async (source: string, dest: string) => {
   try {
-    await invoke<string>('connect_jack_port', { source, dest })
+    await tauriInvoke<string>('connect_jack_port', { source, dest })
   } catch (error) {
     const message = String(error).toLowerCase()
     if (!message.includes('already connected')) {
@@ -84,7 +88,7 @@ const connectPair = async (source: string, dest: string) => {
 
 const disconnectPair = async (source: string, dest: string) => {
   try {
-    await invoke<string>('disconnect_jack_port', { source, dest })
+    await tauriInvoke<string>('disconnect_jack_port', { source, dest })
   } catch (error) {
     const message = String(error).toLowerCase()
     if (!message.includes('not connected') && !message.includes('no connection')) {
@@ -107,7 +111,7 @@ export function useJackTripVoice(options: UseAgoraVoiceOptions) {
 
   const checkDependencies = async () => {
     try {
-      await invoke('check_jacktrip_dependencies')
+      await tauriInvoke('check_jacktrip_dependencies')
       dependenciesOk = true
     } catch (error) {
       const err = errorFrom(error)
@@ -119,7 +123,7 @@ export function useJackTripVoice(options: UseAgoraVoiceOptions) {
   }
 
   const ensurePorts = async (): Promise<JackTripPorts> => {
-    const list = await invoke<string[]>('list_jack_ports')
+    const list = await tauriInvoke<string[]>('list_jack_ports')
     ports = resolvePorts(list)
     return ports
   }
@@ -127,7 +131,7 @@ export function useJackTripVoice(options: UseAgoraVoiceOptions) {
   const waitForJackTripPorts = async (timeoutMs: number, intervalMs: number) => {
     const startedAt = Date.now()
     while (Date.now() - startedAt < timeoutMs) {
-      const list = await invoke<string[]>('list_jack_ports')
+      const list = await tauriInvoke<string[]>('list_jack_ports')
       const sendLeft = SEND_LEFT_OVERRIDE || findSendPort(list, 'send_1')
       const sendRight = SEND_RIGHT_OVERRIDE || findSendPort(list, 'send_2')
       if (sendLeft && sendRight) {
@@ -155,7 +159,7 @@ export function useJackTripVoice(options: UseAgoraVoiceOptions) {
     if (connectionInterval) return
     connectionInterval = window.setInterval(async () => {
       try {
-        const alive = await invoke<boolean>('is_jacktrip_connected')
+        const alive = await tauriInvoke<boolean>('is_jacktrip_connected')
         if (!alive && state() === 'connected') {
           setState('error')
           options.onError?.(new Error('JackTrip disconnected'))
@@ -191,7 +195,7 @@ export function useJackTripVoice(options: UseAgoraVoiceOptions) {
         await checkDependencies()
       }
 
-      await invoke<string>('connect_jacktrip', {
+      await tauriInvoke<string>('connect_jacktrip', {
         server: JACKTRIP_SERVER,
         port: JACKTRIP_PORT,
       })
@@ -244,7 +248,7 @@ export function useJackTripVoice(options: UseAgoraVoiceOptions) {
     }
 
     try {
-      await invoke<string>('disconnect_jacktrip')
+      await tauriInvoke<string>('disconnect_jacktrip')
     } catch (error) {
       if (IS_DEV) console.warn('[JackTrip] Disconnect error:', error)
     }

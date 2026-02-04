@@ -27,6 +27,10 @@ export interface MessageBubbleProps {
  * - Username + timestamp on first line (when isFirstInGroup)
  * - Message content below
  * - Own messages have accent colored username
+ *
+ * Note: This component has a specialized layout that differs from UserIdentity.
+ * The message text appears below the username/timestamp line, not as a secondary line
+ * within the identity block. This is intentional for the Discord-style layout.
  */
 export const MessageBubble: Component<MessageBubbleProps> = (props) => {
   const [local, others] = splitProps(props, [
@@ -70,7 +74,7 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
               </span>
             </Show>
             <Show when={local.timestamp}>
-              <span class="text-sm text-[var(--text-muted)]">{local.timestamp}</span>
+              <span class="text-base text-[var(--text-muted)]">{local.timestamp}</span>
             </Show>
           </div>
         </Show>

@@ -15,6 +15,9 @@
 | `ScrobbleV3.sol` | Track Registry + Scrobble Events. Tracks registered once with metadata on-chain, scrobbles as cheap event refs. Deterministic `trackId = keccak256(abi.encode(kind, payload))`. Canonical payload checks. `updateTrack()` for typo fixes. |
 | `PlaylistV1.sol` | Event-sourced playlists. Stores header + `tracksHash`/`trackCount`/`version` in storage. Full track lists + name/coverCid emitted in events for subgraph. `onlySponsor` gated. `setTracks()` for reorder/add/remove (full list replace). Tombstone delete. |
 | `ContentRegistry.sol` | Filecoin content pointers + access control. `contentId = keccak256(trackId, owner)`. Stores encrypted file refs (pieceCid, algo, datasetOwner). `canAccess(user, contentId)` for Lit Action gating. Batch grant/revoke. `onlySponsor` gated. |
+| `EngagementV1.sol` | ⚠️ Deprecated. Uses Story `ipId` as key. See EngagementV2 for new posts. |
+| `EngagementV2.sol` | Likes, comments, translations, flags, reveals, nullifier bans. Uses `postIdBytes32` as universal key. Permissionless `payReveal()` with 24h viewing windows. Immutable charity wallet. Privacy-preserving reveal logging (nullifierHash offchain). |
+| `PostsV1.sol` | Post existence + metadata pointer on MegaETH. Cross-chain mirror of Story Protocol IP Asset registrations. `postFor()` emits `PostCreated` events for subgraph indexing. Stores `creatorOf[ipId]` for idempotency. `onlySponsor` gated. |
 
 ## Chain Info
 
@@ -37,6 +40,9 @@ All names are **FREE** (`pricePerYear = 0`). Tiered pricing for short names (2-4
 | ScrobbleV3 | `0x144c450cd5B641404EEB5D5eD523399dD94049E0` |
 | PlaylistV1 | `0xF0337C4A335cbB3B31c981945d3bE5B914F7B329` |
 | ContentRegistry | `0x9ca08C2D2170A43ecfA12AB35e06F2E1cEEB4Ef2` |
+| EngagementV1 | `0x2A3beA895AE5bb4415c436155cbA15a97ACc2C77` |
+| EngagementV2 | `0xAF769d204e51b64D282083Eb0493F6f37cd93138` |
+| PostsV1 | `0xFe674F421c2bBB6D664c7F5bc0D5A0204EE0bFA6` |
 
 Heaven Node: `0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27`
 

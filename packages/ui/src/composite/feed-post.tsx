@@ -1,9 +1,40 @@
 import type { Component, JSX } from 'solid-js'
 import { Show, Switch, Match, For } from 'solid-js'
 import { cn } from '../lib/utils'
-import { Avatar } from '../primitives/avatar'
+import { useIsMobile } from '../lib/use-media-query'
+import { UserIdentity } from './user-identity'
+import { EngagementBar } from './engagement-bar'
+import { PlayFill, Info } from '../icons'
+import { Dialog, DialogTrigger, DialogPortal, DialogOverlay, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogCloseButton } from './dialog'
 
 // ── Types ──────────────────────────────────────────────────────────────
+
+/** Full provenance/metadata for displayed posts */
+export interface PostProvenance {
+  // Ownership
+  ownership: 'mine' | 'not-mine' | null
+  // Source attribution
+  source?: {
+    url: string
+    platform?: string
+    handle?: string
+  }
+  audioSource?: {
+    url: string
+    platform?: string
+  }
+  // On-chain IDs
+  postId?: string        // Unique post ID (author + timestamp + content hash)
+  contentId?: string     // Content ID for clustering/deduplication (same image → same contentId)
+  ipId?: string | null   // Story Protocol IP Asset address (null if not registered on Story)
+  ipfsHash?: string      // IPFS CID for content
+  contentHash?: string   // Content hash (keccak256)
+  txHash?: string        // Story Protocol tx hash (null if not registered)
+  megaTxHash?: string    // MegaETH mirror tx hash
+  // Timestamps
+  registeredAt?: string  // ISO timestamp
+  chainId?: number       // Chain ID (e.g., 6343 for MegaETH)
+}
 
 export type MediaItem = {
   url: string
@@ -40,14 +71,10 @@ export interface FeedPostProps {
   hideAuthor?: boolean
   // Menu
   menuSlot?: JSX.Element
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────
-
-function formatCount(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}K`
-  return n.toString()
+  // Provenance metadata (shown in info dialog)
+  provenance?: PostProvenance
+  /** Click handler for post content (opens post viewer) */
+  onPostClick?: () => void
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────
@@ -173,9 +200,7 @@ const VideoEmbed: Component<{
               aspect() === 'portrait' && 'h-[500px] aspect-[9/16]',
             )}
           >
-            <svg class="w-16 h-16 text-[var(--text-muted)]" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8 5v14l11-7z" />
-            </svg>
+            <PlayFill class="w-16 h-16 text-[var(--text-muted)]" />
           </div>
         }
       >
@@ -194,80 +219,200 @@ const VideoEmbed: Component<{
       {/* Play button overlay */}
       <div class="absolute inset-0 flex items-center justify-center cursor-pointer group">
         <div class="w-16 h-16 bg-black/40 backdrop-blur-sm rounded-full flex items-center justify-center group-hover:bg-black/50 transition-colors">
-          <svg class="w-8 h-8 text-white ml-1" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M8 5v14l11-7z" />
-          </svg>
+          <PlayFill class="w-8 h-8 text-white ml-1" />
         </div>
       </div>
     </div>
   )
 }
 
-// ── Icons ──────────────────────────────────────────────────────────────
+// ── Provenance Row ──────────────────────────────────────────────────────
 
-/** Rounded/bubbly heart (Phosphor-style) */
-const HeartIcon: Component<{ filled?: boolean }> = (props) => (
-  <svg class="w-6 h-6" viewBox="0 0 256 256" fill="currentColor">
-    {props.filled ? (
-      <path d="M240,94c0,70-103.79,126.66-108.21,129a8,8,0,0,1-7.58,0C119.79,220.66,16,164,16,94A62.07,62.07,0,0,1,78,32c20.65,0,38.73,8.88,50,23.89C139.27,40.88,157.35,32,178,32A62.07,62.07,0,0,1,240,94Z" />
-    ) : (
-      <path d="M178,32c-20.65,0-38.73,8.88-50,23.89C116.73,40.88,98.65,32,78,32A62.07,62.07,0,0,0,16,94c0,70,103.79,126.66,108.21,129a8,8,0,0,0,7.58,0C136.21,220.66,240,164,240,94A62.07,62.07,0,0,0,178,32ZM128,206.8C109.74,196.16,32,147.69,32,94A46.06,46.06,0,0,1,78,48c19.45,0,35.78,10.36,42.6,27a8,8,0,0,0,14.8,0c6.82-16.67,23.15-27,42.6-27a46.06,46.06,0,0,1,46,46C224,147.61,146.24,196.15,128,206.8Z" />
-    )}
-  </svg>
+const ProvenanceRow: Component<{ label: string; value?: string; href?: string; mono?: boolean }> = (props) => (
+  <Show when={props.value}>
+    <div class="flex flex-col gap-1">
+      <span class="text-base text-[var(--text-muted)]">{props.label}</span>
+      <Show when={props.href} fallback={
+        <span class={cn('text-base text-[var(--text-primary)] break-all', props.mono && 'font-mono')}>
+          {props.value}
+        </span>
+      }>
+        <a
+          href={props.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          class={cn('text-base text-[var(--accent-blue)] hover:underline break-all', props.mono && 'font-mono')}
+        >
+          {props.value}
+        </a>
+      </Show>
+    </div>
+  </Show>
 )
 
-const ChatIcon: Component = () => (
-  <svg class="w-6 h-6" viewBox="0 0 256 256" fill="currentColor">
-    <path d="M216,48H40A16,16,0,0,0,24,64V224a15.85,15.85,0,0,0,9.24,14.5A16.13,16.13,0,0,0,40,240a15.89,15.89,0,0,0,10.25-3.78l.09-.07L83,208H216a16,16,0,0,0,16-16V64A16,16,0,0,0,216,48ZM216,192H83a8,8,0,0,0-5.23,1.95L40,224V64H216Z" />
-  </svg>
-)
+// ── Provenance Dialog Content ───────────────────────────────────────────
+
+const ProvenanceDialogContent: Component<{ provenance: PostProvenance }> = (props) => {
+  const ownershipLabel = () => {
+    if (props.provenance.ownership === 'mine') return 'Original'
+    if (props.provenance.ownership === 'not-mine') return 'Shared'
+    return 'Not specified'
+  }
+
+  const chainName = () => {
+    if (props.provenance.chainId === 6343) return 'MegaETH'
+    if (props.provenance.chainId === 1513) return 'Story Protocol'
+    return props.provenance.chainId ? `Chain ${props.provenance.chainId}` : undefined
+  }
+
+  return (
+    <div class="flex flex-col gap-6">
+      {/* Badges row */}
+      <div class="flex items-center gap-3">
+        <span class={cn(
+          'px-3 py-1.5 rounded-md text-base font-medium',
+          props.provenance.ownership === 'mine' && 'bg-green-500/20 text-green-400',
+          props.provenance.ownership === 'not-mine' && 'bg-blue-500/20 text-blue-400',
+          !props.provenance.ownership && 'bg-[var(--bg-highlight)] text-[var(--text-muted)]',
+        )}>
+          {ownershipLabel()}
+        </span>
+        <Show when={chainName()}>
+          <span class="px-3 py-1.5 rounded-md text-base font-medium bg-[var(--bg-highlight)] text-[var(--text-secondary)]">
+            {chainName()}
+          </span>
+        </Show>
+      </div>
+
+      {/* Attribution section */}
+      <Show when={props.provenance.source || props.provenance.audioSource}>
+        <div class="flex flex-col gap-4 p-4 rounded-md bg-[var(--bg-elevated)]">
+          <span class="text-base font-semibold text-[var(--text-secondary)] uppercase tracking-wide">Attribution</span>
+          <ProvenanceRow
+            label="Original source"
+            value={props.provenance.source?.platform
+              ? `${props.provenance.source.platform}${props.provenance.source.handle ? ` · @${props.provenance.source.handle}` : ''}`
+              : props.provenance.source?.url}
+            href={props.provenance.source?.url}
+          />
+          <ProvenanceRow
+            label="Audio source"
+            value={props.provenance.audioSource?.platform || props.provenance.audioSource?.url}
+            href={props.provenance.audioSource?.url}
+          />
+        </div>
+      </Show>
+
+      {/* On-chain section */}
+      <Show when={props.provenance.postId || props.provenance.ipId || props.provenance.ipfsHash || props.provenance.contentHash}>
+        <div class="flex flex-col gap-4 p-4 rounded-md bg-[var(--bg-elevated)]">
+          <span class="text-base font-semibold text-[var(--text-secondary)] uppercase tracking-wide">On-chain</span>
+          <ProvenanceRow label="Post ID" value={props.provenance.postId} mono />
+          <ProvenanceRow label="Content ID" value={props.provenance.contentId} mono />
+          {/* Story Protocol IP — only shown if registered */}
+          <Show when={props.provenance.ipId}>
+            <ProvenanceRow
+              label="Story Protocol IP"
+              value={props.provenance.ipId!}
+              href={`https://explorer.story.foundation/ipa/${props.provenance.ipId}`}
+              mono
+            />
+          </Show>
+          <ProvenanceRow
+            label="IPFS CID"
+            value={props.provenance.ipfsHash}
+            href={props.provenance.ipfsHash ? `https://heaven.myfilebase.com/ipfs/${props.provenance.ipfsHash}` : undefined}
+            mono
+          />
+          <ProvenanceRow label="Content hash" value={props.provenance.contentHash} mono />
+          {/* Story Protocol transaction */}
+          <Show when={props.provenance.txHash}>
+            <ProvenanceRow
+              label="Story TX"
+              value={`${props.provenance.txHash!.slice(0, 10)}...${props.provenance.txHash!.slice(-8)}`}
+              href={`https://explorer.story.foundation/tx/${props.provenance.txHash}`}
+              mono
+            />
+          </Show>
+          {/* MegaETH mirror transaction */}
+          <Show when={props.provenance.megaTxHash}>
+            <ProvenanceRow
+              label="MegaETH TX"
+              value={`${props.provenance.megaTxHash!.slice(0, 10)}...${props.provenance.megaTxHash!.slice(-8)}`}
+              href={`https://megaeth-testnet-v2.blockscout.com/tx/${props.provenance.megaTxHash}`}
+              mono
+            />
+          </Show>
+        </div>
+      </Show>
+
+      {/* Timestamp */}
+      <Show when={props.provenance.registeredAt}>
+        <div class="text-base text-[var(--text-muted)]">
+          Registered {new Date(props.provenance.registeredAt!).toLocaleString()}
+        </div>
+      </Show>
+    </div>
+  )
+}
 
 // ── Main Component ─────────────────────────────────────────────────────
 
 export const FeedPost: Component<FeedPostProps> = (props) => {
+  const isMobile = useIsMobile()
+
+  // Provenance info button for the engagement bar
+  const provenanceInfoButton = () => (
+    <Show when={props.provenance}>
+      <Dialog>
+        <DialogTrigger
+          as="button"
+          type="button"
+          class="flex items-center text-[var(--text-muted)] hover:text-[var(--text-secondary)] cursor-pointer transition-colors"
+        >
+          <Info class="w-5 h-5" />
+        </DialogTrigger>
+        <DialogPortal>
+          <DialogOverlay />
+          <DialogContent class="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Provenance</DialogTitle>
+              <DialogCloseButton />
+            </DialogHeader>
+            <DialogBody>
+              <ProvenanceDialogContent provenance={props.provenance!} />
+            </DialogBody>
+          </DialogContent>
+        </DialogPortal>
+      </Dialog>
+    </Show>
+  )
+
   return (
-    <div class={cn('flex flex-col gap-4 p-5', props.class)}>
+    <div class={cn('flex flex-col gap-4', isMobile() ? 'p-4' : 'p-5', props.class)}>
       {/* Header: avatar + name + timestamp */}
-      {!props.hideAuthor && (
-        <div class="flex items-center gap-3">
-          <button
-            type="button"
-            class="cursor-pointer flex-shrink-0"
-            onClick={() => props.onAuthorClick?.()}
-          >
-            <Avatar
-              src={props.authorAvatarUrl}
-              size="lg"
-              shape="circle"
-            />
-          </button>
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-1.5">
-              <button
-                type="button"
-                class="font-semibold text-base text-[var(--text-primary)] truncate cursor-pointer hover:underline"
-                onClick={() => props.onAuthorClick?.()}
-              >
-                {props.authorName}
-              </button>
-              <span class="text-base text-[var(--text-muted)]">·</span>
-              <span class="text-base text-[var(--text-muted)] flex-shrink-0">{props.timestamp}</span>
-            </div>
-            <Show when={props.authorHandle}>
-              <div class="text-base text-[var(--text-muted)] truncate">{props.authorHandle}</div>
-            </Show>
-          </div>
-          <Show when={props.menuSlot}>
-            {props.menuSlot}
-          </Show>
-        </div>
-      )}
+      <Show when={!props.hideAuthor}>
+        <UserIdentity
+          name={props.authorHandle || props.authorName}
+          avatarUrl={props.authorAvatarUrl}
+          timestamp={props.timestamp}
+          showDot
+          size={isMobile() ? 'md' : 'lg'}
+          onAvatarClick={props.onAuthorClick}
+          onClick={props.onAuthorClick}
+          rightSlot={props.menuSlot}
+        />
+      </Show>
 
       {/* Content: custom slot or default text+media */}
       {props.contentSlot ? (
         props.contentSlot
       ) : (
-        <>
+        <button
+          onClick={props.onPostClick}
+          class={cn('text-left w-full', props.onPostClick && 'cursor-pointer')}
+          disabled={!props.onPostClick}
+        >
           <Show when={props.text}>
             <p class="text-base font-medium text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap">{props.text}</p>
           </Show>
@@ -283,36 +428,20 @@ export const FeedPost: Component<FeedPostProps> = (props) => {
               </Switch>
             )}
           </Show>
-        </>
+        </button>
       )}
 
       {/* Engagement bar */}
-      <div class="flex items-center gap-5 pt-1">
-        <button
-          type="button"
-          class={cn(
-            'flex items-center gap-1.5 text-base cursor-pointer transition-colors',
-            props.isLiked ? 'text-red-500' : 'text-[var(--text-secondary)] hover:text-red-400',
-          )}
-          onClick={() => props.onLike?.()}
-        >
-          <HeartIcon filled={props.isLiked} />
-          <Show when={props.likes !== undefined}>
-            <span>{formatCount(props.likes!)}</span>
-          </Show>
-        </button>
-
-        <button
-          type="button"
-          class="flex items-center gap-1.5 text-base text-[var(--text-secondary)] hover:text-[var(--accent-blue)] cursor-pointer transition-colors"
-          onClick={() => props.onComment?.()}
-        >
-          <ChatIcon />
-          <Show when={props.comments !== undefined}>
-            <span>{formatCount(props.comments!)}</span>
-          </Show>
-        </button>
-      </div>
+      <EngagementBar
+        likes={props.likes}
+        isLiked={props.isLiked}
+        onLike={props.onLike}
+        comments={props.comments}
+        onComment={props.onComment}
+        rightSlot={provenanceInfoButton()}
+        compact={isMobile()}
+        class="pt-1"
+      />
     </div>
   )
 }

@@ -19,6 +19,7 @@
     "@tauri-apps/plugin-shell": "2.3.4"
   },
   "dependencies": {
+    "@selfxyz/sdk-common": "1.0.0",
     "agora-rtc-sdk-ng": "4.24.2",
     "buffer": "6.0.3",
     "viem": "2.45.0"

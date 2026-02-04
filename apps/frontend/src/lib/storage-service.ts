@@ -12,7 +12,7 @@
  */
 
 import { ethers } from 'ethers'
-import { Synapse, RPC_URLS, TOKENS } from '@filoz/synapse-sdk'
+import { Synapse, RPC_URLS } from '@filoz/synapse-sdk'
 import type { PKPAuthContext, PKPInfo } from './lit'
 import { PKPEthersSigner } from './lit/pkp-ethers-signer'
 

@@ -1,8 +1,5 @@
 export { AlbumCover, type AlbumCoverProps } from './album-cover'
-export { ActivityItem, type ActivityItemProps } from './activity-item'
-export { SearchField, type SearchFieldProps, type SearchOption } from './search-field'
 export { ListItem, type ListItemProps } from './list-item'
-export { InfoCard, InfoCardSection, InfoCardRow, type InfoCardProps, type InfoCardSectionProps, type InfoCardRowProps } from './info-card'
 export { EditableInfoCard, EditableInfoCardSection, EditableInfoCardRow, type EditableInfoCardProps, type EditableInfoCardSectionProps, type EditableInfoCardRowProps } from './editable-info-card'
 export { Scrubber, type ScrubberProps } from './scrubber'
 export { MessageBubble, MessageList, type MessageBubbleProps, type MessageListProps } from './message-bubble'
@@ -49,18 +46,7 @@ export {
   DialogDescription,
   DialogCloseButton,
 } from './dialog'
-export {
-  Scheduler,
-  SchedulerCalendar,
-  TimeSlotList,
-  TimezoneSelector,
-  BookingConfirmation,
-  type SchedulerProps,
-  type DayAvailability,
-  type TimeSlot
-} from './scheduler'
-export { SongUploadCard, type SongUploadCardProps, type SongUploadFormData } from './song-upload-card'
-export { ProfileInfoSection, type ProfileInfoSectionProps, type ProfileInput, type EnsProfile } from './profile-info-section'
+export { ProfileInfoSection, type ProfileInfoSectionProps, type ProfileInput, type EnsProfile, type VerificationData } from './profile-info-section'
 export {
   HOBBY_TAGS, SKILL_TAGS, HOBBY_BY_ID, SKILL_BY_ID,
   getTagLabel, packTagIds, unpackTagIds,
@@ -69,8 +55,23 @@ export {
 } from '../data/tags'
 export { VerificationBadge, type VerificationBadgeProps, type VerificationState } from './verification-badge'
 export { VerifyIdentityDialog, type VerifyIdentityDialogProps, type VerifyStep } from './verify-identity-dialog'
-export { FeedPost, type FeedPostProps, type FeedPostMedia, type MediaItem } from './feed-post'
-export { PostComposer, type PostComposerProps } from './post-composer'
+export { FeedPost, type FeedPostProps, type FeedPostMedia, type MediaItem, type PostProvenance } from './feed-post'
+export {
+  PostComposer,
+  parseSourceLink,
+  type PostComposerProps,
+  type PostProcessingStep,
+  type Attribution,
+  type OwnershipClaim,
+  type SourceRef,
+  type AudioRef,
+  type MediaType,
+} from './post-composer'
 export { ChatListItem, type ChatListItemProps } from './chat-list-item'
-export { NotificationItem, type NotificationItemProps, type NotificationType } from './notification-item'
+export { MiniPlayer, type MiniPlayerProps } from './mini-player'
+export { UserIdentity, type UserIdentityProps, type UserIdentitySize } from './user-identity'
+export { EngagementBar, type EngagementBarProps } from './engagement-bar'
+export { RevealModal, type RevealModalProps } from './reveal-modal'
+export { PostViewer, type PostViewerProps, type PostComment } from './post-viewer'
+export { SidePlayer, type SidePlayerProps } from './side-player'
 

@@ -1,89 +1,87 @@
-import type { Meta, StoryObj } from 'storybook-solidjs-vite'
-import { Checkbox } from './checkbox'
+import type { Meta, StoryObj } from 'storybook-solidjs'
 import { createSignal } from 'solid-js'
+import { Checkbox, type CheckboxProps } from './checkbox'
 
-const meta = {
+const meta: Meta<CheckboxProps> = {
   title: 'Primitives/Checkbox',
   component: Checkbox,
-  tags: ['autodocs'],
-} satisfies Meta<typeof Checkbox>
+  parameters: { layout: 'centered' },
+  decorators: [
+    (Story) => (
+      <div style={{ padding: '2rem', background: 'var(--bg-surface)', 'border-radius': '6px' }}>
+        <Story />
+      </div>
+    ),
+  ],
+}
 
 export default meta
-type Story = StoryObj<typeof meta>
 
-export const Default: Story = {
-  args: {
-    label: 'Accept terms and conditions',
-  },
+export const Default: StoryObj = {
+  render: () => <Checkbox label="Accept terms and conditions" />,
 }
 
-export const WithDescription: Story = {
-  args: {
-    label: 'Marketing emails',
-    description: 'Receive emails about new products, features, and more.',
-  },
+export const WithDescription: StoryObj = {
+  render: () => (
+    <Checkbox
+      label="Subscribe to newsletter"
+      description="Get weekly updates about new features"
+    />
+  ),
 }
 
-export const DefaultChecked: Story = {
-  args: {
-    label: 'Subscribe to newsletter',
-    defaultChecked: true,
-  },
+export const Checked: StoryObj = {
+  render: () => <Checkbox label="Remember me" defaultChecked />,
 }
 
-export const Disabled: Story = {
-  args: {
-    label: 'Disabled checkbox',
-    disabled: true,
-  },
+export const Disabled: StoryObj = {
+  render: () => (
+    <div class="flex flex-col gap-4">
+      <Checkbox label="Disabled (unchecked)" disabled />
+      <Checkbox label="Disabled (checked)" disabled defaultChecked />
+    </div>
+  ),
 }
 
-export const DisabledChecked: Story = {
-  args: {
-    label: 'Disabled checked',
-    defaultChecked: true,
-    disabled: true,
-  },
-}
-
-export const Invalid: Story = {
-  args: {
-    label: 'I agree to the terms',
-    validationState: 'invalid',
-    errorMessage: 'You must agree to continue',
-  },
-}
-
-export const Controlled: Story = {
+export const Controlled: StoryObj = {
   render: () => {
     const [checked, setChecked] = createSignal(false)
-
     return (
       <div class="flex flex-col gap-4">
         <Checkbox
-          label="Controlled checkbox"
+          label="I agree to the terms"
           checked={checked()}
           onChange={setChecked}
         />
         <p class="text-sm text-[var(--text-secondary)]">
-          Status: {checked() ? 'Checked' : 'Unchecked'}
+          Terms {checked() ? 'accepted' : 'not accepted'}
         </p>
       </div>
     )
   },
 }
 
-export const Group: Story = {
+export const MultipleCheckboxes: StoryObj = {
+  name: 'Multiple Checkboxes',
   render: () => (
     <div class="flex flex-col gap-3">
-      <p class="text-sm font-semibold text-[var(--text-primary)] mb-1">
-        Select translations:
-      </p>
-      <Checkbox label="Chinese (Simplified)" defaultChecked />
-      <Checkbox label="Japanese" />
-      <Checkbox label="Korean" />
-      <Checkbox label="Spanish" />
-      <Checkbox label="French" />
+      <div class="text-sm font-medium text-[var(--text-primary)] mb-1">Select your interests:</div>
+      <Checkbox label="Music" />
+      <Checkbox label="Movies" />
+      <Checkbox label="Sports" />
+      <Checkbox label="Travel" />
+    </div>
+  ),
+}
+
+export const AllVariants: StoryObj = {
+  name: 'All Variants',
+  render: () => (
+    <div class="flex flex-col gap-4">
+      <Checkbox label="Simple checkbox" />
+      <Checkbox label="With description" description="Additional helper text" />
+      <Checkbox label="Checked by default" defaultChecked />
+      <Checkbox label="Disabled checkbox" disabled />
     </div>
   ),
 }

@@ -1,7 +1,64 @@
 import { defineChain } from 'viem'
-import { celo, mainnet, sepolia } from 'viem/chains'
+import { celo } from 'viem/chains'
 
-export { celo, mainnet, sepolia }
+export { celo }
+
+// Lavanet decentralized RPC gateway
+const LAVANET_KEY = '69b66aca774b0ee62a86d26675365f07'
+
+// Ethereum Mainnet with Lavanet RPC
+export const mainnet = defineChain({
+  id: 1,
+  name: 'Ethereum',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: {
+    default: { http: [`https://g.w.lavanet.xyz:443/gateway/eth/rpc-http/${LAVANET_KEY}`] },
+  },
+  blockExplorers: {
+    default: { name: 'Etherscan', url: 'https://etherscan.io' },
+  },
+})
+
+// Ethereum Sepolia with Lavanet RPC
+export const sepolia = defineChain({
+  id: 11155111,
+  name: 'Sepolia',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: {
+    default: { http: [`https://g.w.lavanet.xyz:443/gateway/sep1/rpc-http/${LAVANET_KEY}`] },
+  },
+  blockExplorers: {
+    default: { name: 'Etherscan', url: 'https://sepolia.etherscan.io' },
+  },
+  testnet: true,
+})
+
+// Base Mainnet with Lavanet RPC
+export const base = defineChain({
+  id: 8453,
+  name: 'Base',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: {
+    default: { http: [`https://g.w.lavanet.xyz:443/gateway/base/rpc-http/${LAVANET_KEY}`] },
+  },
+  blockExplorers: {
+    default: { name: 'Basescan', url: 'https://basescan.org' },
+  },
+})
+
+// Base Sepolia with Lavanet RPC
+export const baseSepolia = defineChain({
+  id: 84532,
+  name: 'Base Sepolia',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: {
+    default: { http: [`https://g.w.lavanet.xyz:443/gateway/bases/rpc-http/${LAVANET_KEY}`] },
+  },
+  blockExplorers: {
+    default: { name: 'Basescan', url: 'https://sepolia.basescan.org' },
+  },
+  testnet: true,
+})
 
 // Celo Sepolia (Self.xyz hub is deployed here, chain 11142220)
 export const celoSepolia = defineChain({

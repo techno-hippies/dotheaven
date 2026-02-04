@@ -5,6 +5,7 @@ import { resolve } from 'path'
 
 // Base configuration shared between web and tauri
 export default defineConfig({
+  base: './',
   plugins: [solid(), tailwindcss()],
   resolve: {
     alias: {

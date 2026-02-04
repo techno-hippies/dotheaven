@@ -7,11 +7,13 @@
  *  - Dual-broadcast: Base mirror first, then MegaETH ContentRegistry
  *  - ContentAccessMirror.canAccess() returns true for owner on Base
  *  - ContentRegistry.canAccess() returns true for owner on MegaETH
- *  - Returns contentId, txHash, mirrorTxHash
+ *  - Cover image upload to Filebase + setTrackCoverBatch on ScrobbleV3
+ *  - Returns contentId, txHash, mirrorTxHash, coverCid, coverTxHash
  *
  * Usage:
  *   bun tests/content-register.test.ts
  *   bun tests/content-register.test.ts --dry-run
+ *   bun tests/content-register.test.ts --with-cover
  */
 
 import { createLitClient } from "@lit-protocol/lit-client";
@@ -26,6 +28,7 @@ const abiCoder = AbiCoder.defaultAbiCoder();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dryRun = process.argv.includes("--dry-run");
+const withCover = process.argv.includes("--with-cover");
 
 // Contract addresses
 const MEGAETH_RPC = "https://carrot.megaeth.com/rpc";
@@ -34,11 +37,37 @@ const CONTENT_REGISTRY = "0x9ca08C2D2170A43ecfA12AB35e06F2E1cEEB4Ef2";
 const CONTENT_ACCESS_MIRROR = "0xd4D3baB38a11D72e36F49a73D50Dbdc3c1Aa4e9A";
 const SCROBBLE_V3 = "0x144c450cd5B641404EEB5D5eD523399dD94049E0";
 
+// Generate a small test image (1x1 red PNG, ~70 bytes)
+function createTestImage(): { base64: string; contentType: string } {
+  // Minimal valid 1x1 red PNG
+  const pngBytes = new Uint8Array([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, // PNG signature
+    0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, // IHDR chunk
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, // 1x1
+    0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xde, // 8-bit RGB
+    0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, // IDAT chunk
+    0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00, 0x00, // compressed data
+    0x00, 0x03, 0x00, 0x01, 0x00, 0x18, 0xdd, 0x8d, 0xb4,
+    0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, // IEND chunk
+    0xae, 0x42, 0x60, 0x82,
+  ]);
+  // Convert to base64
+  let binary = "";
+  for (let i = 0; i < pngBytes.length; i++) {
+    binary += String.fromCharCode(pngBytes[i]);
+  }
+  return {
+    base64: btoa(binary),
+    contentType: "image/png",
+  };
+}
+
 async function main() {
   console.log("Test Content Register v1");
   console.log("=".repeat(60));
   console.log(`   Env:         ${Env.name}`);
   if (dryRun) console.log("   Mode:        DRY RUN (sign only, no broadcast)");
+  if (withCover) console.log("   Mode:        WITH COVER (test album art upload)");
 
   const pkpCreds = Env.loadPkpCreds();
   console.log(`   PKP:         ${pkpCreds.ethAddress}`);
@@ -148,6 +177,19 @@ async function main() {
     dryRun,
   };
 
+  // Add cover image if --with-cover flag is set
+  if (withCover) {
+    const filebaseKey = process.env.FILEBASE_COVERS_KEY;
+    if (!filebaseKey) {
+      console.error("\nFILEBASE_COVERS_KEY env var required for --with-cover");
+      console.error("Format: base64(accessKey:secretKey:bucket)");
+      process.exit(1);
+    }
+    jsParams.coverImage = createTestImage();
+    jsParams.filebasePlaintextKey = filebaseKey;
+    console.log(`   Cover image: test PNG (${jsParams.coverImage.base64.length} bytes base64)`);
+  }
+
   console.log("\nExecuting Lit Action (internal signing)...");
   const t0 = performance.now();
 
@@ -180,6 +222,10 @@ async function main() {
     console.log(`   TX Hash:      ${response.txHash || "(dry run)"}`);
     console.log(`   Mirror TX:    ${response.mirrorTxHash || "(dry run)"}`);
     console.log(`   Block:        ${response.blockNumber || "(dry run)"}`);
+    if (withCover) {
+      console.log(`   Cover CID:    ${response.coverCid || "(none)"}`);
+      console.log(`   Cover TX:     ${response.coverTxHash || "(none)"}`);
+    }
 
     // Version
     if (response.version !== "content-register-v1") {
@@ -245,7 +291,7 @@ async function main() {
       // Check ScrobbleV3 track registration
       const scrobbleAbi = [
         "function isRegistered(bytes32 trackId) view returns (bool)",
-        "function getTrack(bytes32 trackId) view returns (string title, string artist, string album, uint8 kind, bytes32 payload, bytes32 metaHash, uint64 registeredAt)",
+        "function getTrack(bytes32 trackId) view returns (string title, string artist, string album, uint8 kind, bytes32 payload, uint64 registeredAt, string coverCid)",
       ];
       const scrobbleContract = new Contract(SCROBBLE_V3, scrobbleAbi, megaProvider);
       const isReg = await scrobbleContract.isRegistered(trackId);
@@ -257,6 +303,38 @@ async function main() {
       const trackData = await scrobbleContract.getTrack(trackId);
       console.log(`   ✓ ScrobbleV3 title: "${trackData.title}"`);
       console.log(`   ✓ ScrobbleV3 artist: "${trackData.artist}"`);
+
+      // Verify cover CID if we uploaded one
+      if (withCover && response.coverCid) {
+        if (!response.coverCid.startsWith("Qm") && !response.coverCid.startsWith("baf")) {
+          throw new Error(`Invalid cover CID format: ${response.coverCid}`);
+        }
+        console.log("   ✓ Cover CID is valid IPFS hash");
+
+        // Check on-chain coverCid
+        const onChainCover = trackData.coverCid || trackData[6]; // coverCid is 7th element (index 6)
+        if (onChainCover && onChainCover.length > 0) {
+          console.log(`   ✓ ScrobbleV3 coverCid: "${onChainCover}"`);
+          if (onChainCover !== response.coverCid) {
+            console.log(`   ⚠ Cover CID mismatch: action returned ${response.coverCid}, on-chain has ${onChainCover}`);
+          }
+        } else {
+          console.log("   ⚠ On-chain coverCid is empty (cover TX may still be pending)");
+        }
+
+        // Verify Filebase gateway accessibility
+        const filebaseUrl = `https://heaven.myfilebase.com/ipfs/${response.coverCid}`;
+        try {
+          const imgRes = await fetch(filebaseUrl, { method: "HEAD" });
+          if (imgRes.ok) {
+            console.log(`   ✓ Cover accessible via Filebase: ${filebaseUrl}`);
+          } else {
+            console.log(`   ⚠ Filebase returned ${imgRes.status} (may need propagation time)`);
+          }
+        } catch (e) {
+          console.log(`   ⚠ Could not verify Filebase URL: ${e}`);
+        }
+      }
     }
 
     console.log("\n" + "=".repeat(60));

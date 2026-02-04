@@ -1,4 +1,4 @@
-import { type Component, createSignal, createMemo, Show, For, onCleanup, createEffect, createResource } from 'solid-js'
+import { type Component, createSignal, createMemo, Show, onCleanup, createEffect, createResource } from 'solid-js'
 import {
   MediaHeader,
   TrackList,
@@ -9,20 +9,24 @@ import {
   type SortState,
 } from '@heaven/ui'
 import { usePlatform } from 'virtual:heaven-platform'
+import { useParams, useNavigate } from '@solidjs/router'
 import { pickFolder, type LocalTrack } from '../lib/local-music'
 import { usePlayer, useAuth } from '../providers'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
-import { ShareContentDialog } from '../components/ShareContentDialog'
+// TODO: Re-add share functionality via TrackList menu actions
+// import { ShareContentDialog } from '../components/ShareContentDialog'
 import { enqueueUpload, jobs } from '../lib/upload-manager'
 import { initFilecoinUploadService } from '../lib/filecoin-upload-service'
 import { fetchUploadedContent, fetchSharedContent, type UploadedContentEntry, type SharedContentEntry } from '../lib/heaven/scrobbles'
 
-type LibraryTab = 'local' | 'uploaded' | 'shared'
+type LibraryTab = 'local' | 'cloud' | 'shared'
 
 export const LibraryPage: Component = () => {
   const platform = usePlatform()
   const player = usePlayer()
   const auth = useAuth()
+  const params = useParams<{ tab?: string }>()
+  const navigate = useNavigate()
 
   // Initialize upload service once (idempotent — setQueueProcessor just replaces the fn)
   if (platform.isTauri) {
@@ -32,7 +36,23 @@ export const LibraryPage: Component = () => {
     })
   }
 
-  const [tab, setTab] = createSignal<LibraryTab>(platform.isTauri ? 'local' : 'uploaded')
+  // Get tab from route params, default to local (Tauri) or cloud (web)
+  const tab = createMemo<LibraryTab>(() => {
+    const t = params.tab
+    if (t === 'local' && platform.isTauri) return 'local'
+    if (t === 'cloud') return 'cloud'
+    if (t === 'shared') return 'shared'
+    // Default: redirect to appropriate default tab
+    return platform.isTauri ? 'local' : 'cloud'
+  })
+
+  // Redirect /music to the default tab on mount
+  createEffect(() => {
+    if (!params.tab) {
+      const defaultTab = platform.isTauri ? 'local' : 'cloud'
+      navigate(`/music/${defaultTab}`, { replace: true })
+    }
+  })
 
   // Uploaded tracks — fetched from subgraph (cross-device)
   const [uploadedTracks, { refetch: refetchUploaded }] = createResource(
@@ -45,6 +65,76 @@ export const LibraryPage: Component = () => {
     () => auth.pkpInfo()?.ethAddress,
     (addr) => fetchSharedContent(addr),
   )
+
+
+  // Convert uploaded entries to Track[] for TrackList
+  const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
+  const uploadedTracksAsTrack = createMemo<Track[]>(() => {
+    const entries = uploadedTracks() ?? []
+    return entries.map((e) => ({
+      id: e.contentId,
+      title: e.title,
+      artist: e.artist,
+      album: '',
+      albumCover: e.coverCid
+        ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
+        : undefined,
+      dateAdded: new Date(e.uploadedAt * 1000).toLocaleDateString(),
+    }))
+  })
+
+  // Map contentId -> UploadedContentEntry for playback lookup
+  const uploadedEntriesMap = createMemo(() => {
+    const map = new Map<string, UploadedContentEntry>()
+    for (const e of uploadedTracks() ?? []) {
+      map.set(e.contentId, e)
+    }
+    return map
+  })
+
+  // Convert shared entries to Track[] for TrackList
+  const sharedTracksAsTrack = createMemo<Track[]>(() => {
+    const entries = sharedTracks() ?? []
+    return entries.map((e) => ({
+      id: e.contentId,
+      title: e.title,
+      artist: `${e.artist} • from ${e.sharedBy.slice(0, 6)}...${e.sharedBy.slice(-4)}`,
+      album: '',
+      albumCover: e.coverCid
+        ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
+        : undefined,
+      dateAdded: new Date(e.uploadedAt * 1000).toLocaleDateString(),
+    }))
+  })
+
+  // Map contentId -> SharedContentEntry for playback lookup
+  const sharedEntriesMap = createMemo(() => {
+    const map = new Map<string, SharedContentEntry>()
+    for (const e of sharedTracks() ?? []) {
+      map.set(e.contentId, e)
+    }
+    return map
+  })
+
+  // Handle play for uploaded/shared content with toggle support
+  const handleEncryptedTrackPlay = (track: Track, entriesMap: Map<string, UploadedContentEntry | SharedContentEntry>) => {
+    const currentTrack = player.currentTrack()
+    // If same track is playing, toggle play/pause
+    if (currentTrack?.id === track.id) {
+      player.togglePlay()
+      return
+    }
+    // Otherwise play the new track
+    const entry = entriesMap.get(track.id)
+    if (entry) {
+      player.playEncryptedContent({
+        ...entry,
+        coverUrl: entry.coverCid
+          ? `${FILEBASE_GATEWAY}/${entry.coverCid}?img-width=256&img-height=256&img-format=webp&img-quality=80`
+          : undefined,
+      })
+    }
+  }
 
   // Refetch when new uploads complete (with delay for subgraph indexing)
   let lastDoneCount = 0
@@ -111,8 +201,6 @@ export const LibraryPage: Component = () => {
   // Add to playlist dialog
   const [playlistDialogOpen, setPlaylistDialogOpen] = createSignal(false)
   const [playlistDialogTrack, setPlaylistDialogTrack] = createSignal<Track | null>(null)
-  const [shareDialogOpen, setShareDialogOpen] = createSignal(false)
-  const [shareEntry, setShareEntry] = createSignal<UploadedContentEntry | null>(null)
 
   // Sort state
   const [sort, setSort] = createSignal<SortState | undefined>(undefined)
@@ -152,9 +240,9 @@ export const LibraryPage: Component = () => {
     >
       <MediaHeader
         type="playlist"
-        title={tab() === 'local' ? 'Local Files' : tab() === 'uploaded' ? 'Uploaded to Filecoin' : 'Shared with Me'}
-        creator={tab() === 'local' ? (player.folderPath() || 'No folder selected') : tab() === 'uploaded' ? `${uploadedTracks()?.length ?? 0} tracks` : `${sharedTracks()?.length ?? 0} tracks`}
-        stats={tab() === 'local' ? { songCount: player.tracks().length } : { songCount: (tab() === 'uploaded' ? uploadedTracks()?.length : sharedTracks()?.length) ?? 0 }}
+        title={tab() === 'local' ? 'Local Files' : tab() === 'cloud' ? 'Cloud Library' : 'Shared with Me'}
+        creator={tab() === 'local' ? (player.folderPath() || 'No folder selected') : tab() === 'cloud' ? `${uploadedTracks()?.length ?? 0} tracks` : `${sharedTracks()?.length ?? 0} tracks`}
+        stats={tab() === 'local' ? { songCount: player.tracks().length } : { songCount: (tab() === 'cloud' ? uploadedTracks()?.length : sharedTracks()?.length) ?? 0 }}
         actionsSlot={
           <Show when={tab() === 'local'}>
             <div class="flex items-center gap-4">
@@ -219,7 +307,7 @@ export const LibraryPage: Component = () => {
                 </IconButton>
                 <Show when={player.scanning() && player.scanProgress()}>
                   {(p) => (
-                    <span class="text-sm text-[var(--text-muted)] tabular-nums">
+                    <span class="text-base text-[var(--text-muted)] tabular-nums hidden md:inline">
                       {p().done === 0
                         ? `Finding files... ${p().total.toLocaleString()}`
                         : `${p().done.toLocaleString()}/${p().total.toLocaleString()}`}
@@ -231,48 +319,6 @@ export const LibraryPage: Component = () => {
           </Show>
         }
       />
-
-      {/* Tab switcher */}
-      <div class="flex gap-1 px-4 py-2">
-        <Show when={platform.isTauri}>
-          <button
-            class={`px-3 py-1 text-sm rounded-md transition-colors ${
-              tab() === 'local'
-                ? 'bg-[var(--bg-highlight)] text-[var(--text-primary)]'
-                : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-highlight-hover)]'
-            }`}
-            onClick={() => setTab('local')}
-          >
-            Local Files
-          </button>
-        </Show>
-        <button
-          class={`px-3 py-1 text-sm rounded-md transition-colors ${
-            tab() === 'uploaded'
-              ? 'bg-[var(--bg-highlight)] text-[var(--text-primary)]'
-              : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-highlight-hover)]'
-          }`}
-          onClick={() => setTab('uploaded')}
-        >
-          Uploaded
-          <Show when={(uploadedTracks()?.length ?? 0) > 0}>
-            <span class="ml-1 text-[var(--text-muted)]">({uploadedTracks()!.length})</span>
-          </Show>
-        </button>
-        <button
-          class={`px-3 py-1 text-sm rounded-md transition-colors ${
-            tab() === 'shared'
-              ? 'bg-[var(--bg-highlight)] text-[var(--text-primary)]'
-              : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-highlight-hover)]'
-          }`}
-          onClick={() => setTab('shared')}
-        >
-          Shared
-          <Show when={(sharedTracks()?.length ?? 0) > 0}>
-            <span class="ml-1 text-[var(--text-muted)]">({sharedTracks()!.length})</span>
-          </Show>
-        </button>
-      </div>
 
       {/* Local Files tab */}
       <Show when={tab() === 'local'}>
@@ -336,6 +382,7 @@ export const LibraryPage: Component = () => {
                           title: lt.title,
                           artist: lt.artist,
                           filePath: lt.filePath,
+                          coverPath: lt.coverPath,
                           encrypted: true,
                         })
                       }
@@ -352,6 +399,7 @@ export const LibraryPage: Component = () => {
                           title: lt.title,
                           artist: lt.artist,
                           filePath: lt.filePath,
+                          coverPath: lt.coverPath,
                           encrypted: false,
                         })
                       }
@@ -363,8 +411,8 @@ export const LibraryPage: Component = () => {
         </Show>
       </Show>
 
-      {/* Uploaded tab */}
-      <Show when={tab() === 'uploaded'}>
+      {/* Cloud tab */}
+      <Show when={tab() === 'cloud'}>
         <Show when={uploadedTracks.loading}>
           <div class="flex items-center justify-center py-20 text-[var(--text-muted)]">
             <div class="flex items-center gap-3">
@@ -378,7 +426,7 @@ export const LibraryPage: Component = () => {
         </Show>
         <Show when={!uploadedTracks.loading}>
           <Show
-            when={(uploadedTracks()?.length ?? 0) > 0}
+            when={uploadedTracksAsTrack().length > 0}
             fallback={
               <div class="flex flex-col items-center justify-center py-20 text-[var(--text-muted)]">
                 <p class="text-lg mb-2">No uploaded tracks yet</p>
@@ -386,62 +434,27 @@ export const LibraryPage: Component = () => {
               </div>
             }
           >
-            <div class="px-4">
-              <For each={uploadedTracks()}>
-                {(entry: UploadedContentEntry) => {
-                  const isActive = () => player.currentTrack()?.id === entry.contentId
-                  const isEntryPlaying = () => isActive() && player.isPlaying()
-                  const isEntryDecrypting = () => isActive() && player.decrypting()
-                  return (
-                    <div
-                      class={`flex items-center gap-3 py-2 px-2 rounded-md cursor-pointer group ${isActive() ? 'bg-[var(--bg-highlight)]' : 'hover:bg-[var(--bg-highlight-hover)]'}`}
-                      onClick={() => player.playEncryptedContent(entry)}
-                    >
-                      <div class="w-8 h-8 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center shrink-0">
-                        <Show when={isEntryDecrypting()} fallback={
-                          <Show when={isEntryPlaying()} fallback={
-                            <svg class="w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--text-primary)]" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M8 5v14l11-7z" />
-                            </svg>
-                          }>
-                            <svg class="w-4 h-4 text-[var(--accent-blue)]" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                            </svg>
-                          </Show>
-                        }>
-                          <svg class="w-4 h-4 animate-spin text-[var(--accent-blue)]" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                          </svg>
-                        </Show>
-                      </div>
-                      <div class="flex-1 min-w-0">
-                        <div class={`truncate ${isActive() ? 'text-[var(--accent-blue)]' : 'text-[var(--text-primary)]'}`}>{entry.title}</div>
-                        <div class="text-sm text-[var(--text-muted)] truncate">{entry.artist}</div>
-                      </div>
-                      <div class="text-xs text-[var(--text-muted)] tabular-nums shrink-0">
-                        {new Date(entry.uploadedAt * 1000).toLocaleDateString()}
-                      </div>
-                      <IconButton
-                        variant="ghost"
-                        size="sm"
-                        aria-label="Share"
-                        class="opacity-0 group-hover:opacity-100 shrink-0"
-                        onClick={(e: MouseEvent) => {
-                          e.stopPropagation()
-                          setShareEntry(entry)
-                          setShareDialogOpen(true)
-                        }}
-                      >
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z" />
-                        </svg>
-                      </IconButton>
-                    </div>
-                  )
-                }}
-              </For>
-            </div>
+            <Show when={scrollRef()}>
+              {(el) => (
+                <TrackList
+                  tracks={uploadedTracksAsTrack()}
+                  showDateAdded
+                  activeTrackId={player.currentTrack()?.id}
+                  activeTrackPlaying={player.isPlaying()}
+                  selectedTrackId={player.selectedTrackId() || undefined}
+                  scrollRef={el()}
+                  onTrackClick={(track) => player.setSelectedTrackId(track.id)}
+                  onTrackPlay={(track) => handleEncryptedTrackPlay(track, uploadedEntriesMap())}
+                  menuActions={{
+                    onAddToPlaylist: (track) => {
+                      setPlaylistDialogTrack(track)
+                      setPlaylistDialogOpen(true)
+                    },
+                    onAddToQueue: (track) => console.log('Add to queue:', track),
+                  }}
+                />
+              )}
+            </Show>
           </Show>
         </Show>
       </Show>
@@ -461,7 +474,7 @@ export const LibraryPage: Component = () => {
         </Show>
         <Show when={!sharedTracks.loading}>
           <Show
-            when={(sharedTracks()?.length ?? 0) > 0}
+            when={sharedTracksAsTrack().length > 0}
             fallback={
               <div class="flex flex-col items-center justify-center py-20 text-[var(--text-muted)]">
                 <p class="text-lg mb-2">No shared tracks yet</p>
@@ -469,50 +482,27 @@ export const LibraryPage: Component = () => {
               </div>
             }
           >
-            <div class="px-4">
-              <For each={sharedTracks()}>
-                {(entry: SharedContentEntry) => {
-                  const isActive = () => player.currentTrack()?.id === entry.contentId
-                  const isEntryPlaying = () => isActive() && player.isPlaying()
-                  const isEntryDecrypting = () => isActive() && player.decrypting()
-                  return (
-                    <div
-                      class={`flex items-center gap-3 py-2 px-2 rounded-md cursor-pointer group ${isActive() ? 'bg-[var(--bg-highlight)]' : 'hover:bg-[var(--bg-highlight-hover)]'}`}
-                      onClick={() => player.playEncryptedContent(entry)}
-                    >
-                      <div class="w-8 h-8 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center shrink-0">
-                        <Show when={isEntryDecrypting()} fallback={
-                          <Show when={isEntryPlaying()} fallback={
-                            <svg class="w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--text-primary)]" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M8 5v14l11-7z" />
-                            </svg>
-                          }>
-                            <svg class="w-4 h-4 text-[var(--accent-blue)]" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                            </svg>
-                          </Show>
-                        }>
-                          <svg class="w-4 h-4 animate-spin text-[var(--accent-blue)]" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                          </svg>
-                        </Show>
-                      </div>
-                      <div class="flex-1 min-w-0">
-                        <div class={`truncate ${isActive() ? 'text-[var(--accent-blue)]' : 'text-[var(--text-primary)]'}`}>{entry.title}</div>
-                        <div class="text-sm text-[var(--text-muted)] truncate">{entry.artist}</div>
-                      </div>
-                      <div class="text-xs text-[var(--text-muted)] truncate shrink-0 max-w-[120px]">
-                        from {entry.sharedBy.slice(0, 6)}...{entry.sharedBy.slice(-4)}
-                      </div>
-                      <div class="text-xs text-[var(--text-muted)] tabular-nums shrink-0">
-                        {new Date(entry.uploadedAt * 1000).toLocaleDateString()}
-                      </div>
-                    </div>
-                  )
-                }}
-              </For>
-            </div>
+            <Show when={scrollRef()}>
+              {(el) => (
+                <TrackList
+                  tracks={sharedTracksAsTrack()}
+                  showDateAdded
+                  activeTrackId={player.currentTrack()?.id}
+                  activeTrackPlaying={player.isPlaying()}
+                  selectedTrackId={player.selectedTrackId() || undefined}
+                  scrollRef={el()}
+                  onTrackClick={(track) => player.setSelectedTrackId(track.id)}
+                  onTrackPlay={(track) => handleEncryptedTrackPlay(track, sharedEntriesMap())}
+                  menuActions={{
+                    onAddToPlaylist: (track) => {
+                      setPlaylistDialogTrack(track)
+                      setPlaylistDialogOpen(true)
+                    },
+                    onAddToQueue: (track) => console.log('Add to queue:', track),
+                  }}
+                />
+              )}
+            </Show>
           </Show>
         </Show>
       </Show>
@@ -522,16 +512,6 @@ export const LibraryPage: Component = () => {
         onOpenChange={setPlaylistDialogOpen}
         track={playlistDialogTrack()}
       />
-      <Show when={shareEntry()}>
-        {(entry) => (
-          <ShareContentDialog
-            open={shareDialogOpen()}
-            onOpenChange={setShareDialogOpen}
-            contentId={entry().contentId}
-            title={`${entry().title} - ${entry().artist}`}
-          />
-        )}
-      </Show>
     </div>
   )
 }

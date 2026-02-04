@@ -1,4 +1,4 @@
-import { type Component, createSignal, createMemo, Show } from 'solid-js'
+import { type Component, createSignal, Show } from 'solid-js'
 import { useParams } from '@solidjs/router'
 import { createQuery } from '@tanstack/solid-query'
 import {

@@ -20,10 +20,12 @@ const VERIFICATION_MIRROR_MEGAETH = (import.meta.env.VITE_VERIFICATION_MIRROR_ME
 
 const verifierAbi = parseAbi([
   'function verifiedAt(address user) external view returns (uint64)',
+  'function nationality(address user) external view returns (string)',
 ])
 
 const mirrorAbi = parseAbi([
   'function verifiedAt(address user) external view returns (uint64)',
+  'function nationality(address user) external view returns (string)',
   'function nonces(address user) external view returns (uint256)',
 ])
 
@@ -46,6 +48,8 @@ export interface VerificationStatus {
   megaEthVerifiedAt: number
   /** Whether mirror is stale (Celo verified but MegaETH not yet synced) */
   mirrorStale: boolean
+  /** 3-letter ISO nationality code (e.g. "USA", "GBR") */
+  nationality: string
 }
 
 const CACHE_KEY_PREFIX = 'heaven:verified:'
@@ -87,10 +91,15 @@ export async function getVerificationStatus(
 ): Promise<VerificationStatus> {
   if (!skipCache) {
     const cached = getCached(userAddress)
-    if (cached) return cached
+    if (cached) {
+      console.log('[Verify] Using cached status for', userAddress, cached)
+      return cached
+    }
   }
 
-  const [celoTs, megaTs] = await Promise.all([
+  console.log('[Verify] Fetching verification status from Celo verifier:', SELF_VERIFIER_CELO, 'for', userAddress)
+
+  const [celoTs, celoNat, megaTs] = await Promise.all([
     SELF_VERIFIER_CELO
       ? celoClient.readContract({
           address: SELF_VERIFIER_CELO,
@@ -99,6 +108,14 @@ export async function getVerificationStatus(
           args: [userAddress],
         }).catch(() => 0n)
       : Promise.resolve(0n),
+    SELF_VERIFIER_CELO
+      ? celoClient.readContract({
+          address: SELF_VERIFIER_CELO,
+          abi: verifierAbi,
+          functionName: 'nationality',
+          args: [userAddress],
+        }).catch(() => '')
+      : Promise.resolve(''),
     VERIFICATION_MIRROR_MEGAETH
       ? megaClient.readContract({
           address: VERIFICATION_MIRROR_MEGAETH,
@@ -117,6 +134,7 @@ export async function getVerificationStatus(
     celoVerifiedAt,
     megaEthVerifiedAt,
     mirrorStale: celoVerifiedAt > 0 && megaEthVerifiedAt < celoVerifiedAt,
+    nationality: celoNat as string,
   }
 
   setCache(userAddress, status)
@@ -150,11 +168,12 @@ export async function buildSelfVerifyLink(config: SelfVerifyConfig): Promise<str
     appName: 'Heaven',
     scope: config.scope,
     endpoint: config.contractAddress.toLowerCase(),
-    endpointType: 'staging_celo',
+    endpointType: 'staging_celo' as any,
     userId: config.userAddress,
     userIdType: 'hex',
     disclosures: {
       minimumAge: 18,
+      nationality: true,
     },
   }).build()
 

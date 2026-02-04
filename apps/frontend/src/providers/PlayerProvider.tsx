@@ -16,9 +16,10 @@ import {
   type ParentComponent,
 } from 'solid-js'
 import { usePlatform } from 'virtual:heaven-platform'
-import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
 import { useAuth } from './AuthContext'
+
+const tauriCore = () => import('@tauri-apps/api/core')
+const tauriEvent = () => import('@tauri-apps/api/event')
 import {
   createPlaybackSource,
   getMimeForPath,
@@ -41,6 +42,7 @@ export interface EncryptedContentInfo {
   title: string
   artist: string
   algo?: number // 0 = plaintext, 1 = AES-GCM-256 (default)
+  coverUrl?: string // resolved album art URL for NowPlaying display
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -59,6 +61,60 @@ function parseDuration(value?: string | null): number {
   if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
   if (parts.length === 2) return parts[0] * 60 + parts[1]
   return parts[0] || 0
+}
+
+function bytesMatch(bytes: Uint8Array, offset: number, text: string): boolean {
+  if (offset + text.length > bytes.length) return false
+  for (let i = 0; i < text.length; i += 1) {
+    if (bytes[offset + i] !== text.charCodeAt(i)) return false
+  }
+  return true
+}
+
+function sniffAudioMime(bytes: Uint8Array): string | null {
+  if (bytes.length < 4) return null
+  if (bytesMatch(bytes, 0, 'RIFF') && bytesMatch(bytes, 8, 'WAVE')) return 'audio/wav'
+  if (bytesMatch(bytes, 0, 'fLaC')) return 'audio/flac'
+  if (bytesMatch(bytes, 0, 'OggS')) return 'audio/ogg'
+  if (bytesMatch(bytes, 0, 'ID3')) return 'audio/mpeg'
+  if (bytes.length >= 12 && bytesMatch(bytes, 4, 'ftyp')) return 'audio/mp4'
+  if (bytes[0] === 0xff && (bytes[1] & 0xf0) === 0xf0 && (bytes[1] & 0x06) === 0x00) {
+    return 'audio/aac'
+  }
+  if (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0) return 'audio/mpeg'
+  return null
+}
+
+async function decodeDuration(bytes: Uint8Array): Promise<number | null> {
+  const AudioCtx = (window as typeof window & {
+    webkitAudioContext?: typeof AudioContext
+  }).AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!AudioCtx) return null
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+  const ctx = new AudioCtx()
+  try {
+    const decoded = await ctx.decodeAudioData(buffer)
+    return Number.isFinite(decoded.duration) && decoded.duration > 0 ? decoded.duration : null
+  } catch {
+    return null
+  } finally {
+    try { await ctx.close() } catch { /* ignore */ }
+  }
+}
+
+// ─── Persistence keys ────────────────────────────────────────────────────────
+
+const LS_TRACK_ID = 'heaven:lastTrackId'
+const LS_POSITION = 'heaven:lastPosition'
+const LS_DURATION = 'heaven:lastDuration'
+const LS_VOLUME = 'heaven:lastVolume'
+
+function savePlayerState(key: string, value: string) {
+  try { localStorage.setItem(key, value) } catch { /* quota */ }
+}
+
+function readPlayerState(key: string): string | null {
+  try { return localStorage.getItem(key) } catch { return null }
 }
 
 // ─── Context type ─────────────────────────────────────────────────────────────
@@ -119,6 +175,10 @@ export const PlayerProvider: ParentComponent = (props) => {
   const auth = useAuth()
   const isNative = platform.isTauri
 
+  // Lazy-loaded Tauri helpers (only resolved when isNative)
+  let _invoke: typeof import('@tauri-apps/api/core').invoke = null!
+  let _listen: typeof import('@tauri-apps/api/event').listen = null!
+
   // Scrobble service
   let scrobbleService: ScrobbleService | null = null
 
@@ -146,7 +206,7 @@ export const PlayerProvider: ParentComponent = (props) => {
   const [isPlaying, setIsPlaying] = createSignal(false)
   const [currentTime, setCurrentTime] = createSignal(0)
   const [duration, setDuration] = createSignal(0)
-  const [volume, setVolume] = createSignal(75)
+  const [volume, setVolume] = createSignal(Number(readPlayerState(LS_VOLUME)) || 75)
   const [playbackError, setPlaybackError] = createSignal<string | null>(null)
   const [decrypting, setDecrypting] = createSignal(false)
 
@@ -155,11 +215,62 @@ export const PlayerProvider: ParentComponent = (props) => {
     scrobbleService?.onPlaybackChange(playing)
   }))
 
+  // ─── Persist playback state to localStorage ──────────────────────────────────
+
+  // Save track id when it changes (skip the initial -1)
+  createEffect(on(currentIndex, (idx) => {
+    const t = tracks()
+    if (idx >= 0 && idx < t.length) {
+      savePlayerState(LS_TRACK_ID, t[idx].id)
+    }
+  }))
+
+  // Save position debounced (~5s) — avoid thrashing localStorage on every timeupdate
+  let positionSaveTimer: ReturnType<typeof setInterval> | undefined
+  onMount(() => {
+    positionSaveTimer = setInterval(() => {
+      const time = currentTime()
+      const dur = duration()
+      if (currentIndex() >= 0 && time > 0) {
+        savePlayerState(LS_POSITION, String(time))
+        if (dur > 0) savePlayerState(LS_DURATION, String(dur))
+      }
+    }, 5000)
+  })
+  onCleanup(() => clearInterval(positionSaveTimer))
+
+  // Save volume on change
+  createEffect(on(volume, (v) => {
+    savePlayerState(LS_VOLUME, String(v))
+  }))
+
+  // Restore last-played track after library loads (paused, at saved position)
+  let restored = false
+  let restoredSeek = 0 // position to seek to when user first hits play
+  function restoreLastTrack() {
+    if (restored) return
+    const savedId = readPlayerState(LS_TRACK_ID)
+    if (!savedId) return
+    const t = tracks()
+    const idx = t.findIndex((tr) => tr.id === savedId)
+    if (idx < 0) return
+    restored = true
+    setCurrentIndex(idx)
+    setSelectedTrackId(t[idx].id)
+    const savedPos = Number(readPlayerState(LS_POSITION)) || 0
+    const savedDur = Number(readPlayerState(LS_DURATION)) || parseDuration(t[idx].duration)
+    if (savedPos > 0) setCurrentTime(savedPos)
+    if (savedDur > 0) setDuration(savedDur)
+    restoredSeek = savedPos
+    // Don't auto-play — user hits play to resume
+  }
+
   let audio: HTMLAudioElement | undefined
   let currentRevoke: (() => void) | undefined
   let currentMode: 'stream' | 'blob' = 'stream'
   let fallbackTried = false
   let playId = 0
+  let decryptingPlayId = 0
   let seekWasPlaying = false
   let lastSeekValue = 0
   let pendingSeek: number | null = null
@@ -234,7 +345,7 @@ export const PlayerProvider: ParentComponent = (props) => {
 
     let unlistenProgress: (() => void) | undefined
     try {
-      unlistenProgress = await listen('music://scan-progress', (event) => {
+      unlistenProgress = await _listen('music://scan-progress', (event) => {
         const payload = event.payload as { done: number; total: number }
         setScanProgress(payload)
       })
@@ -254,14 +365,18 @@ export const PlayerProvider: ParentComponent = (props) => {
     }
   }
 
-  // Load persisted folder + tracks from native SQLite on mount
+  // Load Tauri APIs + persisted folder on mount
   onMount(async () => {
     if (!isNative) return
+    const [core, event] = await Promise.all([tauriCore(), tauriEvent()])
+    _invoke = core.invoke
+    _listen = event.listen
     try {
       const folder = await getFolderNative()
       if (folder) {
         setFolderPath(folder)
         await loadAllTracks(folder)
+        restoreLastTrack()
       }
     } catch (e) {
       console.error('[Library] Failed to load persisted folder:', e)
@@ -271,9 +386,15 @@ export const PlayerProvider: ParentComponent = (props) => {
   })
 
   // Audio setup
-  onMount(() => {
+  onMount(async () => {
     if (isNative) {
-      listen('audio:position', (event) => {
+      // Ensure Tauri APIs are loaded (may already be from folder onMount)
+      if (!_invoke) {
+        const [core, event] = await Promise.all([tauriCore(), tauriEvent()])
+        _invoke = core.invoke
+        _listen = event.listen
+      }
+      _listen('audio:position', (event) => {
         const payload = event.payload as { position?: number }
         if (typeof payload?.position === 'number') {
           setCurrentTime(payload.position)
@@ -284,7 +405,7 @@ export const PlayerProvider: ParentComponent = (props) => {
       }).then((unlisten) => {
         unlistenPosition = unlisten
       })
-      listen('audio:loaded', (event) => {
+      _listen('audio:loaded', (event) => {
         const payload = event.payload as { duration?: number }
         if (audioDebug()) {
           console.log('[Audio] native loaded', payload)
@@ -298,7 +419,7 @@ export const PlayerProvider: ParentComponent = (props) => {
       }).then((unlisten) => {
         unlistenLoaded = unlisten
       })
-      listen('audio:ended', () => {
+      _listen('audio:ended', () => {
         if (audioDebug()) {
           console.log('[Audio] native ended')
         }
@@ -306,7 +427,7 @@ export const PlayerProvider: ParentComponent = (props) => {
       }).then((unlisten) => {
         unlistenEnded = unlisten
       })
-      listen('audio:state', (event) => {
+      _listen('audio:state', (event) => {
         const payload = event.payload as { state?: string }
         if (audioDebug()) {
           console.log('[Audio] native state', payload)
@@ -316,7 +437,7 @@ export const PlayerProvider: ParentComponent = (props) => {
       }).then((unlisten) => {
         unlistenState = unlisten
       })
-      listen('audio:error', (event) => {
+      _listen('audio:error', (event) => {
         const payload = event.payload as { message?: string }
         const message = payload?.message || 'Audio playback failed.'
         console.error('[Audio] native error:', message)
@@ -338,6 +459,12 @@ export const PlayerProvider: ParentComponent = (props) => {
     const onTimeUpdate = () => {
       const current = audio!.currentTime
       setCurrentTime(current)
+      if (!duration()) {
+        const audioDur = audio!.duration
+        if (Number.isFinite(audioDur) && audioDur > 0) {
+          setDuration(audioDur)
+        }
+      }
       if (!isSeeking) {
         const delta = Math.abs(current - lastTime)
         if (delta > 5 && Number.isFinite(lastTime)) {
@@ -360,7 +487,10 @@ export const PlayerProvider: ParentComponent = (props) => {
       }
       logAudio('loadedmetadata')
     }
-    const onEnded = () => playNext()
+    const onEnded = () => {
+      logAudio('ended')
+      playNext()
+    }
     const onError = () => {
       const code = audio?.error?.code
       const src = audio?.currentSrc || audio?.src
@@ -384,6 +514,9 @@ export const PlayerProvider: ParentComponent = (props) => {
           playTrack(currentIndex(), 'blob', true)
           return
         }
+      }
+      if (currentMode === 'blob' && (code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED || code === MediaError.MEDIA_ERR_DECODE)) {
+        setPlaybackError('Unsupported audio format for this device.')
       }
       console.error('Audio playback error:', audio?.error, details)
       logAudio('error', details)
@@ -449,13 +582,17 @@ export const PlayerProvider: ParentComponent = (props) => {
       unlistenState?.()
       unlistenLoaded?.()
       unlistenError?.()
-      invoke('audio_stop')
+      _invoke('audio_stop')
     }
   })
 
-  async function playTrack(index: number, mode: 'stream' | 'blob' = 'stream', isFallback = false) {
+  async function playTrack(index: number, mode: 'stream' | 'blob' = 'stream', isFallback = false, seekTo = 0) {
     const t = tracks()
     if (index < 0 || index >= t.length) return
+    if (decryptingPlayId) {
+      decryptingPlayId = 0
+      setDecrypting(false)
+    }
 
     // Skip tracks without a local file (e.g. on-chain playlist tracks)
     const track = t[index] as LocalTrack
@@ -470,6 +607,7 @@ export const PlayerProvider: ParentComponent = (props) => {
 
     const thisPlay = ++playId
     if (!isFallback) fallbackTried = false
+    if (!seekTo) restoredSeek = -1 // clear restore state on explicit play
     setCurrentIndex(index)
     setSelectedTrackId(t[index].id)
     setPlaybackError(null)
@@ -493,7 +631,7 @@ export const PlayerProvider: ParentComponent = (props) => {
         if (audioDebug()) {
           console.log('[Audio] native play', { index, path: t[index].filePath })
         }
-        await invoke('audio_play', { path: t[index].filePath, seek: 0 })
+        await _invoke('audio_play', { path: t[index].filePath, seek: seekTo })
         setIsPlaying(true)
       } catch (e) {
         console.error('Failed to play track:', e)
@@ -530,8 +668,12 @@ export const PlayerProvider: ParentComponent = (props) => {
       setCurrentTime(0)
       setDuration(0)
       audio.load()
-      logAudio('src-set', { mode: source.mode, src: source.url })
+      logAudio('src-set', { mode: source.mode, src: source.url, seekTo })
       await audio.play()
+      if (seekTo > 0) {
+        audio.currentTime = seekTo
+        setCurrentTime(seekTo)
+      }
       setIsPlaying(true)
     } catch (e) {
       if (thisPlay === playId) {
@@ -548,9 +690,18 @@ export const PlayerProvider: ParentComponent = (props) => {
   }
 
   async function togglePlay() {
+    // If we restored a track from localStorage but haven't loaded audio yet,
+    // load it now and seek to the saved position
+    if (restored && restoredSeek >= 0 && currentIndex() >= 0 && !isPlaying()) {
+      const seekPos = restoredSeek
+      restoredSeek = -1 // clear so we don't re-seek on next toggle
+      await playTrack(currentIndex(), 'stream', false, seekPos)
+      return
+    }
+
     if (isNative) {
       if (isPlaying()) {
-        await invoke('audio_pause')
+        await _invoke('audio_pause')
         setIsPlaying(false)
         return
       }
@@ -558,7 +709,7 @@ export const PlayerProvider: ParentComponent = (props) => {
         await playTrack(0)
         return
       }
-      await invoke('audio_resume')
+      await _invoke('audio_resume')
       setIsPlaying(true)
       return
     }
@@ -594,7 +745,7 @@ export const PlayerProvider: ParentComponent = (props) => {
     if (t.length === 0) return
     if (isNative) {
       if (currentTime() > 3) {
-        invoke('audio_seek', { position: 0, play: isPlaying() })
+        _invoke('audio_seek', { position: 0, play: isPlaying() })
         setCurrentTime(0)
         return
       }
@@ -617,7 +768,7 @@ export const PlayerProvider: ParentComponent = (props) => {
       }
       const nextPos = (value / 100) * activeDuration
       setCurrentTime(nextPos)
-      invoke('audio_seek', { position: nextPos, play: isPlaying() })
+      _invoke('audio_seek', { position: nextPos, play: isPlaying() })
       return
     }
 
@@ -651,7 +802,7 @@ export const PlayerProvider: ParentComponent = (props) => {
       if (activeDuration) {
         const nextPos = (lastSeekValue / 100) * activeDuration
         setCurrentTime(nextPos)
-        await invoke('audio_seek', { position: nextPos, play: seekWasPlaying })
+        await _invoke('audio_seek', { position: nextPos, play: seekWasPlaying })
       }
       if (seekWasPlaying) {
         setIsPlaying(true)
@@ -679,7 +830,7 @@ export const PlayerProvider: ParentComponent = (props) => {
   function handleVolumeChange(value: number) {
     setVolume(value)
     if (isNative) {
-      invoke('audio_set_volume', { volume: value / 100 })
+      _invoke('audio_set_volume', { volume: value / 100 })
       return
     }
     if (audio) audio.volume = value / 100
@@ -687,6 +838,7 @@ export const PlayerProvider: ParentComponent = (props) => {
 
   // In-memory cache for decrypted audio blob URLs (keyed by contentId)
   const decryptedCache = new Map<string, string>()
+  const decryptedDurationCache = new Map<string, number>()
 
   async function playEncryptedContent(content: EncryptedContentInfo) {
     console.log('[Player] playEncryptedContent called:', {
@@ -700,6 +852,11 @@ export const PlayerProvider: ParentComponent = (props) => {
       console.error('[Player] No audio element')
       return
     }
+    const thisPlay = ++playId
+    if (decryptingPlayId) {
+      decryptingPlayId = 0
+      setDecrypting(false)
+    }
     setPlaybackError(null)
 
     // Create a synthetic track so NowPlaying displays correctly
@@ -709,6 +866,7 @@ export const PlayerProvider: ParentComponent = (props) => {
       artist: content.artist,
       album: '',
       filePath: '', // no local file
+      albumCover: content.coverUrl,
     }
 
     // Set as current track immediately (shows title while decrypting)
@@ -722,20 +880,33 @@ export const PlayerProvider: ParentComponent = (props) => {
     // Check cache first
     const cached = decryptedCache.get(content.contentId)
     if (cached) {
+      if (thisPlay !== playId) return
       currentRevoke?.()
       currentRevoke = undefined
+      currentMode = 'blob'
+      fallbackTried = true
+      const cachedDuration = decryptedDurationCache.get(content.contentId)
+      if (cachedDuration) setDuration(cachedDuration)
       audio.src = cached
       audio.currentTime = 0
       audio.load()
-      await audio.play()
-      setIsPlaying(true)
+      try {
+        await audio.play()
+        if (thisPlay === playId) setIsPlaying(true)
+      } catch {
+        if (thisPlay === playId) {
+          setPlaybackError('Audio playback failed.')
+          setIsPlaying(false)
+        }
+      }
       return
     }
 
     // Fetch + decrypt (or fetch plaintext if algo=0)
-    setDecrypting(true)
-    console.log('[Player] Starting fetch, algo:', content.algo)
     try {
+      decryptingPlayId = thisPlay
+      setDecrypting(true)
+      console.log('[Player] Starting fetch, algo:', content.algo)
       let result: { audio: Uint8Array }
       if (content.algo === 0) {
         console.log('[Player] Fetching plaintext from Beam...')
@@ -751,11 +922,29 @@ export const PlayerProvider: ParentComponent = (props) => {
         )
       }
       console.log('[Player] Got audio bytes:', result.audio.length)
+      if (thisPlay !== playId) return
 
       // Create blob URL from decrypted audio bytes
-      const blob = new Blob([result.audio.buffer], { type: 'audio/mpeg' })
+      const detectedMime = sniffAudioMime(result.audio)
+      const canPlay = detectedMime ? audio.canPlayType(detectedMime) : ''
+      console.log('[Player] Cloud mime:', { detectedMime, canPlay })
+      if (detectedMime && !canPlay) {
+        setPlaybackError('Unsupported audio format for this device.')
+        setIsPlaying(false)
+        return
+      }
+      if (detectedMime === 'audio/flac' && canPlay !== 'probably') {
+        setPlaybackError('Unsupported audio format for this device.')
+        setIsPlaying(false)
+        return
+      }
+      const blob = detectedMime
+        ? new Blob([result.audio as BlobPart], { type: detectedMime })
+        : new Blob([result.audio as BlobPart])
       const url = URL.createObjectURL(blob)
       decryptedCache.set(content.contentId, url)
+      const cachedDuration = decryptedDurationCache.get(content.contentId)
+      if (cachedDuration) setDuration(cachedDuration)
 
       // Stop current playback
       audio.pause()
@@ -764,16 +953,42 @@ export const PlayerProvider: ParentComponent = (props) => {
         // Don't revoke cached URLs — they'll be GC'd with the page
       }
 
+      currentMode = 'blob'
+      fallbackTried = true
       audio.src = url
       audio.currentTime = 0
       audio.load()
-      await audio.play()
-      setIsPlaying(true)
+      try {
+        await audio.play()
+        if (thisPlay === playId) setIsPlaying(true)
+      } catch {
+        if (thisPlay === playId) {
+          setPlaybackError('Audio playback failed.')
+          setIsPlaying(false)
+        }
+      }
+      if (thisPlay === playId && !duration()) {
+        setTimeout(() => {
+          if (thisPlay !== playId || duration()) return
+          void decodeDuration(result.audio).then((decodedDuration) => {
+            if (!decodedDuration) return
+            if (thisPlay !== playId || duration()) return
+            decryptedDurationCache.set(content.contentId, decodedDuration)
+            setDuration(decodedDuration)
+          })
+        }, 250)
+      }
     } catch (e: any) {
       console.error('[Player] Failed to decrypt content:', e)
-      setPlaybackError(e.message || 'Failed to decrypt content')
+      if (thisPlay === playId) {
+        setPlaybackError(e?.message || 'Failed to decrypt content')
+        setIsPlaying(false)
+      }
     } finally {
-      setDecrypting(false)
+      if (decryptingPlayId === thisPlay) {
+        decryptingPlayId = 0
+        setDecrypting(false)
+      }
     }
   }
 

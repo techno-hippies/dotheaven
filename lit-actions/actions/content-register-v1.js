@@ -8,7 +8,8 @@
  * 1. Verify EIP-191 signature (trackId + pieceCid hash + datasetOwner + algo + timestamp + nonce)
  * 2. Sponsor PKP broadcasts registerContentFor() on MegaETH
  * 3. Sponsor PKP broadcasts registerContent() on Base mirror
- * 4. Return contentId + tx hashes
+ * 4. If coverImage provided, upload to Filebase + set on ScrobbleV3
+ * 5. Return contentId + tx hashes + coverCid
  *
  * Required jsParams:
  * - userPkpPublicKey: User PKP public key
@@ -27,8 +28,11 @@
  * - contentRegistry: Override ContentRegistry address
  * - contentAccessMirror: Override ContentAccessMirror address
  * - dryRun: boolean (default false) — skip broadcast, return signed tx
+ * - coverImage: { base64: string, contentType: string } — album art to upload
+ * - filebaseEncryptedKey: Encrypted Filebase API key (required if coverImage provided)
+ * - filebasePlaintextKey: Plaintext Filebase API key (alternative to encrypted)
  *
- * Returns: { success, contentId, txHash, blockNumber, mirrorTxHash, trackRegistered }
+ * Returns: { success, contentId, txHash, blockNumber, mirrorTxHash, trackRegistered, coverCid, coverTxHash }
  */
 
 // ============================================================
@@ -94,6 +98,133 @@ async function sha256HexFromBytes(bytes) {
   return Array.from(new Uint8Array(hash))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+// ============================================================
+// FILEBASE S3 UPLOAD (AWS Sig V4)
+// ============================================================
+
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/bmp"];
+const MAX_COVER_BYTES = 5 * 1024 * 1024;
+
+async function sha256Bytes(data) {
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return new Uint8Array(hashBuffer);
+}
+
+function bytesToHex(bytes) {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function sha256HexFromBuffer(buffer) {
+  const hash = await sha256Bytes(buffer);
+  return bytesToHex(hash);
+}
+
+async function sha256Hex(message) {
+  const encoder = new TextEncoder();
+  const hash = await crypto.subtle.digest("SHA-256", encoder.encode(message));
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function hmacSha256(key, message) {
+  const encoder = new TextEncoder();
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    typeof key === "string" ? encoder.encode(key) : key,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  return crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(message));
+}
+
+async function hmacHex(key, message) {
+  const sig = await hmacSha256(key, message);
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function getSigningKey(secretKey, dateStamp, region, service) {
+  const encoder = new TextEncoder();
+  const kDate = await hmacSha256(encoder.encode("AWS4" + secretKey), dateStamp);
+  const kRegion = await hmacSha256(kDate, region);
+  const kService = await hmacSha256(kRegion, service);
+  return hmacSha256(kService, "aws4_request");
+}
+
+async function uploadToFilebase(filebaseApiKey, content, contentType, fileName) {
+  const decoded = atob(filebaseApiKey);
+  const [accessKey, secretKey, bucket] = decoded.split(":");
+  if (!accessKey || !secretKey || !bucket) {
+    throw new Error("Invalid Filebase API key format");
+  }
+
+  const endpoint = "s3.filebase.com";
+  const region = "us-east-1";
+  const service = "s3";
+
+  const date = new Date();
+  const amzDate = date.toISOString().replace(/[:-]|\.\d{3}/g, "");
+  const dateStamp = amzDate.slice(0, 8);
+
+  const canonicalUri = `/${bucket}/${fileName}`;
+
+  const payloadHash = await sha256HexFromBuffer(content);
+
+  const canonicalHeaders =
+    [`host:${endpoint}`, `x-amz-content-sha256:${payloadHash}`, `x-amz-date:${amzDate}`].join("\n") + "\n";
+  const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+
+  const canonicalRequest = ["PUT", canonicalUri, "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
+
+  const algorithm = "AWS4-HMAC-SHA256";
+  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const stringToSign = [algorithm, amzDate, credentialScope, await sha256Hex(canonicalRequest)].join("\n");
+
+  const signingKey = await getSigningKey(secretKey, dateStamp, region, service);
+  const signature = await hmacHex(signingKey, stringToSign);
+
+  const authHeader = [
+    `${algorithm} Credential=${accessKey}/${credentialScope}`,
+    `SignedHeaders=${signedHeaders}`,
+    `Signature=${signature}`,
+  ].join(", ");
+
+  const response = await fetch(`https://${endpoint}${canonicalUri}`, {
+    method: "PUT",
+    headers: {
+      Authorization: authHeader,
+      "x-amz-content-sha256": payloadHash,
+      "x-amz-date": amzDate,
+      "Content-Type": contentType,
+    },
+    body: content,
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Filebase upload failed: ${response.status} ${text}`);
+  }
+
+  const cid = response.headers.get("x-amz-meta-cid");
+  if (!cid) {
+    throw new Error("No CID returned from Filebase");
+  }
+
+  return cid;
+}
+
+function decodeBase64ToBytes(base64) {
+  const binaryStr = atob(base64);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+  return bytes;
 }
 
 async function signTx(unsignedTx, label) {
@@ -167,6 +298,8 @@ const SCROBBLE_V3 = "0x144c450cd5B641404EEB5D5eD523399dD94049E0";
 const SCROBBLE_V3_ABI = [
   "function isRegistered(bytes32 trackId) external view returns (bool)",
   "function registerTracksBatch(uint8[] kinds, bytes32[] payloads, string[] titles, string[] artists, string[] albums) external",
+  "function getTrack(bytes32 trackId) external view returns (string title, string artist, string album, uint8 kind, bytes32 payload, uint64 registeredAt, string coverCid)",
+  "function setTrackCoverBatch(bytes32[] trackIds, string[] coverCids) external",
 ];
 
 const CONTENT_REGISTRY_ABI = [
@@ -198,6 +331,9 @@ const main = async () => {
       contentRegistry: contentRegistryOverride,
       contentAccessMirror: contentAccessMirrorOverride,
       dryRun = false,
+      coverImage,
+      filebaseEncryptedKey,
+      filebasePlaintextKey,
     } = jsParams || {};
 
     must(trackId, "trackId");
@@ -484,6 +620,112 @@ const main = async () => {
       return;
     }
 
+    // ========================================
+    // STEP 5: Upload cover image (if provided)
+    // ========================================
+    let coverCid = null;
+    let coverTxHash = null;
+
+    if (coverImage && coverImage.base64 && coverImage.contentType) {
+      const contentType = (coverImage.contentType || "").split(";")[0].trim().toLowerCase();
+
+      if (ALLOWED_IMAGE_TYPES.includes(contentType)) {
+        try {
+          const coverBytes = decodeBase64ToBytes(coverImage.base64);
+
+          if (coverBytes.byteLength <= MAX_COVER_BYTES) {
+            // Check if track already has a cover
+            let existingCover = "";
+            try {
+              const checkCoverJson = await Lit.Actions.runOnce(
+                { waitForResponse: true, name: "checkExistingCover" },
+                async () => {
+                  const provider = new ethers.providers.JsonRpcProvider(MEGAETH_RPC_URL);
+                  const c = new ethers.Contract(SCROBBLE_V3, SCROBBLE_V3_ABI, provider);
+                  const track = await c.getTrack(trackId32);
+                  return JSON.stringify({ coverCid: track.coverCid || "" });
+                }
+              );
+              existingCover = JSON.parse(checkCoverJson).coverCid || "";
+            } catch {
+              // Track might not be registered yet if this is a new upload
+            }
+
+            // Only upload if no existing cover
+            if (!existingCover) {
+              // Decrypt Filebase key
+              let filebaseKey = null;
+              if (filebasePlaintextKey) {
+                filebaseKey = filebasePlaintextKey;
+              } else if (filebaseEncryptedKey) {
+                filebaseKey = await Lit.Actions.decryptAndCombine({
+                  accessControlConditions: filebaseEncryptedKey.accessControlConditions,
+                  ciphertext: filebaseEncryptedKey.ciphertext,
+                  dataToEncryptHash: filebaseEncryptedKey.dataToEncryptHash,
+                  authSig: null,
+                  chain: "ethereum",
+                });
+              }
+
+              if (filebaseKey) {
+                // Upload cover to Filebase
+                const hash = await sha256HexFromBuffer(coverBytes);
+                const ext = contentType.split("/")[1] || "jpg";
+                const objectKey = `covers/${hash}.${ext}`;
+
+                coverCid = await Lit.Actions.runOnce(
+                  { waitForResponse: true, name: `uploadCover_${hash.slice(0, 8)}` },
+                  async () => {
+                    return await uploadToFilebase(filebaseKey, coverBytes, contentType, objectKey);
+                  }
+                );
+
+                // Set cover on-chain via setTrackCoverBatch
+                if (coverCid) {
+                  const scrobbleIface = new ethers.utils.Interface(SCROBBLE_V3_ABI);
+                  const coverTxData = scrobbleIface.encodeFunctionData("setTrackCoverBatch", [
+                    [trackId32],
+                    [coverCid],
+                  ]);
+
+                  const coverNonceJson = await Lit.Actions.runOnce(
+                    { waitForResponse: true, name: "getCoverTxNonce" },
+                    async () => {
+                      const provider = new ethers.providers.JsonRpcProvider(MEGAETH_RPC_URL);
+                      const n = await provider.getTransactionCount(SPONSOR_PKP_ADDRESS, "pending");
+                      return JSON.stringify({ nonce: n.toString() });
+                    }
+                  );
+                  const coverTxNonce = Number(JSON.parse(coverNonceJson).nonce);
+
+                  const unsignedCoverTx = {
+                    type: 0,
+                    chainId: MEGAETH_CHAIN_ID,
+                    nonce: toBigNumber(coverTxNonce, "coverNonce"),
+                    to: SCROBBLE_V3,
+                    data: coverTxData,
+                    gasLimit: toBigNumber("500000", "gasLimit"),
+                    gasPrice: toBigNumber(MEGAETH_GAS_PRICE, "gasPrice"),
+                    value: 0,
+                  };
+
+                  try {
+                    const coverSigned = await signTx(unsignedCoverTx, "setTrackCover_mega");
+                    const coverBroadcast = await broadcastSignedTx(coverSigned.signedTx, MEGAETH_RPC_URL, "setTrackCover_mega");
+                    coverTxHash = coverBroadcast.txHash;
+                  } catch {
+                    // Cover setting is best-effort; don't fail the whole registration
+                  }
+                }
+              }
+            }
+          }
+        } catch {
+          // Cover upload is best-effort; don't fail the whole registration
+        }
+      }
+    }
+
     Lit.Actions.setResponse({
       response: JSON.stringify({
         success: true,
@@ -494,6 +736,8 @@ const main = async () => {
         blockNumber: megaBroadcast.blockNumber,
         mirrorTxHash: baseBroadcast.txHash,
         trackRegistered,
+        coverCid,
+        coverTxHash,
       }),
     });
   } catch (err) {

@@ -25,8 +25,10 @@ import {
   RELIGION_OPTIONS,
   PETS_OPTIONS,
   DIET_OPTIONS,
+  alpha3ToAlpha2,
 } from '../constants/profile-options'
 import { HOBBY_TAGS, SKILL_TAGS, tagsToOptions } from '../data/tags'
+import { VerificationBadge } from './verification-badge'
 
 const HOBBY_OPTIONS = tagsToOptions(HOBBY_TAGS)
 const SKILL_OPTIONS = tagsToOptions(SKILL_TAGS)
@@ -79,6 +81,14 @@ export interface ProfileInput {
   skillTagIds?: number[]
 }
 
+/** Verified identity data from Self.xyz (separate from user-reported profile) */
+export interface VerificationData {
+  /** Whether the user has a verified passport */
+  verified: boolean
+  /** 3-letter ISO nationality from passport (e.g. "GBR") */
+  nationality: string
+}
+
 export interface EnsProfile {
   name: string | null
   avatar: string | null
@@ -109,6 +119,8 @@ export interface ProfileInfoSectionProps {
   ensLoading?: boolean
   /** Called when user selects an ENS/external avatar URI (ENSIP-12 ref or URL) */
   onImportAvatar?: (uri: string) => void
+  /** Verified identity data — when present and verified, overrides age/nationality display and locks editing */
+  verification?: VerificationData
 }
 
 export const ProfileInfoSection: Component<ProfileInfoSectionProps> = (props) => {
@@ -117,6 +129,16 @@ export const ProfileInfoSection: Component<ProfileInfoSectionProps> = (props) =>
   const [coverPreview, setCoverPreview] = createSignal<string | null>(props.profile.coverPhoto || null)
   let avatarInputRef: HTMLInputElement | undefined
   let coverInputRef: HTMLInputElement | undefined
+
+  // Verification: derived state for locked fields
+  const isVerified = () => !!props.verification?.verified
+  const verifiedNationalityAlpha2 = () => {
+    const nat = props.verification?.nationality
+    if (!nat) return undefined
+    // If already alpha-2 (2 chars), use directly; otherwise convert from alpha-3
+    return nat.length === 2 ? nat.toUpperCase() : alpha3ToAlpha2(nat)
+  }
+  const verifiedBadge = () => <VerificationBadge state="verified" size="sm" />
 
   createEffect(() => {
     const profile = props.profile
@@ -136,7 +158,13 @@ export const ProfileInfoSection: Component<ProfileInfoSectionProps> = (props) =>
   const handleSave = async () => {
     if (!props.onSave) return
     try {
-      await props.onSave(formData())
+      const data = { ...formData() }
+      // Strip verified fields so they are never written back to ProfileV1
+      if (isVerified()) {
+        delete data.age
+        delete data.nationality
+      }
+      await props.onSave(data)
       props.setIsEditing(false)
     } catch (error) {
       console.error('Failed to save profile:', error)
@@ -396,9 +424,26 @@ export const ProfileInfoSection: Component<ProfileInfoSectionProps> = (props) =>
       {/* Basics */}
       <EditableInfoCard>
         <EditableInfoCardSection title="Basics" isEditing={props.isEditing}>
-          <EditableInfoCardRow label="Age" value={formData().age?.toString()} isEditing={props.isEditing} isOwnProfile={props.isOwnProfile} placeholder="Enter your age" onValueChange={(v: string | string[]) => updateField('age', typeof v === 'string' && v ? Number(v) : undefined)} />
+          <EditableInfoCardRow
+            label="Age"
+            value={formData().age?.toString()}
+            isEditing={props.isEditing}
+            isOwnProfile={props.isOwnProfile}
+            placeholder="Enter your age"
+            onValueChange={(v: string | string[]) => updateField('age', typeof v === 'string' && v ? Number(v) : undefined)}
+          />
           <EditableInfoCardRow label="Gender" value={formData().gender} isEditing={props.isEditing} isOwnProfile={props.isOwnProfile} type="select" options={GENDER_OPTIONS} onValueChange={(v: string | string[]) => updateField('gender', typeof v === 'string' ? v : undefined)} />
-          <EditableInfoCardRow label="Nationality" value={formData().nationality} isEditing={props.isEditing} isOwnProfile={props.isOwnProfile} type="select" options={NATIONALITY_OPTIONS} onValueChange={(v: string | string[]) => updateField('nationality', typeof v === 'string' ? v : undefined)} />
+          <EditableInfoCardRow
+            label="Nationality"
+            value={isVerified() && verifiedNationalityAlpha2() ? verifiedNationalityAlpha2()! : formData().nationality}
+            isEditing={props.isEditing}
+            isOwnProfile={props.isOwnProfile}
+            type="select"
+            options={NATIONALITY_OPTIONS}
+            locked={isVerified() && !!verifiedNationalityAlpha2()}
+            suffix={isVerified() && verifiedNationalityAlpha2() ? verifiedBadge() : undefined}
+            onValueChange={(v: string | string[]) => updateField('nationality', typeof v === 'string' ? v : undefined)}
+          />
           <EditableInfoCardRow label="Native language" value={formData().nativeLanguage} isEditing={props.isEditing} isOwnProfile={props.isOwnProfile} type="select" options={LANGUAGE_OPTIONS} onValueChange={(v: string | string[]) => updateField('nativeLanguage', typeof v === 'string' ? v : undefined)} />
           <EditableInfoCardRow label="Learning" value={formData().targetLanguage} isEditing={props.isEditing} isOwnProfile={props.isOwnProfile} type="multiselectdropdown" options={LEARNING_LANGUAGE_OPTIONS} placeholder="Select languages you're learning" onValueChange={(v: string | string[]) => updateField('targetLanguage', Array.isArray(v) ? v.join(', ') : v as string)} />
         </EditableInfoCardSection>

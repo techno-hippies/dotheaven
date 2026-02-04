@@ -1,7 +1,7 @@
 /* @refresh reload */
 import { Buffer } from 'buffer'
 // Polyfill Buffer for Lit SDK (web only)
-if (typeof window !== 'undefined' && !window.Buffer) {
+if (typeof window !== 'undefined' && !(window as any).Buffer) {
   ;(window as any).Buffer = Buffer
 }
 
@@ -35,7 +35,7 @@ import { WalletPage } from './pages/WalletPage'
 import { PlaylistPage } from './pages/PlaylistPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ChatLayout } from './pages/ChatLayout'
-import { NotificationsPage } from './pages/NotificationsPage'
+import { PostPage } from './pages/PostPage'
 
 function maybeRedirectHandshakeProfile() {
   if (typeof window === 'undefined') return
@@ -82,7 +82,8 @@ render(
                   <Route path="/" component={App} />
                   <Route path="/profile" component={MyProfilePage} />
                   <Route path="/u/:id" component={PublicProfilePage} />
-                  <Route path="/library" component={LibraryPage} />
+                  <Route path="/music" component={LibraryPage} />
+                  <Route path="/music/:tab" component={LibraryPage} />
                   <Route path="/liked-songs" component={LikedSongsPage} />
                   <Route path="/free-weekly" component={FreeWeeklyPage} />
                   <Route path="/chat" component={ChatLayout}>
@@ -93,7 +94,7 @@ render(
                   <Route path="/wallet" component={WalletPage} />
                   <Route path="/playlist/:id" component={PlaylistPage} />
 
-                  <Route path="/notifications" component={NotificationsPage} />
+                  <Route path="/post/:id" component={PostPage} />
                   <Route path="/settings" component={SettingsPage} />
                 </Route>
               </HashRouter>

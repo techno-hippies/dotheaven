@@ -131,11 +131,44 @@ const ACTIONS: Record<string, ActionDef> = {
     displayName: 'Content Decrypt v1',
     keys: [], // No encrypted keys — Lit Action only
   },
+  postCreateV1: {
+    name: 'postCreateV1',
+    path: 'actions/post-create-v1.js',
+    displayName: 'Post Create v1',
+    keys: [
+      { name: 'filebase_api_key', envVar: 'FILEBASE_SONGS_BUCKET_API_KEY' },
+      { name: 'openrouter_api_key', envVar: 'OPENROUTER_API_KEY' },
+      { name: 'fal_api_key', envVar: 'FAL_KEY' },
+    ],
+  },
+  postTextV1: {
+    name: 'postTextV1',
+    path: 'actions/post-text-v1.js',
+    displayName: 'Post Text v1',
+    keys: [
+      { name: 'filebase_api_key', envVar: 'FILEBASE_SONGS_BUCKET_API_KEY' },
+    ],
+  },
   linkEoaV1: {
     name: 'linkEoaV1',
     path: 'actions/link-eoa-v1.js',
     displayName: 'Link EOA v1',
     keys: [], // No encrypted keys — sponsor PKP pays gas directly
+  },
+  postRegisterV1: {
+    name: 'postRegisterV1',
+    path: 'actions/post-register-v1.js',
+    displayName: 'Post Register v1',
+    keys: [
+      { name: 'filebase_api_key', envVar: 'FILEBASE_SONGS_BUCKET_API_KEY' },
+      { name: 'openrouter_api_key', envVar: 'OPENROUTER_API_KEY' },
+    ],
+  },
+  photoRevealV1: {
+    name: 'photoRevealV1',
+    path: 'actions/photo-reveal-v1.js',
+    displayName: 'Photo Reveal v1',
+    keys: [], // No encrypted keys — watermark secret is hardcoded seed, decryption uses Lit ACLs
   },
 };
 

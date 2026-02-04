@@ -1,11 +1,11 @@
-import { type Component, createSignal, createEffect, Show, createMemo } from 'solid-js'
+import { type Component, createSignal, createEffect, Show, createMemo, onCleanup } from 'solid-js'
 import { useNavigate, useParams } from '@solidjs/router'
 import { createQuery } from '@tanstack/solid-query'
 import { ProfilePage, type ProfileTab, type ProfileScrobble } from '../components/profile'
 import { useAuth } from '../providers'
-import { fetchScrobbleEntries, getProfile, setProfile, setTextRecord, setTextRecords, computeNode, getTextRecord, checkNameAvailable, registerHeavenName, resolveAvatarUri, resolveIpfsUri, getEnsProfile, getAddr, resolveEnsName, getPrimaryName } from '../lib/heaven'
+import { fetchScrobbleEntries, getProfile, setProfile, setTextRecord, setTextRecords, computeNode, getTextRecord, checkNameAvailable, registerHeavenName, resolveAvatarUri, resolveIpfsUri, getEnsProfile, getAddr, resolveEnsName, getPrimaryName, getVerificationStatus, buildSelfVerifyLink, syncVerificationToMegaEth } from '../lib/heaven'
 import { uploadAvatar } from '../lib/heaven/avatar'
-import { type ProfileInput, getTagLabel } from '@heaven/ui'
+import { type ProfileInput, type VerificationState, type VerifyStep, type VerificationData, getTagLabel, VerifyIdentityDialog } from '@heaven/ui'
 import { parseTagCsv } from '../lib/heaven/profile'
 import { isAddress, zeroAddress } from 'viem'
 
@@ -202,6 +202,103 @@ export const MyProfilePage: Component = () => {
 
   const handleImportAvatar = (uri: string) => {
     setImportedAvatarUri(uri)
+  }
+
+  // ---- Verification (Self.xyz) ----
+  const verificationQuery = createQuery(() => ({
+    queryKey: ['verification', address()],
+    queryFn: () => getVerificationStatus(address()! as `0x${string}`),
+    get enabled() { return !!address() },
+    staleTime: 1000 * 60 * 5,
+  }))
+
+  const verificationState = (): VerificationState => {
+    const v = verificationQuery.data
+    if (!v) return 'none'
+    return v.verified ? 'verified' : 'none'
+  }
+
+  const verificationData = (): VerificationData | undefined => {
+    const v = verificationQuery.data
+    if (!v?.verified) return undefined
+    return { verified: true, nationality: v.nationality }
+  }
+
+  const [verifyDialogOpen, setVerifyDialogOpen] = createSignal(false)
+  const [verifyStep, setVerifyStep] = createSignal<VerifyStep>('qr')
+  const [verifyLink, setVerifyLink] = createSignal<string | undefined>()
+  const [verifyLinkLoading, setVerifyLinkLoading] = createSignal(false)
+  const [verifyError, setVerifyError] = createSignal<string | undefined>()
+
+  let pollTimer: ReturnType<typeof setInterval> | undefined
+
+  onCleanup(() => { if (pollTimer) clearInterval(pollTimer) })
+
+  const handleVerifyClick = async () => {
+    setVerifyStep('qr')
+    setVerifyLink(undefined)
+    setVerifyError(undefined)
+    setVerifyDialogOpen(true)
+    setVerifyLinkLoading(true)
+
+    try {
+      const VERIFIER = import.meta.env.VITE_SELF_VERIFIER_CELO
+      console.log('[Verify] VITE_SELF_VERIFIER_CELO =', VERIFIER)
+      if (!VERIFIER) throw new Error('Verifier contract not configured')
+
+      const link = await buildSelfVerifyLink({
+        contractAddress: VERIFIER,
+        userAddress: address()! as `0x${string}`,
+        scope: 'heaven-profile-verify',
+      })
+      console.log('[Verify] Self link:', link)
+      setVerifyLink(link)
+      setVerifyLinkLoading(false)
+
+      // Stay on QR step — poll in background while user scans
+      pollTimer = setInterval(async () => {
+        try {
+          const status = await getVerificationStatus(address()! as `0x${string}`, { skipCache: true })
+          if (status.verified) {
+            clearInterval(pollTimer!)
+            pollTimer = undefined
+
+            // Mirror to MegaETH
+            if (status.mirrorStale) {
+              setVerifyStep('mirroring')
+              try {
+                const authCtx = await auth.getAuthContext()
+                await syncVerificationToMegaEth(address()! as `0x${string}`, authCtx)
+              } catch (e) {
+                console.warn('[Verify] Mirror sync failed (non-fatal):', e)
+              }
+            }
+
+            setVerifyStep('success')
+            verificationQuery.refetch()
+          }
+        } catch {
+          // polling error, keep trying
+        }
+      }, 5000)
+    } catch (err: any) {
+      setVerifyLinkLoading(false)
+      setVerifyStep('error')
+      setVerifyError(err?.message || 'Failed to start verification')
+    }
+  }
+
+  const handleVerifyRetry = () => {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = undefined }
+    handleVerifyClick()
+  }
+
+  const handleVerifyDialogChange = (open: boolean) => {
+    setVerifyDialogOpen(open)
+    if (!open && pollTimer) {
+      clearInterval(pollTimer)
+      pollTimer = undefined
+    }
   }
 
   const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
@@ -449,13 +546,10 @@ export const MyProfilePage: Component = () => {
       <ProfilePage
         username={handleName()}
         displayName={displayName()}
-        avatarUrl={profileQuery.data?.avatar || ensQuery.data?.avatar}
-        stats={{
-          followers: 0,
-          following: 0,
-          likes: 0,
-        }}
+        avatarUrl={profileQuery.data?.avatar || ensQuery.data?.avatar || undefined}
         isOwnProfile={true}
+        verificationState={verificationState()}
+        onVerifyClick={handleVerifyClick}
         activeTab={activeTab()}
         onTabChange={setActiveTab}
         scrobbles={scrobbles()}
@@ -472,6 +566,16 @@ export const MyProfilePage: Component = () => {
         ensProfile={ensQuery.data}
         ensLoading={ensQuery.isLoading}
         onImportAvatar={handleImportAvatar}
+        verification={verificationData()}
+      />
+      <VerifyIdentityDialog
+        open={verifyDialogOpen()}
+        onOpenChange={handleVerifyDialogChange}
+        verifyLink={verifyLink()}
+        linkLoading={verifyLinkLoading()}
+        step={verifyStep()}
+        errorMessage={verifyError()}
+        onRetry={handleVerifyRetry}
       />
       </Show>
     </div>
@@ -563,6 +667,19 @@ export const PublicProfilePage: Component = () => {
     staleTime: 1000 * 60 * 30,
   }))
 
+  const publicVerificationQuery = createQuery(() => ({
+    queryKey: ['verification', address()],
+    queryFn: () => getVerificationStatus(address()! as `0x${string}`),
+    get enabled() { return !!address() },
+    staleTime: 1000 * 60 * 5,
+  }))
+
+  const publicVerificationData = (): VerificationData | undefined => {
+    const v = publicVerificationQuery.data
+    if (!v?.verified) return undefined
+    return { verified: true, nationality: v.nationality }
+  }
+
   const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
 
   const scrobbles = (): ProfileScrobble[] => {
@@ -624,11 +741,6 @@ export const PublicProfilePage: Component = () => {
             username={handleName()}
             displayName={displayName()}
             avatarUrl={profileQuery.data?.avatar || ensProfileQuery.data?.avatar || undefined}
-            stats={{
-              followers: 0,
-              following: 0,
-              likes: 0,
-            }}
             isOwnProfile={false}
             activeTab={activeTab()}
             onTabChange={setActiveTab}
@@ -639,6 +751,7 @@ export const PublicProfilePage: Component = () => {
             heavenName={resolvedQuery.data?.label ?? null}
             ensProfile={ensProfileQuery.data}
             ensLoading={ensProfileQuery.isLoading}
+            verification={publicVerificationData()}
           />
         </Show>
       </Show>

@@ -28,7 +28,7 @@ export const WelcomeScreen: Component<WelcomeScreenProps> = (props) => {
       {/* App Icon */}
       <div class="mb-8 flex items-center justify-center">
         <img
-          src={props.logoSrc || "/images/heaven.png"}
+          src={props.logoSrc || `${import.meta.env.BASE_URL}images/heaven.png`}
           alt="Heaven logo"
           class="w-24 h-24 object-contain"
         />

@@ -23,6 +23,8 @@ export interface UploadJob {
   title: string
   artist: string
   filePath: string
+  /** Absolute path to local cover image (for extracting album art) */
+  coverPath?: string
   step: UploadStep
   error?: string
   startedAt?: number
@@ -55,6 +57,7 @@ export function enqueueUpload(track: {
   title: string
   artist: string
   filePath: string
+  coverPath?: string
   encrypted?: boolean
 }): string {
   const jobId = `upload-${nextId++}`
@@ -63,6 +66,7 @@ export function enqueueUpload(track: {
     title: track.title,
     artist: track.artist,
     filePath: track.filePath,
+    coverPath: track.coverPath,
     step: 'queued',
     encrypted: track.encrypted !== false, // default true
   }

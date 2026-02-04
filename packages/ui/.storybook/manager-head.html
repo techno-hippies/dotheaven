@@ -1,0 +1,69 @@
+<style>
+  /* Tailwind Neutral Theme for Storybook UI chrome */
+  :root {
+    /* Override Storybook's default blue theme */
+    --color-primary: #89b4fa !important;
+    --color-secondary: #b4befe !important;
+  }
+
+  /* Storybook UI backgrounds */
+  body {
+    background: #171717 !important;
+    color: #fafafa !important;
+  }
+
+  /* Sidebar */
+  [data-side="left"],
+  [role="navigation"] {
+    background: #1c1c1c !important;
+    border-color: #404040 !important;
+  }
+
+  /* Toolbar */
+  [data-side="top"] {
+    background: #1c1c1c !important;
+    border-color: #404040 !important;
+  }
+
+  /* Panels (addons, controls, etc.) */
+  [data-side="bottom"],
+  [role="tabpanel"] {
+    background: #1c1c1c !important;
+    border-color: #404040 !important;
+  }
+
+  /* Buttons */
+  button {
+    border-radius: 6px !important;
+  }
+
+  /* Input fields */
+  input,
+  select,
+  textarea {
+    background: #262626 !important;
+    border-color: #404040 !important;
+    border-radius: 6px !important;
+    color: #fafafa !important;
+  }
+
+  /* Links and interactive text */
+  a {
+    color: #89b4fa !important;
+  }
+
+  a:hover {
+    color: #b4befe !important;
+  }
+
+  /* Selected/active states */
+  [aria-selected="true"],
+  [data-selected="true"] {
+    background: #363636 !important;
+  }
+
+  /* Canvas background (where stories render) */
+  #storybook-root {
+    background: #171717 !important;
+  }
+</style>

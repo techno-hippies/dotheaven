@@ -122,6 +122,7 @@ export const HeaderActions: Component = () => {
           </>
         }
       >
+        {/* Authenticated state on desktop: nothing (notifications in sidebar) */}
         <></>
       </Show>
     </div>
