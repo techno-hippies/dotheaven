@@ -22,15 +22,16 @@ import '@fontsource/geist/500.css'
 import '@fontsource/geist/600.css'
 import '@fontsource/geist/700.css'
 import { App } from './App'
-import { AppLayout } from './components/shell'
+import { AppLayout, AuthGuard } from './components/shell'
 import { AuthPage } from './pages/AuthPage'
+
+import { OnboardingPage } from './pages/OnboardingPage'
 import { MyProfilePage, PublicProfilePage } from './pages/ProfilePage'
 import { LibraryPage } from './pages/LibraryPage'
 import { LikedSongsPage } from './pages/LikedSongsPage'
 import { FreeWeeklyPage } from './pages/FreeWeeklyPage'
 import { ChatPage } from './pages/ChatPage'
 import { AIChatPage } from './pages/AIChatPage'
-// VoiceCallPage removed - voice calls are now integrated into AIChatPage via ?call=1 param
 import { WalletPage } from './pages/WalletPage'
 import { PlaylistPage } from './pages/PlaylistPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -75,27 +76,33 @@ render(
           <XMTPProvider>
             <PlayerProvider>
               <HashRouter>
-                {/* Auth page is standalone (no AppShell) */}
+                {/* Standalone routes (no AppShell) */}
                 <Route path="/auth" component={AuthPage} />
-                {/* All other routes share AppLayout (header, sidebar, player footer) */}
-                <Route path="/" component={AppLayout}>
-                  <Route path="/" component={App} />
-                  <Route path="/profile" component={MyProfilePage} />
-                  <Route path="/u/:id" component={PublicProfilePage} />
-                  <Route path="/music" component={LibraryPage} />
-                  <Route path="/music/:tab" component={LibraryPage} />
-                  <Route path="/liked-songs" component={LikedSongsPage} />
-                  <Route path="/free-weekly" component={FreeWeeklyPage} />
-                  <Route path="/chat" component={ChatLayout}>
-                    <Route path="/" component={() => null} />
-                    <Route path="/ai/:personalityId" component={AIChatPage} />
-                    <Route path="/:username" component={ChatPage} />
-                  </Route>
-                  <Route path="/wallet" component={WalletPage} />
-                  <Route path="/playlist/:id" component={PlaylistPage} />
+                <Route path="/onboarding" component={OnboardingPage} />
 
+                {/* App routes with shared layout */}
+                <Route path="/" component={AppLayout}>
+                  {/* Public routes (no auth required) */}
+                  <Route path="/u/:id" component={PublicProfilePage} />
                   <Route path="/post/:id" component={PostPage} />
-                  <Route path="/settings" component={SettingsPage} />
+
+                  {/* Protected routes */}
+                  <Route path="/" component={AuthGuard}>
+                    <Route path="/" component={App} />
+                    <Route path="/profile" component={MyProfilePage} />
+                    <Route path="/music" component={LibraryPage} />
+                    <Route path="/music/:tab" component={LibraryPage} />
+                    <Route path="/liked-songs" component={LikedSongsPage} />
+                    <Route path="/free-weekly" component={FreeWeeklyPage} />
+                    <Route path="/chat" component={ChatLayout}>
+                      <Route path="/" component={() => null} />
+                      <Route path="/ai/:personalityId" component={AIChatPage} />
+                      <Route path="/:username" component={ChatPage} />
+                    </Route>
+                    <Route path="/wallet" component={WalletPage} />
+                    <Route path="/playlist/:id" component={PlaylistPage} />
+                    <Route path="/settings" component={SettingsPage} />
+                  </Route>
                 </Route>
               </HashRouter>
             </PlayerProvider>

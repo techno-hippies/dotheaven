@@ -36,6 +36,15 @@ export const Default: Story = {
   },
 }
 
+export const WithNationality: Story = {
+  args: {
+    name: 'yuki.heaven',
+    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=yuki',
+    timestamp: '2m ago',
+    nationalityCode: 'JP',
+  },
+}
+
 export const WithOnlineStatus: Story = {
   args: {
     name: 'vitalik.eth',
@@ -227,6 +236,44 @@ export const AllSizes: Story = {
           avatarUrl="https://api.dicebear.com/7.x/avataaars/svg?seed=large"
           timestamp="1h ago"
           size="lg"
+        />
+      </div>
+    </div>
+  ),
+}
+
+export const NationalityFlags: Story = {
+  name: 'Nationality Flags — All Sizes',
+  render: () => (
+    <div class="flex flex-col gap-6">
+      <div>
+        <span class="text-xs text-[var(--text-muted)] mb-2 block">Small — Brazilian</span>
+        <UserIdentity
+          name="lucas.heaven"
+          avatarUrl="https://api.dicebear.com/7.x/avataaars/svg?seed=lucas"
+          timestamp="Just now"
+          size="sm"
+          nationalityCode="BR"
+        />
+      </div>
+      <div>
+        <span class="text-xs text-[var(--text-muted)] mb-2 block">Medium — Korean</span>
+        <UserIdentity
+          name="soyeon.heaven"
+          avatarUrl="https://api.dicebear.com/7.x/avataaars/svg?seed=soyeon"
+          timestamp="5m ago"
+          size="md"
+          nationalityCode="KR"
+        />
+      </div>
+      <div>
+        <span class="text-xs text-[var(--text-muted)] mb-2 block">Large — British</span>
+        <UserIdentity
+          name="oliver.heaven"
+          avatarUrl="https://api.dicebear.com/7.x/avataaars/svg?seed=oliver"
+          timestamp="1h ago"
+          size="lg"
+          nationalityCode="GB"
         />
       </div>
     </div>

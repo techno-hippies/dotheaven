@@ -9,6 +9,8 @@ export interface MessageBubbleProps {
   username?: string
   /** Avatar image URL */
   avatarUrl?: string
+  /** ISO 3166-1 alpha-2 nationality code (e.g. "US"). Shows a flag badge on the avatar. */
+  nationalityCode?: string
   /** Timestamp text (e.g., "2:30 PM") */
   timestamp?: string
   /** Whether this message is from the current user */
@@ -38,6 +40,7 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
     'message',
     'username',
     'avatarUrl',
+    'nationalityCode',
     'timestamp',
     'isOwn',
     'isFirstInGroup',
@@ -58,7 +61,7 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
         when={showHeader()}
         fallback={<div class="w-10 flex-shrink-0 ml-4" />}
       >
-        <Avatar size="md" src={local.avatarUrl} class="flex-shrink-0 mt-0.5 ml-4" />
+        <Avatar size="md" src={local.avatarUrl} nationalityCode={local.nationalityCode} class="flex-shrink-0 mt-0.5 ml-4" />
       </Show>
       <div class="flex-1 min-w-0 mr-4">
         <Show when={showHeader()}>

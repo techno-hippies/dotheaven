@@ -10,6 +10,8 @@ export interface ChatListItemProps {
   /** Secondary text shown after name in muted color (e.g. truncated 0x address) */
   handle?: string
   avatarUrl?: string
+  /** ISO 3166-1 alpha-2 nationality code (e.g. "US"). Shows a flag badge on the avatar. */
+  nationalityCode?: string
   /** Last message preview text */
   lastMessage?: string
   /** Timestamp of last message (e.g. "2m ago", "Yesterday") */
@@ -66,6 +68,7 @@ export const ChatListItem: Component<ChatListItemProps> = (props) => {
         name={props.name}
         handle={props.handle}
         avatarUrl={props.avatarUrl}
+        nationalityCode={props.nationalityCode}
         timestamp={props.timestamp}
         online={props.online}
         size="lg"

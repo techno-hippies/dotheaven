@@ -74,4 +74,14 @@ export { EngagementBar, type EngagementBarProps } from './engagement-bar'
 export { RevealModal, type RevealModalProps } from './reveal-modal'
 export { PostViewer, type PostViewerProps, type PostComment } from './post-viewer'
 export { SidePlayer, type SidePlayerProps } from './side-player'
+export { CommunityCard, type CommunityCardProps, type LanguageInfo } from './community-card'
+export { CommunityFeed, type CommunityFeedProps, type CommunityTab } from './community-feed'
+export { LanguageEditor, type LanguageEditorProps } from './language-editor'
+export {
+  type LanguageEntry, type ProficiencyLevel,
+  PROFICIENCY, PROFICIENCY_LEVELS, PROFICIENCY_OPTIONS, LANG_TO_FLAG,
+  proficiencyLabel, packLanguages, packLanguagesHex, unpackLanguages,
+  getNativeLanguages, getLearningLanguages,
+} from '../data/languages'
+export { DownloadAppCta, type DownloadAppCtaProps, type DetectedPlatform } from './download-app-cta'
 

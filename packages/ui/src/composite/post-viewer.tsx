@@ -54,6 +54,8 @@ export interface PostViewerProps {
   authorName: string
   authorHandle?: string
   authorAvatarUrl?: string
+  /** ISO 3166-1 alpha-2 nationality code for the post author */
+  authorNationalityCode?: string
   timestamp: string
   fullTimestamp?: string // Full date/time for detail view
   text?: string
@@ -181,6 +183,7 @@ export const PostViewer: Component<PostViewerProps> = (props) => {
           >
             <Avatar
               src={props.authorAvatarUrl}
+              nationalityCode={props.authorNationalityCode}
               size="lg"
             />
             <div class="flex flex-col">

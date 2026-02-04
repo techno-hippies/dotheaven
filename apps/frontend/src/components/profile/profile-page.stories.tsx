@@ -25,6 +25,7 @@ export const Default: Story = {
         username="samantha.heaven"
         displayName="Samantha"
         avatarUrl="https://i.pravatar.cc/300?img=1"
+        nationalityCode="JP"
         verificationState="verified"
         isFollowing={isFollowing()}
         isOwnProfile={false}
@@ -47,6 +48,7 @@ export const OwnProfile: Story = {
         username="samantha.heaven"
         displayName="Samantha"
         avatarUrl="https://i.pravatar.cc/300?img=1"
+        nationalityCode="GB"
         verificationState="verified"
         isOwnProfile={true}
         onAvatarClick={() => console.log('Avatar clicked')}

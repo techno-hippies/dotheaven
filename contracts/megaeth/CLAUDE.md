@@ -18,6 +18,10 @@
 | `EngagementV1.sol` | ⚠️ Deprecated. Uses Story `ipId` as key. See EngagementV2 for new posts. |
 | `EngagementV2.sol` | Likes, comments, translations, flags, reveals, nullifier bans. Uses `postIdBytes32` as universal key. Permissionless `payReveal()` with 24h viewing windows. Immutable charity wallet. Privacy-preserving reveal logging (nullifierHash offchain). |
 | `PostsV1.sol` | Post existence + metadata pointer on MegaETH. Cross-chain mirror of Story Protocol IP Asset registrations. `postFor()` emits `PostCreated` events for subgraph indexing. Stores `creatorOf[ipId]` for idempotency. `onlySponsor` gated. |
+| `ScrobbleV4.sol` | AA-enabled Track Registry + Scrobble Events. Same logic as V3 but uses ERC-4337 Account Abstraction: user-facing functions (`scrobbleBatch`, `registerAndScrobbleBatch`) gated by `onlyAccountOf(user)` (factory-deterministic binding), admin functions (`registerTracksBatch`, `updateTrack`, covers) gated by `onlyOperator`. Inherits `AccountBinding`. |
+| `aa/HeavenAccountFactory.sol` | Wraps eth-infinitism `SimpleAccountFactory` v0.7 via composition. Deploys `SimpleAccount` proxies via CREATE2. Exposes `getAddress(owner, salt)` for deterministic address derivation. |
+| `aa/HeavenPaymaster.sol` | Thin wrapper around eth-infinitism `VerifyingPaymaster` v0.7. Off-chain gateway signer validates policy and signs UserOp approvals. |
+| `aa/AccountBinding.sol` | Shared abstract contract with `onlyAccountOf(user)` modifier. Verifies `msg.sender == FACTORY.getAddress(user, SALT)` — not spoofable. Inherited by ScrobbleV4 (and future AA-enabled contracts). |
 
 ## Chain Info
 
@@ -43,8 +47,16 @@ All names are **FREE** (`pricePerYear = 0`). Tiered pricing for short names (2-4
 | EngagementV1 | `0x2A3beA895AE5bb4415c436155cbA15a97ACc2C77` |
 | EngagementV2 | `0xAF769d204e51b64D282083Eb0493F6f37cd93138` |
 | PostsV1 | `0xFe674F421c2bBB6D664c7F5bc0D5A0204EE0bFA6` |
+| HeavenAccountFactory | `0xB66BF4066F40b36Da0da34916799a069CBc79408` |
+| HeavenPaymaster | `0xEb3C4c145AE16d7cC044657D1632ef08d6B2D5d9` |
+| ScrobbleV4 | `0xD41a8991aDF67a1c4CCcb5f7Da6A01a601eC3F37` |
+
+Internal (deployed by factory constructor):
+| SimpleAccountFactory | `0x48833641e079936664df306e64a160256520a33F` |
+| SimpleAccount (impl) | `0xA17Fd81A1fFEC9f5694343dd4BFe29847B0eb9E7` |
 
 Heaven Node: `0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27`
+EntryPoint v0.7: `0x0000000071727De22E5E9d8BAf0edAc6f37da032`
 
 ## MegaETH Foundry Quirks
 
@@ -134,6 +146,23 @@ trackId = keccak256(abi.encode(uint8(kind), bytes32(payload)))
 - Display strings (title/artist/album) stored on-chain in original casing
 - Normalized strings used only for kind 3 payload derivation
 
+### ScrobbleV4 — AA-enabled Track Registry + Scrobble Events
+Same track registry and scrobble logic as V3, but permission model replaced with ERC-4337 Account Abstraction:
+- **User-facing** (`scrobbleBatch`, `registerAndScrobbleBatch`): `onlyAccountOf(user)` — `msg.sender` must be user's factory-derived SimpleAccount
+- **Admin** (`registerTracksBatch`, `updateTrack`, `setTrackCover`, `setTrackCoverBatch`): `onlyOperator` — `mapping(address => bool)` (multiple operators, not single sponsor)
+- **Factory binding**: `FACTORY` is immutable, `ACCOUNT_SALT = 0`. Modifier checks `msg.sender == FACTORY.getAddress(user, 0)` — not spoofable.
+- **Events**: All events emit `user` (PKP EOA), never `msg.sender` (the smart account)
+
+### ERC-4337 Account Abstraction Architecture
+```
+User PKP signs UserOp → Gateway validates + signs paymasterAndData → Bundler (Alto) submits to EntryPoint → SimpleAccount.execute() → ScrobbleV4
+```
+- **HeavenAccountFactory**: wraps `SimpleAccountFactory` v0.7. CREATE2-deterministic: `getAddress(owner, 0)` = user's account address.
+- **HeavenPaymaster**: `VerifyingPaymaster` v0.7. Gateway signer signs UserOp approvals off-chain. Burns paymaster's EntryPoint deposit for gas.
+- **AccountBinding**: shared `onlyAccountOf(user)` modifier. Inherited by AA-enabled app contracts.
+- **Two-step handshake**: (1) `/quotePaymaster` returns `paymasterAndData`, (2) user signs `userOpHash` (which covers `paymasterAndData`), (3) `/sendUserOp` forwards to bundler.
+- **SimpleAccount is UUPS-upgradeable** (ERC1967Proxy). Gateway must reject `target == sender` to prevent `execute(self, upgradeToAndCall(...))`.
+
 ### PlaylistV1 — Event-sourced Playlists
 ```
 playlistId = keccak256(abi.encode(owner, createdAt, nonce))
@@ -163,16 +192,24 @@ contracts/megaeth/
 │   ├── RecordsV1.sol          # ENS record storage
 │   ├── Resolver.sol           # CCIP-Read resolver
 │   ├── ProfileV1.sol          # Social profile (packed enums)
-│   ├── ScrobbleV3.sol         # Track registry + scrobble events
-│   └── PlaylistV1.sol         # Event-sourced playlists
+│   ├── ScrobbleV3.sol         # Track registry + scrobble events (sponsor-gated)
+│   ├── ScrobbleV4.sol         # Track registry + scrobble events (AA-gated)
+│   ├── PlaylistV1.sol         # Event-sourced playlists
+│   └── aa/
+│       ├── IHeavenAccountFactory.sol  # Minimal factory interface
+│       ├── HeavenAccountFactory.sol   # SimpleAccountFactory v0.7 wrapper
+│       ├── HeavenPaymaster.sol        # VerifyingPaymaster v0.7 wrapper
+│       └── AccountBinding.sol         # Shared onlyAccountOf modifier
 ├── script/
 │   ├── DeployHeaven.s.sol     # Deploy script (registry/records/profile)
 │   ├── DeployScrobbleV3.s.sol # Deploy ScrobbleV3
-│   └── DeployPlaylistV1.s.sol # Deploy PlaylistV1
+│   ├── DeployPlaylistV1.s.sol # Deploy PlaylistV1
+│   └── DeployAA.s.sol         # Deploy AA stack (factory/paymaster/ScrobbleV4)
 ├── test/
 │   ├── RegistryV1.t.sol       # Primary name + transfer clearing tests
 │   ├── ProfileV1.t.sol        # Profile sig verification + replay tests
 │   ├── ScrobbleV3.t.sol       # Track registry + scrobble tests
+│   ├── ScrobbleV4.t.sol       # AA-gated scrobble + factory binding tests
 │   ├── PlaylistV1.t.sol       # Playlist CRUD + tombstone tests
 │   └── SessionEscrowV1.t.sol  # Session escrow tests
 ├── foundry.toml

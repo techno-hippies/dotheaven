@@ -20,6 +20,7 @@ export default meta
 
 const noop = () => {}
 const AVATAR = 'https://placewaifu.com/image/100'
+const NAT = 'JP'
 const PHOTO = 'https://placewaifu.com/image/400/500'
 
 // ── Basic states ───────────────────────────────────────────────────────
@@ -29,6 +30,7 @@ export const Default: StoryObj = {
   render: () => (
     <PostComposer
       avatarUrl={AVATAR}
+      nationalityCode={NAT}
       onPhotoClick={noop}
       onVideoClick={noop}
       onMusicClick={noop}

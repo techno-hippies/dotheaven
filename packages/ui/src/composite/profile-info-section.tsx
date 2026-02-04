@@ -2,11 +2,10 @@ import { Show, type Component, createSignal, createEffect } from 'solid-js'
 import { cn } from '../lib/utils'
 import { EditableInfoCard, EditableInfoCardSection, EditableInfoCardRow } from './editable-info-card'
 import { OnboardingNameStep } from './onboarding-name-step'
+import { LanguageEditor } from './language-editor'
 import {
   GENDER_OPTIONS,
   NATIONALITY_OPTIONS,
-  LANGUAGE_OPTIONS,
-  LEARNING_LANGUAGE_OPTIONS,
   RELOCATE_OPTIONS,
   DEGREE_OPTIONS,
   FIELD_OPTIONS,
@@ -28,6 +27,7 @@ import {
   alpha3ToAlpha2,
 } from '../constants/profile-options'
 import { HOBBY_TAGS, SKILL_TAGS, tagsToOptions } from '../data/tags'
+import type { LanguageEntry } from '../data/languages'
 import { VerificationBadge } from './verification-badge'
 
 const HOBBY_OPTIONS = tagsToOptions(HOBBY_TAGS)
@@ -44,8 +44,8 @@ export interface ProfileInput {
   heightCm?: number
   gender?: string
   nationality?: string
-  nativeLanguage?: string
-  targetLanguage?: string
+  /** Unified language entries with CEFR proficiency levels (replaces nativeLanguage/targetLanguage) */
+  languages?: LanguageEntry[]
   locationCityId?: string
   relocate?: string
   degree?: string
@@ -71,7 +71,6 @@ export interface ProfileInput {
   twitter?: string
   github?: string
   telegram?: string
-  learningLanguagesPacked?: number
   friendsOpenToMask?: number
   skillsCommit?: string
   hobbiesCommit?: string
@@ -444,8 +443,12 @@ export const ProfileInfoSection: Component<ProfileInfoSectionProps> = (props) =>
             suffix={isVerified() && verifiedNationalityAlpha2() ? verifiedBadge() : undefined}
             onValueChange={(v: string | string[]) => updateField('nationality', typeof v === 'string' ? v : undefined)}
           />
-          <EditableInfoCardRow label="Native language" value={formData().nativeLanguage} isEditing={props.isEditing} isOwnProfile={props.isOwnProfile} type="select" options={LANGUAGE_OPTIONS} onValueChange={(v: string | string[]) => updateField('nativeLanguage', typeof v === 'string' ? v : undefined)} />
-          <EditableInfoCardRow label="Learning" value={formData().targetLanguage} isEditing={props.isEditing} isOwnProfile={props.isOwnProfile} type="multiselectdropdown" options={LEARNING_LANGUAGE_OPTIONS} placeholder="Select languages you're learning" onValueChange={(v: string | string[]) => updateField('targetLanguage', Array.isArray(v) ? v.join(', ') : v as string)} />
+          <LanguageEditor
+            languages={formData().languages || []}
+            onChange={(langs) => updateField('languages', langs)}
+            isEditing={props.isEditing}
+            isOwnProfile={props.isOwnProfile}
+          />
         </EditableInfoCardSection>
       </EditableInfoCard>
 

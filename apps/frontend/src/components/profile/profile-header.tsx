@@ -6,6 +6,8 @@ export interface ProfileHeaderProps {
   username: string
   displayName: string
   avatarUrl?: string
+  /** ISO 3166-1 alpha-2 nationality code (e.g. "US"). Shows a flag badge on the avatar. */
+  nationalityCode?: string
   bannerGradient?: string
   bannerUrl?: string
   bio?: string
@@ -71,6 +73,7 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
             src={props.avatarUrl}
             alt={props.displayName}
             size="2xl"
+            nationalityCode={props.nationalityCode}
             class="md:!w-32 md:!h-32"
           />
         </div>

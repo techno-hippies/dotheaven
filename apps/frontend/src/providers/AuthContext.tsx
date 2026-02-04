@@ -25,6 +25,8 @@ export interface AuthContextType {
   authError: Accessor<string | null>
   /** True after a new account registration completes (cleared by dismissOnboarding) */
   isNewUser: Accessor<boolean>
+  /** True while session is being restored from storage on mount */
+  isSessionRestoring: Accessor<boolean>
 
   // Actions
   loginWithPasskey: () => Promise<void>
@@ -51,6 +53,7 @@ export const AuthProvider: ParentComponent = (props) => {
   const [isAuthenticating, setIsAuthenticating] = createSignal(false)
   const [authError, setAuthError] = createSignal<string | null>(null)
   const [isNewUser, setIsNewUser] = createSignal(false)
+  const [isSessionRestoring, setIsSessionRestoring] = createSignal(true)
   // Track auth method type (1 = EOA, 3 = WebAuthn) — persists across authData being null
   const [lastAuthMethodType, setLastAuthMethodType] = createSignal<number | null>(null)
   // Persisted EOA address — stored separately so it survives session restore
@@ -64,55 +67,59 @@ export const AuthProvider: ParentComponent = (props) => {
 
   // Restore session on mount
   onMount(async () => {
-    if (platform.isTauri) {
-      // Tauri: restore from Tauri storage
-      try {
-        const { invoke } = await import('@tauri-apps/api/core')
-        const auth = await invoke<PersistedAuth | null>('get_auth')
-        if (auth?.pkpAddress && auth?.pkpPublicKey) {
-          setPkpInfo({
-            ethAddress: auth.pkpAddress as `0x${string}`,
-            publicKey: auth.pkpPublicKey,
-            tokenId: auth.pkpTokenId || '',
-          })
-          if (auth.authMethodType && auth.authMethodId) {
-            setLastAuthMethodType(auth.authMethodType)
-            const restoredAuthData = {
-              authMethodType: auth.authMethodType,
-              authMethodId: auth.authMethodId,
-              accessToken: auth.accessToken || '',
+    try {
+      if (platform.isTauri) {
+        // Tauri: restore from Tauri storage
+        try {
+          const { invoke } = await import('@tauri-apps/api/core')
+          const auth = await invoke<PersistedAuth | null>('get_auth')
+          if (auth?.pkpAddress && auth?.pkpPublicKey) {
+            setPkpInfo({
+              ethAddress: auth.pkpAddress as `0x${string}`,
+              publicKey: auth.pkpPublicKey,
+              tokenId: auth.pkpTokenId || '',
+            })
+            if (auth.authMethodType && auth.authMethodId) {
+              setLastAuthMethodType(auth.authMethodType)
+              const restoredAuthData = {
+                authMethodType: auth.authMethodType,
+                authMethodId: auth.authMethodId,
+                accessToken: auth.accessToken || '',
+              }
+              setAuthData(restoredAuthData)
+              console.log('[Auth] Restored authData keys:', Object.keys(restoredAuthData))
+              // Restore persisted EOA address if present
+              if ((auth as any).eoaAddress) {
+                setStoredEoaAddress((auth as any).eoaAddress as `0x${string}`)
+                console.log('[Auth] Restored EOA address:', (auth as any).eoaAddress)
+              }
             }
-            setAuthData(restoredAuthData)
-            console.log('[Auth] Restored authData keys:', Object.keys(restoredAuthData))
-            // Restore persisted EOA address if present
-            if ((auth as any).eoaAddress) {
-              setStoredEoaAddress((auth as any).eoaAddress as `0x${string}`)
-              console.log('[Auth] Restored EOA address:', (auth as any).eoaAddress)
+            console.log('[Auth] Restored from Tauri storage:', auth.pkpAddress)
+          }
+        } catch (err) {
+          console.log('[Auth] Failed to restore from Tauri:', err)
+        }
+      } else {
+        // Web: restore from localStorage
+        try {
+          const stored = localStorage.getItem(WEB_SESSION_KEY)
+          if (stored) {
+            const session = JSON.parse(stored) as { pkpInfo: PKPInfo; authData: AuthData; eoaAddress?: string }
+            setPkpInfo(session.pkpInfo)
+            setAuthData(session.authData)
+            if (session.authData?.authMethodType) setLastAuthMethodType(session.authData.authMethodType)
+            if (session.eoaAddress) {
+              setStoredEoaAddress(session.eoaAddress as `0x${string}`)
+              console.log('[Auth] Restored EOA address:', session.eoaAddress)
             }
+            console.log('[Auth] Restored from localStorage:', session.pkpInfo.ethAddress)
           }
-          console.log('[Auth] Restored from Tauri storage:', auth.pkpAddress)
+        } catch (err) {
+          console.log('[Auth] Failed to restore from localStorage:', err)
         }
-      } catch (err) {
-        console.log('[Auth] Failed to restore from Tauri:', err)
       }
-    } else {
-      // Web: restore from localStorage
-      try {
-        const stored = localStorage.getItem(WEB_SESSION_KEY)
-        if (stored) {
-          const session = JSON.parse(stored) as { pkpInfo: PKPInfo; authData: AuthData; eoaAddress?: string }
-          setPkpInfo(session.pkpInfo)
-          setAuthData(session.authData)
-          if (session.authData?.authMethodType) setLastAuthMethodType(session.authData.authMethodType)
-          if (session.eoaAddress) {
-            setStoredEoaAddress(session.eoaAddress as `0x${string}`)
-            console.log('[Auth] Restored EOA address:', session.eoaAddress)
-          }
-          console.log('[Auth] Restored from localStorage:', session.pkpInfo.ethAddress)
-        }
-      } catch (err) {
-        console.log('[Auth] Failed to restore from localStorage:', err)
-      }
+    } finally {
+      setIsSessionRestoring(false)
     }
   })
 
@@ -497,6 +504,7 @@ export const AuthProvider: ParentComponent = (props) => {
     isAuthenticating,
     authError,
     isNewUser,
+    isSessionRestoring,
     loginWithPasskey,
     registerWithPasskey,
     connectWallet,

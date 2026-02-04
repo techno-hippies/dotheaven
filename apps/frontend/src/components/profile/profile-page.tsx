@@ -71,6 +71,7 @@ export const ProfilePage: Component<ProfilePageProps> = (props) => {
         username={props.username}
         displayName={props.displayName}
         avatarUrl={props.avatarUrl}
+        nationalityCode={props.nationalityCode}
         bannerGradient={props.bannerGradient}
         bannerUrl={props.profileData?.coverPhoto || props.ensProfile?.header || undefined}
         bio={props.profileData?.bio}

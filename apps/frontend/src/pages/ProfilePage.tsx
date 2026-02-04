@@ -5,7 +5,7 @@ import { ProfilePage, type ProfileTab, type ProfileScrobble } from '../component
 import { useAuth } from '../providers'
 import { fetchScrobbleEntries, getProfile, setProfile, setTextRecord, setTextRecords, computeNode, getTextRecord, checkNameAvailable, registerHeavenName, resolveAvatarUri, resolveIpfsUri, getEnsProfile, getAddr, resolveEnsName, getPrimaryName, getVerificationStatus, buildSelfVerifyLink, syncVerificationToMegaEth } from '../lib/heaven'
 import { uploadAvatar } from '../lib/heaven/avatar'
-import { type ProfileInput, type VerificationState, type VerifyStep, type VerificationData, getTagLabel, VerifyIdentityDialog } from '@heaven/ui'
+import { type ProfileInput, type VerificationState, type VerifyStep, type VerificationData, getTagLabel, VerifyIdentityDialog, alpha3ToAlpha2 } from '@heaven/ui'
 import { parseTagCsv } from '../lib/heaven/profile'
 import { isAddress, zeroAddress } from 'viem'
 
@@ -538,6 +538,15 @@ export const MyProfilePage: Component = () => {
     profileQuery.refetch()
   }
 
+  // Nationality: prefer verified (alpha-3 → alpha-2), fall back to self-reported
+  const nationalityCode = () => {
+    const v = verificationQuery.data
+    if (v?.verified && v.nationality) {
+      return alpha3ToAlpha2(v.nationality) ?? v.nationality.slice(0, 2).toUpperCase()
+    }
+    return profileQuery.data?.nationality || undefined
+  }
+
   const initialLoading = () => profileQuery.isLoading || ensQuery.isLoading
 
   return (
@@ -547,6 +556,7 @@ export const MyProfilePage: Component = () => {
         username={handleName()}
         displayName={displayName()}
         avatarUrl={profileQuery.data?.avatar || ensQuery.data?.avatar || undefined}
+        nationalityCode={nationalityCode()}
         isOwnProfile={true}
         verificationState={verificationState()}
         onVerifyClick={handleVerifyClick}
@@ -721,6 +731,15 @@ export const PublicProfilePage: Component = () => {
     return '@unknown'
   }
 
+  // Nationality: prefer verified (alpha-3 → alpha-2), fall back to self-reported
+  const publicNationalityCode = () => {
+    const v = publicVerificationQuery.data
+    if (v?.verified && v.nationality) {
+      return alpha3ToAlpha2(v.nationality) ?? v.nationality.slice(0, 2).toUpperCase()
+    }
+    return profileQuery.data?.nationality || undefined
+  }
+
   const initialLoading = () => resolvedQuery.isLoading || (address() && (profileQuery.isLoading || ensProfileQuery.isLoading))
 
   return (
@@ -741,6 +760,7 @@ export const PublicProfilePage: Component = () => {
             username={handleName()}
             displayName={displayName()}
             avatarUrl={profileQuery.data?.avatar || ensProfileQuery.data?.avatar || undefined}
+            nationalityCode={publicNationalityCode()}
             isOwnProfile={false}
             activeTab={activeTab()}
             onTabChange={setActiveTab}

@@ -9,9 +9,11 @@
  */
 
 import type { ParentComponent } from 'solid-js'
-import { Show, createMemo } from 'solid-js'
+import { Show, createMemo, createEffect } from 'solid-js'
 import { useLocation, useNavigate } from '@solidjs/router'
 import { useIsMobile } from '@heaven/ui'
+import { useAuth } from '../../providers'
+import { LandingPage } from '../../pages/LandingPage'
 import {
   AppShell,
   Header,
@@ -81,12 +83,18 @@ import { usePlayer } from '../../providers'
 import { usePlaylistDialog, buildMenuActions } from '../../hooks/useTrackListActions'
 
 export const AppLayout: ParentComponent = (props) => {
+  const auth = useAuth()
   const player = usePlayer()
   const location = useLocation()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const isChat = createMemo(() => location.pathname.startsWith('/chat'))
   const isPost = createMemo(() => location.pathname.startsWith('/post/'))
+
+  // Public routes that don't require auth (still get the shell)
+  const isPublicRoute = createMemo(() =>
+    location.pathname.startsWith('/u/') || location.pathname.startsWith('/post/')
+  )
 
   // Playlist dialog for SidePlayer menu
   const plDialog = usePlaylistDialog()
@@ -125,75 +133,99 @@ export const AppLayout: ParentComponent = (props) => {
     }
   }
 
+  // Show full-screen landing page (no shell) for unauthenticated users on non-public routes
+  const showLanding = createMemo(() =>
+    !auth.isSessionRestoring() && !auth.isAuthenticated() && !isPublicRoute()
+  )
+
+  // Redirect new users to onboarding
+  createEffect(() => {
+    if (auth.isSessionRestoring()) return
+    if (auth.isAuthenticated() && auth.isNewUser()) {
+      navigate('/onboarding', { replace: true })
+    }
+  })
+
   return (
-    <AppShell
-      header={
-        <Show when={showGlobalHeader()}>
-          <Header
-            rightSlot={<HeaderActions />}
-          />
-        </Show>
-      }
-      sidebar={<AppSidebar />}
-      rightPanel={isChat() ? undefined :
-        <RightPanel>
-          <SidePlayer
-            title={player.currentTrack()?.title}
-            artist={player.currentTrack()?.artist}
-            coverSrc={player.currentTrack()?.albumCover}
-            currentTime={player.currentTimeFormatted()}
-            duration={player.durationFormatted()}
-            progress={player.progress()}
-            isPlaying={player.isPlaying()}
-            onPlayPause={player.togglePlay}
-            onNext={player.playNext}
-            onPrev={player.playPrev}
-            onProgressChange={player.handleSeek}
-            onProgressChangeStart={player.handleSeekStart}
-            onProgressChangeEnd={player.handleSeekEnd}
-            track={player.currentTrack() ? {
-              id: player.currentTrack()!.id,
-              title: player.currentTrack()!.title,
-              artist: player.currentTrack()!.artist,
-              album: player.currentTrack()!.album ?? '',
-              albumCover: player.currentTrack()!.albumCover,
-              duration: player.durationFormatted(),
-            } : undefined}
-            menuActions={player.currentTrack() ? sidePlayerMenu : undefined}
-          />
-        </RightPanel>
-      }
-      mobilePlayer={
-        <Show when={player.currentTrack() && !isPost()}>
-          <MiniPlayer
-            title={player.currentTrack()?.title}
-            artist={player.currentTrack()?.artist}
-            coverSrc={player.currentTrack()?.albumCover}
-            progress={player.progress()}
-            isPlaying={player.isPlaying()}
-            onPlayPause={player.togglePlay}
-            onNext={player.playNext}
-          />
-        </Show>
-      }
-      mobileFooter={
-        <Show when={!isPost()}>
-          <MobileFooter
-            tabs={mobileFooterTabs}
-            activeTab={activeTab()}
-            onTabPress={handleTabPress}
-          />
-        </Show>
+    <Show
+      when={!auth.isSessionRestoring()}
+      fallback={
+        <div class="flex items-center justify-center h-screen bg-[var(--bg-page)]">
+          <div class="w-6 h-6 border-2 border-[var(--text-muted)] border-t-transparent rounded-full animate-spin" />
+        </div>
       }
     >
-      {props.children}
-      <Toaster />
-      <UploadQueue />
-      <AddToPlaylistDialog
-        open={plDialog.open()}
-        onOpenChange={plDialog.setOpen}
-        track={plDialog.track()}
-      />
-    </AppShell>
+      <Show when={!showLanding()} fallback={<LandingPage />}>
+        <AppShell
+          header={
+            <Show when={showGlobalHeader()}>
+              <Header
+                rightSlot={<HeaderActions />}
+              />
+            </Show>
+          }
+          sidebar={<AppSidebar />}
+          rightPanel={isChat() ? undefined :
+            <RightPanel>
+              <SidePlayer
+                title={player.currentTrack()?.title}
+                artist={player.currentTrack()?.artist}
+                coverSrc={player.currentTrack()?.albumCover}
+                currentTime={player.currentTimeFormatted()}
+                duration={player.durationFormatted()}
+                progress={player.progress()}
+                isPlaying={player.isPlaying()}
+                onPlayPause={player.togglePlay}
+                onNext={player.playNext}
+                onPrev={player.playPrev}
+                onProgressChange={player.handleSeek}
+                onProgressChangeStart={player.handleSeekStart}
+                onProgressChangeEnd={player.handleSeekEnd}
+                track={player.currentTrack() ? {
+                  id: player.currentTrack()!.id,
+                  title: player.currentTrack()!.title,
+                  artist: player.currentTrack()!.artist,
+                  album: player.currentTrack()!.album ?? '',
+                  albumCover: player.currentTrack()!.albumCover,
+                  duration: player.durationFormatted(),
+                } : undefined}
+                menuActions={player.currentTrack() ? sidePlayerMenu : undefined}
+              />
+            </RightPanel>
+          }
+          mobilePlayer={
+            <Show when={player.currentTrack() && !isPost()}>
+              <MiniPlayer
+                title={player.currentTrack()?.title}
+                artist={player.currentTrack()?.artist}
+                coverSrc={player.currentTrack()?.albumCover}
+                progress={player.progress()}
+                isPlaying={player.isPlaying()}
+                onPlayPause={player.togglePlay}
+                onNext={player.playNext}
+              />
+            </Show>
+          }
+          mobileFooter={
+            <Show when={!isPost()}>
+              <MobileFooter
+                tabs={mobileFooterTabs}
+                activeTab={activeTab()}
+                onTabPress={handleTabPress}
+              />
+            </Show>
+          }
+        >
+          {props.children}
+          <Toaster />
+          <UploadQueue />
+          <AddToPlaylistDialog
+            open={plDialog.open()}
+            onOpenChange={plDialog.setOpen}
+            track={plDialog.track()}
+          />
+        </AppShell>
+      </Show>
+    </Show>
   )
 }

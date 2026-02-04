@@ -22,6 +22,7 @@ export const Default: Story = {
     name: 'Miku',
     handle: 'miku.heaven',
     avatarUrl: 'https://placewaifu.com/image/101',
+    nationalityCode: 'KR',
     lastMessage: 'Have you heard the new album?',
     timestamp: '2m ago',
   },
@@ -102,6 +103,7 @@ export const ChatList: StoryObj = {
           name="Miku"
           handle="miku.heaven"
           avatarUrl="https://placewaifu.com/image/101"
+          nationalityCode="KR"
           lastMessage="Have you heard the new album? It's incredible"
           timestamp="2m ago"
           unreadCount={2}
@@ -111,6 +113,7 @@ export const ChatList: StoryObj = {
           name="Rei"
           handle="rei.heaven"
           avatarUrl="https://placewaifu.com/image/102"
+          nationalityCode="DE"
           lastMessage="Check out this playlist I made for you"
           timestamp="15m ago"
           unreadCount={1}
@@ -119,6 +122,7 @@ export const ChatList: StoryObj = {
           name="Asuka"
           handle="asuka.eth"
           avatarUrl="https://placewaifu.com/image/103"
+          nationalityCode="US"
           lastMessage="That concert was insane last night"
           timestamp="1h ago"
           active
@@ -127,6 +131,7 @@ export const ChatList: StoryObj = {
           name="Sakura"
           handle="sakura.heaven"
           avatarUrl="https://placewaifu.com/image/104"
+          nationalityCode="JP"
           lastMessage="Want to go to the show tonight?"
           timestamp="3h ago"
           online
@@ -135,6 +140,7 @@ export const ChatList: StoryObj = {
           name="Misato"
           handle="misato.heaven"
           avatarUrl="https://placewaifu.com/image/105"
+          nationalityCode="FR"
           lastMessage="I'll send you the link later"
           timestamp="Yesterday"
         />
@@ -142,6 +148,7 @@ export const ChatList: StoryObj = {
           name="Shinji"
           handle="shinji.eth"
           avatarUrl="https://placewaifu.com/image/106"
+          nationalityCode="BR"
           lastMessage="Thanks for the recommendation"
           timestamp="Yesterday"
         />
@@ -149,6 +156,7 @@ export const ChatList: StoryObj = {
           name="Kaworu"
           handle="kaworu.heaven"
           avatarUrl="https://placewaifu.com/image/107"
+          nationalityCode="GB"
           lastMessage="You need to listen to this right now"
           timestamp="2d ago"
           unreadCount={5}

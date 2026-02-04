@@ -21,6 +21,7 @@ export const MockAuthProvider: ParentComponent<{ mockValue?: Partial<AuthContext
     isAuthenticating: () => false,
     authError: () => null,
     isNewUser: () => false,
+    isSessionRestoring: () => false,
     loginWithPasskey: async () => {},
     registerWithPasskey: async () => {},
     connectWallet: async () => {},

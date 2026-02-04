@@ -23,6 +23,7 @@ const author = {
   authorName: 'Yuki',
   authorHandle: 'yuki.heaven',
   authorAvatarUrl: 'https://placewaifu.com/image/100',
+  authorNationalityCode: 'JP',
   timestamp: '2h ago',
 }
 
@@ -240,6 +241,7 @@ export const FeedScroll: StoryObj = {
         authorName="Miku"
         authorHandle="miku.heaven"
         authorAvatarUrl="https://placewaifu.com/image/101"
+        authorNationalityCode="KR"
         timestamp="4h ago"
         text="Sunset vibes"
         media={{ type: 'photo', items: [{ url: 'https://placewaifu.com/image/800/450', aspect: 'landscape' }] }}
@@ -250,6 +252,7 @@ export const FeedScroll: StoryObj = {
         authorName="Rei"
         authorHandle="rei.heaven"
         authorAvatarUrl="https://placewaifu.com/image/102"
+        authorNationalityCode="DE"
         timestamp="6h ago"
         text="New album art is so good"
         media={{ type: 'photo', items: [{ url: 'https://placewaifu.com/image/500', aspect: 'square' }] }}
@@ -261,6 +264,7 @@ export const FeedScroll: StoryObj = {
         authorName="Asuka"
         authorHandle="asuka.eth"
         authorAvatarUrl="https://placewaifu.com/image/103"
+        authorNationalityCode="US"
         timestamp="8h ago"
         text="POV: discovering a new genre"
         media={{ type: 'video', src: '', thumbnailUrl: 'https://placewaifu.com/image/270/480', aspect: 'portrait' }}
@@ -271,6 +275,7 @@ export const FeedScroll: StoryObj = {
         authorName="Sakura"
         authorHandle="sakura.heaven"
         authorAvatarUrl="https://placewaifu.com/image/104"
+        authorNationalityCode="BR"
         timestamp="1d ago"
         text="Concert was incredible"
         media={{ type: 'photo', items: [

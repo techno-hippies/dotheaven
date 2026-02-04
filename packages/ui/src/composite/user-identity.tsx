@@ -32,6 +32,8 @@ export interface UserIdentityProps {
   timestampClass?: string
   /** Whether to show separator dot between name and timestamp */
   showDot?: boolean
+  /** ISO 3166-1 alpha-2 nationality code (e.g. "US"). Shows a flag badge on the avatar. */
+  nationalityCode?: string
   /** Additional class for container */
   class?: string
   /** Right-aligned slot (e.g. menu, badge) */
@@ -88,6 +90,7 @@ export const UserIdentity: Component<UserIdentityProps> = (props) => {
         src={props.avatarUrl}
         size={avatarSizes[size()]}
         shape="circle"
+        nationalityCode={props.nationalityCode}
       />
       <Show when={props.online}>
         <div class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-500 border-2 border-[var(--bg-surface)]" />

@@ -4,6 +4,7 @@ import {
   TrackList,
   IconButton,
   PlayButton,
+  DownloadAppCta,
   type Track,
   type SortField,
   type SortState,
@@ -429,8 +430,13 @@ export const LibraryPage: Component = () => {
             when={uploadedTracksAsTrack().length > 0}
             fallback={
               <div class="flex flex-col items-center justify-center py-20 text-[var(--text-muted)]">
-                <p class="text-lg mb-2">No uploaded tracks yet</p>
-                <p>Right-click a local track and select "Upload to Filecoin".</p>
+                <Show
+                  when={platform.isTauri}
+                  fallback={<DownloadAppCta />}
+                >
+                  <p class="text-lg mb-2">No uploaded tracks yet</p>
+                  <p>Right-click a local track and select "Upload to Filecoin".</p>
+                </Show>
               </div>
             }
           >

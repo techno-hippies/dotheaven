@@ -2,12 +2,18 @@ import type { Component } from 'solid-js'
 import { createSignal, Show } from 'solid-js'
 import { cn } from '../lib/utils'
 import { Button, PillGroup, LocationInput, Select, type LocationResult, type SelectOption } from '../primitives'
+import type { LanguageEntry } from '../data/languages'
+import { PROFICIENCY } from '../data/languages'
 
 export interface OnboardingBasicsData {
   age: number | null
   gender: string
   location: LocationResult | null
+  /** Unified language entries (native = proficiency 7, learning = proficiency 1) */
+  languages: LanguageEntry[]
+  /** @deprecated Use languages instead */
   nativeLanguage: string
+  /** @deprecated Use languages instead */
   targetLanguage: string
 }
 
@@ -80,12 +86,20 @@ export const OnboardingBasicsStep: Component<OnboardingBasicsStepProps> = (props
   }
 
   const handleContinue = () => {
+    const nativeCode = nativeLang()?.value || ''
+    const targetCode = targetLang()?.value || ''
+    // Build unified language entries
+    const languages: LanguageEntry[] = []
+    if (nativeCode) languages.push({ code: nativeCode, proficiency: PROFICIENCY.NATIVE })
+    if (targetCode) languages.push({ code: targetCode, proficiency: PROFICIENCY.A1 })
+
     props.onContinue?.({
       age: parsedAge(),
       gender: gender(),
       location: location(),
-      nativeLanguage: nativeLang()?.value || '',
-      targetLanguage: targetLang()?.value || '',
+      languages,
+      nativeLanguage: nativeCode,
+      targetLanguage: targetCode,
     })
   }
 

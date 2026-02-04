@@ -54,6 +54,8 @@ export interface FeedPostProps {
   /** Domain handle like "yuki.heaven" or "vitalik.eth" */
   authorHandle?: string
   authorAvatarUrl?: string
+  /** ISO 3166-1 alpha-2 nationality code for the post author */
+  authorNationalityCode?: string
   timestamp: string
   onAuthorClick?: () => void
   // Content
@@ -395,6 +397,7 @@ export const FeedPost: Component<FeedPostProps> = (props) => {
         <UserIdentity
           name={props.authorHandle || props.authorName}
           avatarUrl={props.authorAvatarUrl}
+          nationalityCode={props.authorNationalityCode}
           timestamp={props.timestamp}
           showDot
           size={isMobile() ? 'md' : 'lg'}

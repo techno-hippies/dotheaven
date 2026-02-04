@@ -22,6 +22,7 @@ export const Default: Story = {
     message: 'Hey! Have you had a chance to review the governance proposal?',
     timestamp: '2:30 PM',
     isOwn: false,
+    nationalityCode: 'CA',
   },
 }
 
@@ -86,22 +87,26 @@ export const Conversation: Story = {
           username="vitalik.eth"
           message="Hey! Have you had a chance to review the governance proposal?"
           timestamp="2:30 PM"
+          nationalityCode="CA"
         />
         <MessageBubble
           username="you"
           message="Yes! I think it looks solid. The tokenomics make sense."
           timestamp="2:31 PM"
+          nationalityCode="US"
           isOwn
         />
         <MessageBubble
           username="vitalik.eth"
           message="Great, I'll submit my vote then. Should go live by tomorrow."
           timestamp="2:33 PM"
+          nationalityCode="CA"
         />
         <MessageBubble
           username="you"
           message="Perfect! Let me know if you need anything else"
           timestamp="2:34 PM"
+          nationalityCode="US"
           isOwn
         />
       </MessageList>
@@ -137,22 +142,26 @@ export const ConversationWithHeader: Story = {
           username="vitalik.eth"
           message="Hey! Have you had a chance to review the governance proposal?"
           timestamp="2:30 PM"
+          nationalityCode="CA"
         />
         <MessageBubble
           username="you"
           message="Yes! I think it looks solid. The tokenomics make sense."
           timestamp="2:31 PM"
+          nationalityCode="US"
           isOwn
         />
         <MessageBubble
           username="vitalik.eth"
           message="Great, I'll submit my vote then. Should go live by tomorrow."
           timestamp="2:33 PM"
+          nationalityCode="CA"
         />
         <MessageBubble
           username="you"
           message="Perfect! Let me know if you need anything else"
           timestamp="2:34 PM"
+          nationalityCode="US"
           isOwn
         />
       </MessageList>
@@ -168,32 +177,38 @@ export const GroupConversation: Story = {
           username="alice.eth"
           message="Anyone want to grab coffee?"
           timestamp="3:00 PM"
+          nationalityCode="FR"
         />
         <MessageBubble
           username="bob.eth"
           message="Sure, I'm in!"
           timestamp="3:01 PM"
+          nationalityCode="NG"
         />
         <MessageBubble
           username="you"
           message="Count me in too"
           timestamp="3:02 PM"
+          nationalityCode="JP"
           isOwn
         />
         <MessageBubble
           username="alice.eth"
           message="Great! Meet at the usual place in 15?"
           timestamp="3:03 PM"
+          nationalityCode="FR"
         />
         <MessageBubble
           username="bob.eth"
           message="Works for me"
           timestamp="3:04 PM"
+          nationalityCode="NG"
         />
         <MessageBubble
           username="you"
           message="On my way!"
           timestamp="3:05 PM"
+          nationalityCode="JP"
           isOwn
         />
       </MessageList>

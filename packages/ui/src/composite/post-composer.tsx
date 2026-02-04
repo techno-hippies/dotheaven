@@ -127,6 +127,8 @@ export type MediaType = 'image' | 'video'
 export interface PostComposerProps {
   class?: string
   avatarUrl?: string
+  /** ISO 3166-1 alpha-2 nationality code for the current user's avatar */
+  nationalityCode?: string
   placeholder?: string
   /** Action buttons */
   onPhotoClick?: () => void
@@ -278,7 +280,7 @@ export const PostComposer: Component<PostComposerProps> = (props) => {
     )}>
       {/* Input row */}
       <div class="flex items-start gap-3">
-        <Avatar src={props.avatarUrl} size="lg" shape="circle" />
+        <Avatar src={props.avatarUrl} nationalityCode={props.nationalityCode} size="lg" shape="circle" />
         <textarea
           ref={textareaRef}
           rows={1}

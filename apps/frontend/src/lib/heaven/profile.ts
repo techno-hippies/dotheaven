@@ -3,22 +3,27 @@ import type { ProfileInput } from '@heaven/ui'
 /**
  * Heaven Profile - Set on-chain profile via Lit Action (gasless)
  *
+ * ProfileV2: Unified language model with CEFR proficiency levels.
+ * Each user can have up to 8 languages packed in a single uint256.
+ * "Native" is just proficiency level 7.
+ *
  * The sponsor PKP pays gas on MegaETH. User signs an EIP-191 message
  * authorizing the profile update. Nonce-based replay protection.
  */
 
 import { createPublicClient, http, parseAbi, keccak256 } from 'viem'
-import { packTagIds, unpackTagIds } from '@heaven/ui'
+import { packTagIds, unpackTagIds, packLanguages, unpackLanguages } from '@heaven/ui'
 import { megaTestnetV2 } from '../chains'
 import { getLitClient } from '../lit/client'
 import { HEAVEN_SET_PROFILE_CID } from '../lit/action-cids'
 import type { PKPAuthContext } from '../lit/types'
 
-const PROFILE_V1 = '0x0A6563122cB3515ff678A918B5F31da9b1391EA3' as const
+// ProfileV2 contract address (to be updated after deployment)
+const PROFILE_V2 = '0x0A6563122cB3515ff678A918B5F31da9b1391EA3' as const
 
 const profileAbi = parseAbi([
   'function nonces(address user) external view returns (uint256)',
-  'struct Profile { uint8 profileVersion; bool exists; uint8 age; uint16 heightCm; bytes2 nationality; bytes2 nativeLanguage; uint8 friendsOpenToMask; uint80 learningLanguagesPacked; bytes32 locationCityId; bytes32 schoolId; bytes32 skillsCommit; bytes32 hobbiesCommit; bytes32 nameHash; uint256 packed; string displayName; string photoURI; }',
+  'struct Profile { uint8 profileVersion; bool exists; uint8 age; uint16 heightCm; bytes2 nationality; uint8 friendsOpenToMask; uint256 languagesPacked; bytes32 locationCityId; bytes32 schoolId; bytes32 skillsCommit; bytes32 hobbiesCommit; bytes32 nameHash; uint256 packed; string displayName; string photoURI; }',
   'function getProfile(address user) external view returns (Profile)',
 ])
 
@@ -327,17 +332,6 @@ function bytes2ToCode(hex: string, uppercase = false): string | undefined {
   return uppercase ? code.toUpperCase() : code.toLowerCase()
 }
 
-// Decode learningLanguagesPacked uint80 → first language code (bits 79..64)
-function decodeLearningLanguage(packed: bigint | string): string | undefined {
-  const n = BigInt(packed)
-  if (n === 0n) return undefined
-  const val = Number((n >> 64n) & 0xFFFFn)
-  if (!val) return undefined
-  const c1 = String.fromCharCode((val >> 8) & 0xff)
-  const c2 = String.fromCharCode(val & 0xff)
-  return (c1 + c2).toLowerCase()
-}
-
 const ZERO_HASH = '0x0000000000000000000000000000000000000000000000000000000000000000'
 
 /** Parse a comma-separated string of tag IDs into a clean, deduped, sorted array (max 16) */
@@ -371,17 +365,11 @@ export interface SetProfileResult {
 }
 
 /**
- * Build the profileInput object matching the contract's ProfileInput struct.
+ * Build the profileInput object matching the contract's ProfileInput struct (V2).
  */
 function buildProfileInput(data: ProfileInput) {
-  // Pack target language into learningLanguagesPacked (first slot of 5 x bytes2)
-  // uint80 = 5 x uint16, left-to-right: [0]=bits 79..64, [1]=63..48, ...
-  let learningLanguagesPacked: string | number = data.learningLanguagesPacked ? String(data.learningLanguagesPacked) : '0'
-  if (data.targetLanguage && !data.learningLanguagesPacked) {
-    const code = data.targetLanguage.slice(0, 2).toUpperCase()
-    const val = (code.charCodeAt(0) << 8) | code.charCodeAt(1)
-    learningLanguagesPacked = (BigInt(val) << 64n).toString() as any // shift to bits 79..64; string for ethers v5 BigNumber compat
-  }
+  // Pack languages with proficiency into uint256
+  const languagesPacked = data.languages?.length ? packLanguages(data.languages) : '0'
 
   // schoolId: zeroed out — plaintext stored in RecordsV1 only (no on-chain use yet)
   const schoolId = ZERO_HASH
@@ -396,14 +384,13 @@ function buildProfileInput(data: ProfileInput) {
   const photoURI = ''
 
   return {
-    profileVersion: 1,
+    profileVersion: 2,
     displayName: data.displayName || '',
     nameHash: (data.nameHash as `0x${string}`) || ZERO_HASH,
     age: data.age || 0,
     heightCm: data.heightCm || 0,
     nationality: langToBytes2(data.nationality || ''),
-    nativeLanguage: langToBytes2(data.nativeLanguage || ''),
-    learningLanguagesPacked,
+    languagesPacked,
     friendsOpenToMask: data.friendsOpenToMask || 0,
     locationCityId: toBytes32(data.locationCityId),
     schoolId: schoolId as `0x${string}`,
@@ -440,7 +427,7 @@ export async function getProfile(userAddress: `0x${string}`): Promise<ProfileInp
 
   try {
     const profile = (await client.readContract({
-      address: PROFILE_V1,
+      address: PROFILE_V2,
       abi: profileAbi,
       functionName: 'getProfile',
       args: [userAddress],
@@ -450,9 +437,8 @@ export async function getProfile(userAddress: `0x${string}`): Promise<ProfileInp
       age: number
       heightCm: number
       nationality: `0x${string}`
-      nativeLanguage: `0x${string}`
       friendsOpenToMask: number
-      learningLanguagesPacked: bigint
+      languagesPacked: bigint
       locationCityId: `0x${string}`
       schoolId: `0x${string}`
       skillsCommit: `0x${string}`
@@ -495,6 +481,9 @@ export async function getProfile(userAddress: `0x${string}`): Promise<ProfileInp
     const pets = getByte(packed, 17)
     const diet = getByte(packed, 18)
 
+    // Unpack unified languages with proficiency
+    const languages = unpackLanguages(profile.languagesPacked)
+
     return {
       displayName: profile.displayName || undefined,
       nameHash: profile.nameHash !== ZERO_HASH ? profile.nameHash : undefined,
@@ -502,7 +491,7 @@ export async function getProfile(userAddress: `0x${string}`): Promise<ProfileInp
       heightCm: profile.heightCm || undefined,
       gender: NUM_TO_GENDER[gender] || undefined,
       nationality: bytes2ToCode(profile.nationality, true),  // uppercase: "AF", "US"
-      nativeLanguage: bytes2ToCode(profile.nativeLanguage),  // lowercase: "en", "fr"
+      languages: languages.length ? languages : undefined,
       // locationCityId is an on-chain hash; plaintext comes from RecordsV1 text records
       locationCityId: undefined,
       relocate: NUM_TO_RELOCATE[relocate] || undefined,
@@ -523,8 +512,6 @@ export async function getProfile(userAddress: `0x${string}`): Promise<ProfileInp
       religion: NUM_TO_RELIGION[religion] || undefined,
       pets: NUM_TO_PETS[pets] || undefined,
       diet: NUM_TO_DIET[diet] || undefined,
-      targetLanguage: decodeLearningLanguage(profile.learningLanguagesPacked),
-      learningLanguagesPacked: profile.learningLanguagesPacked.toString() as any,
       friendsOpenToMask: profile.friendsOpenToMask,
       // Unpack tag IDs from bytes32 → comma-separated ID strings for UI multi-select
       skillsCommit: unpackTagIds(profile.skillsCommit).join(', ') || undefined,
@@ -557,7 +544,7 @@ export async function setProfile(
   // 1. Fetch on-chain nonce
   const client = getClient()
   const nonce = await client.readContract({
-    address: PROFILE_V1,
+    address: PROFILE_V2,
     abi: profileAbi,
     functionName: 'nonces',
     args: [userAddress],
@@ -582,4 +569,6 @@ export async function setProfile(
   return response as SetProfileResult
 }
 
-export { PROFILE_V1 }
+export { PROFILE_V2 }
+/** @deprecated Use PROFILE_V2 */
+export const PROFILE_V1 = PROFILE_V2
