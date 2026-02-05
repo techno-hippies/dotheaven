@@ -1,5 +1,16 @@
-import { type Component, Show } from 'solid-js'
-import { cn, Avatar, Button, VerificationBadge, type VerificationState, FollowButton } from '@heaven/ui'
+import { type Component, Show, For } from 'solid-js'
+import { cn, Avatar, Button, IconButton, VerificationBadge, type VerificationState, FollowButton, FlagIcon, MapPin, type LanguageEntry, LANG_TO_FLAG, PROFICIENCY } from '@heaven/ui'
+
+const GearIcon = () => (
+  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
+    <path d="M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Zm88-29.84q.06-2.16,0-4.32l14.92-18.64a8,8,0,0,0,1.48-7.06,107.21,107.21,0,0,0-10.88-26.25,8,8,0,0,0-6-3.93l-23.72-2.64q-1.48-1.56-3-3L186,40.54a8,8,0,0,0-3.94-6,107.71,107.71,0,0,0-26.25-10.87,8,8,0,0,0-7.06,1.49L130.16,40Q128,40,125.84,40L107.2,25.11a8,8,0,0,0-7.06-1.48A107.6,107.6,0,0,0,73.89,34.51a8,8,0,0,0-3.93,6L67.32,64.27q-1.56,1.49-3,3L40.54,70a8,8,0,0,0-6,3.94,107.71,107.71,0,0,0-10.87,26.25,8,8,0,0,0,1.49,7.06L40,125.84Q40,128,40,130.16L25.11,148.8a8,8,0,0,0-1.48,7.06,107.21,107.21,0,0,0,10.88,26.25,8,8,0,0,0,6,3.93l23.72,2.64q1.49,1.56,3,3L70,215.46a8,8,0,0,0,3.94,6,107.71,107.71,0,0,0,26.25,10.87,8,8,0,0,0,7.06-1.49L125.84,216q2.16.06,4.32,0l18.64,14.92a8,8,0,0,0,7.06,1.48,107.21,107.21,0,0,0,26.25-10.88,8,8,0,0,0,3.93-6l2.64-23.72q1.56-1.48,3-3L215.46,186a8,8,0,0,0,6-3.94,107.71,107.71,0,0,0,10.87-26.25,8,8,0,0,0-1.49-7.06Zm-16.1-6.5a73.93,73.93,0,0,1,0,8.68,8,8,0,0,0,1.74,5.48l14.19,17.73a91.57,91.57,0,0,1-6.23,15L187,173.11a8,8,0,0,0-5.1,2.64,74.11,74.11,0,0,1-6.14,6.14,8,8,0,0,0-2.64,5.1l-2.51,22.58a91.32,91.32,0,0,1-15,6.23l-17.74-14.19a8,8,0,0,0-5-1.75h-.48a73.93,73.93,0,0,1-8.68,0,8,8,0,0,0-5.48,1.74L100.45,215.8a91.57,91.57,0,0,1-15-6.23L82.89,187a8,8,0,0,0-2.64-5.1,74.11,74.11,0,0,1-6.14-6.14,8,8,0,0,0-5.1-2.64L46.43,170.6a91.32,91.32,0,0,1-6.23-15l14.19-17.74a8,8,0,0,0,1.74-5.48,73.93,73.93,0,0,1,0-8.68,8,8,0,0,0-1.74-5.48L40.2,100.45a91.57,91.57,0,0,1,6.23-15L69,82.89a8,8,0,0,0,5.1-2.64,74.11,74.11,0,0,1,6.14-6.14A8,8,0,0,0,82.89,69L85.4,46.43a91.32,91.32,0,0,1,15-6.23l17.74,14.19a8,8,0,0,0,5.48,1.74,73.93,73.93,0,0,1,8.68,0,8,8,0,0,0,5.48-1.74L155.55,40.2a91.57,91.57,0,0,1,15,6.23L173.11,69a8,8,0,0,0,2.64,5.1,74.11,74.11,0,0,1,6.14,6.14,8,8,0,0,0,5.1,2.64l22.58,2.51a91.32,91.32,0,0,1,6.23,15l-14.19,17.74A8,8,0,0,0,199.87,123.66Z" />
+  </svg>
+)
+
+const GENDER_ABBREV: Record<string, string> = {
+  woman: 'F', man: 'M', 'non-binary': 'NB',
+  'trans-woman': 'TW', 'trans-man': 'TM', intersex: 'IX', other: 'O',
+}
 
 export interface ProfileHeaderProps {
   class?: string
@@ -26,6 +37,13 @@ export interface ProfileHeaderProps {
   onEditClick?: () => void
   onSaveClick?: () => void
   onVerifyClick?: () => void
+  onSettingsClick?: () => void
+  // Additional metadata to display
+  age?: number
+  gender?: string
+  languages?: LanguageEntry[]
+  location?: string
+  flexibility?: string
 }
 
 /**
@@ -80,14 +98,32 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
 
         {/* Name and buttons row */}
         <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-4">
-          <div>
-            <h1 class="text-xl md:text-2xl font-bold text-[var(--text-primary)] inline-flex items-center gap-1.5">
-              {props.displayName}
-              <VerificationBadge state={props.verificationState ?? 'none'} size="md" />
-            </h1>
+          <div class="flex flex-col gap-0.5">
+            {/* Name + age/gender inline */}
+            <div class="flex items-baseline gap-2">
+              <h1 class="text-xl md:text-2xl font-bold text-[var(--text-primary)] inline-flex items-center gap-1.5">
+                {props.displayName}
+                <VerificationBadge state={props.verificationState ?? 'none'} size="md" />
+              </h1>
+              <Show when={props.age || props.gender}>
+                <span class="text-lg md:text-xl text-[var(--text-muted)]">
+                  {[
+                    props.age && props.age > 0 ? String(props.age) : null,
+                    GENDER_ABBREV[props.gender ?? ''] ?? props.gender,
+                  ].filter(Boolean).join('')}
+                </span>
+              </Show>
+            </div>
             <p class="text-base text-[var(--text-secondary)]">
               {props.username}
             </p>
+            {/* Location below username */}
+            <Show when={props.location}>
+              <p class="flex items-center gap-1 text-base text-[var(--text-muted)]">
+                <MapPin class="w-4 h-4 flex-shrink-0" />
+                {props.location}
+              </p>
+            </Show>
           </div>
 
           {/* Action buttons */}
@@ -123,6 +159,16 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
                   >
                     Edit Profile
                   </Button>
+                  <Show when={props.onSettingsClick}>
+                    <IconButton
+                      variant="default"
+                      size="lg"
+                      aria-label="Settings"
+                      onClick={() => props.onSettingsClick?.()}
+                    >
+                      <GearIcon />
+                    </IconButton>
+                  </Show>
                 </>
               )
             ) : (
@@ -199,6 +245,53 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
               </Show>
             </div>
           </div>
+        </Show>
+
+        {/* Languages */}
+        <Show when={props.languages && props.languages.length > 0}>
+          {(() => {
+            const nativeLangs = props.languages!
+              .filter((e) => e.proficiency === PROFICIENCY.NATIVE)
+              .map((e) => ({ code: LANG_TO_FLAG[e.code] ?? e.code.toUpperCase() }))
+            const learningLangs = props.languages!
+              .filter((e) => e.proficiency > 0 && e.proficiency < PROFICIENCY.NATIVE)
+              .map((e) => ({ code: LANG_TO_FLAG[e.code] ?? e.code.toUpperCase() }))
+
+            return (
+              <div class="flex items-center gap-4 flex-wrap mb-4">
+                <Show when={nativeLangs.length > 0}>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base text-[var(--text-muted)]">
+                      Native
+                    </span>
+                    <For each={nativeLangs.slice(0, 3)}>
+                      {(lang) => <FlagIcon code={lang.code} class="w-6 h-6 flex-shrink-0" />}
+                    </For>
+                    <Show when={nativeLangs.length > 3}>
+                      <span class="text-base text-[var(--text-muted)]">
+                        +{nativeLangs.length - 3}
+                      </span>
+                    </Show>
+                  </div>
+                </Show>
+                <Show when={learningLangs.length > 0}>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-base text-[var(--text-muted)]">
+                      Learns
+                    </span>
+                    <For each={learningLangs.slice(0, 3)}>
+                      {(lang) => <FlagIcon code={lang.code} class="w-6 h-6 flex-shrink-0" />}
+                    </For>
+                    <Show when={learningLangs.length > 3}>
+                      <span class="text-base text-[var(--text-muted)]">
+                        +{learningLangs.length - 3}
+                      </span>
+                    </Show>
+                  </div>
+                </Show>
+              </div>
+            )
+          })()}
         </Show>
 
       </div>

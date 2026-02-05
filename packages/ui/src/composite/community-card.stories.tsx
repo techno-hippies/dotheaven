@@ -26,7 +26,10 @@ export const Default: Story = {
     avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face',
     bio: 'I love red wine, comic books, hiking, and my dog Max.',
     online: true,
-    isNew: true,
+    age: 28,
+    gender: 'M',
+    verified: 'verified',
+    topArtists: ['Radiohead', 'Tame Impala', 'Khruangbin'],
     languages: [
       { code: 'en', proficiency: 7 },
       { code: 'de', proficiency: 7 },
@@ -36,15 +39,18 @@ export const Default: Story = {
   },
 }
 
-// ── Online with comment count ───────────────────────────────────────────
+// ── Verified with top artists ───────────────────────────────────────────
 
-export const WithComments: Story = {
+export const WithTopArtists: Story = {
   args: {
     name: 'Hannah',
     avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop&crop=face',
     bio: "I'm heading to Spain this summer! Can anyone give me recommendations?",
     online: false,
-    commentCount: 12,
+    age: 24,
+    gender: 'F',
+    verified: 'verified',
+    topArtists: ['Bad Bunny', 'Rosalia'],
     languages: [
       { code: 'en', proficiency: 7 },
       { code: 'es', proficiency: 4 },
@@ -55,16 +61,16 @@ export const WithComments: Story = {
   },
 }
 
-// ── New member (no comments) ────────────────────────────────────────────
+// ── No scrobbles yet ────────────────────────────────────────────
 
-export const NewMember: Story = {
+export const NoScrobbles: Story = {
   args: {
     name: 'Eduardo',
     avatarUrl: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=200&h=200&fit=crop&crop=face',
     bio: "I just moved to Madrid. Let's get coffee!",
     online: true,
-    isNew: true,
-    commentCount: 12,
+    age: 31,
+    gender: 'M',
     languages: [
       { code: 'en', proficiency: 7 },
       { code: 'pt', proficiency: 7 },
@@ -86,8 +92,11 @@ export const Featured: Story = {
     avatarUrl: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=300&h=300&fit=crop&crop=face',
     bio: 'I want to practice some new Spanish words I learned.',
     online: true,
-    isNew: true,
     featured: true,
+    age: 26,
+    gender: 'F',
+    verified: 'verified',
+    topArtists: ['Taylor Swift', 'Billie Eilish', 'SZA'],
     languages: [
       { code: 'en', proficiency: 7 },
       { code: 'de', proficiency: 7 },
@@ -97,12 +106,13 @@ export const Featured: Story = {
   },
 }
 
-// ── Offline, no bio ─────────────────────────────────────────────────────
+// ── Minimal (no bio, age only) ──────────────────────────────────────────
 
 export const Minimal: Story = {
   args: {
     name: 'Yuki',
     avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=face',
+    age: 22,
     languages: [
       { code: 'ja', proficiency: 7 },
       { code: 'en', proficiency: 2 },
@@ -110,13 +120,16 @@ export const Minimal: Story = {
   },
 }
 
-// ── No avatar ───────────────────────────────────────────────────────────
+// ── No avatar ───────────────────────────────────────────────────────
 
 export const NoAvatar: Story = {
   args: {
     name: 'Anonymous',
     bio: 'Looking for language exchange partners!',
     online: false,
+    age: 25,
+    gender: 'NB',
+    topArtists: ['Frank Ocean'],
     languages: [
       { code: 'ko', proficiency: 7 },
       { code: 'en', proficiency: 4 },
@@ -142,7 +155,10 @@ export const CardList: StoryObj = {
         avatarUrl="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face"
         bio="I love red wine, comic books, hiking, and my dog Max."
         online={true}
-        isNew={true}
+        age={28}
+        gender="M"
+        verified="verified"
+        topArtists={['Radiohead', 'Tame Impala', 'Khruangbin']}
         languages={[
           { code: 'en', proficiency: 7 },
           { code: 'de', proficiency: 7 },
@@ -155,8 +171,11 @@ export const CardList: StoryObj = {
         avatarUrl="https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop&crop=face"
         bio="I want to practice some new Spanish words I learned."
         online={true}
-        isNew={true}
         featured={true}
+        age={26}
+        gender="F"
+        verified="verified"
+        topArtists={['Taylor Swift', 'Billie Eilish', 'SZA']}
         languages={[
           { code: 'en', proficiency: 7 },
           { code: 'de', proficiency: 7 },
@@ -168,7 +187,9 @@ export const CardList: StoryObj = {
         name="Hannah"
         avatarUrl="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop&crop=face"
         bio="I'm heading to Spain this summer! Can anyone give me recommendations?"
-        commentCount={12}
+        age={24}
+        gender="F"
+        topArtists={['Bad Bunny', 'Rosalia']}
         languages={[
           { code: 'en', proficiency: 7 },
           { code: 'es', proficiency: 4 },
@@ -178,27 +199,25 @@ export const CardList: StoryObj = {
         ]}
       />
       <CommunityCard
-        name="Eduardo"
+        name="Alex"
         avatarUrl="https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=200&h=200&fit=crop&crop=face"
-        bio="I just moved to Madrid. Let's get coffee!"
+        bio="Artist and musician. They/them pronouns."
         online={true}
-        commentCount={12}
+        age={27}
+        gender="NB"
+        topArtists={['Sophie', 'Arca', '100 gecs']}
         languages={[
           { code: 'en', proficiency: 7 },
-          { code: 'pt', proficiency: 7 },
           { code: 'es', proficiency: 5 },
           { code: 'fr', proficiency: 3 },
-          { code: 'de', proficiency: 2 },
-          { code: 'it', proficiency: 2 },
-          { code: 'ja', proficiency: 1 },
-          { code: 'ko', proficiency: 1 },
         ]}
       />
       <CommunityCard
         name="Mia"
         avatarUrl="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=face"
         bio="Music lover. Looking for people to practice Japanese with!"
-        commentCount={12}
+        age={22}
+        topArtists={['Frank Ocean', 'Nujabes']}
         languages={[
           { code: 'en', proficiency: 7 },
           { code: 'ja', proficiency: 3 },

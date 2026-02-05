@@ -13,7 +13,7 @@ import { Show, createMemo, createEffect } from 'solid-js'
 import { useLocation, useNavigate } from '@solidjs/router'
 import { useIsMobile } from '@heaven/ui'
 import { useAuth } from '../../providers'
-import { LandingPage } from '../../pages/LandingPage'
+import { useOnboardingStatus } from '../../hooks/useOnboardingStatus'
 import {
   AppShell,
   Header,
@@ -75,7 +75,18 @@ const WalletFillIcon = () => (
     <path d="M216,64H56a8,8,0,0,1,0-16H192a8,8,0,0,0,0-16H56A24,24,0,0,0,32,56V184a24,24,0,0,0,24,24H216a16,16,0,0,0,16-16V80A16,16,0,0,0,216,64Zm-36,80a12,12,0,1,1,12-12A12,12,0,0,1,180,144Z" />
   </svg>
 )
-import { AppSidebar, HeaderActions } from '.'
+const CalendarIcon = () => (
+  <svg class="w-6 h-6" viewBox="0 0 256 256" fill="currentColor">
+    <path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM72,48v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24V80H48V48ZM208,208H48V96H208V208Z" />
+  </svg>
+)
+const CalendarFillIcon = () => (
+  <svg class="w-6 h-6" viewBox="0 0 256 256" fill="currentColor">
+    <path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32Zm0,48H48V48H72v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24Z" />
+  </svg>
+)
+import { AppSidebar, HeaderActions, AuthDialog } from '.'
+import { authDialogOpen, setAuthDialogOpen } from '../../lib/auth-dialog'
 import { Toaster } from '../Toaster'
 import { UploadQueue } from '../UploadQueue'
 import { AddToPlaylistDialog } from '../AddToPlaylistDialog'
@@ -89,18 +100,33 @@ export const AppLayout: ParentComponent = (props) => {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const isChat = createMemo(() => location.pathname.startsWith('/chat'))
+  const isActiveChat = createMemo(() => location.pathname !== '/chat' && location.pathname.startsWith('/chat'))
   const isPost = createMemo(() => location.pathname.startsWith('/post/'))
+  const isPublicProfile = createMemo(() => location.pathname.startsWith('/u/'))
 
-  // Public routes that don't require auth (still get the shell)
-  const isPublicRoute = createMemo(() =>
-    location.pathname.startsWith('/u/') || location.pathname.startsWith('/post/')
+  // Mobile footer only on main nav pages (home, music, wallet, schedule, own profile, chat list)
+  // Hidden on: active chats, posts, public profiles (/u/...)
+  const showMobileNav = createMemo(() =>
+    !isActiveChat() && !isPost() && !isPublicProfile()
   )
+
+  // Onboarding gate: redirect authenticated users with incomplete onboarding
+  const onboarding = useOnboardingStatus(() => auth.pkpAddress())
+
+  createEffect(() => {
+    if (auth.isSessionRestoring()) return
+    if (!auth.isAuthenticated()) return // public access OK
+    if (onboarding.status() === 'loading') return // wait for check
+    if (onboarding.status() === 'needs-onboarding') {
+      navigate('/onboarding', { replace: true })
+    }
+  })
 
   // Playlist dialog for SidePlayer menu
   const plDialog = usePlaylistDialog()
   const sidePlayerMenu = buildMenuActions(plDialog)
-  // Hide global header on mobile when in chat or post view (they have their own headers)
-  const showGlobalHeader = createMemo(() => !isMobile() || (!isChat() && !isPost()))
+  // Never show global header on mobile - pages have their own headers or use the mobile footer for nav
+  const showGlobalHeader = createMemo(() => !isMobile())
 
   // Mobile footer tabs
   const mobileFooterTabs: MobileFooterTab[] = [
@@ -108,6 +134,7 @@ export const AppLayout: ParentComponent = (props) => {
     { id: 'music', icon: <LibraryIcon />, activeIcon: <LibraryFillIcon />, label: 'Music' },
     { id: 'chat', icon: <ChatIcon />, activeIcon: <ChatFillIcon />, label: 'Chat' },
     { id: 'wallet', icon: <WalletIcon />, activeIcon: <WalletFillIcon />, label: 'Wallet' },
+    { id: 'schedule', icon: <CalendarIcon />, activeIcon: <CalendarFillIcon />, label: 'Schedule' },
     { id: 'profile', icon: <ProfileIcon />, activeIcon: <ProfileFillIcon />, label: 'Profile' },
   ]
 
@@ -118,6 +145,7 @@ export const AppLayout: ParentComponent = (props) => {
     if (path.startsWith('/music')) return 'music'
     if (path.startsWith('/chat')) return 'chat'
     if (path.startsWith('/wallet')) return 'wallet'
+    if (path.startsWith('/schedule')) return 'schedule'
     if (path.startsWith('/profile') || path.startsWith('/u/')) return 'profile'
     return 'home'
   })
@@ -129,22 +157,10 @@ export const AppLayout: ParentComponent = (props) => {
       case 'music': navigate('/music'); break
       case 'chat': navigate('/chat'); break
       case 'wallet': navigate('/wallet'); break
+      case 'schedule': navigate('/schedule'); break
       case 'profile': navigate('/profile'); break
     }
   }
-
-  // Show full-screen landing page (no shell) for unauthenticated users on non-public routes
-  const showLanding = createMemo(() =>
-    !auth.isSessionRestoring() && !auth.isAuthenticated() && !isPublicRoute()
-  )
-
-  // Redirect new users to onboarding
-  createEffect(() => {
-    if (auth.isSessionRestoring()) return
-    if (auth.isAuthenticated() && auth.isNewUser()) {
-      navigate('/onboarding', { replace: true })
-    }
-  })
 
   return (
     <Show
@@ -155,15 +171,8 @@ export const AppLayout: ParentComponent = (props) => {
         </div>
       }
     >
-      <Show when={!showLanding()} fallback={<LandingPage />}>
         <AppShell
-          header={
-            <Show when={showGlobalHeader()}>
-              <Header
-                rightSlot={<HeaderActions />}
-              />
-            </Show>
-          }
+          header={showGlobalHeader() ? <Header rightSlot={<HeaderActions />} /> : undefined}
           sidebar={<AppSidebar />}
           rightPanel={isChat() ? undefined :
             <RightPanel>
@@ -207,7 +216,7 @@ export const AppLayout: ParentComponent = (props) => {
             </Show>
           }
           mobileFooter={
-            <Show when={!isPost()}>
+            <Show when={showMobileNav()}>
               <MobileFooter
                 tabs={mobileFooterTabs}
                 activeTab={activeTab()}
@@ -224,8 +233,9 @@ export const AppLayout: ParentComponent = (props) => {
             onOpenChange={plDialog.setOpen}
             track={plDialog.track()}
           />
+          {/* Auth dialog - always mounted at app root level */}
+          <AuthDialog open={authDialogOpen()} onOpenChange={setAuthDialogOpen} />
         </AppShell>
-      </Show>
     </Show>
   )
 }

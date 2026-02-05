@@ -21,8 +21,6 @@ export interface OnboardingBasicsStepProps {
   class?: string
   /** Called when user continues. Return false to prevent advancing. */
   onContinue?: (data: OnboardingBasicsData) => Promise<boolean | void> | boolean | void
-  /** Called when user skips */
-  onSkip?: () => void
   /** Whether submission is in progress */
   submitting?: boolean
   /** Error message */
@@ -190,19 +188,12 @@ export const OnboardingBasicsStep: Component<OnboardingBasicsStepProps> = (props
       <div class="flex flex-col gap-3">
         <Button
           class="w-full h-12 text-lg"
-          disabled={!!ageError() || props.submitting}
+          disabled={!!ageError() || !parsedAge() || !gender() || !location() || !nativeLang() || props.submitting}
           loading={props.submitting}
           onClick={handleContinue}
         >
           {props.submitting ? 'Saving...' : 'Continue'}
         </Button>
-        <button
-          type="button"
-          onClick={() => props.onSkip?.()}
-          class="text-base text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors py-2"
-        >
-          Skip for now
-        </button>
       </div>
     </div>
   )

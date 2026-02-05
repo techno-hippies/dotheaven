@@ -1,0 +1,14 @@
+{
+  "name": "profiles-subgraph",
+  "version": "1.0.0",
+  "description": "Profile directory subgraph on MegaETH — dotheaven",
+  "scripts": {
+    "codegen": "graph codegen",
+    "build": "graph codegen && graph build"
+  },
+  "keywords": ["the-graph", "megaeth", "profiles", "community"],
+  "devDependencies": {
+    "@graphprotocol/graph-cli": "^0.98.1",
+    "@graphprotocol/graph-ts": "^0.35.1"
+  }
+}

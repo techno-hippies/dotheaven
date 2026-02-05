@@ -11,8 +11,6 @@ export interface OnboardingAvatarStepProps {
   onUpload?: (file: File) => Promise<boolean | void> | boolean | void
   /** Called when user imports an external avatar URL (e.g. from ENS) */
   onImportAvatar?: (uri: string) => Promise<boolean | void> | boolean | void
-  /** Called when user skips */
-  onSkip?: () => void
   /** Whether upload is in progress */
   uploading?: boolean
   /** Error message to display (e.g. style check rejection) */
@@ -196,13 +194,6 @@ export const OnboardingAvatarStep: Component<OnboardingAvatarStepProps> = (props
         >
           {props.uploading ? 'Uploading...' : 'Continue'}
         </Button>
-        <button
-          type="button"
-          onClick={() => props.onSkip?.()}
-          class="text-base text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors py-2"
-        >
-          Skip for now
-        </button>
       </div>
     </div>
   )

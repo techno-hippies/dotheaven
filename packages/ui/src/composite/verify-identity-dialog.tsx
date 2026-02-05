@@ -42,7 +42,7 @@ function QrCode(props: { data: string; class?: string }) {
         type: 'svg',
         margin: 1,
         width: 240,
-        color: { dark: '#1a1625', light: '#ffffff' },
+        color: { dark: '#171717', light: '#ffffff' },
       })
       setSvg(svgStr)
     } catch {

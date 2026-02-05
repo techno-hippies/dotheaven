@@ -24,7 +24,6 @@ export {
   DropdownMenuItemLabel,
   DropdownMenuItemDescription,
 } from './dropdown-menu'
-export { MusicPlayer, type MusicPlayerProps } from './music-player'
 export { TrackList, type TrackListProps, type Track, type TrackMenuActions, type ScrobbleStatus, type SortField, type SortDirection, type SortState } from './track-list'
 export { MediaHeader, type MediaHeaderProps } from './media-header'
 export { CommentItem, CommentSection, type CommentItemProps, type CommentSectionProps } from './comment-item'
@@ -32,7 +31,7 @@ export { FollowButton, type FollowButtonProps } from './follow-button'
 export { OnboardingNameStep, type OnboardingNameStepProps } from './onboarding-name-step'
 export { OnboardingBasicsStep, type OnboardingBasicsStepProps, type OnboardingBasicsData } from './onboarding-basics-step'
 export { OnboardingAvatarStep, type OnboardingAvatarStepProps } from './onboarding-avatar-step'
-export { OnboardingFlow, type OnboardingFlowProps, type OnboardingStep } from './onboarding-flow'
+export { OnboardingMusicStep, type OnboardingMusicStepProps, type OnboardingMusicData, type OnboardingArtist, POPULAR_ARTISTS } from './onboarding-music-step'
 export {
   Dialog,
   DialogTrigger,
@@ -76,6 +75,7 @@ export { PostViewer, type PostViewerProps, type PostComment } from './post-viewe
 export { SidePlayer, type SidePlayerProps } from './side-player'
 export { CommunityCard, type CommunityCardProps, type LanguageInfo } from './community-card'
 export { CommunityFeed, type CommunityFeedProps, type CommunityTab } from './community-feed'
+export { CommunityFilterDialog, countActiveFilters, type CommunityFilterProps, type CommunityFilters } from './community-filter'
 export { LanguageEditor, type LanguageEditorProps } from './language-editor'
 export {
   type LanguageEntry, type ProficiencyLevel,
@@ -84,4 +84,13 @@ export {
   getNativeLanguages, getLearningLanguages,
 } from '../data/languages'
 export { DownloadAppCta, type DownloadAppCtaProps, type DetectedPlatform } from './download-app-cta'
+export { ScheduleTab, type ScheduleTabProps, type TimeSlot, type SessionSlotData, type SessionRequestData } from './schedule-tab'
+export {
+  Scheduler, SchedulerCalendar, TimeSlotList, TimezoneSelector, BookingConfirmation,
+  type TimeSlot as SchedulerTimeSlot, type DayAvailability, type SchedulerProps,
+} from './scheduler'
+export { ScheduleDashboard, type ScheduleDashboardProps } from './schedule-dashboard'
+export { BookingDetail, type BookingDetailProps, type BookingDetailData, type BookingStatus, type Outcome } from './booking-detail'
+export { UpcomingSessions, type UpcomingSessionsProps, type BookingData } from './upcoming-sessions'
+export { PageHeader, type PageHeaderProps } from './page-header'
 

@@ -64,8 +64,8 @@
   --bg-page: #171717;             /* neutral-900 */
   --bg-surface: #1c1c1c;
   --bg-elevated: #262626;         /* neutral-800 */
-  --bg-highlight: #363636;
-  --bg-highlight-hover: #404040;  /* neutral-700 */
+  --bg-highlight: #262626;        /* subtle active state */
+  --bg-highlight-hover: #303030;  /* subtle hover - noticeable but not stark */
 
   --text-primary: #fafafa;
   --text-secondary: #d4d4d4;      /* neutral-300 */
@@ -90,9 +90,11 @@
     @apply border-border;
   }
 
+  html,
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-sans);
+    background: #171717 !important;
   }
 }
 
@@ -154,4 +156,19 @@
  */
 :root {
   --vh-screen: 100vh;
+}
+
+/* Force neutral background (override any Storybook/Tailwind defaults) */
+html {
+  background: #171717 !important;
+}
+
+body {
+  background: #171717 !important;
+}
+
+#root,
+#storybook-root,
+#storybook-docs {
+  background: #171717 !important;
 }

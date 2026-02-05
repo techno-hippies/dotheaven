@@ -57,11 +57,15 @@ export async function validateUserOp(
   // 1. Validate initCode
   const initResult = validateInitCode(op.sender, op.initCode);
   if (!initResult.ok) return initResult;
-  const user = initResult.user!;
 
   // 2. Validate callData: must be execute(address,uint256,bytes)
-  const callResult = validateCallData(op.callData, op.sender, user);
+  const callResult = validateCallData(op.callData, op.sender, initResult.user);
   if (!callResult.ok) return callResult;
+
+  const user = callResult.user ?? initResult.user;
+  if (!user) {
+    return { ok: false, error: "missing user in calldata/initCode" };
+  }
 
   // 3. Validate gas caps
   const gasResult = validateGasCaps(op);

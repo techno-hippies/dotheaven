@@ -35,6 +35,9 @@ export const config = {
     process.env.PAYMASTER_VALIDITY_SECONDS ?? 180,
   ),
 
+  // Gateway API key (optional — if set, all mutating endpoints require it)
+  gatewayApiKey: process.env.GATEWAY_API_KEY ?? "",
+
   // Account salt (always 0 in Heaven)
   accountSalt: 0n,
 } as const;

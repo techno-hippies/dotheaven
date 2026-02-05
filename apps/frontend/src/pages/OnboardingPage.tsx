@@ -1,42 +1,78 @@
 /**
- * OnboardingPage — full-page onboarding route for new users.
+ * OnboardingPage — mandatory 4-step onboarding after auth.
  *
- * Replaces the dialog-based OnboardingFlow. Reuses the same step components
- * (OnboardingNameStep, OnboardingBasicsStep, OnboardingAvatarStep) in a
- * standalone full-screen layout.
+ * Steps:
+ * 1. Name — Claim a .heaven name (on-chain via RegistryV1)
+ * 2. Basics — Age, gender, location, language (on-chain via ProfileV2 + RecordsV1)
+ * 3. Music — Connect Spotify or pick favorite artists (skippable)
+ * 4. Avatar — Upload profile photo (IPFS + RecordsV1)
  *
- * Redirects to / if not authenticated, redirects to / on completion.
+ * All steps mandatory except Music (skippable). Resumes at the correct step
+ * on page refresh by reading on-chain state via useOnboardingStatus.
  */
 
 import type { Component } from 'solid-js'
-import { createSignal, createEffect, createResource, Match, Switch } from 'solid-js'
+import { createSignal, createEffect, onMount, Show, Switch, Match } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import {
-  Stepper,
   OnboardingNameStep,
   OnboardingBasicsStep,
+  OnboardingMusicStep,
   OnboardingAvatarStep,
+  Stepper,
 } from '@heaven/ui'
-import type { OnboardingBasicsData } from '@heaven/ui'
+import type { OnboardingBasicsData, OnboardingMusicData, OnboardingArtist } from '@heaven/ui'
 import { useAuth } from '../providers'
+import { useOnboardingStatus } from '../hooks/useOnboardingStatus'
 import {
   checkNameAvailable,
   registerHeavenName,
-  uploadAvatar,
   setProfile,
   setTextRecord,
+  uploadAvatar,
   computeNode,
-  getEnsProfile,
 } from '../lib/heaven'
+import { queryClient } from '../main'
+import {
+  startSpotifyLink,
+  isSpotifyCallback,
+  handleSpotifyCallback,
+  clearSpotifyCallback,
+} from '../lib/camp-spotify'
 
-type OnboardingStep = 'name' | 'basics' | 'avatar' | 'complete'
-const STEPS: OnboardingStep[] = ['name', 'basics', 'avatar', 'complete']
+type OnboardingStep = 'name' | 'basics' | 'music' | 'avatar' | 'complete'
 
 export const OnboardingPage: Component = () => {
   const auth = useAuth()
   const navigate = useNavigate()
+  const address = () => auth.pkpAddress()
+  const onboarding = useOnboardingStatus(address)
 
-  // Guard: redirect if not authenticated
+  // Local step state — initialized from on-chain status
+  const [step, setStep] = createSignal<OnboardingStep>('name')
+  const [initialized, setInitialized] = createSignal(false)
+
+  // Track claimed name for subsequent steps
+  const [claimedName, setClaimedName] = createSignal<string>('')
+
+  // Name step state
+  const [claiming, setClaiming] = createSignal(false)
+  const [claimError, setClaimError] = createSignal<string | null>(null)
+
+  // Basics step state
+  const [basicsSubmitting, setBasicsSubmitting] = createSignal(false)
+  const [basicsError, setBasicsError] = createSignal<string | null>(null)
+
+  // Music step state
+  const [musicSubmitting, setMusicSubmitting] = createSignal(false)
+  const [musicError, setMusicError] = createSignal<string | null>(null)
+  const [connectingSpotify, setConnectingSpotify] = createSignal(false)
+
+  // Avatar step state
+  const [avatarUploading, setAvatarUploading] = createSignal(false)
+  const [avatarError, setAvatarError] = createSignal<string | null>(null)
+
+  // Redirect if not authenticated
   createEffect(() => {
     if (auth.isSessionRestoring()) return
     if (!auth.isAuthenticated()) {
@@ -44,64 +80,29 @@ export const OnboardingPage: Component = () => {
     }
   })
 
-  const [step, setStep] = createSignal<OnboardingStep>('name')
-  const [claimedName, setClaimedName] = createSignal('')
-
-  // Name step state
-  const [claiming, setClaiming] = createSignal(false)
-  const [claimError, setClaimError] = createSignal<string | null>(null)
-
-  // Basics step state
-  const [submittingBasics, setSubmittingBasics] = createSignal(false)
-  const [basicsError, setBasicsError] = createSignal<string | null>(null)
-
-  // Avatar step state
-  const [uploading, setUploading] = createSignal(false)
-  const [uploadError, setUploadError] = createSignal<string | null>(null)
-
-  // ENS profile for EOA users
-  const [ensProfile] = createResource(
-    () => auth.eoaAddress(),
-    async (addr) => {
-      if (!addr) return null
-      console.log('[Onboarding] Fetching ENS profile for EOA:', addr)
-      const result = await getEnsProfile(addr)
-      console.log('[Onboarding] ENS profile:', result)
-      return result
-    },
-  )
-
-  const stepIndex = () => STEPS.indexOf(step())
-
-  const title = () => {
-    switch (step()) {
-      case 'name': return 'Choose your name'
-      case 'basics': return 'A bit about you'
-      case 'avatar': return 'Add a profile photo'
-      case 'complete': return "You're all set!"
-    }
-  }
-
-  const subtitle = () => {
-    switch (step()) {
-      case 'name': return "This is your identity on Heaven. It's how people find and message you."
-      case 'basics': return 'Helps us match your timezone and language preferences.'
-      case 'avatar': return claimedName()
-        ? `Looking good, ${claimedName()}.heaven. Add a photo so people recognize you.`
-        : 'Help people recognize you.'
-      case 'complete': return `Welcome to Heaven, ${claimedName()}.heaven. Your identity is secured on-chain.`
-    }
-  }
-
-  // Auto-redirect on complete
+  // Redirect if already complete
   createEffect(() => {
-    if (step() === 'complete') {
-      auth.dismissOnboarding()
-      setTimeout(() => navigate('/', { replace: true }), 1500)
+    if (onboarding.status() === 'complete') {
+      navigate('/', { replace: true })
     }
   })
 
-  // ── Name step handlers ─────────────────────────────────────────────
+  // Initialize step from on-chain status (once)
+  createEffect(() => {
+    if (initialized()) return
+    const initial = onboarding.initialStep()
+    if (initial && onboarding.status() !== 'loading') {
+      setStep(initial)
+      // If name already exists, populate claimedName from localStorage
+      if (initial !== 'name') {
+        const cached = localStorage.getItem('heaven:username')
+        if (cached) setClaimedName(cached)
+      }
+      setInitialized(true)
+    }
+  })
+
+  // ── Name step handlers ─────────────────────────────────────────
 
   async function handleCheckAvailability(name: string): Promise<boolean> {
     try {
@@ -114,31 +115,26 @@ export const OnboardingPage: Component = () => {
 
   async function handleClaim(name: string): Promise<boolean> {
     const pkp = auth.pkpInfo()
-    if (!pkp) return false
+    const addr = address()
+    if (!pkp || !addr) return false
 
     setClaiming(true)
     setClaimError(null)
     try {
       const authContext = await auth.getAuthContext()
-      const result = await registerHeavenName(
-        name,
-        pkp.ethAddress,
-        authContext,
-        pkp.publicKey,
-      )
+      const result = await registerHeavenName(name, addr, authContext, pkp.publicKey)
 
       if (result.success) {
-        console.log('[Onboarding] Name registered:', result)
+        console.log('[Onboarding] Name registered:', name)
         setClaimedName(name)
         try {
           localStorage.setItem('heaven:username', name)
-        } catch (e) {
-          console.error('[Onboarding] Failed to save username:', e)
-        }
+        } catch { /* ignore */ }
+        // Invalidate the name query so useOnboardingStatus updates
+        queryClient.invalidateQueries({ queryKey: ['primaryName', addr] })
         setStep('basics')
         return true
       } else {
-        console.error('[Onboarding] Registration failed:', result.error)
         setClaimError(result.error || 'Registration failed. Please try again.')
         return false
       }
@@ -151,234 +147,384 @@ export const OnboardingPage: Component = () => {
     }
   }
 
-  // ── Basics step handlers ───────────────────────────────────────────
+  // ── Basics step handlers ───────────────────────────────────────
 
-  async function handleBasicsContinue(data: OnboardingBasicsData): Promise<boolean> {
+  async function handleBasicsContinue(data: OnboardingBasicsData): Promise<boolean | void> {
     const pkp = auth.pkpInfo()
-    if (!pkp) return false
+    const addr = address()
+    if (!pkp || !addr) return false
 
-    const hasData = data.age || data.gender || data.languages.length > 0
-    if (!hasData) {
-      setStep('avatar')
-      return true
-    }
-
-    setSubmittingBasics(true)
+    setBasicsSubmitting(true)
     setBasicsError(null)
     try {
       const authContext = await auth.getAuthContext()
-      const result = await setProfile(
-        {
-          displayName: claimedName() || undefined,
-          age: data.age ?? undefined,
-          gender: data.gender,
-          languages: data.languages.length > 0 ? data.languages : undefined,
-        },
-        pkp.ethAddress,
-        authContext,
-        pkp.publicKey,
-      )
 
-      if (result.success) {
-        console.log('[Onboarding] Profile set on-chain:', result)
-        setStep('avatar')
-        return true
-      } else {
-        console.error('[Onboarding] Profile set failed:', result.error)
-        setBasicsError(result.error || 'Failed to save profile. Please try again.')
-        return false
+      // Build ProfileInput from basics data
+      const profileInput: Record<string, any> = {}
+      if (data.age != null) profileInput.age = data.age
+      if (data.gender) profileInput.gender = data.gender
+      if (data.languages?.length) profileInput.languages = data.languages
+
+      // Save structured profile data to ProfileV2
+      const profileResult = await setProfile(profileInput, addr, authContext, pkp.publicKey)
+      if (!profileResult.success) {
+        throw new Error(profileResult.error || 'Failed to save profile')
       }
-    } catch (err) {
-      console.error('[Onboarding] Profile error:', err)
-      setBasicsError(err instanceof Error ? err.message : 'Failed to save profile. Please try again.')
-      return false
-    } finally {
-      setSubmittingBasics(false)
-    }
-  }
+      console.log('[Onboarding] Profile saved:', profileResult.txHash)
 
-  // ── Avatar step handlers ───────────────────────────────────────────
-
-  async function handleAvatarUpload(file: File): Promise<boolean> {
-    const pkp = auth.pkpInfo()
-    if (!pkp) return false
-
-    const MAX_AVATAR_SIZE = 2 * 1024 * 1024 // 2 MB
-    if (file.size > MAX_AVATAR_SIZE) {
-      setUploadError(`Image is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Please use an image under 2 MB.`)
-      return false
-    }
-
-    setUploading(true)
-    setUploadError(null)
-    try {
-      const authContext = await auth.getAuthContext()
-      const username = claimedName() || localStorage.getItem('heaven:username')
-      if (!username) {
-        setUploadError('Claim a Heaven name before setting an avatar.')
-        return false
-      }
-      const result = await uploadAvatar(file, pkp.publicKey, authContext)
-
-      if (result.success && result.avatarCID) {
-        console.log('[Onboarding] Avatar uploaded:', result)
-        const avatarURI = `ipfs://${result.avatarCID}`
-        const node = computeNode(username)
+      // Save location as a text record on RecordsV1 (if we have a name)
+      const name = claimedName()
+      if (name && data.location) {
+        const node = computeNode(name)
         const recordResult = await setTextRecord(
           node,
-          'avatar',
-          avatarURI,
+          'heaven.location',
+          data.location.label,
           pkp.publicKey,
           authContext,
         )
         if (!recordResult.success) {
-          console.error('[Onboarding] Failed to set avatar record:', recordResult.error)
-          setUploadError(recordResult.error || 'Failed to set avatar record.')
-          return false
+          console.warn('[Onboarding] Failed to set location record:', recordResult.error)
+          // Non-fatal — profile was saved, location is a text record bonus
         }
-        console.log('[Onboarding] Avatar record set:', recordResult.txHash)
-        setStep('complete')
-        return true
-      } else {
-        console.error('[Onboarding] Avatar upload failed:', result.error)
-        const error = result.error || 'Upload failed. Please try again.'
-        setUploadError(
-          error.includes('realistic photos')
-            ? 'Only anime, cartoon, or illustrated avatars are allowed. Please choose a different image.'
-            : error
-        )
-        return false
       }
+
+      // Invalidate profile query
+      queryClient.invalidateQueries({ queryKey: ['profile', addr] })
+      setStep('music')
     } catch (err) {
-      console.error('[Onboarding] Avatar error:', err)
-      const msg = err instanceof Error ? err.message : String(err)
-      if (msg.includes('413') || msg.toLowerCase().includes('payload too large') || msg.toLowerCase().includes('too large')) {
-        setUploadError('Image is too large. Please use a smaller image (under 2 MB).')
-      } else if (msg.includes('network_error') || msg.includes('Load failed')) {
-        setUploadError('Network error uploading image. Please try a smaller file or check your connection.')
-      } else {
-        setUploadError(msg || 'Upload failed. Please try again.')
-      }
+      console.error('[Onboarding] Basics save error:', err)
+      setBasicsError(err instanceof Error ? err.message : 'Failed to save profile. Please try again.')
       return false
     } finally {
-      setUploading(false)
+      setBasicsSubmitting(false)
     }
   }
 
-  async function handleImportAvatar(uri: string): Promise<boolean> {
-    const pkp = auth.pkpInfo()
-    if (!pkp) return false
+  // ── Music step handlers ────────────────────────────────────────
 
-    const username = claimedName() || localStorage.getItem('heaven:username')
-    if (!username) {
-      setUploadError('Claim a Heaven name before setting an avatar.')
-      return false
+  // Build a PKP signer adapter for Camp SDK
+  function buildPkpSigner() {
+    const addr = address()
+    if (!addr) throw new Error('Not authenticated')
+    return {
+      signMessage: (message: string) => auth.signMessage(message),
+      getAddress: () => addr,
     }
+  }
 
-    setUploading(true)
-    setUploadError(null)
+  // On mount: detect if we're returning from Spotify OAuth redirect
+  onMount(async () => {
+    if (!isSpotifyCallback()) return
+
+    // Wait for auth to be ready
+    const waitForAuth = () =>
+      new Promise<void>((resolve) => {
+        const check = () => {
+          if (auth.isAuthenticated() && !auth.isSessionRestoring()) {
+            resolve()
+          } else {
+            setTimeout(check, 200)
+          }
+        }
+        check()
+      })
+
+    try {
+      await waitForAuth()
+      setStep('music')
+      setConnectingSpotify(true)
+      setMusicError(null)
+
+      const signer = buildPkpSigner()
+      const artists = await handleSpotifyCallback(signer)
+
+      if (artists.length > 0) {
+        // Auto-continue with the fetched artists
+        await handleMusicContinue({ artists, spotifyConnected: true })
+      } else {
+        setMusicError('No artists found from your Spotify. Pick some below instead.')
+        clearSpotifyCallback()
+      }
+    } catch (err) {
+      console.error('[Onboarding] Spotify callback error:', err)
+      setMusicError(
+        err instanceof Error ? err.message : 'Failed to import Spotify artists. Pick some below instead.',
+      )
+      clearSpotifyCallback()
+    } finally {
+      setConnectingSpotify(false)
+    }
+  })
+
+  async function handleConnectSpotify(): Promise<OnboardingArtist[] | null> {
+    setConnectingSpotify(true)
+    setMusicError(null)
+    try {
+      const signer = buildPkpSigner()
+      // This redirects the browser — code after this won't execute
+      await startSpotifyLink(signer)
+      return null
+    } catch (err) {
+      console.error('[Onboarding] Spotify connect error:', err)
+      setMusicError('Failed to connect Spotify. You can pick artists manually below.')
+      return null
+    } finally {
+      setConnectingSpotify(false)
+    }
+  }
+
+  async function handleMusicContinue(data: OnboardingMusicData): Promise<boolean | void> {
+    setMusicSubmitting(true)
+    setMusicError(null)
+    try {
+      // Store selected artists in localStorage for now
+      // TODO: Persist to on-chain profile or RecordsV1 text record
+      if (data.artists.length > 0) {
+        const artistMbids = data.artists.map((a) => a.mbid)
+        try {
+          localStorage.setItem('heaven:favoriteArtists', JSON.stringify(artistMbids))
+        } catch { /* ignore */ }
+        console.log('[Onboarding] Music preferences saved:', data.artists.length, 'artists')
+      }
+      setStep('avatar')
+    } catch (err) {
+      console.error('[Onboarding] Music save error:', err)
+      setMusicError(err instanceof Error ? err.message : 'Failed to save. Please try again.')
+      return false
+    } finally {
+      setMusicSubmitting(false)
+    }
+  }
+
+  // ── Avatar step handlers ───────────────────────────────────────
+
+  async function handleAvatarUpload(file: File): Promise<boolean | void> {
+    const pkp = auth.pkpInfo()
+    const addr = address()
+    const name = claimedName()
+    if (!pkp || !addr || !name) return false
+
+    setAvatarUploading(true)
+    setAvatarError(null)
     try {
       const authContext = await auth.getAuthContext()
-      const node = computeNode(username)
-      const recordResult = await setTextRecord(
-        node,
-        'avatar',
-        uri,
-        pkp.publicKey,
-        authContext,
-      )
-      if (!recordResult.success) {
-        setUploadError(recordResult.error || 'Failed to set avatar record.')
-        return false
+
+      // Upload to IPFS via Lit Action
+      const uploadResult = await uploadAvatar(file, pkp.publicKey, authContext)
+      if (!uploadResult.success || !uploadResult.avatarCID) {
+        throw new Error(uploadResult.error || 'Avatar upload failed')
       }
-      console.log('[Onboarding] ENS avatar imported, record set:', recordResult.txHash)
+      console.log('[Onboarding] Avatar uploaded:', uploadResult.avatarCID)
+
+      // Set avatar text record on RecordsV1
+      const node = computeNode(name)
+      const avatarURI = `ipfs://${uploadResult.avatarCID}`
+      const recordResult = await setTextRecord(node, 'avatar', avatarURI, pkp.publicKey, authContext)
+      if (!recordResult.success) {
+        throw new Error(recordResult.error || 'Failed to set avatar record')
+      }
+      console.log('[Onboarding] Avatar record set:', recordResult.txHash)
+
+      // Invalidate avatar query + update onboarding cache
+      queryClient.invalidateQueries({ queryKey: ['textRecord', node, 'avatar'] })
+      try {
+        localStorage.setItem(`heaven:onboarding:${addr.toLowerCase()}`, 'complete')
+      } catch { /* ignore */ }
+
       setStep('complete')
-      return true
+      // Redirect after brief confirmation
+      setTimeout(() => navigate('/', { replace: true }), 1200)
     } catch (err) {
-      console.error('[Onboarding] Import avatar error:', err)
-      setUploadError(err instanceof Error ? err.message : 'Failed to import avatar.')
+      console.error('[Onboarding] Avatar upload error:', err)
+      const msg = err instanceof Error ? err.message : String(err)
+      // Detect 413 / payload-too-large (can surface as CORS error on 413 responses)
+      if (msg.includes('413') || msg.includes('access control') || msg.includes('Too Large')) {
+        setAvatarError('Image is too large. Please try a smaller photo.')
+      } else {
+        setAvatarError(msg || 'Failed to upload avatar. Please try again.')
+      }
       return false
     } finally {
-      setUploading(false)
+      setAvatarUploading(false)
     }
   }
 
+  async function handleAvatarImport(uri: string): Promise<boolean | void> {
+    const pkp = auth.pkpInfo()
+    const addr = address()
+    const name = claimedName()
+    if (!pkp || !addr || !name) return false
+
+    setAvatarUploading(true)
+    setAvatarError(null)
+    try {
+      const authContext = await auth.getAuthContext()
+      const node = computeNode(name)
+      const recordResult = await setTextRecord(node, 'avatar', uri, pkp.publicKey, authContext)
+      if (!recordResult.success) {
+        throw new Error(recordResult.error || 'Failed to set avatar record')
+      }
+      console.log('[Onboarding] Avatar import set:', recordResult.txHash)
+
+      queryClient.invalidateQueries({ queryKey: ['textRecord', node, 'avatar'] })
+      try {
+        localStorage.setItem(`heaven:onboarding:${addr.toLowerCase()}`, 'complete')
+      } catch { /* ignore */ }
+
+      setStep('complete')
+      setTimeout(() => navigate('/', { replace: true }), 1200)
+    } catch (err) {
+      console.error('[Onboarding] Avatar import error:', err)
+      setAvatarError(err instanceof Error ? err.message : 'Failed to set avatar. Please try again.')
+      return false
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
+
+  // ── Render ─────────────────────────────────────────────────────
+
   return (
-    <div class="min-h-screen flex flex-col items-center justify-center bg-[var(--bg-page)] px-4 py-12">
-      <div class="w-full max-w-md">
-        {/* Logo */}
-        <div class="flex justify-center mb-8">
-          <img
-            src={`${import.meta.env.BASE_URL}images/heaven.png`}
-            alt="Heaven"
-            class="w-12 h-12 object-contain"
-          />
-        </div>
-
-        {/* Step indicator (hidden on complete) */}
-        <Switch>
-          <Match when={step() !== 'complete'}>
-            <Stepper steps={3} currentStep={stepIndex()} class="mb-4 justify-center" />
-            <h1 class="text-2xl font-bold text-[var(--text-primary)] text-center mb-1">
-              {title()}
-            </h1>
-            <p class="text-[var(--text-secondary)] text-center mb-8">
-              {subtitle()}
-            </p>
-          </Match>
-          <Match when={step() === 'complete'}>
-            <div class="text-center mb-8">
-              <h1 class="text-2xl font-bold text-[var(--text-primary)] mb-1">{title()}</h1>
-              <p class="text-[var(--text-secondary)]">{subtitle()}</p>
+    <div class="min-h-screen flex flex-col bg-[var(--bg-page)]">
+      <div class="flex-1 flex flex-col items-center justify-center px-6 py-16">
+        {/* Loading state while checking on-chain status */}
+        <Show
+          when={onboarding.status() !== 'loading'}
+          fallback={
+            <div class="flex flex-col items-center gap-3">
+              <div class="w-6 h-6 border-2 border-[var(--text-muted)] border-t-transparent rounded-full animate-spin" />
+              <p class="text-sm text-[var(--text-secondary)]">Checking your profile...</p>
             </div>
-          </Match>
-        </Switch>
-
-        {/* Step content */}
-        <Switch>
-          <Match when={step() === 'name'}>
-            <OnboardingNameStep
-              class="gap-6"
-              onCheckAvailability={handleCheckAvailability}
-              onClaim={handleClaim}
-              claiming={claiming()}
-              error={claimError()}
-            />
-          </Match>
-          <Match when={step() === 'basics'}>
-            <OnboardingBasicsStep
-              claimedName={claimedName()}
-              onContinue={handleBasicsContinue}
-              onSkip={() => setStep('avatar')}
-              submitting={submittingBasics()}
-              error={basicsError()}
-            />
-          </Match>
-          <Match when={step() === 'avatar'}>
-            <OnboardingAvatarStep
-              claimedName={claimedName()}
-              onUpload={handleAvatarUpload}
-              onImportAvatar={handleImportAvatar}
-              onSkip={() => {
-                setStep('complete')
-              }}
-              uploading={uploading()}
-              error={uploadError()}
-              ensAvatar={ensProfile()?.avatar ?? null}
-              ensAvatarRecord={ensProfile()?.avatarRecord ?? null}
-              ensName={ensProfile()?.name ?? null}
-            />
-          </Match>
-          <Match when={step() === 'complete'}>
-            <div class="flex flex-col items-center gap-6 text-center py-8">
-              <div class="w-20 h-20 rounded-full bg-green-500/10 flex items-center justify-center">
-                <svg class="w-10 h-10 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" />
-                </svg>
+          }
+        >
+          <Switch>
+            {/* ── Name Step ──────────────────────────── */}
+            <Match when={step() === 'name'}>
+              <div class="w-full max-w-md">
+                <div class="flex justify-center mb-6">
+                  <img
+                    src={`${import.meta.env.BASE_URL}images/heaven.png`}
+                    alt="Heaven"
+                    class="w-12 h-12 object-contain"
+                  />
+                </div>
+                <Stepper steps={4} currentStep={0} class="mb-6" />
+                <h1 class="text-2xl font-bold text-[var(--text-primary)] text-center mb-1">
+                  Choose your name
+                </h1>
+                <p class="text-[var(--text-secondary)] text-center mb-8">
+                  This is your identity on Heaven. It's how people find and message you.
+                </p>
+                <OnboardingNameStep
+                  class="gap-6"
+                  onCheckAvailability={handleCheckAvailability}
+                  onClaim={handleClaim}
+                  claiming={claiming()}
+                  error={claimError()}
+                />
               </div>
-            </div>
-          </Match>
-        </Switch>
+            </Match>
+
+            {/* ── Basics Step ────────────────────────── */}
+            <Match when={step() === 'basics'}>
+              <div class="w-full max-w-md">
+                <div class="flex justify-center mb-6">
+                  <img
+                    src={`${import.meta.env.BASE_URL}images/heaven.png`}
+                    alt="Heaven"
+                    class="w-12 h-12 object-contain"
+                  />
+                </div>
+                <Stepper steps={4} currentStep={1} class="mb-6" />
+                <h1 class="text-2xl font-bold text-[var(--text-primary)] text-center mb-1">
+                  A bit about you
+                </h1>
+                <p class="text-[var(--text-secondary)] text-center mb-8">
+                  Helps us match your timezone and language preferences.
+                </p>
+                <OnboardingBasicsStep
+                  claimedName={claimedName()}
+                  onContinue={handleBasicsContinue}
+                  submitting={basicsSubmitting()}
+                  error={basicsError()}
+                />
+              </div>
+            </Match>
+
+            {/* ── Music Step ─────────────────────────── */}
+            <Match when={step() === 'music'}>
+              <div class="w-full max-w-md">
+                <div class="flex justify-center mb-6">
+                  <img
+                    src={`${import.meta.env.BASE_URL}images/heaven.png`}
+                    alt="Heaven"
+                    class="w-12 h-12 object-contain"
+                  />
+                </div>
+                <Stepper steps={4} currentStep={2} class="mb-6" />
+                <h1 class="text-2xl font-bold text-[var(--text-primary)] text-center mb-1">
+                  Your music taste
+                </h1>
+                <p class="text-[var(--text-secondary)] text-center mb-8">
+                  Pick some artists you love. This helps us personalize your experience.
+                </p>
+                <OnboardingMusicStep
+                  claimedName={claimedName()}
+                  onConnectSpotify={handleConnectSpotify}
+                  onContinue={handleMusicContinue}
+                  submitting={musicSubmitting()}
+                  connectingSpotify={connectingSpotify()}
+                  error={musicError()}
+                />
+              </div>
+            </Match>
+
+            {/* ── Avatar Step ────────────────────────── */}
+            <Match when={step() === 'avatar'}>
+              <div class="w-full max-w-md">
+                <div class="flex justify-center mb-6">
+                  <img
+                    src={`${import.meta.env.BASE_URL}images/heaven.png`}
+                    alt="Heaven"
+                    class="w-12 h-12 object-contain"
+                  />
+                </div>
+                <Stepper steps={4} currentStep={3} class="mb-6" />
+                <h1 class="text-2xl font-bold text-[var(--text-primary)] text-center mb-1">
+                  Add a profile photo
+                </h1>
+                <p class="text-[var(--text-secondary)] text-center mb-8">
+                  {claimedName()
+                    ? `Looking good, ${claimedName()}.heaven. Add a photo so people recognize you.`
+                    : 'Help people recognize you.'}
+                </p>
+                <OnboardingAvatarStep
+                  claimedName={claimedName()}
+                  onUpload={handleAvatarUpload}
+                  onImportAvatar={handleAvatarImport}
+                  uploading={avatarUploading()}
+                  error={avatarError()}
+                />
+              </div>
+            </Match>
+
+            {/* ── Complete ────────────────────────────── */}
+            <Match when={step() === 'complete'}>
+              <div class="flex flex-col items-center gap-6 text-center py-8">
+                <div class="w-20 h-20 rounded-full bg-green-500/10 flex items-center justify-center">
+                  <svg class="w-10 h-10 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+                <h1 class="text-2xl font-bold text-[var(--text-primary)]">You're all set!</h1>
+                <p class="text-[var(--text-secondary)]">
+                  Welcome to Heaven, {claimedName()}.heaven
+                </p>
+              </div>
+            </Match>
+          </Switch>
+        </Show>
       </div>
     </div>
   )

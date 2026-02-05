@@ -49,18 +49,41 @@ const OPENROUTER_ENCRYPTED_KEY = {
   ],
 }
 
-async function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result as string
-      // Strip data URL prefix: "data:image/png;base64,..."
-      const base64 = result.split(',')[1]
-      resolve(base64)
-    }
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
+/** Max dimension (width or height) for avatar uploads */
+const MAX_AVATAR_SIZE = 512
+/** JPEG quality (0-1) for compressed avatars */
+const JPEG_QUALITY = 0.85
+
+/**
+ * Resize & compress an image file to JPEG, capping dimensions at MAX_AVATAR_SIZE.
+ * Returns { base64, contentType } ready for the Lit Action payload.
+ */
+async function resizeImage(file: File): Promise<{ base64: string; contentType: string }> {
+  const bitmap = await createImageBitmap(file)
+  const { width, height } = bitmap
+
+  // Calculate scaled dimensions preserving aspect ratio
+  let targetW = width
+  let targetH = height
+  if (width > MAX_AVATAR_SIZE || height > MAX_AVATAR_SIZE) {
+    const scale = MAX_AVATAR_SIZE / Math.max(width, height)
+    targetW = Math.round(width * scale)
+    targetH = Math.round(height * scale)
+  }
+
+  const canvas = new OffscreenCanvas(targetW, targetH)
+  const ctx = canvas.getContext('2d')!
+  ctx.drawImage(bitmap, 0, 0, targetW, targetH)
+  bitmap.close()
+
+  const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: JPEG_QUALITY })
+  const buffer = await blob.arrayBuffer()
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return { base64: btoa(binary), contentType: 'image/jpeg' }
 }
 
 export interface AvatarUploadResult {
@@ -86,13 +109,11 @@ export async function uploadAvatar(
 ): Promise<AvatarUploadResult> {
   const litClient = await getLitClient()
 
-  // Convert file to base64
-  const base64 = await fileToBase64(file)
+  // Resize & compress to JPEG before sending to Lit network
+  const { base64, contentType } = await resizeImage(file)
 
   const timestamp = Date.now()
   const nonce = Math.floor(Math.random() * 1_000_000_000)
-
-  const contentType = file.type || 'image/png'
 
   // Single executeJs: action signs with user's PKP, validates, uploads
   const result = await litClient.executeJs({

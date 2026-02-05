@@ -30,6 +30,33 @@ dataSources:
           handler: handleScrobbled
       file: ScrobbleV3/ScrobbleV3.wasm
   - kind: ethereum
+    name: ScrobbleV4
+    network: megaeth-testnet-v2
+    source:
+      address: "0xD41a8991aDF67a1c4CCcb5f7Da6A01a601eC3F37"
+      abi: ScrobbleV4
+      startBlock: 10474742
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Track
+        - Scrobble
+      abis:
+        - name: ScrobbleV4
+          file: ScrobbleV4/ScrobbleV4.json
+      eventHandlers:
+        - event: TrackRegistered(indexed bytes32,indexed uint8,bytes32,indexed bytes32,uint64)
+          handler: handleTrackRegisteredV4
+        - event: TrackCoverSet(indexed bytes32,string)
+          handler: handleTrackCoverSetV4
+        - event: Scrobbled(indexed address,indexed bytes32,uint64)
+          handler: handleScrobbledV4
+        - event: TrackUpdated(indexed bytes32,indexed bytes32)
+          handler: handleTrackUpdatedV4
+      file: ScrobbleV4/ScrobbleV4.wasm
+  - kind: ethereum
     name: PostsV1
     network: megaeth-testnet-v2
     source:
@@ -49,3 +76,30 @@ dataSources:
         - event: PostCreated(indexed bytes32,indexed address,uint8,string,bool)
           handler: handlePostCreated
       file: PostsV1/PostsV1.wasm
+  - kind: ethereum
+    name: ContentRegistry
+    network: megaeth-testnet-v2
+    source:
+      address: "0x9ca08C2D2170A43ecfA12AB35e06F2E1cEEB4Ef2"
+      abi: ContentRegistry
+      startBlock: 10216192
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ContentEntry
+        - AccessGrant
+      abis:
+        - name: ContentRegistry
+          file: ContentRegistry/ContentRegistry.json
+      eventHandlers:
+        - event: ContentRegistered(indexed bytes32,indexed bytes32,indexed address,address,bytes)
+          handler: handleContentRegistered
+        - event: AccessGranted(indexed bytes32,indexed address)
+          handler: handleAccessGranted
+        - event: AccessRevoked(indexed bytes32,indexed address)
+          handler: handleAccessRevoked
+        - event: ContentDeactivated(indexed bytes32)
+          handler: handleContentDeactivated
+      file: ContentRegistry/ContentRegistry.wasm

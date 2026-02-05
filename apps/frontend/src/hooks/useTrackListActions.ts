@@ -3,12 +3,15 @@
  *
  * usePlaylistDialog  — AddToPlaylistDialog open/close state + trigger
  * useTrackPlayback   — find local library match + play/select via player
+ * buildMenuActions   — standard menu wiring (playlist dialog + artist nav)
  */
 
 import { createSignal } from 'solid-js'
+import { useNavigate } from '@solidjs/router'
 import type { Track } from '@heaven/ui'
 import { usePlayer } from '../providers'
 import type { TrackMenuActions } from '@heaven/ui'
+import { fetchRecordingArtists, payloadToMbid } from '../lib/heaven'
 
 // ── AddToPlaylistDialog state ─────────────────────────────────────
 
@@ -94,15 +97,58 @@ export function useTrackPlayback() {
   }
 }
 
-// ── Standard menu actions (AddToPlaylist + AddToQueue) ────────────
+// ── Standard menu actions (AddToPlaylist + AddToQueue + GoToArtist) ─
 
 export function buildMenuActions(
   playlistDialog: ReturnType<typeof usePlaylistDialog>,
   extra?: Partial<TrackMenuActions>,
 ): TrackMenuActions {
+  const navigate = useNavigate()
+
+  const goToArtist = async (track: Track) => {
+    // 1. Check for artistMbid on extended track types (e.g. LocalTrack)
+    const artistMbid = (track as any).artistMbid as string | undefined
+    if (artistMbid) {
+      navigate(`/artist/${artistMbid}`)
+      return
+    }
+
+    // 2. For on-chain scrobbles with kind=1 (MBID), resolve via recording payload
+    const mbid = (track as any).mbid as string | undefined
+    if (mbid) {
+      // mbid is a recording MBID — resolve to artist via heaven-resolver
+      try {
+        const result = await fetchRecordingArtists(mbid)
+        if (result.artists.length > 0) {
+          navigate(`/artist/${result.artists[0].mbid}`)
+          return
+        }
+      } catch { /* fall through */ }
+    }
+
+    // 3. Try to decode recording MBID from payload (on-chain scrobble entries)
+    const payload = (track as any).payload as string | undefined
+    const kind = (track as any).kind as number | undefined
+    if (kind === 1 && payload) {
+      const recordingMbid = payloadToMbid(payload)
+      if (recordingMbid) {
+        try {
+          const result = await fetchRecordingArtists(recordingMbid)
+          if (result.artists.length > 0) {
+            navigate(`/artist/${result.artists[0].mbid}`)
+            return
+          }
+        } catch { /* fall through */ }
+      }
+    }
+
+    // 4. No MBID available — no artist page to navigate to
+  }
+
   return {
     onAddToPlaylist: playlistDialog.trigger,
     onAddToQueue: (track) => console.log('Add to queue:', track),
+    onGoToArtist: goToArtist,
     ...extra,
   }
 }

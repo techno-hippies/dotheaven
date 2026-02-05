@@ -9,7 +9,7 @@ const meta = {
     layout: 'centered',
     backgrounds: {
       default: 'dark',
-      values: [{ name: 'dark', value: '#1a1625' }],
+      values: [{ name: 'dark', value: '#171717' }],
     },
   },
   tags: ['autodocs'],

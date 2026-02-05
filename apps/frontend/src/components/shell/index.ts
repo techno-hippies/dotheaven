@@ -1,6 +1,7 @@
 export { AppShell, type AppShellProps } from './AppShell'
 export { Header, SearchInput, AppLogo, type HeaderProps, type SearchInputProps, type AppLogoProps } from './header'
 export { HeaderActions } from './HeaderActions'
+export { AuthDialog, type AuthDialogProps } from './AuthDialog'
 export { WelcomeScreen, type WelcomeScreenProps } from './WelcomeScreen'
 export { AuthCard, type AuthCardProps, type AuthStatus } from './auth-card'
 export { AppSidebar } from './AppSidebar'

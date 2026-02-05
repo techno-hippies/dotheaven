@@ -86,7 +86,7 @@ export const DialogHeader: Component<JSX.HTMLAttributes<HTMLDivElement>> = (prop
         as={(props: any) => (
           <IconButton
             {...props}
-            variant="soft"
+            variant="default"
             size="md"
             aria-label="Close dialog"
             class="focus-visible:ring-0 focus-visible:outline-none"

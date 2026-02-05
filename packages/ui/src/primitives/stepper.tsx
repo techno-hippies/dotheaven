@@ -21,7 +21,7 @@ export const Stepper: Component<StepperProps> = (props) => {
   const stepArray = () => Array.from({ length: props.steps }, (_, i) => i)
 
   return (
-    <div class={cn('flex items-center gap-2', props.class)}>
+    <div class={cn('flex items-center w-full', props.class)}>
       <For each={stepArray()}>
         {(stepIndex) => (
           <>
@@ -63,5 +63,5 @@ const StepDot: Component<{ active: boolean; completed: boolean; label: string }>
 
 /** Connector line between step dots */
 const StepLine: Component<{ active: boolean }> = (props) => (
-  <div class={cn('w-8 h-0.5', props.active ? 'bg-[var(--accent-blue)]' : 'bg-[var(--bg-highlight)]')} />
+  <div class={cn('flex-1 h-0.5 mx-2', props.active ? 'bg-[var(--accent-blue)]' : 'bg-[var(--bg-highlight)]')} />
 )

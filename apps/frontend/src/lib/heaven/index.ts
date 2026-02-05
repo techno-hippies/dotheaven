@@ -55,12 +55,6 @@ export {
 } from './verification'
 
 export {
-  fetchPosts,
-  timeAgo,
-  type FeedPostEntry,
-} from './posts'
-
-export {
   fetchUserPlaylists,
   fetchPlaylist,
   fetchPlaylistTracks,
@@ -73,3 +67,37 @@ export {
 export {
   getLinkedEoa,
 } from './linked-eoa'
+
+export {
+  fetchArtistInfo,
+  fetchArtistPageData,
+  fetchRecordingArtists,
+  artistTracksToTracks,
+  payloadToMbid,
+  mbidToPayload,
+  type ArtistInfo,
+  type ArtistPageData,
+} from './artist'
+
+export {
+  fetchCommunityMembers,
+  fetchUserLocationCityId,
+  type CommunityMember,
+} from './community'
+
+export {
+  getHostBasePrice,
+  getHostOpenSlots,
+  getSlot,
+  getBooking,
+  getRequest,
+  getFeeBps,
+  SESSION_ESCROW_V1,
+  SlotStatus,
+  BookingStatus,
+  RequestStatus,
+  Outcome,
+  type SessionSlot,
+  type SessionBooking,
+  type SessionRequest,
+} from './escrow'

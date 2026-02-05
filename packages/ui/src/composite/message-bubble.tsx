@@ -51,7 +51,7 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
   return (
     <div
       class={cn(
-        'flex gap-3 px-4 py-1.5 -mx-4 hover:bg-[rgba(255,255,255,0.03)] transition-colors',
+        'flex gap-3 px-4 py-1.5 hover:bg-[rgba(255,255,255,0.03)] transition-colors',
         showHeader() && 'mt-4 first:mt-0',
         local.class
       )}
@@ -59,11 +59,11 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
     >
       <Show
         when={showHeader()}
-        fallback={<div class="w-10 flex-shrink-0 ml-4" />}
+        fallback={<div class="w-10 flex-shrink-0" />}
       >
-        <Avatar size="md" src={local.avatarUrl} nationalityCode={local.nationalityCode} class="flex-shrink-0 mt-0.5 ml-4" />
+        <Avatar size="md" src={local.avatarUrl} nationalityCode={local.nationalityCode} class="flex-shrink-0 mt-0.5" />
       </Show>
-      <div class="flex-1 min-w-0 mr-4">
+      <div class="flex-1 min-w-0">
         <Show when={showHeader()}>
           <div class="flex items-baseline gap-2">
             <Show when={local.username}>

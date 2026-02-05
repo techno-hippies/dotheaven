@@ -38,3 +38,28 @@ type Scrobble @entity(immutable: true) {
   blockTimestamp: BigInt!
   transactionHash: Bytes!
 }
+
+# ── ContentRegistry — Filecoin content pointers + access control ──
+
+type ContentEntry @entity(immutable: false) {
+  id: ID!                        # contentId (bytes32 hex)
+  trackId: Bytes!                # references ScrobbleV3 track registry
+  owner: Bytes!                  # content uploader address
+  datasetOwner: Bytes!           # Beam CDN host address
+  pieceCid: Bytes!               # Filecoin piece CID
+  algo: Int!                     # encryption algorithm enum
+  active: Boolean!               # false = deactivated
+  createdAt: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+  accessGrants: [AccessGrant!]! @derivedFrom(field: "content")
+}
+
+type AccessGrant @entity(immutable: false) {
+  id: ID!                        # "{contentId}-{grantee}"
+  content: ContentEntry!
+  grantee: Bytes!
+  granted: Boolean!              # true = active grant, false = revoked
+  updatedAt: BigInt!
+  blockNumber: BigInt!
+}

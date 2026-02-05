@@ -4,6 +4,12 @@ pragma solidity ^0.8.24;
 import "forge-std/Test.sol";
 import "../src/SessionEscrowV1.sol";
 
+contract RevertingReceiver {
+    receive() external payable {
+        revert("NO_RECEIVE");
+    }
+}
+
 contract SessionEscrowV1Test is Test {
     SessionEscrowV1 escrow;
 
@@ -496,15 +502,15 @@ contract SessionEscrowV1Test is Test {
         SessionEscrowV1.SessionBooking memory b = escrow.getBooking(bookingId);
         vm.warp(uint256(b.disputedAt) + uint256(disputeTimeout));
 
-        uint256 guestBefore = guest.balance;
+        uint256 hostBefore = host.balance;
         escrow.finalizeDisputeByTimeout(bookingId);
 
-        assertEq(guest.balance, guestBefore + challengeBond);
+        assertEq(host.balance, hostBefore + challengeBond);
         b = escrow.getBooking(bookingId);
         assertEq(uint8(b.status), uint8(SessionEscrowV1.SessionBookingStatus.Resolved));
         assertEq(uint8(b.oracleOutcome), uint8(SessionEscrowV1.Outcome.Completed));
 
-        uint256 hostBefore = host.balance;
+        hostBefore = host.balance;
         escrow.finalize(bookingId);
         uint256 fee = (1 ether * 300) / 10000;
         assertEq(host.balance, hostBefore + 1 ether - fee);
@@ -601,6 +607,35 @@ contract SessionEscrowV1Test is Test {
         assertEq(escrow.totalHeld(), 1 ether);
 
         escrow.finalize(bookingId);
+        assertEq(escrow.totalHeld(), 0);
+    }
+
+    // ================================================================
+    // Owed (pull-payments) fallback
+    // ================================================================
+
+    function test_owed_onFailedRefund_guest() public {
+        address badGuest = address(new RevertingReceiver());
+        vm.deal(badGuest, 10 ether);
+
+        uint256 slotId = _createDefaultSlot();
+
+        vm.prank(badGuest);
+        uint256 bookingId = escrow.book{value: 1 ether}(slotId);
+
+        vm.prank(host);
+        escrow.cancelBookingAsHost(bookingId);
+
+        assertEq(escrow.owed(badGuest), 1 ether);
+        assertEq(escrow.totalHeld(), 1 ether);
+
+        address payout = makeAddr("payout");
+        uint256 payoutBefore = payout.balance;
+        vm.prank(badGuest);
+        escrow.withdrawOwed(payable(payout));
+
+        assertEq(payout.balance, payoutBefore + 1 ether);
+        assertEq(escrow.owed(badGuest), 0);
         assertEq(escrow.totalHeld(), 0);
     }
 

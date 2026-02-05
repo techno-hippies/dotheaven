@@ -23,8 +23,6 @@ export interface AuthContextType {
   isAuthenticated: Accessor<boolean>
   isAuthenticating: Accessor<boolean>
   authError: Accessor<string | null>
-  /** True after a new account registration completes (cleared by dismissOnboarding) */
-  isNewUser: Accessor<boolean>
   /** True while session is being restored from storage on mount */
   isSessionRestoring: Accessor<boolean>
 
@@ -35,8 +33,6 @@ export interface AuthContextType {
   logout: () => Promise<void>
   cancelAuth: () => void
   clearError: () => void
-  /** Call when onboarding flow completes or is dismissed */
-  dismissOnboarding: () => void
 
   // Signing (for XMTP and other protocols)
   signMessage: (message: string) => Promise<string>
@@ -52,7 +48,6 @@ export const AuthProvider: ParentComponent = (props) => {
   const [authData, setAuthData] = createSignal<AuthData | null>(null)
   const [isAuthenticating, setIsAuthenticating] = createSignal(false)
   const [authError, setAuthError] = createSignal<string | null>(null)
-  const [isNewUser, setIsNewUser] = createSignal(false)
   const [isSessionRestoring, setIsSessionRestoring] = createSignal(true)
   // Track auth method type (1 = EOA, 3 = WebAuthn) — persists across authData being null
   const [lastAuthMethodType, setLastAuthMethodType] = createSignal<number | null>(null)
@@ -164,9 +159,6 @@ export const AuthProvider: ParentComponent = (props) => {
             console.log('[Auth] Event authData keys:', Object.keys(eventAuthData))
             console.log('[Auth] Event authData full:', eventAuthData)
             setIsAuthenticating(false)
-            if (payload.isNewUser) {
-              setIsNewUser(true)
-            }
             console.log('[Auth] Login complete:', payload.pkpAddress)
           }
         })
@@ -254,7 +246,6 @@ export const AuthProvider: ParentComponent = (props) => {
         const { registerWithWebAuthn } = await import('../lib/lit')
         const result = await registerWithWebAuthn()
 
-        setIsNewUser(true)
         setPkpInfo(result.pkpInfo)
         setAuthData(result.authData)
         setLastAuthMethodType(result.authData.authMethodType)
@@ -350,7 +341,6 @@ export const AuthProvider: ParentComponent = (props) => {
           console.log('[Auth] No PKP for wallet, auto-registering...')
           const { registerWithEOA } = await import('../lib/lit')
           const result = await registerWithEOA(walletClientForEoa)
-          setIsNewUser(true)
           await persistEoaResult(result)
           setIsAuthenticating(false)
           console.log('[Auth] Wallet PKP minted:', result.pkpInfo.ethAddress, 'EOA:', result.eoaAddress)
@@ -420,10 +410,6 @@ export const AuthProvider: ParentComponent = (props) => {
 
   function clearError(): void {
     setAuthError(null)
-  }
-
-  function dismissOnboarding(): void {
-    setIsNewUser(false)
   }
 
   // Get or create PKP auth context for signing.
@@ -503,7 +489,6 @@ export const AuthProvider: ParentComponent = (props) => {
     isAuthenticated,
     isAuthenticating,
     authError,
-    isNewUser,
     isSessionRestoring,
     loginWithPasskey,
     registerWithPasskey,
@@ -511,7 +496,6 @@ export const AuthProvider: ParentComponent = (props) => {
     logout,
     cancelAuth,
     clearError,
-    dismissOnboarding,
     signMessage,
     getAuthContext,
   }

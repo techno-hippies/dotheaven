@@ -318,10 +318,9 @@ export const AIChatPage: Component = () => {
   }
 
   return (
-    <div class="h-full overflow-y-auto">
-      <div class="h-full flex flex-col">
-          {/* Chat header */}
-          <div class="flex items-center justify-between px-4 py-3 border-b border-[var(--border-default)]">
+    <div class="h-full flex flex-col">
+      {/* Chat header */}
+      <div class="flex items-center justify-between px-4 py-3 border-b border-[var(--border-default)]">
             <div class="flex items-center gap-3">
               {/* Back button on mobile */}
               <Show when={isMobile()}>
@@ -437,12 +436,11 @@ export const AIChatPage: Component = () => {
           </div>
 
           {/* Input */}
-          <MessageInput
-            placeholder={`Message ${p.name}...`}
-            onSubmit={handleSendMessage}
-            disabled={isSending()}
-          />
-        </div>
-      </div>
+      <MessageInput
+        placeholder={`Message ${p.name}...`}
+        onSubmit={handleSendMessage}
+        disabled={isSending()}
+      />
+    </div>
   )
 }

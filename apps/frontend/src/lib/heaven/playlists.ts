@@ -14,8 +14,8 @@ import { getCoverCache } from '../cover-cache'
 const PLAYLIST_ENDPOINT =
   'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-playlists/1.0.0/gn'
 
-const CONTENT_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-content/1.0.0/gn'
+const ACTIVITY_ENDPOINT =
+  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/8.0.0/gn'
 
 const MEGAETH_RPC = 'https://carrot.megaeth.com/rpc'
 const SCROBBLE_V3 = '0x144c450cd5B641404EEB5D5eD523399dD94049E0'
@@ -346,7 +346,7 @@ async function batchGetContentMeta(trackIds: string[]): Promise<Map<string, Cont
   }`
 
   try {
-    const res = await fetch(CONTENT_ENDPOINT, {
+    const res = await fetch(ACTIVITY_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),

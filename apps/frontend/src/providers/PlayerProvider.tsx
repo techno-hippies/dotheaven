@@ -185,7 +185,7 @@ export const PlayerProvider: ParentComponent = (props) => {
   onMount(() => {
     scrobbleService = createScrobbleService(
       () => auth.getAuthContext(),
-      () => auth.pkpInfo()?.publicKey ?? null,
+      () => auth.pkpInfo(),
     )
     scrobbleService!.start()
   })

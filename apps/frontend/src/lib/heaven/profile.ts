@@ -19,7 +19,7 @@ import { HEAVEN_SET_PROFILE_CID } from '../lit/action-cids'
 import type { PKPAuthContext } from '../lit/types'
 
 // ProfileV2 contract address (to be updated after deployment)
-const PROFILE_V2 = '0x0A6563122cB3515ff678A918B5F31da9b1391EA3' as const
+const PROFILE_V2 = '0xa31545D33f6d656E62De67fd020A26608d4601E5' as const
 
 const profileAbi = parseAbi([
   'function nonces(address user) external view returns (uint256)',

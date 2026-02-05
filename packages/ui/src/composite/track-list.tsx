@@ -182,6 +182,11 @@ export const TrackList: Component<TrackListProps> = (props) => {
             Remove from playlist
           </DropdownMenuItem>
         </Show>
+        <Show when={props.menuActions?.onIdentify && menuProps.track.scrobbleStatus === 'unidentified'}>
+          <DropdownMenuItem onSelect={() => props.menuActions?.onIdentify?.(menuProps.track)}>
+            Tag with MusicBrainz Picard
+          </DropdownMenuItem>
+        </Show>
         <Show when={props.menuActions?.onUploadToFilecoin}>
           <DropdownMenuItem onSelect={() => props.menuActions?.onUploadToFilecoin?.(menuProps.track)}>
             Upload to Filecoin (Encrypted)

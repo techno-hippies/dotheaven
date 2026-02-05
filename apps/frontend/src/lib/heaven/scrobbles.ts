@@ -11,7 +11,7 @@ import type { Track } from '@heaven/ui'
  */
 
 const GOLDSKY_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/6.0.0/gn'
+  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/8.0.0/gn'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -25,6 +25,7 @@ export interface ScrobbleEntry {
   album: string
   coverCid: string          // IPFS CID for album art (empty if none)
   kind: number              // 1=MBID, 2=ipId, 3=meta
+  payload: string           // raw derivation input (recording MBID hex for kind=1)
 }
 
 interface ScrobbleGQL {
@@ -33,6 +34,7 @@ interface ScrobbleGQL {
   track: {
     id: string
     kind: number
+    payload: string
   }
   timestamp: string
   blockTimestamp: string
@@ -64,6 +66,7 @@ export async function fetchScrobbleEntries(
       track {
         id
         kind
+        payload
       }
       timestamp
       blockTimestamp
@@ -98,6 +101,7 @@ export async function fetchScrobbleEntries(
       album: meta?.album ?? '',
       coverCid: meta?.coverCid ?? '',
       kind: s.track.kind,
+      payload: s.track.payload ?? '',
     }
   })
 }
@@ -118,7 +122,7 @@ export function scrobblesToTracks(entries: ScrobbleEntry[]): Track[] {
       : undefined,
     dateAdded: formatTimeAgo(e.playedAt),
     duration: '--:--',
-    scrobbleStatus: 'verified' as const,
+    scrobbleStatus: (e.kind === 3 ? 'unidentified' : 'verified') as Track['scrobbleStatus'],
   }))
 }
 
@@ -132,6 +136,8 @@ interface TrackMeta {
   artist: string
   album: string
   coverCid: string
+  kind: number
+  payload: string
 }
 
 async function batchGetTracks(trackIds: string[]): Promise<Map<string, TrackMeta>> {
@@ -163,16 +169,20 @@ function decodeGetTrackResult(hex: string): TrackMeta | null {
   try {
     const data = hex.slice(2)
     // 7-tuple: (string title, string artist, string album, uint8 kind, bytes32 payload, uint64 registeredAt, string coverCid)
-    // Slots 0,1,2 = offsets for title/artist/album; 3,4,5 = static; 6 = offset for coverCid
+    // Slots 0,1,2 = offsets for title/artist/album; 3 = kind (uint8); 4 = payload (bytes32); 5 = registeredAt; 6 = offset for coverCid
     const titleOffset = parseInt(data.slice(0, 64), 16) * 2
     const artistOffset = parseInt(data.slice(64, 128), 16) * 2
     const albumOffset = parseInt(data.slice(128, 192), 16) * 2
+    const kind = parseInt(data.slice(192, 256), 16)           // slot 3: uint8
+    const payload = '0x' + data.slice(256, 320)               // slot 4: bytes32
     const coverCidOffset = parseInt(data.slice(384, 448), 16) * 2 // slot 6
     return {
       title: decodeString(data, titleOffset),
       artist: decodeString(data, artistOffset),
       album: decodeString(data, albumOffset),
       coverCid: decodeString(data, coverCidOffset),
+      kind,
+      payload,
     }
   } catch {
     return null
@@ -203,9 +213,6 @@ async function rpcCall(method: string, params: unknown[]): Promise<any> {
 }
 
 // ── Uploaded content (cross-device via subgraphs) ─────────────────
-
-const CONTENT_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-content/1.0.0/gn'
 
 export interface UploadedContentEntry {
   contentId: string
@@ -245,12 +252,12 @@ export async function fetchUploadedContent(
     }
   }`
 
-  const contentRes = await fetch(CONTENT_ENDPOINT, {
+  const contentRes = await fetch(GOLDSKY_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query: contentQuery }),
   })
-  if (!contentRes.ok) throw new Error(`Content subgraph query failed: ${contentRes.status}`)
+  if (!contentRes.ok) throw new Error(`Activity subgraph query failed: ${contentRes.status}`)
   const contentJson = await contentRes.json()
   const entries: Array<{
     id: string
@@ -355,12 +362,12 @@ export async function fetchSharedContent(
     }
   }`
 
-  const grantRes = await fetch(CONTENT_ENDPOINT, {
+  const grantRes = await fetch(GOLDSKY_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query: grantQuery }),
   })
-  if (!grantRes.ok) throw new Error(`Content subgraph query failed: ${grantRes.status}`)
+  if (!grantRes.ok) throw new Error(`Activity subgraph query failed: ${grantRes.status}`)
   const grantJson = await grantRes.json()
   const grants: Array<{
     content: {

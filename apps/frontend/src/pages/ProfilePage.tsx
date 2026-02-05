@@ -3,11 +3,12 @@ import { useNavigate, useParams } from '@solidjs/router'
 import { createQuery } from '@tanstack/solid-query'
 import { ProfilePage, type ProfileTab, type ProfileScrobble } from '../components/profile'
 import { useAuth } from '../providers'
-import { fetchScrobbleEntries, getProfile, setProfile, setTextRecord, setTextRecords, computeNode, getTextRecord, checkNameAvailable, registerHeavenName, resolveAvatarUri, resolveIpfsUri, getEnsProfile, getAddr, resolveEnsName, getPrimaryName, getVerificationStatus, buildSelfVerifyLink, syncVerificationToMegaEth } from '../lib/heaven'
+import { openAuthDialog } from '../lib/auth-dialog'
+import { fetchScrobbleEntries, getProfile, setProfile, setTextRecord, setTextRecords, computeNode, getTextRecord, checkNameAvailable, registerHeavenName, resolveAvatarUri, resolveIpfsUri, getEnsProfile, getAddr, resolveEnsName, getPrimaryName, getVerificationStatus, buildSelfVerifyLink, syncVerificationToMegaEth, getHostBasePrice, getHostOpenSlots, SlotStatus } from '../lib/heaven'
 import { uploadAvatar } from '../lib/heaven/avatar'
-import { type ProfileInput, type VerificationState, type VerifyStep, type VerificationData, getTagLabel, VerifyIdentityDialog, alpha3ToAlpha2 } from '@heaven/ui'
+import { type ProfileInput, type VerificationState, type VerifyStep, type VerificationData, type TimeSlot, type SessionSlotData, getTagLabel, VerifyIdentityDialog, alpha3ToAlpha2, Button, Switch } from '@heaven/ui'
 import { parseTagCsv } from '../lib/heaven/profile'
-import { isAddress, zeroAddress } from 'viem'
+import { isAddress, zeroAddress, type Address } from 'viem'
 
 function formatTimeAgo(ts: number): string {
   const now = Math.floor(Date.now() / 1000)
@@ -131,6 +132,7 @@ async function applyHeavenRecords(profile: ProfileInput, node: `0x${string}`): P
 
 export const MyProfilePage: Component = () => {
   const auth = useAuth()
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = createSignal<ProfileTab>('about')
   const [heavenName, setHeavenName] = createSignal<string | null>(localStorage.getItem('heaven:username'))
   const [nameClaiming, setNameClaiming] = createSignal(false)
@@ -161,6 +163,57 @@ export const MyProfilePage: Component = () => {
     const primary = primaryNameQuery.data
     if (primary?.node) return primary.node
     return null
+  }
+
+  // ── Schedule state ──
+  const [scheduleAvailability, setScheduleAvailability] = createSignal<TimeSlot[]>(
+    JSON.parse(localStorage.getItem('heaven:schedule:availability') || '[]')
+  )
+  const [scheduleAccepting, setScheduleAccepting] = createSignal(
+    localStorage.getItem('heaven:schedule:accepting') === 'true'
+  )
+
+  // Persist availability to localStorage
+  createEffect(() => {
+    localStorage.setItem('heaven:schedule:availability', JSON.stringify(scheduleAvailability()))
+  })
+  createEffect(() => {
+    localStorage.setItem('heaven:schedule:accepting', String(scheduleAccepting()))
+  })
+
+  // Fetch host base price from contract
+  const basePriceQuery = createQuery(() => ({
+    queryKey: ['hostBasePrice', address()],
+    queryFn: () => getHostBasePrice(address()! as Address),
+    get enabled() { return !!address() },
+    staleTime: 1000 * 60 * 5,
+  }))
+
+  // Fetch open slots for this host
+  const slotsQuery = createQuery(() => ({
+    queryKey: ['hostSlots', address()],
+    queryFn: async () => {
+      const slots = await getHostOpenSlots(address()! as Address)
+      return slots.map((s): SessionSlotData => ({
+        id: s.id,
+        startTime: s.startTime,
+        durationMins: s.durationMins,
+        priceEth: s.priceEth,
+        status: s.status === SlotStatus.Open ? 'open' : s.status === SlotStatus.Booked ? 'booked' : s.status === SlotStatus.Cancelled ? 'cancelled' : 'settled',
+      }))
+    },
+    get enabled() { return !!address() },
+    staleTime: 1000 * 60 * 2,
+  }))
+
+  const handleSetBasePrice = (priceEth: string) => {
+    // TODO: Call contract via Lit Action or direct tx
+    console.log('[Schedule] Set base price:', priceEth, 'ETH')
+  }
+
+  const handleCancelSlot = (slotId: number) => {
+    // TODO: Call contract via Lit Action or direct tx
+    console.log('[Schedule] Cancel slot:', slotId)
   }
 
   const scrobblesQuery = createQuery(() => ({
@@ -329,8 +382,13 @@ export const MyProfilePage: Component = () => {
   }
 
   const handleName = () => {
+    // Prefer heaven name, then ENS, then truncated address
+    const hn = heavenName()
+    if (hn) return `${hn}.heaven`
+    const ens = ensQuery.data
+    if (ens?.name) return ens.name
     const addr = auth.eoaAddress() ?? auth.pkpAddress()
-    if (!addr) return '@unknown'
+    if (!addr) return 'unknown'
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`
   }
 
@@ -549,44 +607,166 @@ export const MyProfilePage: Component = () => {
 
   const initialLoading = () => profileQuery.isLoading || ensQuery.isLoading
 
+  // ── Settings (inline on profile page) ────────────────────────────
+  const [settingsSaving, setSettingsSaving] = createSignal(false)
+
+  // Fetch current display identity preference
+  const displayIdentityQuery = createQuery(() => ({
+    queryKey: ['displayIdentity', resolvedNode()],
+    queryFn: async () => {
+      const node = resolvedNode()
+      if (!node) return 'ens'
+      const pref = await getTextRecord(node as `0x${string}`, 'heaven.displayIdentity').catch(() => '')
+      return pref === 'heaven' ? 'heaven' : 'ens'
+    },
+    get enabled() { return !!resolvedNode() },
+    staleTime: 1000 * 60 * 5,
+  }))
+
+  const hasEns = () => !!ensQuery.data?.name
+  const hasHeaven = () => !!heavenName()
+  const showIdentityToggle = () => hasEns() && hasHeaven()
+
+  const handleIdentityToggle = async (preferHeaven: boolean) => {
+    const name = heavenName()
+    const pkp = auth.pkpInfo()
+    if (!name || !pkp) return
+
+    setSettingsSaving(true)
+    try {
+      const authContext = await auth.getAuthContext()
+      const node = computeNode(name)
+      const value = preferHeaven ? 'heaven' : 'ens'
+      const result = await setTextRecord(node, 'heaven.displayIdentity', value, pkp.publicKey, authContext)
+      if (result.success) {
+        displayIdentityQuery.refetch()
+      } else {
+        console.error('[Settings] Failed to save identity preference:', result.error)
+      }
+    } catch (err) {
+      console.error('[Settings] Error saving identity preference:', err)
+    } finally {
+      setSettingsSaving(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    await auth.logout()
+    navigate('/')
+  }
+
+  const settingsSlot = (
+    <>
+      {/* Identity section */}
+      <Show when={showIdentityToggle()}>
+        <div class="border-b border-[var(--bg-highlight)] pb-6 mb-6">
+          <h2 class="text-lg font-semibold text-[var(--text-primary)] mb-2">Identity</h2>
+          <p class="text-base text-[var(--text-secondary)] mb-4">
+            You have both <span class="text-[var(--text-primary)] font-medium">{heavenName()}.heaven</span> and{' '}
+            <span class="text-[var(--text-primary)] font-medium">{ensQuery.data?.name}</span>. Choose which to display.
+          </p>
+          <div class="flex items-center gap-3">
+            <Switch
+              checked={displayIdentityQuery.data === 'heaven'}
+              onChange={(checked) => handleIdentityToggle(checked)}
+              disabled={settingsSaving() || displayIdentityQuery.isLoading}
+              label={displayIdentityQuery.data === 'heaven' ? `Show as ${heavenName()}.heaven` : `Show as ${ensQuery.data?.name}`}
+              description={displayIdentityQuery.data === 'heaven'
+                ? 'Your Heaven name will be shown on posts'
+                : 'Your ENS name will be shown on posts'}
+            />
+          </div>
+        </div>
+      </Show>
+
+      {/* Account section */}
+      <div>
+        <h2 class="text-lg font-semibold text-[var(--text-primary)] mb-2">Account</h2>
+        <p class="text-base text-[var(--text-secondary)] mb-4">
+          Signed in as {auth.pkpAddress()?.slice(0, 6)}...{auth.pkpAddress()?.slice(-4)}
+        </p>
+        <Button
+          variant="destructive"
+          onClick={handleLogout}
+        >
+          Log Out
+        </Button>
+      </div>
+    </>
+  )
+
   return (
     <div class="h-full overflow-y-auto">
-      <Show when={!initialLoading()} fallback={<ProfileSkeleton />}>
-      <ProfilePage
-        username={handleName()}
-        displayName={displayName()}
-        avatarUrl={profileQuery.data?.avatar || ensQuery.data?.avatar || undefined}
-        nationalityCode={nationalityCode()}
-        isOwnProfile={true}
-        verificationState={verificationState()}
-        onVerifyClick={handleVerifyClick}
-        activeTab={activeTab()}
-        onTabChange={setActiveTab}
-        scrobbles={scrobbles()}
-        scrobblesLoading={scrobblesQuery.isLoading}
-        profileData={profileQuery.data || null}
-        profileLoading={profileQuery.isLoading}
-        onProfileSave={handleProfileSave}
-        heavenName={heavenName()}
-        onClaimName={handleClaimName}
-        onCheckNameAvailability={handleCheckNameAvailability}
-        nameClaiming={nameClaiming()}
-        nameClaimError={nameClaimError()}
-        eoaAddress={eoaAddr()}
-        ensProfile={ensQuery.data}
-        ensLoading={ensQuery.isLoading}
-        onImportAvatar={handleImportAvatar}
-        verification={verificationData()}
-      />
-      <VerifyIdentityDialog
-        open={verifyDialogOpen()}
-        onOpenChange={handleVerifyDialogChange}
-        verifyLink={verifyLink()}
-        linkLoading={verifyLinkLoading()}
-        step={verifyStep()}
-        errorMessage={verifyError()}
-        onRetry={handleVerifyRetry}
-      />
+      <Show
+        when={auth.isAuthenticated()}
+        fallback={
+          <div class="flex flex-col items-center justify-center min-h-[60vh] gap-6 py-8">
+            <div class="w-20 h-20 rounded-full bg-[var(--bg-elevated)] flex items-center justify-center">
+              <svg class="w-10 h-10 text-[var(--text-muted)]" fill="currentColor" viewBox="0 0 256 256">
+                <path d="M230.92,212c-15.23-26.33-38.7-45.21-66.09-54.16a72,72,0,1,0-73.66,0C63.78,166.78,40.31,185.66,25.08,212a8,8,0,1,0,13.85,8c18.84-32.56,52.14-52,89.07-52s70.23,19.44,89.07,52a8,8,0,1,0,13.85-8ZM72,96a56,56,0,1,1,56,56A56.06,56.06,0,0,1,72,96Z" />
+              </svg>
+            </div>
+            <div class="text-center">
+              <h2 class="text-2xl font-bold text-[var(--text-primary)] mb-2">Your Profile</h2>
+              <p class="text-base text-[var(--text-secondary)] mb-6">Sign up to create your profile and connect with others.</p>
+              <button
+                type="button"
+                class="px-6 py-3 rounded-md font-semibold text-base bg-[var(--accent-blue)] text-white hover:bg-[var(--accent-blue-hover)] transition-colors cursor-pointer"
+                onClick={() => openAuthDialog()}
+              >
+                Sign Up
+              </button>
+            </div>
+          </div>
+        }
+      >
+        <Show when={!initialLoading()} fallback={<ProfileSkeleton />}>
+        <ProfilePage
+          username={handleName()}
+          displayName={displayName()}
+          avatarUrl={profileQuery.data?.avatar || ensQuery.data?.avatar || undefined}
+          nationalityCode={nationalityCode()}
+          isOwnProfile={true}
+          verificationState={verificationState()}
+          onVerifyClick={handleVerifyClick}
+          activeTab={activeTab()}
+          onTabChange={setActiveTab}
+          scrobbles={scrobbles()}
+          scrobblesLoading={scrobblesQuery.isLoading}
+          profileData={profileQuery.data || null}
+          profileLoading={profileQuery.isLoading}
+          onProfileSave={handleProfileSave}
+          heavenName={heavenName()}
+          onClaimName={handleClaimName}
+          onCheckNameAvailability={handleCheckNameAvailability}
+          nameClaiming={nameClaiming()}
+          nameClaimError={nameClaimError()}
+          eoaAddress={eoaAddr()}
+          ensProfile={ensQuery.data}
+          ensLoading={ensQuery.isLoading}
+          onImportAvatar={handleImportAvatar}
+          verification={verificationData()}
+          settingsSlot={settingsSlot}
+          scheduleBasePrice={basePriceQuery.data}
+          scheduleAccepting={scheduleAccepting()}
+          scheduleAvailability={scheduleAvailability()}
+          scheduleSlots={slotsQuery.data}
+          scheduleSlotsLoading={slotsQuery.isLoading}
+          onSetBasePrice={handleSetBasePrice}
+          onToggleAccepting={setScheduleAccepting}
+          onAvailabilityChange={setScheduleAvailability}
+          onCancelSlot={handleCancelSlot}
+        />
+        <VerifyIdentityDialog
+          open={verifyDialogOpen()}
+          onOpenChange={handleVerifyDialogChange}
+          verifyLink={verifyLink()}
+          linkLoading={verifyLinkLoading()}
+          step={verifyStep()}
+          errorMessage={verifyError()}
+          onRetry={handleVerifyRetry}
+        />
+        </Show>
       </Show>
     </div>
   )
@@ -645,6 +825,40 @@ export const PublicProfilePage: Component = () => {
 
   const address = () => resolvedQuery.data?.address
   const node = () => resolvedQuery.data?.node
+
+  // Schedule data for public profile
+  const publicBasePriceQuery = createQuery(() => ({
+    queryKey: ['hostBasePrice', address()],
+    queryFn: () => getHostBasePrice(address()! as Address),
+    get enabled() { return !!address() },
+    staleTime: 1000 * 60 * 5,
+  }))
+
+  const publicSlotsQuery = createQuery(() => ({
+    queryKey: ['hostSlots', address()],
+    queryFn: async () => {
+      const slots = await getHostOpenSlots(address()! as Address)
+      return slots.map((s): SessionSlotData => ({
+        id: s.id,
+        startTime: s.startTime,
+        durationMins: s.durationMins,
+        priceEth: s.priceEth,
+        status: s.status === SlotStatus.Open ? 'open' : s.status === SlotStatus.Booked ? 'booked' : s.status === SlotStatus.Cancelled ? 'cancelled' : 'settled',
+      }))
+    },
+    get enabled() { return !!address() },
+    staleTime: 1000 * 60 * 2,
+  }))
+
+  const handleBookSlot = (slotId: number) => {
+    // TODO: Call contract book() — requires wallet tx
+    console.log('[Schedule] Book slot:', slotId)
+  }
+
+  const handleRequestCustomTime = (params: { windowStart: number; windowEnd: number; durationMins: number; amountEth: string }) => {
+    // TODO: Call contract createRequest() — requires wallet tx
+    console.log('[Schedule] Request custom time:', params)
+  }
 
   const scrobblesQuery = createQuery(() => ({
     queryKey: ['scrobbles', address()],
@@ -724,11 +938,11 @@ export const PublicProfilePage: Component = () => {
 
   const handleName = () => {
     const resolved = resolvedQuery.data
-    if (!resolved) return '@unknown'
+    if (!resolved) return 'unknown'
     if (resolved.label) return `${resolved.label}.heaven`
     if (resolved.name) return resolved.name
     if (resolved.address) return `${resolved.address.slice(0, 6)}...${resolved.address.slice(-4)}`
-    return '@unknown'
+    return 'unknown'
   }
 
   // Nationality: prefer verified (alpha-3 → alpha-2), fall back to self-reported
@@ -772,6 +986,17 @@ export const PublicProfilePage: Component = () => {
             ensProfile={ensProfileQuery.data}
             ensLoading={ensProfileQuery.isLoading}
             verification={publicVerificationData()}
+            scheduleBasePrice={publicBasePriceQuery.data}
+            scheduleSlots={publicSlotsQuery.data}
+            scheduleSlotsLoading={publicSlotsQuery.isLoading}
+            onBookSlot={handleBookSlot}
+            onRequestCustomTime={handleRequestCustomTime}
+            onMessageClick={() => {
+              const addr = address()
+              if (addr) {
+                navigate(`/chat/${encodeURIComponent(addr)}`)
+              }
+            }}
           />
         </Show>
       </Show>

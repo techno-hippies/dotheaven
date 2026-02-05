@@ -57,20 +57,7 @@ export const CommunityFeed: Component<CommunityFeedProps> = (props) => {
   }
 
   return (
-    <div class={cn('flex flex-col', props.class)}>
-      {/* Header */}
-      <div class="flex items-center justify-between px-4 py-3">
-        <div class="flex items-center gap-3">
-          {props.headerLeftSlot}
-          <h1 class="text-xl font-bold text-[var(--text-primary)]">Community</h1>
-        </div>
-        <Show when={props.headerRightSlot}>
-          <div class="flex items-center gap-2">
-            {props.headerRightSlot}
-          </div>
-        </Show>
-      </div>
-
+    <div class={cn('flex flex-col h-full', props.class)}>
       {/* Tab bar */}
       <div class="flex items-center border-b border-[var(--bg-highlight)] overflow-x-auto scrollbar-hide">
         <For each={tabs()}>

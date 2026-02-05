@@ -2,6 +2,7 @@ import { type Component, createSignal, createResource, Show } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { Button, Switch } from '@heaven/ui'
 import { useAuth } from '../providers'
+import { openAuthDialog } from '../lib/auth-dialog'
 import { getEnsProfile, getTextRecord, setTextRecord, computeNode, getPrimaryName } from '../lib/heaven'
 
 export const SettingsPage: Component = () => {
@@ -78,41 +79,51 @@ export const SettingsPage: Component = () => {
       <div class="max-w-2xl mx-auto px-6 py-8">
         <h1 class="text-2xl font-bold text-[var(--text-primary)] mb-6">Settings</h1>
 
-        {/* Identity section */}
-        <Show when={showIdentityToggle()}>
-          <div class="border-b border-[var(--bg-highlight)] pb-6 mb-6">
-            <h2 class="text-lg font-semibold text-[var(--text-primary)] mb-2">Identity</h2>
-            <p class="text-base text-[var(--text-secondary)] mb-4">
-              You have both <span class="text-[var(--text-primary)] font-medium">{heavenName()}.heaven</span> and{' '}
-              <span class="text-[var(--text-primary)] font-medium">{ensProfile()?.name}</span>. Choose which to display on your posts.
-            </p>
-            <div class="flex items-center gap-3">
-              <Switch
-                checked={displayIdentity() === 'heaven'}
-                onChange={(checked) => handleToggle(checked)}
-                disabled={saving() || displayIdentity.loading}
-                label={displayIdentity() === 'heaven' ? `Show as ${heavenName()}.heaven` : `Show as ${ensProfile()?.name}`}
-                description={displayIdentity() === 'heaven'
-                  ? 'Your Heaven name will be shown on posts'
-                  : 'Your ENS name will be shown on posts'}
-              />
+        <Show
+          when={auth.isAuthenticated()}
+          fallback={
+            <div class="text-center py-12">
+              <p class="text-base text-[var(--text-secondary)] mb-4">Sign in to manage your settings.</p>
+              <Button onClick={() => openAuthDialog()}>Sign In</Button>
             </div>
+          }
+        >
+          {/* Identity section */}
+          <Show when={showIdentityToggle()}>
+            <div class="border-b border-[var(--bg-highlight)] pb-6 mb-6">
+              <h2 class="text-lg font-semibold text-[var(--text-primary)] mb-2">Identity</h2>
+              <p class="text-base text-[var(--text-secondary)] mb-4">
+                You have both <span class="text-[var(--text-primary)] font-medium">{heavenName()}.heaven</span> and{' '}
+                <span class="text-[var(--text-primary)] font-medium">{ensProfile()?.name}</span>. Choose which to display on your posts.
+              </p>
+              <div class="flex items-center gap-3">
+                <Switch
+                  checked={displayIdentity() === 'heaven'}
+                  onChange={(checked) => handleToggle(checked)}
+                  disabled={saving() || displayIdentity.loading}
+                  label={displayIdentity() === 'heaven' ? `Show as ${heavenName()}.heaven` : `Show as ${ensProfile()?.name}`}
+                  description={displayIdentity() === 'heaven'
+                    ? 'Your Heaven name will be shown on posts'
+                    : 'Your ENS name will be shown on posts'}
+                />
+              </div>
+            </div>
+          </Show>
+
+          {/* Account section */}
+          <div class="border-b border-[var(--bg-highlight)] pb-6 mb-6">
+            <h2 class="text-lg font-semibold text-[var(--text-primary)] mb-2">Account</h2>
+            <p class="text-base text-[var(--text-secondary)] mb-4">
+              Signed in as {auth.pkpAddress()?.slice(0, 6)}...{auth.pkpAddress()?.slice(-4)}
+            </p>
+            <Button
+              variant="destructive"
+              onClick={handleLogout}
+            >
+              Log Out
+            </Button>
           </div>
         </Show>
-
-        {/* Account section */}
-        <div class="border-b border-[var(--bg-highlight)] pb-6 mb-6">
-          <h2 class="text-lg font-semibold text-[var(--text-primary)] mb-2">Account</h2>
-          <p class="text-base text-[var(--text-secondary)] mb-4">
-            Signed in as {auth.pkpAddress()?.slice(0, 6)}...{auth.pkpAddress()?.slice(-4)}
-          </p>
-          <Button
-            variant="destructive"
-            onClick={handleLogout}
-          >
-            Log Out
-          </Button>
-        </div>
       </div>
     </div>
   )

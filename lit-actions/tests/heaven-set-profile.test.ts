@@ -1,12 +1,13 @@
 #!/usr/bin/env bun
 /**
- * Test Heaven Set Profile v1 Lit Action
+ * Test Heaven Set Profile v2 Lit Action
  *
  * Verifies:
  *  - EIP-191 signature verification over profile data
  *  - Nonce check against on-chain state
  *  - Sponsor PKP signs + broadcasts upsertProfileFor() to MegaETH
  *  - Profile written on-chain (getProfile)
+ *  - Unified language model (uint256 languagesPacked)
  *
  * Modes:
  *  - Default: Full broadcast to MegaETH testnet
@@ -32,17 +33,18 @@ const ROOT_DIR = join(__dirname, "../");
 
 // MegaETH testnet
 const MEGAETH_RPC = "https://carrot.megaeth.com/rpc";
-const PROFILE_V1 = "0x0A6563122cB3515ff678A918B5F31da9b1391EA3";
+// ProfileV2 contract (to be updated after deployment)
+const PROFILE_V2 = "0xa31545D33f6d656E62De67fd020A26608d4601E5";
 
 const profileAbi = parseAbi([
   "function nonces(address user) external view returns (uint256)",
-  "function getProfile(address user) external view returns ((uint8 profileVersion, bool exists, uint8 age, uint16 heightCm, bytes2 nationality, bytes2 nativeLanguage, uint8 friendsOpenToMask, uint80 learningLanguagesPacked, bytes32 locationCityId, bytes32 schoolId, bytes32 skillsCommit, bytes32 hobbiesCommit, bytes32 nameHash, uint256 packed, string displayName, string photoURI))",
+  "function getProfile(address user) external view returns ((uint8 profileVersion, bool exists, uint8 age, uint16 heightCm, bytes2 nationality, uint8 friendsOpenToMask, uint256 languagesPacked, bytes32 locationCityId, bytes32 schoolId, bytes32 skillsCommit, bytes32 hobbiesCommit, bytes32 nameHash, uint256 packed, string displayName, string photoURI))",
 ]);
 
 async function main() {
   const dryRun = process.argv.includes("--dry-run");
 
-  console.log("Test Heaven Set Profile v1");
+  console.log("Test Heaven Set Profile v2");
   console.log("=".repeat(60));
   console.log(`   Env:         ${Env.name}`);
   console.log(`   Dry run:     ${dryRun}`);
@@ -78,7 +80,7 @@ async function main() {
   });
 
   const nonce = await megaClient.readContract({
-    address: PROFILE_V1 as `0x${string}`,
+    address: PROFILE_V2 as `0x${string}`,
     abi: profileAbi,
     functionName: "nonces",
     args: [userAddress as `0x${string}`],
@@ -86,15 +88,21 @@ async function main() {
   console.log(`   Nonce:       ${nonce}`);
 
   // Build profile input
+  // languagesPacked: English Native (0x454E0700) in slot 0, Spanish B1 (0x45530300) in slot 1
+  // = (0x454E0700 << 224) | (0x45530300 << 192) as decimal string
+  const langPacked = (
+    (BigInt(0x454E0700) << 224n) |
+    (BigInt(0x45530300) << 192n)
+  ).toString();
+
   const profileInput = {
-    profileVersion: 1,
+    profileVersion: 2,
     displayName: "TestUser",
     nameHash: ZeroHash,
     age: 25,
     heightCm: 0,
     nationality: "0x0000",
-    nativeLanguage: "0x454e", // "EN"
-    learningLanguagesPacked: 0,
+    languagesPacked: langPacked,
     friendsOpenToMask: 0,
     locationCityId: ZeroHash,
     schoolId: ZeroHash,
@@ -215,7 +223,7 @@ async function main() {
       console.log("\nVerifying on-chain profile...");
       try {
         const profileData = await megaClient.readContract({
-          address: PROFILE_V1 as `0x${string}`,
+          address: PROFILE_V2 as `0x${string}`,
           abi: profileAbi,
           functionName: "getProfile",
           args: [userAddress as `0x${string}`],
@@ -238,7 +246,7 @@ async function main() {
 
         // Check nonce incremented
         const newNonce = await megaClient.readContract({
-          address: PROFILE_V1 as `0x${string}`,
+          address: PROFILE_V2 as `0x${string}`,
           abi: profileAbi,
           functionName: "nonces",
           args: [userAddress as `0x${string}`],

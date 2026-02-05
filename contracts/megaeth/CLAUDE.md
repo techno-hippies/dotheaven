@@ -11,8 +11,8 @@
 | `RegistryV1.sol` | ERC-721 name NFTs for `.heaven` subnames. Native ETH payments. |
 | `RecordsV1.sol` | ENS-compatible record storage (addr, text, contenthash). Gated by NFT ownership. |
 | `Resolver.sol` | CCIP-Read resolver for ENS gateway compatibility (`*.eth.limo`). |
-| `ProfileV1.sol` | On-chain dating/social profile (packed enums). Supports `msg.sender` and sponsored `upsertProfileFor()` with EIP-191 sig. |
-| `ScrobbleV3.sol` | Track Registry + Scrobble Events. Tracks registered once with metadata on-chain, scrobbles as cheap event refs. Deterministic `trackId = keccak256(abi.encode(kind, payload))`. Canonical payload checks. `updateTrack()` for typo fixes. |
+| `ProfileV2.sol` | On-chain dating/social profile (packed enums, unified language model). Supports `msg.sender` and sponsored `upsertProfileFor()` with EIP-191 sig. |
+| `ScrobbleV3.sol` | **Legacy** — Track Registry + Scrobble Events (sponsor-gated). Superseded by ScrobbleV4 (AA-gated) for frontend scrobbles. Still used by Playlist Lit Action for track registration. |
 | `PlaylistV1.sol` | Event-sourced playlists. Stores header + `tracksHash`/`trackCount`/`version` in storage. Full track lists + name/coverCid emitted in events for subgraph. `onlySponsor` gated. `setTracks()` for reorder/add/remove (full list replace). Tombstone delete. |
 | `ContentRegistry.sol` | Filecoin content pointers + access control. `contentId = keccak256(trackId, owner)`. Stores encrypted file refs (pieceCid, algo, datasetOwner). `canAccess(user, contentId)` for Lit Action gating. Batch grant/revoke. `onlySponsor` gated. |
 | `EngagementV1.sol` | ⚠️ Deprecated. Uses Story `ipId` as key. See EngagementV2 for new posts. |
@@ -22,6 +22,7 @@
 | `aa/HeavenAccountFactory.sol` | Wraps eth-infinitism `SimpleAccountFactory` v0.7 via composition. Deploys `SimpleAccount` proxies via CREATE2. Exposes `getAddress(owner, salt)` for deterministic address derivation. |
 | `aa/HeavenPaymaster.sol` | Thin wrapper around eth-infinitism `VerifyingPaymaster` v0.7. Off-chain gateway signer validates policy and signs UserOp approvals. |
 | `aa/AccountBinding.sol` | Shared abstract contract with `onlyAccountOf(user)` modifier. Verifies `msg.sender == FACTORY.getAddress(user, SALT)` — not spoofable. Inherited by ScrobbleV4 (and future AA-enabled contracts). |
+| `SessionEscrowV1.sol` | ETH-native escrow for scheduled 1:1 voice sessions. Hosts publish slots → guests book (payable) → oracle attests outcome → challenge window → finalize payout. Pull-payment fallback via `owed` mapping for failed transfers. |
 
 ## Chain Info
 
@@ -40,7 +41,7 @@ All names are **FREE** (`pricePerYear = 0`). Tiered pricing for short names (2-4
 |----------|---------|
 | RegistryV1 | `0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2` |
 | RecordsV1 | `0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3` |
-| ProfileV1 | `0x0A6563122cB3515ff678A918B5F31da9b1391EA3` |
+| ProfileV2 | `0xa31545D33f6d656E62De67fd020A26608d4601E5` |
 | ScrobbleV3 | `0x144c450cd5B641404EEB5D5eD523399dD94049E0` |
 | PlaylistV1 | `0xF0337C4A335cbB3B31c981945d3bE5B914F7B329` |
 | ContentRegistry | `0x9ca08C2D2170A43ecfA12AB35e06F2E1cEEB4Ef2` |
@@ -50,6 +51,7 @@ All names are **FREE** (`pricePerYear = 0`). Tiered pricing for short names (2-4
 | HeavenAccountFactory | `0xB66BF4066F40b36Da0da34916799a069CBc79408` |
 | HeavenPaymaster | `0xEb3C4c145AE16d7cC044657D1632ef08d6B2D5d9` |
 | ScrobbleV4 | `0xD41a8991aDF67a1c4CCcb5f7Da6A01a601eC3F37` |
+| SessionEscrowV1 | `0x132212B78C4a7A3F19DE1BF63f119848c765c1d2` |
 
 Internal (deployed by factory constructor):
 | SimpleAccountFactory | `0x48833641e079936664df306e64a160256520a33F` |
@@ -132,7 +134,7 @@ setAddr(node, userAddress)
 - Only NFT owner/approved can set records
 - Records are versioned and expiry-gated
 
-### ScrobbleV3 — Track Registry + Scrobble Events
+### ScrobbleV3 — Track Registry + Scrobble Events (Legacy, sponsor-gated)
 ```
 trackId = keccak256(abi.encode(uint8(kind), bytes32(payload)))
 ```
@@ -145,8 +147,9 @@ trackId = keccak256(abi.encode(uint8(kind), bytes32(payload)))
 - `updateTrack()` for typo/casing fixes (preserves trackId/payload)
 - Display strings (title/artist/album) stored on-chain in original casing
 - Normalized strings used only for kind 3 payload derivation
+- **Note**: Frontend scrobbles now use ScrobbleV4 (AA). V3 is still used by the Playlist Lit Action for track registration.
 
-### ScrobbleV4 — AA-enabled Track Registry + Scrobble Events
+### ScrobbleV4 — AA-enabled Track Registry + Scrobble Events (Primary)
 Same track registry and scrobble logic as V3, but permission model replaced with ERC-4337 Account Abstraction:
 - **User-facing** (`scrobbleBatch`, `registerAndScrobbleBatch`): `onlyAccountOf(user)` — `msg.sender` must be user's factory-derived SimpleAccount
 - **Admin** (`registerTracksBatch`, `updateTrack`, `setTrackCover`, `setTrackCoverBatch`): `onlyOperator` — `mapping(address => bool)` (multiple operators, not single sponsor)
@@ -191,7 +194,7 @@ contracts/megaeth/
 │   ├── RegistryV1.sol         # Name NFT registry (native ETH)
 │   ├── RecordsV1.sol          # ENS record storage
 │   ├── Resolver.sol           # CCIP-Read resolver
-│   ├── ProfileV1.sol          # Social profile (packed enums)
+│   ├── ProfileV2.sol          # Social profile (packed enums, unified language model)
 │   ├── ScrobbleV3.sol         # Track registry + scrobble events (sponsor-gated)
 │   ├── ScrobbleV4.sol         # Track registry + scrobble events (AA-gated)
 │   ├── PlaylistV1.sol         # Event-sourced playlists
@@ -207,7 +210,7 @@ contracts/megaeth/
 │   └── DeployAA.s.sol         # Deploy AA stack (factory/paymaster/ScrobbleV4)
 ├── test/
 │   ├── RegistryV1.t.sol       # Primary name + transfer clearing tests
-│   ├── ProfileV1.t.sol        # Profile sig verification + replay tests
+│   ├── ProfileV2.t.sol        # Profile sig verification + replay + gas tests
 │   ├── ScrobbleV3.t.sol       # Track registry + scrobble tests
 │   ├── ScrobbleV4.t.sol       # AA-gated scrobble + factory binding tests
 │   ├── PlaylistV1.t.sol       # Playlist CRUD + tombstone tests

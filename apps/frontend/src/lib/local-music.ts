@@ -8,6 +8,10 @@ export interface LocalTrack extends Track {
   filePath: string
   /** MusicBrainz Recording ID from ID3 tags */
   mbid?: string
+  /** MusicBrainz Artist ID (first/primary artist) from ID3 tags */
+  artistMbid?: string
+  /** MusicBrainz Release Artist ID from ID3 tags */
+  albumArtistMbid?: string
   /** IPFS CID for album cover art (set after uploading to Filebase) */
   coverCid?: string
   /** Absolute path to local cover image (for Tauri file reads) */
@@ -29,10 +33,12 @@ export async function getTracksNative(folder: string, limit: number, offset: num
   const { invoke, convertFileSrc } = await tauriCore()
   const tracks = await invoke<LocalTrack[]>('music_get_tracks', { folder, limit, offset })
   // Convert local cover paths to asset URLs serveable by Tauri
+  // Set scrobbleStatus based on whether the track has a recording MBID
   for (const t of tracks) {
     if (t.albumCover) {
       t.albumCover = convertFileSrc(t.albumCover)
     }
+    t.scrobbleStatus = t.mbid ? 'verified' : 'unidentified'
   }
   return tracks
 }

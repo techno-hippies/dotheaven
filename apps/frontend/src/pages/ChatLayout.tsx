@@ -21,6 +21,7 @@ import {
   DialogCloseButton,
   Button,
   useIsMobile,
+  PageHeader,
 } from '@heaven/ui'
 import { useXMTP, type ChatListItem as XMTPChatItem } from '../providers'
 import { usePeerName } from '../lib/hooks/usePeerName'
@@ -149,17 +150,14 @@ export const ChatLayout: ParentComponent = (props) => {
       <Show when={!isMobile() || !hasActiveChat()}>
         <div class={`${isMobile() ? 'w-full' : 'w-[360px]'} flex-shrink-0 border-r border-[var(--bg-highlight)] flex flex-col h-full overflow-hidden`}>
           {/* Header */}
-          <div class="flex items-center justify-between px-4 py-3 flex-shrink-0">
-            <h1 class="text-xl font-bold text-[var(--text-primary)]">Messages</h1>
-            <IconButton
-              variant="soft"
-              size="md"
-              aria-label="New message"
-              onClick={() => setNewChatOpen(true)}
-            >
-              <PenIcon />
-            </IconButton>
-          </div>
+          <PageHeader
+            title="Messages"
+            rightSlot={
+              <IconButton onClick={() => setNewChatOpen(true)} aria-label="New message" variant="ghost">
+                <PenIcon />
+              </IconButton>
+            }
+          />
 
           {/* Conversation list */}
           <div class="flex-1 overflow-y-auto">

@@ -19,7 +19,7 @@ pragma solidity ^0.8.24;
 ///
 /// Safety:
 ///  - Oracle-deadlock timeout refunds guest
-///  - Dispute timeout: oracle outcome stands, bond returned to challenger (mercy)
+///  - Dispute timeout: oracle outcome stands, bond goes to counterparty
 ///  - Sweep only excess ETH (tracked via totalHeld)
 contract SessionEscrowV1 {
     // ---- Reentrancy guard ----
@@ -50,6 +50,7 @@ contract SessionEscrowV1 {
     // Tracks ETH owed to participants (escrowed deposits + challenge bonds + open request funds).
     // Any ETH held above totalHeld is "excess" and can be swept.
     uint256 public totalHeld;
+    mapping(address => uint256) public owed; // pull-payments fallback for failed payouts
 
     // ---- Enums ----
     enum SessionSlotStatus    { Open, Booked, Cancelled, Settled }
@@ -168,6 +169,7 @@ contract SessionEscrowV1 {
     event SessionRequestAccepted(uint256 indexed requestId, address indexed host, uint256 slotId, uint256 bookingId, uint48 startTime);
 
     event Swept(uint256 amount);
+    event OwedWithdrawn(address indexed from, address indexed to, uint256 amount);
 
     // ---- Auth ----
     modifier onlyOwner()  { require(msg.sender == owner, "NOT_OWNER");  _; }
@@ -573,7 +575,12 @@ contract SessionEscrowV1 {
     function resolveDispute(uint256 bookingId, Outcome finalOutcome) external onlyOwner nonReentrant {
         SessionBooking storage b = bookings[bookingId];
         require(b.status == SessionBookingStatus.Disputed, "NOT_DISPUTED");
-        require(finalOutcome != Outcome.None, "BAD_OUTCOME");
+        require(
+            finalOutcome == Outcome.Completed ||
+            finalOutcome == Outcome.NoShowHost ||
+            finalOutcome == Outcome.NoShowGuest,
+            "BAD_OUTCOME"
+        );
 
         bool challengerWins = (finalOutcome != b.oracleOutcome);
 
@@ -607,7 +614,9 @@ contract SessionEscrowV1 {
         require(block.timestamp >= uint256(b.disputedAt) + uint256(disputeTimeout), "TOO_EARLY");
 
         if (b.bondAmount > 0) {
-            _sendObligation(b.challenger, b.bondAmount);
+            SessionSlot storage s = slots[b.slotId];
+            address counterparty = (b.challenger == b.guest) ? s.host : b.guest;
+            _sendObligation(counterparty, b.bondAmount);
         }
 
         b.status        = SessionBookingStatus.Resolved;
@@ -679,12 +688,16 @@ contract SessionEscrowV1 {
         }
     }
 
-    /// @dev Sends owed ETH and decrements totalHeld
+    /// @dev Sends owed ETH; if transfer fails, credit to pull-balance.
+    /// Decrements totalHeld on successful send or later withdrawal.
     function _sendObligation(address to, uint256 amount) internal {
         if (amount == 0) return;
         (bool ok, ) = to.call{value: amount}("");
-        require(ok, "ETH_TRANSFER_FAILED");
-        totalHeld -= amount;
+        if (ok) {
+            totalHeld -= amount;
+        } else {
+            owed[to] += amount;
+        }
     }
 
     /// @dev Sends excess ETH (does not affect totalHeld)
@@ -692,6 +705,27 @@ contract SessionEscrowV1 {
         if (amount == 0) return;
         (bool ok, ) = to.call{value: amount}("");
         require(ok, "ETH_TRANSFER_FAILED");
+    }
+
+    /// @notice Withdraw any owed balance to a chosen address (pull-payments).
+    function withdrawOwed(address payable to) external nonReentrant {
+        _withdrawOwed(to);
+    }
+
+    /// @notice Convenience: withdraw owed balance to caller.
+    function withdrawOwed() external nonReentrant {
+        _withdrawOwed(payable(msg.sender));
+    }
+
+    function _withdrawOwed(address payable to) internal {
+        require(to != address(0), "BAD_ADDR");
+        uint256 amount = owed[msg.sender];
+        require(amount > 0, "NOTHING_OWED");
+        owed[msg.sender] = 0;
+        totalHeld -= amount;
+        (bool ok, ) = to.call{value: amount}("");
+        require(ok, "ETH_TRANSFER_FAILED");
+        emit OwedWithdrawn(msg.sender, to, amount);
     }
 
     // ---- Views ----

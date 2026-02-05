@@ -220,6 +220,119 @@ contract ProfileV2Test is Test {
         assertEq(profs[1], 3);
     }
 
+    // ── Gas measurement tests ──
+
+    function _maxInput() internal pure returns (OnchainProfilesV2.ProfileInput memory in_) {
+        in_.profileVersion = 2;
+        in_.displayName = "Maximilian von Unterberg-Hochstetten"; // long-ish name
+        in_.nameHash = keccak256("maximilian");
+        in_.age = 28;
+        in_.heightCm = 183;
+        in_.nationality = bytes2("DE");
+        // 8 languages, all slots filled
+        in_.languagesPacked =
+            (uint256(0x454E0700) << 224) | // EN Native
+            (uint256(0x44450600) << 192) | // DE C2
+            (uint256(0x45530500) << 160) | // ES C1
+            (uint256(0x46520400) << 128) | // FR B2
+            (uint256(0x4A410300) <<  96) | // JA B1
+            (uint256(0x4B4F0200) <<  64) | // KO A2
+            (uint256(0x5A480100) <<  32) | // ZH A1
+            (uint256(0x41520700));          // AR Native
+        in_.friendsOpenToMask = 7; // all bits set
+        in_.locationCityId = keccak256("Berlin|DE-BE|DE");
+        in_.schoolId = keccak256("TU Berlin");
+        // 16 hobby tag IDs packed into bytes32
+        in_.hobbiesCommit = bytes32(uint256(0x0001000200030004000500060007000800090010001100120013001400150016));
+        // 16 skill tag IDs packed into bytes32
+        in_.skillsCommit = bytes32(uint256(0x03E803E903EA03EB03EC03ED03EE03EF03F003F103F203F303F403F503F603F7));
+        in_.photoURI = "ipfs://QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG";
+        // All enums set to non-zero values
+        in_.gender = OnchainProfilesV2.Gender.Man;
+        in_.relocate = OnchainProfilesV2.Relocate.Maybe;
+        in_.degree = OnchainProfilesV2.Degree.Master;
+        in_.fieldBucket = OnchainProfilesV2.FieldBucket.ComputerScience;
+        in_.profession = OnchainProfilesV2.Profession.SoftwareEngineer;
+        in_.industry = OnchainProfilesV2.Industry.Technology;
+        in_.relationshipStatus = OnchainProfilesV2.RelationshipStatus.Single;
+        in_.sexuality = OnchainProfilesV2.Sexuality.Straight;
+        in_.ethnicity = OnchainProfilesV2.Ethnicity.White;
+        in_.datingStyle = OnchainProfilesV2.DatingStyle.Monogamous;
+        in_.children = OnchainProfilesV2.Children.None;
+        in_.wantsChildren = OnchainProfilesV2.WantsChildren.OpenToIt;
+        in_.drinking = OnchainProfilesV2.Drinking.Socially;
+        in_.smoking = OnchainProfilesV2.Smoking.No;
+        in_.drugs = OnchainProfilesV2.Drugs.Never;
+        in_.lookingFor = OnchainProfilesV2.LookingFor.Serious;
+        in_.religion = OnchainProfilesV2.Religion.Agnostic;
+        in_.pets = OnchainProfilesV2.Pets.HasPets;
+        in_.diet = OnchainProfilesV2.Diet.Omnivore;
+    }
+
+    function test_gas_upsertProfile_maxFilled() public {
+        OnchainProfilesV2.ProfileInput memory in_ = _maxInput();
+        vm.prank(user);
+        uint256 gasBefore = gasleft();
+        profile.upsertProfile(in_);
+        uint256 gasUsed = gasBefore - gasleft();
+        emit log_named_uint("gas_upsertProfile_firstWrite_maxFilled", gasUsed);
+    }
+
+    function test_gas_upsertProfile_update() public {
+        // First write
+        OnchainProfilesV2.ProfileInput memory in_ = _maxInput();
+        vm.prank(user);
+        profile.upsertProfile(in_);
+
+        // Second write (update — warm storage)
+        in_.displayName = "Updated Name Here";
+        in_.age = 29;
+        vm.prank(user);
+        uint256 gasBefore = gasleft();
+        profile.upsertProfile(in_);
+        uint256 gasUsed = gasBefore - gasleft();
+        emit log_named_uint("gas_upsertProfile_update_maxFilled", gasUsed);
+    }
+
+    function test_gas_upsertProfileFor_maxFilled() public {
+        OnchainProfilesV2.ProfileInput memory in_ = _maxInput();
+        uint256 currentNonce = profile.nonces(user);
+        bytes32 profileHash = keccak256(abi.encode(in_));
+
+        string memory message = string.concat(
+            "heaven:profile:",
+            _toHexString(user),
+            ":",
+            _toHexString(profileHash),
+            ":",
+            _uintToString(currentNonce)
+        );
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n",
+                _uintToString(bytes(message).length),
+                message
+            )
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(userPk, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        uint256 gasBefore = gasleft();
+        profile.upsertProfileFor(user, in_, signature);
+        uint256 gasUsed = gasBefore - gasleft();
+        emit log_named_uint("gas_upsertProfileFor_firstWrite_maxFilled", gasUsed);
+    }
+
+    function test_gas_upsertProfile_minFilled() public {
+        // Minimal profile: only onboarding fields (name, age, gender, 2 languages)
+        OnchainProfilesV2.ProfileInput memory in_ = _defaultInput();
+        vm.prank(user);
+        uint256 gasBefore = gasleft();
+        profile.upsertProfile(in_);
+        uint256 gasUsed = gasBefore - gasleft();
+        emit log_named_uint("gas_upsertProfile_firstWrite_minFilled", gasUsed);
+    }
+
     // ── Helpers (mirror contract logic) ──
 
     function _toHexString(address a) internal pure returns (string memory) {

@@ -7,6 +7,7 @@ const webPlatformPath = resolve(__dirname, '../../packages/platform/src/web.ts')
 
 // Web-specific configuration
 export default defineConfig({
+  base: './',
   plugins: [solid(), tailwindcss()],
   resolve: {
     alias: [

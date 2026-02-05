@@ -1,0 +1,26 @@
+specVersion: 1.0.0
+indexerHints:
+  prune: auto
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: ProfileV2
+    network: megaeth-testnet-v2
+    source:
+      address: "0xa31545D33f6d656E62De67fd020A26608d4601E5"
+      abi: ProfileV2
+      startBlock: 10484810
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Profile
+      abis:
+        - name: ProfileV2
+          file: ./abis/ProfileV2.json
+      eventHandlers:
+        - event: ProfileUpserted(indexed address,uint8)
+          handler: handleProfileUpserted
+      file: ./src/profile.ts

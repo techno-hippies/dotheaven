@@ -1,8 +1,14 @@
 /**
- * Heaven Set Profile v1
+ * Heaven Set Profile v2
  *
  * Sets a user's on-chain profile on MegaETH via sponsor PKP (gasless).
  * The user signs an EIP-191 message authorizing the profile update.
+ *
+ * V2 changes:
+ * - Unified language model: uint256 languagesPacked (8 x 32-bit slots)
+ *   replacing separate nativeLanguage + learningLanguagesPacked
+ * - Each slot: [langCode:16][proficiency:8][reserved:8]
+ * - proficiency 7 = Native, 1-6 = CEFR A1-C2
  *
  * Flow:
  * 1. Verify user's EIP-191 signature (binds user + profileHash + nonce)
@@ -29,8 +35,8 @@
 const CHAIN_ID = 6343;
 const RPC_URL = "https://carrot.megaeth.com/rpc";
 
-// ProfileV1 contract (will be set after deploy)
-const PROFILE_V1 = "0x0A6563122cB3515ff678A918B5F31da9b1391EA3";
+// ProfileV2 contract (to be updated after deployment)
+const PROFILE_V2 = "0xa31545D33f6d656E62De67fd020A26608d4601E5";
 
 // Sponsor PKP — same as claim-name
 const SPONSOR_PKP_PUBLIC_KEY =
@@ -68,7 +74,7 @@ const toBigNumber = (value, label) => {
 // ============================================================
 
 const PROFILE_ABI = [
-  "function upsertProfileFor(address user, tuple(uint8 profileVersion, string displayName, bytes32 nameHash, uint8 age, uint16 heightCm, bytes2 nationality, bytes2 nativeLanguage, uint80 learningLanguagesPacked, uint8 friendsOpenToMask, bytes32 locationCityId, bytes32 schoolId, bytes32 skillsCommit, bytes32 hobbiesCommit, string photoURI, uint8 gender, uint8 relocate, uint8 degree, uint8 fieldBucket, uint8 profession, uint8 industry, uint8 relationshipStatus, uint8 sexuality, uint8 ethnicity, uint8 datingStyle, uint8 children, uint8 wantsChildren, uint8 drinking, uint8 smoking, uint8 drugs, uint8 lookingFor, uint8 religion, uint8 pets, uint8 diet) in_, bytes signature) external",
+  "function upsertProfileFor(address user, tuple(uint8 profileVersion, string displayName, bytes32 nameHash, uint8 age, uint16 heightCm, bytes2 nationality, uint256 languagesPacked, uint8 friendsOpenToMask, bytes32 locationCityId, bytes32 schoolId, bytes32 skillsCommit, bytes32 hobbiesCommit, string photoURI, uint8 gender, uint8 relocate, uint8 degree, uint8 fieldBucket, uint8 profession, uint8 industry, uint8 relationshipStatus, uint8 sexuality, uint8 ethnicity, uint8 datingStyle, uint8 children, uint8 wantsChildren, uint8 drinking, uint8 smoking, uint8 drugs, uint8 lookingFor, uint8 religion, uint8 pets, uint8 diet) in_, bytes signature) external",
   "function nonces(address user) external view returns (uint256)",
 ];
 
@@ -102,14 +108,13 @@ const main = async () => {
 
     // Build the profile tuple for abi.encode
     const profileTuple = [
-      profileInput.profileVersion || 1,
+      profileInput.profileVersion || 2,
       profileInput.displayName || "",
       profileInput.nameHash || ethers.constants.HashZero,
       profileInput.age || 0,
       profileInput.heightCm || 0,
       profileInput.nationality || "0x0000",
-      profileInput.nativeLanguage || "0x0000",
-      profileInput.learningLanguagesPacked || 0,
+      toBigNumber(profileInput.languagesPacked || "0", "languagesPacked"),
       profileInput.friendsOpenToMask || 0,
       profileInput.locationCityId || ethers.constants.HashZero,
       profileInput.schoolId || ethers.constants.HashZero,
@@ -140,7 +145,7 @@ const main = async () => {
     // Compute profileHash = keccak256(abi.encode(profileInput))
     const profileEncoded = ethers.utils.defaultAbiCoder.encode(
       [
-        "tuple(uint8,string,bytes32,uint8,uint16,bytes2,bytes2,uint80,uint8,bytes32,bytes32,bytes32,bytes32,string,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8)",
+        "tuple(uint8,string,bytes32,uint8,uint16,bytes2,uint256,uint8,bytes32,bytes32,bytes32,bytes32,string,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8)",
       ],
       [profileTuple]
     );
@@ -181,7 +186,7 @@ const main = async () => {
       { waitForResponse: true, name: "checkNonce" },
       async () => {
         const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
-        const contract = new ethers.Contract(PROFILE_V1, PROFILE_ABI, provider);
+        const contract = new ethers.Contract(PROFILE_V2, PROFILE_ABI, provider);
         const onChainNonce = await contract.nonces(userAddr);
         return JSON.stringify({ nonce: onChainNonce.toString() });
       }
@@ -221,7 +226,7 @@ const main = async () => {
       type: 0,
       chainId: CHAIN_ID,
       nonce: toBigNumber(txParams.nonce, "nonce"),
-      to: PROFILE_V1,
+      to: PROFILE_V2,
       data: txData,
       gasLimit: toBigNumber(GAS_LIMIT, "gasLimit"),
       gasPrice: toBigNumber(GAS_PRICE, "gasPrice"),
@@ -258,13 +263,13 @@ const main = async () => {
         response: JSON.stringify({
           success: true,
           dryRun: true,
-          version: "heaven-set-profile-v1",
+          version: "heaven-set-profile-v2",
           signedTx,
           txHash,
           user: userAddr,
           profileHash,
           sponsor: SPONSOR_PKP_ADDRESS,
-          contract: PROFILE_V1,
+          contract: PROFILE_V2,
           chainId: CHAIN_ID,
         }),
       });
@@ -304,13 +309,13 @@ const main = async () => {
     Lit.Actions.setResponse({
       response: JSON.stringify({
         success: true,
-        version: "heaven-set-profile-v1",
+        version: "heaven-set-profile-v2",
         txHash: broadcast.txHash,
         blockNumber: broadcast.blockNumber,
         user: userAddr,
         profileHash,
         sponsor: SPONSOR_PKP_ADDRESS,
-        contract: PROFILE_V1,
+        contract: PROFILE_V2,
         chainId: CHAIN_ID,
       }),
     });
@@ -318,7 +323,7 @@ const main = async () => {
     Lit.Actions.setResponse({
       response: JSON.stringify({
         success: false,
-        version: "heaven-set-profile-v1",
+        version: "heaven-set-profile-v2",
         error: e?.message || String(e),
       }),
     });

@@ -25,6 +25,8 @@ pub struct TrackRow {
     pub duration: String,
     pub file_path: String,
     pub mbid: Option<String>,
+    pub artist_mbid: Option<String>,
+    pub album_artist_mbid: Option<String>,
     pub album_cover: Option<String>,
     pub cover_path: Option<String>,
     pub cover_cid: Option<String>,
@@ -144,6 +146,26 @@ impl MusicDb {
             log::info!("MusicDb: migrated — added cover_cid column");
         }
 
+        // Migrate: add artist_mbid column if missing
+        let has_artist_mbid: bool = conn
+            .prepare("SELECT artist_mbid FROM tracks LIMIT 0")
+            .is_ok();
+        if !has_artist_mbid {
+            conn.execute_batch("ALTER TABLE tracks ADD COLUMN artist_mbid TEXT")
+                .map_err(|e| format!("Failed to add artist_mbid column: {e}"))?;
+            log::info!("MusicDb: migrated — added artist_mbid column");
+        }
+
+        // Migrate: add album_artist_mbid column if missing
+        let has_album_artist_mbid: bool = conn
+            .prepare("SELECT album_artist_mbid FROM tracks LIMIT 0")
+            .is_ok();
+        if !has_album_artist_mbid {
+            conn.execute_batch("ALTER TABLE tracks ADD COLUMN album_artist_mbid TEXT")
+                .map_err(|e| format!("Failed to add album_artist_mbid column: {e}"))?;
+            log::info!("MusicDb: migrated — added album_artist_mbid column");
+        }
+
         // Ensure covers cache directory exists
         let covers_dir = app_data_dir.join("covers");
         std::fs::create_dir_all(&covers_dir).ok();
@@ -176,7 +198,7 @@ impl MusicDb {
         let mut stmt = self
             .conn
             .prepare(
-                "SELECT file_path, title, artist, album, duration, mbid, rowid, cover_path, cover_cid
+                "SELECT file_path, title, artist, album, duration, mbid, rowid, cover_path, cover_cid, artist_mbid, album_artist_mbid
                  FROM tracks WHERE folder_path = ?1 ORDER BY title COLLATE NOCASE
                  LIMIT ?2 OFFSET ?3",
             )
@@ -194,6 +216,8 @@ impl MusicDb {
                     album: row.get(3)?,
                     duration: row.get(4)?,
                     mbid: row.get(5)?,
+                    artist_mbid: row.get(9)?,
+                    album_artist_mbid: row.get(10)?,
                     album_cover: row.get(7)?,
                     cover_path: row.get(7)?,
                     cover_cid: cover_cid.filter(|s| !s.is_empty()),
@@ -245,6 +269,10 @@ impl MusicDb {
         let mut extracted: usize = 0;
 
         // 2. Process each file
+        let needs_mbid_backfill = self
+            .get_setting("mbid_columns_v1")
+            .as_deref()
+            != Some("1");
         for (i, path) in audio_files.iter().enumerate() {
             let path_str = path.to_string_lossy().to_string();
             seen_paths.insert(path_str.clone());
@@ -263,18 +291,18 @@ impl MusicDb {
                 .unwrap_or(0);
 
             // Check if cached with same size+mtime
-            let cached: Option<(i64, i64, Option<String>, Option<String>)> = self
+            let cached: Option<(i64, i64, Option<String>, Option<String>, Option<String>, Option<String>)> = self
                 .conn
                 .query_row(
-                    "SELECT file_size, file_mtime, cover_path, cover_cid FROM tracks WHERE file_path = ?1",
+                    "SELECT file_size, file_mtime, cover_path, cover_cid, artist_mbid, album_artist_mbid FROM tracks WHERE file_path = ?1",
                     params![&path_str],
-                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
                 )
                 .ok();
 
             let mut existing_cover_path: Option<String> = None;
             let mut existing_cover_cid: Option<String> = None;
-            if let Some((sz, mt, cover_path_cached, cover_cid_cached)) = cached {
+            if let Some((sz, mt, cover_path_cached, cover_cid_cached, artist_mbid_cached, album_artist_mbid_cached)) = cached {
                 existing_cover_path = cover_path_cached;
                 existing_cover_cid = cover_cid_cached;
                 if sz == file_size && mt == file_mtime {
@@ -283,7 +311,16 @@ impl MusicDb {
                         .filter(|p| !p.is_empty())
                         .map(|p| !Path::new(p).exists())
                         .unwrap_or(false);
-                    if !cover_missing {
+                    let mbid_missing = artist_mbid_cached
+                        .as_deref()
+                        .map(|s| s.is_empty())
+                        .unwrap_or(true)
+                        && album_artist_mbid_cached
+                            .as_deref()
+                            .map(|s| s.is_empty())
+                            .unwrap_or(true);
+                    let force_backfill = needs_mbid_backfill && mbid_missing;
+                    if !cover_missing && !force_backfill {
                         cache_hits += 1;
                         if i % 100 == 0 {
                             if let Some(app) = app {
@@ -297,7 +334,7 @@ impl MusicDb {
 
             // Extract metadata with lofty
             extracted += 1;
-            let (title, artist, album, duration, mbid, cover_path) = extract_metadata(path, &path_str, &self.covers_dir);
+            let (title, artist, album, duration, mbid, artist_mbid, album_artist_mbid, cover_path) = extract_metadata(path, &path_str, &self.covers_dir);
 
             // Preserve cover_cid only if cover_path is unchanged
             let cover_cid = match (
@@ -311,8 +348,8 @@ impl MusicDb {
 
             self.conn
                 .execute(
-                    "INSERT OR REPLACE INTO tracks (file_path, title, artist, album, duration_ms, duration, mbid, file_size, file_mtime, folder_path, cover_path, cover_cid)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                    "INSERT OR REPLACE INTO tracks (file_path, title, artist, album, duration_ms, duration, mbid, file_size, file_mtime, folder_path, cover_path, cover_cid, artist_mbid, album_artist_mbid)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                     params![
                         &path_str,
                         &title,
@@ -326,6 +363,8 @@ impl MusicDb {
                         folder,
                         &cover_path,
                         cover_cid,
+                        &artist_mbid,
+                        &album_artist_mbid,
                     ],
                 )
                 .ok();
@@ -367,6 +406,10 @@ impl MusicDb {
         // Emit final progress
         if let Some(app) = app {
             let _ = app.emit("music://scan-progress", ScanProgress { done: total, total });
+        }
+
+        if needs_mbid_backfill {
+            let _ = self.set_setting("mbid_columns_v1", "1");
         }
 
         // 4. Return count
@@ -411,8 +454,8 @@ impl MusicDb {
 // Metadata extraction via lofty
 // =============================================================================
 
-/// Returned metadata tuple: (title, artist, album, duration_ms, mbid, cover_path)
-fn extract_metadata(path: &Path, path_str: &str, covers_dir: &Path) -> (String, String, String, Option<u64>, Option<String>, Option<String>) {
+/// Returned metadata tuple: (title, artist, album, duration_ms, mbid, artist_mbid, album_artist_mbid, cover_path)
+fn extract_metadata(path: &Path, path_str: &str, covers_dir: &Path) -> (String, String, String, Option<u64>, Option<String>, Option<String>, Option<String>, Option<String>) {
     let file_name = path
         .file_name()
         .and_then(|n| n.to_str())
@@ -446,6 +489,18 @@ fn extract_metadata(path: &Path, path_str: &str, covers_dir: &Path) -> (String, 
                 t.get_string(&lofty::prelude::ItemKey::MusicBrainzRecordingId)
                     .map(|s| s.to_string())
             });
+            let artist_mbid = tag
+                .and_then(|t| t.get_string(&lofty::prelude::ItemKey::MusicBrainzArtistId))
+                .map(|s| {
+                    // For collaborations, tags may contain multiple MBIDs separated by
+                    // '/' or ';'. We store only the first (primary) artist.
+                    s.split(&['/', ';'][..]).next().unwrap_or(s).trim().to_string()
+                })
+                .filter(|s| !s.is_empty());
+            let album_artist_mbid = tag
+                .and_then(|t| t.get_string(&lofty::prelude::ItemKey::MusicBrainzReleaseArtistId))
+                .map(|s| s.split(&['/', ';'][..]).next().unwrap_or(s).trim().to_string())
+                .filter(|s| !s.is_empty());
 
             // Extract cover art — prefer CoverFront, then largest by byte size, then first
             let cover_path = tag.and_then(|t| {
@@ -478,11 +533,11 @@ fn extract_metadata(path: &Path, path_str: &str, covers_dir: &Path) -> (String, 
                 Some(cover_file.to_string_lossy().to_string())
             });
 
-            (title, artist, album, duration_ms, mbid, cover_path)
+            (title, artist, album, duration_ms, mbid, artist_mbid, album_artist_mbid, cover_path)
         }
         Err(e) => {
             log::warn!("lofty failed for {}: {}", path_str, e);
-            (fb_title, fb_artist, String::new(), None, None, None)
+            (fb_title, fb_artist, String::new(), None, None, None, None, None)
         }
     }
 }

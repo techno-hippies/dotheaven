@@ -355,6 +355,7 @@ export const LibraryPage: Component = () => {
               <TrackList
                 tracks={sortedTracks()}
                 showDateAdded={false}
+                showScrobbleStatus
                 activeTrackId={player.currentTrack()?.id}
                 selectedTrackId={player.selectedTrackId() || undefined}
                 sort={sort()}
@@ -370,6 +371,9 @@ export const LibraryPage: Component = () => {
                   onAddToPlaylist: (track) => {
                     setPlaylistDialogTrack(track)
                     setPlaylistDialogOpen(true)
+                  },
+                  onIdentify: () => {
+                    window.open('https://picard.musicbrainz.org/', '_blank')
                   },
                   onUploadToFilecoin: platform.isTauri
                     ? (track) => {

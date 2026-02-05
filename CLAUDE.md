@@ -28,6 +28,10 @@ dotheaven/
 │   ├── core/              # Core business logic (playlists, storage)
 │   └── platform/          # Platform-specific utilities
 ├── contracts/             # Smart contracts
+├── subgraphs/             # Goldsky subgraph definitions
+├── services/
+│   ├── aa-gateway/        # AA Gateway + Alto bundler (ERC-4337)
+│   └── alto/              # Pimlico Alto bundler (git submodule)
 └── lit-actions/           # Lit Protocol actions
 ```
 
@@ -74,12 +78,13 @@ bun check            # Type check all packages
 
 ### Scrobbling (On-chain listening history)
 - **ScrobbleEngine** (`packages/core/src/scrobble/engine.ts`): State machine tracking play time per session. Threshold: `min(duration × 50%, 240s)`. Emits `ReadyScrobble` when met
-- **ScrobbleService** (`apps/frontend/src/lib/scrobble-service.ts`): Wires engine directly to Lit Action V3. Each scrobble fires immediately (no queue/batch)
-- **Lit Action V3** (`lit-actions/actions/scrobble-submit-v3.js`): Signs EIP-191, registers tracks + scrobbles via `registerAndScrobbleBatch()`. Uploads cover art to Filebase (encrypted key, decrypted at runtime), sets coverCid on-chain via `setTrackCoverBatch()`. Sponsor PKP broadcasts to ScrobbleV3 on MegaETH
-- **ScrobbleV3 contract**: `0x144c450cd5B641404EEB5D5eD523399dD94049E0` on MegaETH (chain 6343)
-- **Subgraph**: Goldsky `dotheaven-activity/4.0.0` indexes `TrackRegistered` + `TrackCoverSet` + `Scrobbled` events
+- **ScrobbleService** (`apps/frontend/src/lib/scrobble-service.ts`): Wires engine to AA client (ScrobbleV4). Each scrobble submits a UserOp via the AA gateway immediately (no queue/batch)
+- **AA client** (`apps/frontend/src/lib/aa-client.ts`): Builds ERC-4337 UserOps targeting ScrobbleV4. PKP signs `userOpHash`, gateway adds paymaster signature, bundler (Alto) submits to EntryPoint
+- **ScrobbleV4 contract**: `0xD41a8991aDF67a1c4CCcb5f7Da6A01a601eC3F37` on MegaETH (chain 6343). AA-enabled — `onlyAccountOf(user)` gating via factory-derived SimpleAccount
+- **ScrobbleV3 contract**: `0x144c450cd5B641404EEB5D5eD523399dD94049E0` on MegaETH (chain 6343). Legacy sponsor-gated version — still deployed, used by playlists Lit Action for track registration
+- **Subgraph**: Goldsky `dotheaven-activity/7.0.0` indexes `TrackRegistered` + `TrackCoverSet` + `Scrobbled` + `PostCreated` + `ContentRegistered` events
 - **Frontend**: `ScrobblesPage` fetches from subgraph, displays verified/unidentified status with cover art
-- **Cover art pipeline** (Tauri): Rust extracts cover from audio tags → Tauri reads bytes → base64 sent to Lit Action → uploads to Filebase S3 (IPFS-pinned) → CID set on-chain → cached in local SQLite → displayed via `heaven.myfilebase.com` dedicated gateway with image optimization params
+- **Cover art pipeline** (Tauri): Rust extracts cover from audio tags → Tauri reads bytes → base64 sent via AA → cached in local SQLite → displayed via `heaven.myfilebase.com` dedicated gateway with image optimization params
 - **Auto-refresh**: After scrobble, `queryClient.invalidateQueries(['scrobbles'])` refreshes profile. Waits for cover TX confirmation before invalidating.
 - **MBID extraction**: Rust `music_db.rs` reads MusicBrainz recording ID from tags via lofty
 - **IPFS gateway**: `https://heaven.myfilebase.com/ipfs/` (dedicated Filebase gateway) with optimization params (`?img-width=96&img-height=96&img-format=webp&img-quality=80`)
@@ -100,7 +105,7 @@ bun check            # Type check all packages
 - **VerificationMirror contract**: `0xb0864603A4d6b62eACB53fbFa32E7665BADCc7Fb` on MegaETH (6343)
 - **Stored on-chain**: `verifiedAt` (timestamp), `nationality` (3-letter ISO e.g. "GBR"). No age/DOB — privacy by design.
 - **Disclosures requested**: minimumAge 18 (binary gate, proof fails if under 18), nationality
-- **Verified data overrides self-reported**: when `verifiedAt > 0`, nationality from the verifier contract overrides ProfileV1 value. Age is always self-reported via ProfileV1.
+- **Verified data overrides self-reported**: when `verifiedAt > 0`, nationality from the verifier contract overrides ProfileV2 value. Age is always self-reported via ProfileV2.
 - **Zero gas for user**: Self app pays Celo gas, sponsor PKP pays MegaETH mirror gas
 - **Frontend flow**: "Verify Identity" button next to "Edit Profile" → QR dialog → polls Celo → mirrors to MegaETH → badge shown
 - **SDK quirk**: `endpointType` must be `'staging_celo'` (not `'celo-staging'`) in `@selfxyz/sdk-common` v1.0.0
@@ -136,12 +141,12 @@ bun check            # Type check all packages
   - `apps/frontend/src/pages/ProfilePage.tsx` — `PublicProfilePage`, `MyProfilePage`, `parseProfileId()`, `resolveProfileId()`
   - `packages/ui/src/composite/profile-info-section.tsx` — edit-only sections gated on `isOwnProfile`
 
-### Profile (On-chain via ProfileV1 + RecordsV1)
-- **ProfileV1 contract**: `0x0A6563122cB3515ff678A918B5F31da9b1391EA3` on MegaETH (chain 6343)
+### Profile (On-chain via ProfileV2 + RecordsV1)
+- **ProfileV2 contract**: `0xa31545D33f6d656E62De67fd020A26608d4601E5` on MegaETH (chain 6343)
 - **RecordsV1 contract**: `0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3` on MegaETH (chain 6343)
 - **Lit Action**: `heaven-set-profile-v1.js` — sponsor PKP writes profile gaslessly
 - **Dual storage model**:
-  - **ProfileV1**: Structured data (enums, packed integers, bytes32). Used for matching/filtering.
+  - **ProfileV2**: Structured data (enums, packed integers, bytes32). Used for matching/filtering.
     - Numeric enums: age, gender, nationality, nativeLanguage, relocate, degree, profession, etc.
     - `learningLanguagesPacked`: uint80 = 5 × uint16 language codes, big-endian
     - `hobbiesCommit`/`skillsCommit`: bytes32 packed with 16 × uint16 tag IDs (not hashes)
@@ -160,16 +165,45 @@ bun check            # Type check all packages
   - UI uses `multiselectdropdown` with tag options → stores comma-separated ID strings
 - **Profile save flow** (2 txs, both gasless via sponsor PKP):
   1. `setRecordsFor()` / `setTextRecords()` — writes display strings to RecordsV1
-  2. `upsertProfileFor()` — writes structured data to ProfileV1
+  2. `upsertProfileFor()` — writes structured data to ProfileV2
 - **Profile load flow**:
-  1. `getProfile()` reads ProfileV1 struct, decodes enums/bytes2/packed tags
+  1. `getProfile()` reads ProfileV2 struct, decodes enums/bytes2/packed tags
   2. `getTextRecord()` reads RecordsV1 for display strings (avatar, bio, social links, labels)
   3. On-chain packed tag IDs are the source of truth for hobbies/skills (not RecordsV1 labels)
+- **Subgraph**: Goldsky `dotheaven-profiles/1.0.0` indexes `ProfileUpserted` events, denormalizes all 19 packed enums into individual fields for subgraph-level filtering
+  - API: `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-profiles/1.0.0/gn`
 - **Key files**:
   - `apps/frontend/src/lib/heaven/profile.ts` — buildProfileInput, getProfile, parseTagCsv
+  - `apps/frontend/src/lib/heaven/community.ts` — subgraph queries for community page
   - `apps/frontend/src/pages/ProfilePage.tsx` — save/load orchestration
   - `packages/ui/src/composite/profile-info-section.tsx` — editable profile UI
   - `packages/ui/src/data/tags.ts` — tag dictionary + pack/unpack helpers
+  - `subgraphs/profiles/` — subgraph definition (schema, mapping, ABI)
+
+### Community Homepage
+- **Homepage** (`App.tsx`): Community member discovery page using `CommunityFeed` component
+- **Data source**: `dotheaven-profiles` subgraph indexes ProfileV2 events, denormalizes all enums for filtering
+- **Tabs**: All (everyone) / Nearby (same `locationCityId`)
+- **Resolution**: Each profile card resolves heaven name + avatar + bio via RPC (getPrimaryName, getTextRecord, resolveAvatarUri)
+- **TanStack Query**: `fetchCommunityMembers()` queries subgraph, `fetchUserLocationCityId()` gets user's location for Nearby tab
+- **Key files**:
+  - `apps/frontend/src/App.tsx` — CommunityFeed wiring
+  - `apps/frontend/src/lib/heaven/community.ts` — subgraph queries + profile resolution
+
+### Subgraphs (Goldsky)
+Three Goldsky subgraphs on MegaETH testnet (3-slot limit):
+
+| Subgraph | Version | Indexes | Source Dir |
+|----------|---------|---------|------------|
+| `dotheaven-activity` | 7.0.0 | ScrobbleV3 + PostsV1 + ContentRegistry | `subgraphs/activity-feed/` |
+| `dotheaven-profiles` | 1.0.0 | ProfileV2 | `subgraphs/profiles/` |
+| `dotheaven-playlists` | 1.0.0 | PlaylistV1 | `subgraphs/playlist-feed/` |
+
+API base: `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/{name}/{version}/gn`
+
+Deploy: `cd subgraphs/<dir> && npx graph codegen && npx graph build && goldsky subgraph deploy <name>/<version>`
+
+**Note**: `dotheaven-content` was merged into `dotheaven-activity` v7.0.0. Old content-feed subgraph dir remains for reference but is no longer deployed.
 
 ### Local Music Library (Tauri-only)
 - **Rust SQLite backend** (`src-tauri/src/music_db.rs`): rusqlite + lofty + walkdir
@@ -194,15 +228,17 @@ bun check            # Type check all packages
 
 ## Key Routes
 ```
-/                      # Home (vertical video feed)
+/                      # Home (community member discovery)
 /chat/ai/:personalityId  # AI chat (Scarlett) - has voice call
-/chat/:addressOrId     # XMTP peer-to-peer chat
+/chat/:username        # XMTP peer-to-peer chat
 /wallet                # Wallet page
-/library               # Music library
+/music                 # Music library (local/cloud/shared tabs)
+/music/:tab            # Music library specific tab
 /playlist/:id          # Playlist page
-/scrobbles             # On-chain scrobble history
+/post/:id              # Single post view (legacy deep-link compat)
 /u/:id                 # Public profile (address, heaven name, ENS, or HNS)
 /profile               # Own profile (edit mode)
+/settings              # Settings page
 ```
 
 ## Environment Variables
@@ -211,6 +247,8 @@ VITE_CHAT_WORKER_URL     # Cloudflare Worker for AI chat
 VITE_AGORA_APP_ID        # Agora RTC app ID for voice calls
 VITE_MEDIA_WORKER_URL    # Media Worker for photo upload + AI conversion
 VITE_HEAVEN_IMAGES_URL   # Heaven Images service for watermarking
+VITE_AA_GATEWAY_URL      # AA Gateway URL (default: http://127.0.0.1:3337)
+VITE_AA_GATEWAY_KEY      # AA Gateway API key (optional, for protected endpoints)
 ```
 
 ## Color Scheme (Heaven Dark Theme)
