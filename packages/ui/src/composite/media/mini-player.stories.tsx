@@ -4,7 +4,7 @@ import { MiniPlayer } from './mini-player'
 import { MobileFooter } from '../../layout/MobileFooter'
 
 const meta: Meta<typeof MiniPlayer> = {
-  title: 'Composite/MiniPlayer',
+  title: 'Media/MiniPlayer',
   component: MiniPlayer,
   parameters: {
     layout: 'fullscreen',

@@ -13,7 +13,7 @@ import {
 import { IconButton } from '../../primitives/icon-button'
 
 const meta = {
-  title: 'Composite/DropdownMenu',
+  title: 'Shared/DropdownMenu',
   component: DropdownMenu,
   parameters: {
     layout: 'centered',

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { VerificationBadge } from './verification-badge'
 
 const meta = {
-  title: 'Composite/VerificationBadge',
+  title: 'Profile/VerificationBadge',
   component: VerificationBadge,
   parameters: {
     layout: 'centered',

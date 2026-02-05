@@ -3,7 +3,7 @@ import { ListItem } from './list-item'
 import { AlbumCover } from './album-cover'
 
 const meta: Meta<typeof ListItem> = {
-  title: 'Composite/ListItem',
+  title: 'Shared/ListItem',
   component: ListItem,
   tags: ['autodocs'],
 }

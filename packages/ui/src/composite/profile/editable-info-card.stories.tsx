@@ -11,7 +11,7 @@ import {
 } from '../../constants/profile-options'
 
 const meta = {
-  title: 'Composite/EditableInfoCard',
+  title: 'Profile/EditableInfoCard',
   component: EditableInfoCard,
   parameters: {
     layout: 'padded',

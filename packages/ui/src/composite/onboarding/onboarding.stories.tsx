@@ -7,7 +7,7 @@ import { OnboardingMusicStep, POPULAR_ARTISTS, type OnboardingArtist } from './o
 import { Stepper } from '../../primitives/stepper'
 
 const meta = {
-  title: 'Composite/Onboarding',
+  title: 'Onboarding/Steps',
   parameters: {
     layout: 'fullscreen',
     backgrounds: {

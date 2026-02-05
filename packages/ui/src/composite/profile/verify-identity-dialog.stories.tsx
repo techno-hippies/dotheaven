@@ -4,7 +4,7 @@ import { VerifyIdentityDialog, type VerifyStep } from './verify-identity-dialog'
 import { Button } from '../../primitives'
 
 const meta = {
-  title: 'Composite/VerifyIdentityDialog',
+  title: 'Profile/VerifyIdentityDialog',
   component: VerifyIdentityDialog,
   parameters: {
     layout: 'centered',

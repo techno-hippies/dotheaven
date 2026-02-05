@@ -16,7 +16,7 @@ import { Spinner } from '../../primitives/spinner'
 import { AlbumCover } from './album-cover'
 
 const meta: Meta<typeof Dialog> = {
-  title: 'Composite/Dialog',
+  title: 'Shared/Dialog',
   component: Dialog,
   tags: ['autodocs'],
 }

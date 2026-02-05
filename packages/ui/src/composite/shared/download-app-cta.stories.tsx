@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs'
 import { DownloadAppCta } from './download-app-cta'
 
 const meta: Meta<typeof DownloadAppCta> = {
-  title: 'Composite/DownloadAppCta',
+  title: 'Shared/DownloadAppCta',
   component: DownloadAppCta,
   decorators: [
     (Story) => (

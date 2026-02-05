@@ -3,7 +3,7 @@ import { CommunityCard } from './community-card'
 import type { LanguageEntry } from '../../data/languages'
 
 const meta: Meta<typeof CommunityCard> = {
-  title: 'Composite/CommunityCard',
+  title: 'Community/CommunityCard',
   component: CommunityCard,
   parameters: { layout: 'centered' },
   decorators: [

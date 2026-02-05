@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs'
 import { ChatListItem } from './chat-list-item'
 
 const meta: Meta<typeof ChatListItem> = {
-  title: 'Composite/ChatListItem',
+  title: 'Chat/ChatListItem',
   component: ChatListItem,
   parameters: { layout: 'centered' },
   decorators: [

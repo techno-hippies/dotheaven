@@ -4,7 +4,7 @@ import { TrackList, type SortField, type SortState, type Track } from './track-l
 import { MediaHeader } from './media-header'
 
 const meta = {
-  title: 'Composite/TrackList',
+  title: 'Media/TrackList',
   component: TrackList,
   parameters: {
     layout: 'fullscreen',

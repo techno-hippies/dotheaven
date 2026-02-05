@@ -6,7 +6,7 @@ import { IconButton } from '../../primitives/icon-button'
 import { Plus, MagnifyingGlass } from '../../icons'
 
 const meta: Meta<typeof CommunityFeed> = {
-  title: 'Composite/CommunityFeed',
+  title: 'Community/CommunityFeed',
   component: CommunityFeed,
   parameters: { layout: 'fullscreen' },
 }

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { BookingDetail, type BookingDetailData } from './booking-detail'
 
 const meta: Meta = {
-  title: 'Composite/BookingDetail',
+  title: 'Scheduling/BookingDetail',
   component: BookingDetail,
   parameters: {
     layout: 'padded',

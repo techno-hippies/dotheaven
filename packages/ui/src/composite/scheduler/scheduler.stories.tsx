@@ -4,7 +4,7 @@ import { Scheduler } from './Scheduler'
 import type { DayAvailability, TimeSlot } from './types'
 
 const meta: Meta = {
-  title: 'Composite/Scheduler',
+  title: 'Scheduling/Scheduler',
   component: Scheduler,
   parameters: {
     layout: 'padded',

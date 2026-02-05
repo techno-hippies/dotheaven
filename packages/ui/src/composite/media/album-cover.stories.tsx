@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { AlbumCover } from './album-cover'
 
 const meta: Meta<typeof AlbumCover> = {
-  title: 'Composite/AlbumCover',
+  title: 'Media/AlbumCover',
   component: AlbumCover,
   tags: ['autodocs'],
   argTypes: {

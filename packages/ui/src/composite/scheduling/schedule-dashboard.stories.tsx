@@ -4,7 +4,7 @@ import { ScheduleDashboard } from './schedule-dashboard'
 import type { SessionSlotData } from './schedule-tab'
 
 const meta: Meta = {
-  title: 'Composite/ScheduleDashboard',
+  title: 'Scheduling/ScheduleDashboard',
   component: ScheduleDashboard,
   parameters: {
     layout: 'padded',

@@ -5,7 +5,7 @@ import { IconButton } from '../../primitives/icon-button'
 import { createSignal } from 'solid-js'
 
 const meta: Meta<typeof MessageInput> = {
-  title: 'Composite/MessageInput',
+  title: 'Chat/MessageInput',
   component: MessageInput,
   tags: ['autodocs'],
 }

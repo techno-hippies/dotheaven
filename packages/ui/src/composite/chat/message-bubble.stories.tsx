@@ -3,7 +3,7 @@ import { MessageBubble, MessageList } from './message-bubble'
 import { IconButton } from '../../primitives/icon-button'
 
 const meta: Meta<typeof MessageBubble> = {
-  title: 'Composite/MessageBubble',
+  title: 'Chat/MessageBubble',
   component: MessageBubble,
   tags: ['autodocs'],
   argTypes: {

@@ -4,7 +4,7 @@ import { LanguageEditor } from './language-editor'
 import type { LanguageEntry } from '../../data/languages'
 
 const meta: Meta<typeof LanguageEditor> = {
-  title: 'Composite/LanguageEditor',
+  title: 'Profile/LanguageEditor',
   component: LanguageEditor,
   decorators: [
     (Story) => (

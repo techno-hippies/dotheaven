@@ -4,7 +4,7 @@ import { SidePlayer } from './side-player'
 import { RightPanel } from '../../layout/RightPanel'
 
 const meta: Meta<typeof SidePlayer> = {
-  title: 'Composite/SidePlayer',
+  title: 'Media/SidePlayer',
   component: SidePlayer,
   parameters: {
     layout: 'fullscreen',
