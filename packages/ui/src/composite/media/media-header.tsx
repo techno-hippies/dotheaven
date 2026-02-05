@@ -15,6 +15,7 @@ export interface MediaHeaderProps {
     songCount?: number
     duration?: string
     followers?: number
+    scrobbles?: number
   }
   onPlay?: () => void
   onTitleClick?: () => void
@@ -34,14 +35,20 @@ export const MediaHeader: Component<MediaHeaderProps> = (props) => {
   const formatStats = () => {
     const parts: string[] = []
 
+    // For artists: show listeners and scrobbles like Last.fm
+    if (props.stats?.followers !== undefined) {
+      parts.push(`Listeners ${props.stats.followers.toLocaleString()}`)
+    }
+    if (props.stats?.scrobbles !== undefined) {
+      parts.push(`Scrobbles ${props.stats.scrobbles.toLocaleString()}`)
+    }
+
+    // For playlists/albums: show song count and duration
     if (props.stats?.songCount) {
       parts.push(`${props.stats.songCount} songs`)
     }
     if (props.stats?.duration) {
       parts.push(props.stats.duration)
-    }
-    if (props.stats?.followers) {
-      parts.push(`${props.stats.followers.toLocaleString()} followers`)
     }
 
     return parts.join(', ')
@@ -49,7 +56,7 @@ export const MediaHeader: Component<MediaHeaderProps> = (props) => {
 
   return (
     <div class={cn('p-4 md:p-8', props.class)}>
-      <div class="flex flex-col md:flex-row md:items-end gap-4 md:gap-6">
+      <div class="flex flex-col md:flex-row md:items-center gap-4 md:gap-6">
         {/* Cover Art */}
         <div
           class={cn('flex-shrink-0 self-center md:self-auto', props.onCoverClick && 'cursor-pointer')}
@@ -83,7 +90,7 @@ export const MediaHeader: Component<MediaHeaderProps> = (props) => {
         </div>
 
         {/* Metadata */}
-        <div class="flex-1 min-w-0 md:pb-4 text-center md:text-left">
+        <div class="flex-1 min-w-0 text-center md:text-left">
           {/* Type label */}
           {props.type && (
             <div class="text-base font-medium text-[var(--text-primary)] mb-1 md:mb-2">

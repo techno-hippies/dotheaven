@@ -18,7 +18,7 @@
 | `EngagementV1.sol` | ⚠️ Deprecated. Uses Story `ipId` as key. See EngagementV2 for new posts. |
 | `EngagementV2.sol` | Likes, comments, translations, flags, reveals, nullifier bans. Uses `postIdBytes32` as universal key. Permissionless `payReveal()` with 24h viewing windows. Immutable charity wallet. Privacy-preserving reveal logging (nullifierHash offchain). |
 | `PostsV1.sol` | Post existence + metadata pointer on MegaETH. Cross-chain mirror of Story Protocol IP Asset registrations. `postFor()` emits `PostCreated` events for subgraph indexing. Stores `creatorOf[ipId]` for idempotency. `onlySponsor` gated. |
-| `ScrobbleV4.sol` | AA-enabled Track Registry + Scrobble Events. Same logic as V3 but uses ERC-4337 Account Abstraction: user-facing functions (`scrobbleBatch`, `registerAndScrobbleBatch`) gated by `onlyAccountOf(user)` (factory-deterministic binding), admin functions (`registerTracksBatch`, `updateTrack`, covers) gated by `onlyOperator`. Inherits `AccountBinding`. |
+| `ScrobbleV4.sol` | AA-enabled Track Registry + Scrobble Events. Same logic as V3 but uses ERC-4337 Account Abstraction: user-facing functions (`scrobbleBatch`, `registerAndScrobbleBatch`) gated by `onlyAccountOf(user)` (factory-deterministic binding), admin functions (`registerTracksBatch`, `updateTrack`, covers) gated by `onlyOperator`. Inherits `AccountBinding`. **Includes `uint32 durationSec` field**. |
 | `aa/HeavenAccountFactory.sol` | Wraps eth-infinitism `SimpleAccountFactory` v0.7 via composition. Deploys `SimpleAccount` proxies via CREATE2. Exposes `getAddress(owner, salt)` for deterministic address derivation. |
 | `aa/HeavenPaymaster.sol` | Thin wrapper around eth-infinitism `VerifyingPaymaster` v0.7. Off-chain gateway signer validates policy and signs UserOp approvals. |
 | `aa/AccountBinding.sol` | Shared abstract contract with `onlyAccountOf(user)` modifier. Verifies `msg.sender == FACTORY.getAddress(user, SALT)` — not spoofable. Inherited by ScrobbleV4 (and future AA-enabled contracts). |
@@ -48,9 +48,9 @@ All names are **FREE** (`pricePerYear = 0`). Tiered pricing for short names (2-4
 | EngagementV1 | `0x2A3beA895AE5bb4415c436155cbA15a97ACc2C77` |
 | EngagementV2 | `0xAF769d204e51b64D282083Eb0493F6f37cd93138` |
 | PostsV1 | `0xFe674F421c2bBB6D664c7F5bc0D5A0204EE0bFA6` |
-| HeavenAccountFactory | `0xB66BF4066F40b36Da0da34916799a069CBc79408` |
-| HeavenPaymaster | `0xEb3C4c145AE16d7cC044657D1632ef08d6B2D5d9` |
-| ScrobbleV4 | `0xD41a8991aDF67a1c4CCcb5f7Da6A01a601eC3F37` |
+| HeavenAccountFactory | `0xF78E2a3187DB720F738a5477f42dCAEF4fec10dB` |
+| HeavenPaymaster | `0xd7C9436b7d6D62cF2bd5B3eE48f0f2D55d974c67` |
+| ScrobbleV4 | `0x1D23Ad1c20ce54224fEffe8c2E112296C321451E` |
 | SessionEscrowV1 | `0x132212B78C4a7A3F19DE1BF63f119848c765c1d2` |
 
 Internal (deployed by factory constructor):

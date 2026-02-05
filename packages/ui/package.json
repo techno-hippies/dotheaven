@@ -6,7 +6,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./styles": "./src/styles/index.css"
+    "./styles": "./src/styles/index.css",
+    "./icons": "./src/icons/index.tsx"
   },
   "scripts": {
     "storybook": "storybook dev -p 6006",

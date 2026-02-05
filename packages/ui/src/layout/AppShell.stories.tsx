@@ -3,12 +3,10 @@ import { createSignal } from 'solid-js'
 import { AppShell } from './AppShell'
 import { Sidebar, SidebarSection } from './Sidebar'
 import { RightPanel } from './RightPanel'
-import { Header } from './Header'
 import { MobileFooter } from './MobileFooter'
-import { ListItem } from '../composite/list-item'
-import { MusicPlayer } from '../composite/music-player'
-import { MiniPlayer } from '../composite/mini-player'
-import { AlbumCover } from '../composite/album-cover'
+import { ListItem } from '../composite/shared/list-item'
+import { MiniPlayer } from '../composite/media/mini-player'
+import { AlbumCover } from '../composite/media/album-cover'
 import { Avatar } from '../primitives/avatar'
 import { IconButton } from '../primitives/icon-button'
 
@@ -124,34 +122,17 @@ const meta: Meta<typeof AppShell> = {
 export default meta
 type Story = StoryObj<typeof AppShell>
 
-// Header with notifications (for Home page)
-const HomeHeader = () => (
-  <Header
-    rightSlot={
-      <div class="flex items-center gap-3">
-        <IconButton variant="ghost" size="md" aria-label="Notifications">
-          <BellIcon />
-        </IconButton>
-        <Avatar size="sm" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop" class="cursor-pointer" />
-      </div>
-    }
-    mobileRightSlot={
+// Simple header placeholder for stories
+const SimpleHeader = () => (
+  <div class="flex items-center justify-between px-4 py-3 border-b border-[var(--bg-highlight)]">
+    <h1 class="text-lg font-semibold text-[var(--text-primary)]">Heaven</h1>
+    <div class="flex items-center gap-3">
       <IconButton variant="ghost" size="md" aria-label="Notifications">
         <BellIcon />
       </IconButton>
-    }
-  />
-)
-
-// Header without notifications (for other pages)
-const SimpleHeader = () => (
-  <Header
-    rightSlot={
-      <div class="flex items-center gap-3">
-        <Avatar size="sm" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop" class="cursor-pointer" />
-      </div>
-    }
-  />
+      <Avatar size="sm" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop" class="cursor-pointer" />
+    </div>
+  </div>
 )
 
 const SharedSidebar = () => (
@@ -230,15 +211,13 @@ const SharedRightPanel = () => (
 )
 
 const SharedDesktopFooter = () => (
-  <MusicPlayer
-    title="Blinding Lights"
-    artist="The Weeknd"
-    coverSrc="https://picsum.photos/seed/album1/96/96"
-    currentTime="2:47"
-    duration="4:39"
-    progress={58}
-    isPlaying
-  />
+  <div class="flex items-center gap-4 px-4 py-3 border-t border-[var(--bg-highlight)] bg-[var(--bg-surface)]">
+    <AlbumCover size="sm" src="https://picsum.photos/seed/album1/96/96" />
+    <div class="flex-1 min-w-0">
+      <p class="text-sm font-semibold text-[var(--text-primary)] truncate">Blinding Lights</p>
+      <p class="text-xs text-[var(--text-secondary)] truncate">The Weeknd</p>
+    </div>
+  </div>
 )
 
 const SharedMobilePlayer = () => (
@@ -271,7 +250,7 @@ const MainContent = () => (
 export const Default: Story = {
   render: () => (
     <AppShell
-      header={<HomeHeader />}
+      header={<SimpleHeader />}
       sidebar={<SharedSidebar />}
       rightPanel={<SharedRightPanel />}
       footer={<SharedDesktopFooter />}
@@ -291,7 +270,7 @@ export const Desktop: Story = {
   },
   render: () => (
     <AppShell
-      header={<HomeHeader />}
+      header={<SimpleHeader />}
       sidebar={<SharedSidebar />}
       rightPanel={<SharedRightPanel />}
       footer={<SharedDesktopFooter />}
@@ -311,7 +290,7 @@ export const Tablet: Story = {
   },
   render: () => (
     <AppShell
-      header={<HomeHeader />}
+      header={<SimpleHeader />}
       sidebar={<SharedSidebar />}
       rightPanel={<SharedRightPanel />}
       footer={<SharedDesktopFooter />}
@@ -331,7 +310,7 @@ export const Mobile: Story = {
   },
   render: () => (
     <AppShell
-      header={<HomeHeader />}
+      header={<SimpleHeader />}
       sidebar={<SharedSidebar />}
       rightPanel={<SharedRightPanel />}
       footer={<SharedDesktopFooter />}
@@ -379,7 +358,7 @@ export const MobileNoTrackPlaying: Story = {
   },
   render: () => (
     <AppShell
-      header={<HomeHeader />}
+      header={<SimpleHeader />}
       sidebar={<SharedSidebar />}
       rightPanel={<SharedRightPanel />}
       footer={<SharedDesktopFooter />}
@@ -428,53 +407,9 @@ export const MobileInteractive: Story = {
       profile: 'Profile',
     }
 
-    // Different mobile slots based on current page
-    const getMobileLeftSlot = () => {
-      if (activeTab() === 'profile') {
-        return (
-          <IconButton variant="ghost" size="md" aria-label="Wallet">
-            <WalletIcon />
-          </IconButton>
-        )
-      }
-      return null
-    }
-
-    const getMobileRightSlot = () => {
-      switch (activeTab()) {
-        case 'home':
-          return (
-            <IconButton variant="ghost" size="md" aria-label="Notifications">
-              <BellIcon />
-            </IconButton>
-          )
-        case 'profile':
-          return (
-            <IconButton variant="ghost" size="md" aria-label="Settings">
-              <GearIcon />
-            </IconButton>
-          )
-        default:
-          return null
-      }
-    }
-
     return (
       <AppShell
-        header={
-          <Header
-            rightSlot={
-              <div class="flex items-center gap-3">
-                <IconButton variant="ghost" size="md" aria-label="Notifications">
-                  <BellIcon />
-                </IconButton>
-                <Avatar size="sm" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop" class="cursor-pointer" />
-              </div>
-            }
-            mobileLeftSlot={getMobileLeftSlot()}
-            mobileRightSlot={getMobileRightSlot()}
-          />
-        }
+        header={<SimpleHeader />}
         sidebar={<SharedSidebar />}
         rightPanel={<SharedRightPanel />}
         footer={<SharedDesktopFooter />}

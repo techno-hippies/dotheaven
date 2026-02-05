@@ -1,4 +1,5 @@
 import { type Component, createSignal, createMemo, For, Show, createEffect, onCleanup } from 'solid-js'
+import type { Track } from '@heaven/ui'
 import {
   Sidebar,
   AlbumCover,
@@ -12,8 +13,8 @@ import {
   DialogTitle,
   DialogDescription,
   DialogCloseButton,
-  AppLogo,
 } from '@heaven/ui'
+import { AppLogo } from './header'
 import { useNavigate, useLocation } from '@solidjs/router'
 import { createQuery, useQueryClient } from '@tanstack/solid-query'
 import { usePlatform } from 'virtual:heaven-platform'
@@ -22,7 +23,10 @@ import { openAuthDialog } from '../../lib/auth-dialog'
 import { fetchUserPlaylists, type OnChainPlaylist } from '../../lib/heaven/playlists'
 import { fetchUploadedContent, fetchSharedContent } from '../../lib/heaven/scrobbles'
 import { createPlaylistService } from '../../lib/playlist-service'
-import { addToast } from '../../lib/toast'
+import { addToast, updateToast } from '../../lib/toast'
+import { computeTrackIdFromMeta } from '../../lib/track-id'
+import { setCoverCache, setCoverCacheById } from '../../lib/cover-cache'
+import { readCoverBase64 } from '../../lib/cover-image'
 
 // Phosphor icons (regular weight, 256x256)
 const HomeIcon = () => (
@@ -78,6 +82,76 @@ const ShareIcon = () => (
     <path d="M176,160a39.89,39.89,0,0,0-28.62,12.09l-46.1-29.63a39.8,39.8,0,0,0,0-28.92l46.1-29.63a40,40,0,1,0-8.66-13.45l-46.1,29.63a40,40,0,1,0,0,55.82l46.1,29.63A40,40,0,1,0,176,160Zm0-128a24,24,0,1,1-24,24A24,24,0,0,1,176,32ZM64,152a24,24,0,1,1,24-24A24,24,0,0,1,64,152Zm112,72a24,24,0,1,1,24-24A24,24,0,0,1,176,224Z" />
   </svg>
 )
+
+/** Parse track data from drag event */
+const parseTrackFromDrag = (e: DragEvent): Track | null => {
+  try {
+    const data = e.dataTransfer?.getData('application/x-heaven-track')
+    if (!data) return null
+    return JSON.parse(data) as Track
+  } catch {
+    return null
+  }
+}
+
+interface PlaylistDropTargetProps {
+  playlist: OnChainPlaylist
+  isActive: boolean
+  onClick: () => void
+  onDrop: (track: Track, playlist: OnChainPlaylist) => void
+}
+
+const PlaylistDropTarget: Component<PlaylistDropTargetProps> = (props) => {
+  const [isDragOver, setIsDragOver] = createSignal(false)
+
+  const handleDragOver = (e: DragEvent) => {
+    if (e.dataTransfer?.types.includes('application/x-heaven-track')) {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+      setIsDragOver(true)
+    }
+  }
+
+  const handleDragLeave = () => {
+    setIsDragOver(false)
+  }
+
+  const handleDrop = (e: DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    const track = parseTrackFromDrag(e)
+    if (track) {
+      props.onDrop(track, props.playlist)
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      class={`flex items-center gap-3 w-full px-3 py-2 rounded-md cursor-pointer transition-colors ${
+        isDragOver()
+          ? 'ring-2 ring-[var(--accent-blue)] bg-[var(--bg-highlight)]'
+          : props.isActive
+            ? 'bg-[var(--bg-highlight)]'
+            : 'hover:bg-[var(--bg-highlight-hover)]'
+      }`}
+      onClick={props.onClick}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      <AlbumCover
+        size="sm"
+        src={props.playlist.coverCid ? `https://heaven.myfilebase.com/ipfs/${props.playlist.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80` : undefined}
+        icon="playlist"
+      />
+      <div class="flex flex-col min-w-0 text-left">
+        <span class="text-base text-[var(--text-primary)] truncate">{props.playlist.name}</span>
+        <span class="text-sm text-[var(--text-muted)]">{props.playlist.trackCount} songs</span>
+      </div>
+    </button>
+  )
+}
 
 interface NavItemProps {
   icon: () => any
@@ -151,6 +225,121 @@ export const AppSidebar: Component = () => {
 
   const retryAbort = new AbortController()
   onCleanup(() => retryAbort.abort())
+
+  /** Handle track drop onto a playlist */
+  const handleTrackDrop = async (track: Track, playlist: OnChainPlaylist) => {
+    const toastId = addToast(`Adding to ${playlist.name}...`, 'info', 0)
+
+    const local = track as Track & {
+      mbid?: string | null
+      ipId?: string | null
+      coverCid?: string | null
+      coverPath?: string | null
+    }
+    const computedTrackId = computeTrackIdFromMeta({
+      artist: track.artist,
+      title: track.title,
+      album: track.album ?? null,
+      mbid: local.mbid ?? null,
+      ipId: local.ipId ?? null,
+    })
+
+    if (track.albumCover) {
+      setCoverCache(track.artist, track.title, track.album, track.albumCover)
+      setCoverCacheById(computedTrackId ?? undefined, track.albumCover)
+    }
+
+    try {
+      // Get existing trackIds from cache or subgraph
+      const cached = queryClient.getQueryData<{ playlist: OnChainPlaylist; tracks: Track[] }>(['playlist', playlist.id])
+      const existingTrackIds: string[] = cached?.tracks
+        ?.map((t) => t.id)
+        .filter((id) => /^0x[0-9a-fA-F]{64}$/.test(id)) ?? []
+
+      if (existingTrackIds.length === 0 && playlist.trackCount > 0) {
+        const { fetchPlaylistTracks } = await import('../../lib/heaven/playlists')
+        const subgraphTracks = await fetchPlaylistTracks(playlist.id)
+        existingTrackIds.push(...subgraphTracks.map((t) => t.trackId))
+      }
+
+      // Build track input
+      const coverImage = (!local.coverCid && local.coverPath)
+        ? await readCoverBase64(local.coverPath)
+        : null
+
+      const trackInput = {
+        artist: track.artist,
+        title: track.title,
+        ...(track.album ? { album: track.album } : {}),
+        ...(local.mbid ? { mbid: local.mbid } : {}),
+        ...(local.ipId ? { ipId: local.ipId } : {}),
+        ...(local.coverCid ? { coverCid: local.coverCid } : {}),
+        ...(coverImage ? { coverImage } : {}),
+      }
+
+      // Optimistic cache update
+      const addr = auth.pkpAddress()
+      if (cached) {
+        queryClient.setQueryData(['playlist', playlist.id], {
+          playlist: { ...cached.playlist, trackCount: Number(cached.playlist.trackCount) + 1 },
+          tracks: [...cached.tracks, {
+            id: computedTrackId ?? `optimistic-${Date.now()}`,
+            title: track.title,
+            artist: track.artist,
+            album: track.album || '',
+            albumCover: track.albumCover,
+            duration: track.duration || '--:--',
+          }],
+        })
+      }
+      const cachedPlaylists = queryClient.getQueryData<OnChainPlaylist[]>(['userPlaylists', addr])
+      if (cachedPlaylists) {
+        queryClient.setQueryData(['userPlaylists', addr],
+          cachedPlaylists.map((p) => p.id === playlist.id ? { ...p, trackCount: Number(p.trackCount) + 1 } : p),
+        )
+      }
+
+      const result = await playlistService.setTracks({
+        playlistId: playlist.id,
+        existingTrackIds,
+        tracks: [trackInput],
+      })
+
+      if (result.success) {
+        updateToast(toastId, `Added to ${playlist.name}`, 'success', 4000)
+      } else {
+        updateToast(toastId, `Failed to add to ${playlist.name}`, 'error', 4000)
+        console.error('[Sidebar] Drop failed:', result.error)
+      }
+
+      // Delay invalidation until the subgraph indexes the new track
+      const invalidate = () => {
+        queryClient.invalidateQueries({ queryKey: ['playlist', playlist.id] })
+        queryClient.invalidateQueries({ queryKey: ['userPlaylists'] })
+      }
+
+      if (computedTrackId) {
+        try {
+          const { fetchPlaylistTracks } = await import('../../lib/heaven/playlists')
+          for (let i = 0; i < 6; i++) {
+            await new Promise((r) => setTimeout(r, 5000))
+            const subgraphTracks = await fetchPlaylistTracks(playlist.id)
+            if (subgraphTracks.some((t) => t.trackId.toLowerCase() === computedTrackId.toLowerCase())) {
+              invalidate()
+              return
+            }
+          }
+        } catch {
+          // ignore and fall back to delayed invalidation
+        }
+      }
+
+      setTimeout(invalidate, 8000)
+    } catch (err) {
+      updateToast(toastId, `Failed to add to ${playlist.name}`, 'error', 4000)
+      console.error('[Sidebar] Drop error:', err)
+    }
+  }
 
   const handleCreatePlaylist = async () => {
     const name = newPlaylistName().trim()
@@ -297,21 +486,12 @@ export const AppSidebar: Component = () => {
             {/* User playlists */}
             <For each={playlists()}>
               {(pl) => (
-                <button
-                  type="button"
-                  class={`flex items-center gap-3 w-full px-3 py-2 rounded-md cursor-pointer transition-colors hover:bg-[var(--bg-highlight-hover)] ${location.pathname === `/playlist/${pl.id}` ? 'bg-[var(--bg-highlight)]' : ''}`}
+                <PlaylistDropTarget
+                  playlist={pl}
+                  isActive={location.pathname === `/playlist/${pl.id}`}
                   onClick={() => navigate(`/playlist/${pl.id}`)}
-                >
-                  <AlbumCover
-                    size="sm"
-                    src={pl.coverCid ? `https://heaven.myfilebase.com/ipfs/${pl.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80` : undefined}
-                    icon="playlist"
-                  />
-                  <div class="flex flex-col min-w-0 text-left">
-                    <span class="text-base text-[var(--text-primary)] truncate">{pl.name}</span>
-                    <span class="text-sm text-[var(--text-muted)]">{pl.trackCount} songs</span>
-                  </div>
-                </button>
+                  onDrop={handleTrackDrop}
+                />
               )}
             </For>
           </div>

@@ -75,6 +75,7 @@ export {
   artistTracksToTracks,
   payloadToMbid,
   mbidToPayload,
+  normalizeArtistVariants,
   type ArtistInfo,
   type ArtistPageData,
 } from './artist'

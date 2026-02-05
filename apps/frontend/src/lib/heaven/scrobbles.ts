@@ -1,7 +1,9 @@
 import type { Track } from '@heaven/ui'
+import { payloadToMbid } from './artist'
 
 /**
- * ScrobbleV3 — reads scrobble history from Goldsky subgraph.
+ * Scrobble history — reads from Goldsky subgraph and resolves
+ * track metadata from on-chain (V4 first, fallback to V3).
  *
  * The subgraph indexes:
  * - Track entities (from TrackRegistered events) — metadata on-chain
@@ -11,7 +13,7 @@ import type { Track } from '@heaven/ui'
  */
 
 const GOLDSKY_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/8.0.0/gn'
+  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/9.0.0/gn'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -24,6 +26,7 @@ export interface ScrobbleEntry {
   title: string
   album: string
   coverCid: string          // IPFS CID for album art (empty if none)
+  durationSec: number       // track duration in seconds
   kind: number              // 1=MBID, 2=ipId, 3=meta
   payload: string           // raw derivation input (recording MBID hex for kind=1)
 }
@@ -35,6 +38,7 @@ interface ScrobbleGQL {
     id: string
     kind: number
     payload: string
+    durationSec: number
   }
   timestamp: string
   blockTimestamp: string
@@ -44,9 +48,8 @@ interface ScrobbleGQL {
 // ── Fetch ──────────────────────────────────────────────────────────
 
 /**
- * Fetch scrobble history for a user from the V3 subgraph.
- * Track metadata is resolved on-chain via getTrack() since the subgraph
- * only stores trackId/kind/payload (not the display strings).
+ * Fetch scrobble history for a user from the activity subgraph.
+ * Track metadata is resolved on-chain via getTrack() (V4, fallback V3).
  */
 export async function fetchScrobbleEntries(
   userAddress: string,
@@ -67,6 +70,7 @@ export async function fetchScrobbleEntries(
         id
         kind
         payload
+        durationSec
       }
       timestamp
       blockTimestamp
@@ -85,7 +89,7 @@ export async function fetchScrobbleEntries(
   const scrobbles: ScrobbleGQL[] = json.data?.scrobbles ?? []
   if (scrobbles.length === 0) return []
 
-  // Resolve track metadata from on-chain (subgraph doesn't store display strings)
+  // Resolve track metadata from on-chain (V4 → V3 fallback)
   const uniqueTrackIds = [...new Set(scrobbles.map((s) => s.track.id))]
   const trackMeta = await batchGetTracks(uniqueTrackIds)
 
@@ -100,6 +104,7 @@ export async function fetchScrobbleEntries(
       title: meta?.title ?? `Track ${s.track.id.slice(0, 10)}...`,
       album: meta?.album ?? '',
       coverCid: meta?.coverCid ?? '',
+      durationSec: s.track.durationSec ?? meta?.durationSec ?? 0,
       kind: s.track.kind,
       payload: s.track.payload ?? '',
     }
@@ -111,31 +116,48 @@ export async function fetchScrobbleEntries(
  */
 const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
 
+/** Validate CID looks like an IPFS hash (Qm... or bafy...) */
+function isValidCid(cid: string | undefined | null): cid is string {
+  return !!cid && (cid.startsWith('Qm') || cid.startsWith('bafy'))
+}
+
 export function scrobblesToTracks(entries: ScrobbleEntry[]): Track[] {
   return entries.map((e) => ({
     id: e.id,
     title: e.title,
     artist: e.artist,
     album: e.album,
-    albumCover: e.coverCid
+    kind: e.kind,
+    payload: e.payload,
+    mbid: e.kind === 1 ? payloadToMbid(e.payload) ?? undefined : undefined,
+    albumCover: isValidCid(e.coverCid)
       ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
       : undefined,
     dateAdded: formatTimeAgo(e.playedAt),
-    duration: '--:--',
+    duration: formatDuration(e.durationSec),
     scrobbleStatus: (e.kind === 3 ? 'unidentified' : 'verified') as Track['scrobbleStatus'],
   }))
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds === 0) return '--:--'
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
 }
 
 // ── Track metadata resolution (on-chain via MegaETH RPC) ──────────
 
 const MEGAETH_RPC = 'https://carrot.megaeth.com/rpc'
 const SCROBBLE_V3 = '0x144c450cd5B641404EEB5D5eD523399dD94049E0'
+const SCROBBLE_V4 = '0x1D23Ad1c20ce54224fEffe8c2E112296C321451E'
 
 interface TrackMeta {
   title: string
   artist: string
   album: string
   coverCid: string
+  durationSec: number
   kind: number
   payload: string
 }
@@ -145,42 +167,53 @@ async function batchGetTracks(trackIds: string[]): Promise<Map<string, TrackMeta
   // cast sig "getTrack(bytes32)" → 0x82368a6b
   const selector = '0x82368a6b'
 
-  const promises = trackIds.map(async (trackId) => {
-    try {
-      const data = selector + trackId.slice(2).padStart(64, '0')
-      const result = await rpcCall('eth_call', [
-        { to: SCROBBLE_V3, data },
-        'latest',
-      ])
-      if (result && result !== '0x' && result.length > 66) {
-        const decoded = decodeGetTrackResult(result)
-        if (decoded) results.set(trackId, decoded)
+  const fetchFrom = async (contract: string, ids: string[]) => {
+    const promises = ids.map(async (trackId) => {
+      if (results.has(trackId)) return
+      try {
+        const data = selector + trackId.slice(2).padStart(64, '0')
+        const result = await rpcCall('eth_call', [
+          { to: contract, data },
+          'latest',
+        ])
+        if (result && result !== '0x' && result.length > 66) {
+          const decoded = decodeGetTrackResult(result)
+          if (decoded) results.set(trackId, decoded)
+        }
+      } catch {
+        // Skip failed lookups
       }
-    } catch {
-      // Skip failed lookups
-    }
-  })
+    })
+    await Promise.all(promises)
+  }
 
-  await Promise.all(promises)
+  await fetchFrom(SCROBBLE_V4, trackIds)
+  const missing = trackIds.filter((id) => !results.has(id))
+  if (missing.length > 0) {
+    await fetchFrom(SCROBBLE_V3, missing)
+  }
+
   return results
 }
 
 function decodeGetTrackResult(hex: string): TrackMeta | null {
   try {
     const data = hex.slice(2)
-    // 7-tuple: (string title, string artist, string album, uint8 kind, bytes32 payload, uint64 registeredAt, string coverCid)
-    // Slots 0,1,2 = offsets for title/artist/album; 3 = kind (uint8); 4 = payload (bytes32); 5 = registeredAt; 6 = offset for coverCid
+    // 8-tuple: (string title, string artist, string album, uint8 kind, bytes32 payload, uint64 registeredAt, string coverCid, uint32 durationSec)
+    // Slots 0,1,2 = offsets for title/artist/album; 3 = kind (uint8); 4 = payload (bytes32); 5 = registeredAt; 6 = offset for coverCid; 7 = durationSec (uint32)
     const titleOffset = parseInt(data.slice(0, 64), 16) * 2
     const artistOffset = parseInt(data.slice(64, 128), 16) * 2
     const albumOffset = parseInt(data.slice(128, 192), 16) * 2
     const kind = parseInt(data.slice(192, 256), 16)           // slot 3: uint8
     const payload = '0x' + data.slice(256, 320)               // slot 4: bytes32
     const coverCidOffset = parseInt(data.slice(384, 448), 16) * 2 // slot 6
+    const durationSec = parseInt(data.slice(448, 512), 16)    // slot 7: uint32
     return {
       title: decodeString(data, titleOffset),
       artist: decodeString(data, artistOffset),
       album: decodeString(data, albumOffset),
       coverCid: decodeString(data, coverCidOffset),
+      durationSec,
       kind,
       payload,
     }
@@ -224,6 +257,9 @@ export interface UploadedContentEntry {
   coverCid: string   // IPFS CID for album art (empty if none)
   uploadedAt: number // unix seconds
   algo: number       // 0 = plaintext, 1 = AES-GCM-256
+  kind?: number
+  payload?: string
+  mbid?: string
 }
 
 /**
@@ -278,6 +314,8 @@ export async function fetchUploadedContent(
       title
       artist
       coverCid
+      kind
+      payload
     }
   }`
 
@@ -287,11 +325,17 @@ export async function fetchUploadedContent(
     body: JSON.stringify({ query: trackQuery }),
   })
 
-  const trackMap = new Map<string, { title: string; artist: string; coverCid: string }>()
+  const trackMap = new Map<string, { title: string; artist: string; coverCid: string; kind?: number; payload?: string }>()
   if (trackRes.ok) {
     const trackJson = await trackRes.json()
     for (const t of trackJson.data?.tracks ?? []) {
-      trackMap.set(t.id, { title: t.title, artist: t.artist, coverCid: t.coverCid ?? '' })
+      trackMap.set(t.id, {
+        title: t.title,
+        artist: t.artist,
+        coverCid: t.coverCid ?? '',
+        kind: t.kind ?? undefined,
+        payload: t.payload ?? undefined,
+      })
     }
   }
 
@@ -312,6 +356,7 @@ export async function fetchUploadedContent(
         // Fall back to raw value
       }
     }
+    const mbid = meta?.kind === 1 && meta?.payload ? payloadToMbid(meta.payload) ?? undefined : undefined
     return {
       contentId: e.id,
       trackId: e.trackId,
@@ -322,6 +367,9 @@ export async function fetchUploadedContent(
       coverCid: meta?.coverCid ?? '',
       uploadedAt: parseInt(e.createdAt),
       algo: e.algo ?? 1, // default encrypted for legacy entries
+      kind: meta?.kind,
+      payload: meta?.payload,
+      mbid,
     }
   })
 }
@@ -397,6 +445,8 @@ export async function fetchSharedContent(
       title
       artist
       coverCid
+      kind
+      payload
     }
   }`
 
@@ -406,11 +456,17 @@ export async function fetchSharedContent(
     body: JSON.stringify({ query: trackQuery }),
   })
 
-  const trackMap = new Map<string, { title: string; artist: string; coverCid: string }>()
+  const trackMap = new Map<string, { title: string; artist: string; coverCid: string; kind?: number; payload?: string }>()
   if (trackRes.ok) {
     const trackJson = await trackRes.json()
     for (const t of trackJson.data?.tracks ?? []) {
-      trackMap.set(t.id, { title: t.title, artist: t.artist, coverCid: t.coverCid ?? '' })
+      trackMap.set(t.id, {
+        title: t.title,
+        artist: t.artist,
+        coverCid: t.coverCid ?? '',
+        kind: t.kind ?? undefined,
+        payload: t.payload ?? undefined,
+      })
     }
   }
 
@@ -428,6 +484,7 @@ export async function fetchSharedContent(
         // Fall back to raw value
       }
     }
+    const mbid = meta?.kind === 1 && meta?.payload ? payloadToMbid(meta.payload) ?? undefined : undefined
     return {
       contentId: e.id,
       trackId: e.trackId,
@@ -438,6 +495,9 @@ export async function fetchSharedContent(
       coverCid: meta?.coverCid ?? '',
       uploadedAt: parseInt(e.createdAt),
       algo: e.algo ?? 1,
+      kind: meta?.kind,
+      payload: meta?.payload,
+      mbid,
       sharedBy: e.owner,
     }
   })

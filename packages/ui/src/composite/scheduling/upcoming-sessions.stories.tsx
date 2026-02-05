@@ -80,9 +80,7 @@ export const Default: Story = {
   args: {
     bookings: mockBookings,
     onBookingClick: (booking) => alert(`Clicked: ${booking.guestName}`),
-    onSetAvailability: () => alert('Set Availability'),
-    onViewRequests: () => alert('View Requests'),
-    requestCount: 2,
+    onSetAvailability: () => alert('Opening Schedule Dashboard...'),
   },
 }
 
@@ -114,9 +112,7 @@ export const SingleSession: Story = {
 export const Empty: Story = {
   args: {
     bookings: [],
-    onSetAvailability: () => alert('Set Availability'),
-    onViewRequests: () => alert('View Requests'),
-    requestCount: 0,
+    onSetAvailability: () => alert('Opening Schedule Dashboard...'),
   },
 }
 

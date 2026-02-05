@@ -1,5 +1,6 @@
 import type { Track } from '@heaven/ui'
-import { getCoverCache } from '../cover-cache'
+import { getCoverCache, getCoverCacheById } from '../cover-cache'
+import { payloadToMbid } from './artist'
 
 /**
  * PlaylistV1 — reads playlist data from Goldsky subgraph + on-chain track metadata.
@@ -15,7 +16,7 @@ const PLAYLIST_ENDPOINT =
   'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-playlists/1.0.0/gn'
 
 const ACTIVITY_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/8.0.0/gn'
+  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/9.0.0/gn'
 
 const MEGAETH_RPC = 'https://carrot.megaeth.com/rpc'
 const SCROBBLE_V3 = '0x144c450cd5B641404EEB5D5eD523399dD94049E0'
@@ -47,6 +48,8 @@ interface TrackMeta {
   artist: string
   album: string
   coverCid: string
+  kind: number
+  payload: string
 }
 
 // ── Subgraph Queries ───────────────────────────────────────────────
@@ -207,19 +210,26 @@ export async function resolvePlaylistTracks(
     const meta = metaMap.get(pt.trackId)
     const content = contentMap.get(pt.trackId)
     const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
+    const isValidCid = (cid: string | undefined | null): cid is string =>
+      !!cid && (cid.startsWith('Qm') || cid.startsWith('bafy'))
     const title = meta?.title ?? `Track ${pt.trackId.slice(0, 10)}...`
     const artist = meta?.artist ?? 'Unknown'
     const album = meta?.album ?? ''
-    const onChainCover = meta?.coverCid
+    const kind = meta?.kind
+    const payload = meta?.payload
+    const mbid = kind === 1 && payload ? payloadToMbid(payload) ?? undefined : undefined
+    const onChainCover = isValidCid(meta?.coverCid)
       ? `${FILEBASE_GATEWAY}/${meta.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
       : undefined
-    // Only try local cover cache if we have real metadata (not fallback strings)
-    const localCover = meta ? getCoverCache(artist, title, album) : undefined
+    const localCover = getCoverCacheById(pt.trackId) ?? (meta ? getCoverCache(artist, title, album) : undefined)
     return {
       id: pt.trackId,
       title,
       artist,
       album,
+      kind,
+      payload,
+      mbid,
       albumCover: onChainCover ?? localCover,
       duration: '--:--',
       ...(content ? {
@@ -296,12 +306,16 @@ function decodeGetTrackResult(hex: string): TrackMeta | null {
     const titleOffset = parseInt(data.slice(0, 64), 16) * 2
     const artistOffset = parseInt(data.slice(64, 128), 16) * 2
     const albumOffset = parseInt(data.slice(128, 192), 16) * 2
+    const kind = parseInt(data.slice(192, 256), 16)           // slot 3: uint8
+    const payload = '0x' + data.slice(256, 320)               // slot 4: bytes32
     const coverCidOffset = parseInt(data.slice(384, 448), 16) * 2 // slot 6
     return {
       title: decodeString(data, titleOffset),
       artist: decodeString(data, artistOffset),
       album: decodeString(data, albumOffset),
       coverCid: decodeString(data, coverCidOffset),
+      kind,
+      payload,
     }
   } catch {
     return null

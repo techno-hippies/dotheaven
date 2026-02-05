@@ -13,7 +13,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-} from '../shared/dropdown-menu'
+} from '../../primitives/dropdown-menu'
 
 export interface SidePlayerProps {
   class?: string
@@ -39,6 +39,8 @@ export interface SidePlayerProps {
   menuActions?: TrackMenuActions
   /** The current track object, needed to pass to menu action callbacks */
   track?: { id: string; title: string; artist: string; album: string; albumCover?: string; duration?: string }
+  /** Direct callback for clicking the artist name */
+  onArtistClick?: () => void
 }
 
 /**
@@ -122,9 +124,22 @@ export const SidePlayer: Component<SidePlayerProps> = (props) => {
         <h3 class="text-lg font-semibold text-[var(--text-primary)] truncate">
           {props.title || 'No track playing'}
         </h3>
-        <p class="text-sm text-[var(--text-secondary)] truncate">
-          {props.artist || 'Unknown artist'}
-        </p>
+        <Show
+          when={props.onArtistClick}
+          fallback={
+            <p class="text-sm text-[var(--text-secondary)] truncate">
+              {props.artist || 'Unknown artist'}
+            </p>
+          }
+        >
+          <button
+            type="button"
+            class="text-sm text-[var(--text-secondary)] truncate hover:text-[var(--accent-blue)] hover:underline transition-colors text-left w-full"
+            onClick={props.onArtistClick}
+          >
+            {props.artist || 'Unknown artist'}
+          </button>
+        </Show>
       </div>
 
       {/* Progress */}

@@ -13,6 +13,7 @@ import { usePlatform } from 'virtual:heaven-platform'
 import { useParams, useNavigate } from '@solidjs/router'
 import { pickFolder, type LocalTrack } from '../lib/local-music'
 import { usePlayer, useAuth } from '../providers'
+import { usePlaylistDialog, buildMenuActions } from '../hooks/useTrackListActions'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 // TODO: Re-add share functionality via TrackList menu actions
 // import { ShareContentDialog } from '../components/ShareContentDialog'
@@ -28,6 +29,7 @@ export const LibraryPage: Component = () => {
   const auth = useAuth()
   const params = useParams<{ tab?: string }>()
   const navigate = useNavigate()
+  const plDialog = usePlaylistDialog()
 
   // Initialize upload service once (idempotent — setQueueProcessor just replaces the fn)
   if (platform.isTauri) {
@@ -70,14 +72,22 @@ export const LibraryPage: Component = () => {
 
   // Convert uploaded entries to Track[] for TrackList
   const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
+  const isValidCid = (cid: string | undefined | null): cid is string =>
+    !!cid && (cid.startsWith('Qm') || cid.startsWith('bafy'))
   const uploadedTracksAsTrack = createMemo<Track[]>(() => {
     const entries = uploadedTracks() ?? []
     return entries.map((e) => ({
       id: e.contentId,
+      contentId: e.contentId,
+      pieceCid: e.pieceCid,
       title: e.title,
       artist: e.artist,
       album: '',
-      albumCover: e.coverCid
+      kind: e.kind,
+      payload: e.payload,
+      mbid: e.mbid,
+      coverCid: e.coverCid,
+      albumCover: isValidCid(e.coverCid)
         ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
         : undefined,
       dateAdded: new Date(e.uploadedAt * 1000).toLocaleDateString(),
@@ -98,10 +108,16 @@ export const LibraryPage: Component = () => {
     const entries = sharedTracks() ?? []
     return entries.map((e) => ({
       id: e.contentId,
+      contentId: e.contentId,
+      pieceCid: e.pieceCid,
       title: e.title,
       artist: `${e.artist} • from ${e.sharedBy.slice(0, 6)}...${e.sharedBy.slice(-4)}`,
       album: '',
-      albumCover: e.coverCid
+      kind: e.kind,
+      payload: e.payload,
+      mbid: e.mbid,
+      coverCid: e.coverCid,
+      albumCover: isValidCid(e.coverCid)
         ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
         : undefined,
       dateAdded: new Date(e.uploadedAt * 1000).toLocaleDateString(),
@@ -130,7 +146,7 @@ export const LibraryPage: Component = () => {
     if (entry) {
       player.playEncryptedContent({
         ...entry,
-        coverUrl: entry.coverCid
+        coverUrl: isValidCid(entry.coverCid)
           ? `${FILEBASE_GATEWAY}/${entry.coverCid}?img-width=256&img-height=256&img-format=webp&img-quality=80`
           : undefined,
       })
@@ -199,10 +215,6 @@ export const LibraryPage: Component = () => {
     restored = false
   })
 
-  // Add to playlist dialog
-  const [playlistDialogOpen, setPlaylistDialogOpen] = createSignal(false)
-  const [playlistDialogTrack, setPlaylistDialogTrack] = createSignal<Track | null>(null)
-
   // Sort state
   const [sort, setSort] = createSignal<SortState | undefined>(undefined)
   const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
@@ -232,6 +244,49 @@ export const LibraryPage: Component = () => {
     await player.setLibraryFolder(path)
     await player.rescanLibrary(path)
   }
+
+  const menuActionsLocal = buildMenuActions(plDialog, {
+    onIdentify: () => {
+      window.open('https://picard.musicbrainz.org/', '_blank')
+    },
+    onUploadToFilecoin: platform.isTauri
+      ? (track) => {
+          const lt = track as LocalTrack
+          if (!lt.filePath) {
+            console.warn('[Upload] No filePath for track:', track.title)
+            return
+          }
+          enqueueUpload({
+            id: lt.id,
+            title: lt.title,
+            artist: lt.artist,
+            filePath: lt.filePath,
+            coverPath: lt.coverPath,
+            encrypted: true,
+          })
+        }
+      : undefined,
+    onUploadToFilecoinPublic: platform.isTauri
+      ? (track) => {
+          const lt = track as LocalTrack
+          if (!lt.filePath) {
+            console.warn('[Upload] No filePath for track:', track.title)
+            return
+          }
+          enqueueUpload({
+            id: lt.id,
+            title: lt.title,
+            artist: lt.artist,
+            filePath: lt.filePath,
+            coverPath: lt.coverPath,
+            encrypted: false,
+          })
+        }
+      : undefined,
+  })
+
+  const menuActionsCloud = buildMenuActions(plDialog)
+  const menuActionsShared = buildMenuActions(plDialog)
 
   return (
     <div
@@ -355,61 +410,18 @@ export const LibraryPage: Component = () => {
               <TrackList
                 tracks={sortedTracks()}
                 showDateAdded={false}
-                showScrobbleStatus
                 activeTrackId={player.currentTrack()?.id}
                 selectedTrackId={player.selectedTrackId() || undefined}
                 sort={sort()}
                 onSort={handleSort}
                 scrollRef={el()}
+                enableDrag
                 onTrackClick={(track) => player.setSelectedTrackId(track.id)}
                 onTrackPlay={(track) => {
                   const idx = player.tracks().findIndex((t) => t.id === track.id)
                   if (idx >= 0) player.playTrack(idx)
                 }}
-                menuActions={{
-                  onAddToQueue: (track) => console.log('Add to queue:', track),
-                  onAddToPlaylist: (track) => {
-                    setPlaylistDialogTrack(track)
-                    setPlaylistDialogOpen(true)
-                  },
-                  onIdentify: () => {
-                    window.open('https://picard.musicbrainz.org/', '_blank')
-                  },
-                  onUploadToFilecoin: platform.isTauri
-                    ? (track) => {
-                        const lt = track as LocalTrack
-                        if (!lt.filePath) {
-                          console.warn('[Upload] No filePath for track:', track.title)
-                          return
-                        }
-                        enqueueUpload({
-                          id: lt.id,
-                          title: lt.title,
-                          artist: lt.artist,
-                          filePath: lt.filePath,
-                          coverPath: lt.coverPath,
-                          encrypted: true,
-                        })
-                      }
-                    : undefined,
-                  onUploadToFilecoinPublic: platform.isTauri
-                    ? (track) => {
-                        const lt = track as LocalTrack
-                        if (!lt.filePath) {
-                          console.warn('[Upload] No filePath for track:', track.title)
-                          return
-                        }
-                        enqueueUpload({
-                          id: lt.id,
-                          title: lt.title,
-                          artist: lt.artist,
-                          filePath: lt.filePath,
-                          coverPath: lt.coverPath,
-                          encrypted: false,
-                        })
-                      }
-                    : undefined,
-                }}
+                menuActions={menuActionsLocal}
               />
             )}
           </Show>
@@ -453,15 +465,10 @@ export const LibraryPage: Component = () => {
                   activeTrackPlaying={player.isPlaying()}
                   selectedTrackId={player.selectedTrackId() || undefined}
                   scrollRef={el()}
+                  enableDrag
                   onTrackClick={(track) => player.setSelectedTrackId(track.id)}
                   onTrackPlay={(track) => handleEncryptedTrackPlay(track, uploadedEntriesMap())}
-                  menuActions={{
-                    onAddToPlaylist: (track) => {
-                      setPlaylistDialogTrack(track)
-                      setPlaylistDialogOpen(true)
-                    },
-                    onAddToQueue: (track) => console.log('Add to queue:', track),
-                  }}
+                  menuActions={menuActionsCloud}
                 />
               )}
             </Show>
@@ -501,15 +508,10 @@ export const LibraryPage: Component = () => {
                   activeTrackPlaying={player.isPlaying()}
                   selectedTrackId={player.selectedTrackId() || undefined}
                   scrollRef={el()}
+                  enableDrag
                   onTrackClick={(track) => player.setSelectedTrackId(track.id)}
                   onTrackPlay={(track) => handleEncryptedTrackPlay(track, sharedEntriesMap())}
-                  menuActions={{
-                    onAddToPlaylist: (track) => {
-                      setPlaylistDialogTrack(track)
-                      setPlaylistDialogOpen(true)
-                    },
-                    onAddToQueue: (track) => console.log('Add to queue:', track),
-                  }}
+                  menuActions={menuActionsShared}
                 />
               )}
             </Show>
@@ -518,9 +520,9 @@ export const LibraryPage: Component = () => {
       </Show>
 
       <AddToPlaylistDialog
-        open={playlistDialogOpen()}
-        onOpenChange={setPlaylistDialogOpen}
-        track={playlistDialogTrack()}
+        open={plDialog.open()}
+        onOpenChange={plDialog.setOpen}
+        track={plDialog.track()}
       />
     </div>
   )

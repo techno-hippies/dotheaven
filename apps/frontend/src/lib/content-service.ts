@@ -25,6 +25,27 @@ import {
   CONTENT_ACCESS_V1_CID,
   LINK_EOA_V1_CID,
 } from './lit/action-cids'
+
+type EncryptedKey = {
+  ciphertext: string
+  dataToEncryptHash: string
+  accessControlConditions: unknown[]
+}
+
+/** Encrypted Filebase covers key — bound to content-register-v1 action CID (update after redeploy). */
+const FILEBASE_COVERS_ENCRYPTED_KEY: EncryptedKey = {
+  ciphertext: 'tDexT2JOQHWx+3l3F6X1ggsITqpaGilj+DVUrVez5Gd0THUIv/sfcy4Brmpu9tMJ9PDk0EOGSoG+168+idOZM8Ixi/lrjhwDNEDmyL8EMCCGAXAV/pVe4ObQn0vcC6Ljg4ckVja+soDkyQ9E/JWklf+ZtbtkcmMNO2YszHgA0QjHg9blClYg89mTQVOZe4kqlA9GO2wzyRS3hhxfV4WsoaVaMrJD15g6nRCM8N2AcCN+hS/KS7WhE+Z+04k7ZS0R0zmuns6WNq3PB1pTdsm0FYNPwl2kM5iFAg==',
+  dataToEncryptHash: '1fb52374f1a4ec4d9f1a263b1355cedecbe3ef9d52425f76c222f2f5d9993d4f',
+  accessControlConditions: [{
+    conditionType: 'evmBasic',
+    contractAddress: '',
+    standardContractType: '',
+    chain: 'ethereum',
+    method: '',
+    parameters: [':currentActionIpfsId'],
+    returnValueTest: { comparator: '=', value: 'QmchDhdrQ8JiX1NDFe6XG2wspWhGMpfEZ652iZp9NzVmCu' },
+  }],
+}
 import { CONTENT_ACCESS_MIRROR } from './content-crypto'
 import {
   encryptAudio,
@@ -99,15 +120,10 @@ export async function registerContent(
     nonce,
   }
 
-  // Add cover image if provided
+  // Add cover image if provided (uses encrypted key — no plaintext in frontend)
   if (coverImage) {
     jsParams.coverImage = coverImage
-    // Use plaintext key for now (encrypted key would require setup.ts deployment)
-    // The Lit Action will decrypt if filebaseEncryptedKey is provided instead
-    const filebaseKey = import.meta.env.VITE_FILEBASE_COVERS_KEY
-    if (filebaseKey) {
-      jsParams.filebasePlaintextKey = filebaseKey
-    }
+    jsParams.filebaseEncryptedKey = FILEBASE_COVERS_ENCRYPTED_KEY
   }
 
   const result = await litClient.executeJs({

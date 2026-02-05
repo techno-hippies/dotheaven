@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { ListItem } from './list-item'
-import { AlbumCover } from './album-cover'
+import { AlbumCover } from '../media/album-cover'
 
 const meta: Meta<typeof ListItem> = {
   title: 'Shared/ListItem',

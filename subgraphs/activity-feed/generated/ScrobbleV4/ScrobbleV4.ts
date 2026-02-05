@@ -130,6 +130,10 @@ export class TrackRegistered__Params {
   get registeredAt(): BigInt {
     return this._event.parameters[4].value.toBigInt();
   }
+
+  get durationSec(): BigInt {
+    return this._event.parameters[5].value.toBigInt();
+  }
 }
 
 export class TrackUpdated extends ethereum.Event {
@@ -162,6 +166,7 @@ export class ScrobbleV4__getTrackResult {
   value4: Bytes;
   value5: BigInt;
   value6: string;
+  value7: BigInt;
 
   constructor(
     value0: string,
@@ -171,6 +176,7 @@ export class ScrobbleV4__getTrackResult {
     value4: Bytes,
     value5: BigInt,
     value6: string,
+    value7: BigInt,
   ) {
     this.value0 = value0;
     this.value1 = value1;
@@ -179,6 +185,7 @@ export class ScrobbleV4__getTrackResult {
     this.value4 = value4;
     this.value5 = value5;
     this.value6 = value6;
+    this.value7 = value7;
   }
 
   toMap(): TypedMap<string, ethereum.Value> {
@@ -193,6 +200,7 @@ export class ScrobbleV4__getTrackResult {
     map.set("value4", ethereum.Value.fromFixedBytes(this.value4));
     map.set("value5", ethereum.Value.fromUnsignedBigInt(this.value5));
     map.set("value6", ethereum.Value.fromString(this.value6));
+    map.set("value7", ethereum.Value.fromUnsignedBigInt(this.value7));
     return map;
   }
 
@@ -223,6 +231,97 @@ export class ScrobbleV4__getTrackResult {
   getCoverCid(): string {
     return this.value6;
   }
+
+  getDurationSec(): BigInt {
+    return this.value7;
+  }
+}
+
+export class ScrobbleV4__tracksResult {
+  value0: string;
+  value1: string;
+  value2: string;
+  value3: string;
+  value4: Bytes;
+  value5: i32;
+  value6: BigInt;
+  value7: BigInt;
+  value8: boolean;
+
+  constructor(
+    value0: string,
+    value1: string,
+    value2: string,
+    value3: string,
+    value4: Bytes,
+    value5: i32,
+    value6: BigInt,
+    value7: BigInt,
+    value8: boolean,
+  ) {
+    this.value0 = value0;
+    this.value1 = value1;
+    this.value2 = value2;
+    this.value3 = value3;
+    this.value4 = value4;
+    this.value5 = value5;
+    this.value6 = value6;
+    this.value7 = value7;
+    this.value8 = value8;
+  }
+
+  toMap(): TypedMap<string, ethereum.Value> {
+    let map = new TypedMap<string, ethereum.Value>();
+    map.set("value0", ethereum.Value.fromString(this.value0));
+    map.set("value1", ethereum.Value.fromString(this.value1));
+    map.set("value2", ethereum.Value.fromString(this.value2));
+    map.set("value3", ethereum.Value.fromString(this.value3));
+    map.set("value4", ethereum.Value.fromFixedBytes(this.value4));
+    map.set(
+      "value5",
+      ethereum.Value.fromUnsignedBigInt(BigInt.fromI32(this.value5)),
+    );
+    map.set("value6", ethereum.Value.fromUnsignedBigInt(this.value6));
+    map.set("value7", ethereum.Value.fromUnsignedBigInt(this.value7));
+    map.set("value8", ethereum.Value.fromBoolean(this.value8));
+    return map;
+  }
+
+  getTitle(): string {
+    return this.value0;
+  }
+
+  getArtist(): string {
+    return this.value1;
+  }
+
+  getAlbum(): string {
+    return this.value2;
+  }
+
+  getCoverCid(): string {
+    return this.value3;
+  }
+
+  getPayload(): Bytes {
+    return this.value4;
+  }
+
+  getKind(): i32 {
+    return this.value5;
+  }
+
+  getDurationSec(): BigInt {
+    return this.value6;
+  }
+
+  getRegisteredAt(): BigInt {
+    return this.value7;
+  }
+
+  getExists(): boolean {
+    return this.value8;
+  }
 }
 
 export class ScrobbleV4 extends ethereum.SmartContract {
@@ -230,10 +329,108 @@ export class ScrobbleV4 extends ethereum.SmartContract {
     return new ScrobbleV4("ScrobbleV4", address);
   }
 
+  ACCOUNT_SALT(): BigInt {
+    let result = super.call("ACCOUNT_SALT", "ACCOUNT_SALT():(uint256)", []);
+
+    return result[0].toBigInt();
+  }
+
+  try_ACCOUNT_SALT(): ethereum.CallResult<BigInt> {
+    let result = super.tryCall("ACCOUNT_SALT", "ACCOUNT_SALT():(uint256)", []);
+    if (result.reverted) {
+      return new ethereum.CallResult();
+    }
+    let value = result.value;
+    return ethereum.CallResult.fromValue(value[0].toBigInt());
+  }
+
+  FACTORY(): Address {
+    let result = super.call("FACTORY", "FACTORY():(address)", []);
+
+    return result[0].toAddress();
+  }
+
+  try_FACTORY(): ethereum.CallResult<Address> {
+    let result = super.tryCall("FACTORY", "FACTORY():(address)", []);
+    if (result.reverted) {
+      return new ethereum.CallResult();
+    }
+    let value = result.value;
+    return ethereum.CallResult.fromValue(value[0].toAddress());
+  }
+
+  MAX_CID(): BigInt {
+    let result = super.call("MAX_CID", "MAX_CID():(uint256)", []);
+
+    return result[0].toBigInt();
+  }
+
+  try_MAX_CID(): ethereum.CallResult<BigInt> {
+    let result = super.tryCall("MAX_CID", "MAX_CID():(uint256)", []);
+    if (result.reverted) {
+      return new ethereum.CallResult();
+    }
+    let value = result.value;
+    return ethereum.CallResult.fromValue(value[0].toBigInt());
+  }
+
+  MAX_SCROBBLES(): BigInt {
+    let result = super.call("MAX_SCROBBLES", "MAX_SCROBBLES():(uint256)", []);
+
+    return result[0].toBigInt();
+  }
+
+  try_MAX_SCROBBLES(): ethereum.CallResult<BigInt> {
+    let result = super.tryCall(
+      "MAX_SCROBBLES",
+      "MAX_SCROBBLES():(uint256)",
+      [],
+    );
+    if (result.reverted) {
+      return new ethereum.CallResult();
+    }
+    let value = result.value;
+    return ethereum.CallResult.fromValue(value[0].toBigInt());
+  }
+
+  MAX_STR(): BigInt {
+    let result = super.call("MAX_STR", "MAX_STR():(uint256)", []);
+
+    return result[0].toBigInt();
+  }
+
+  try_MAX_STR(): ethereum.CallResult<BigInt> {
+    let result = super.tryCall("MAX_STR", "MAX_STR():(uint256)", []);
+    if (result.reverted) {
+      return new ethereum.CallResult();
+    }
+    let value = result.value;
+    return ethereum.CallResult.fromValue(value[0].toBigInt());
+  }
+
+  MAX_TRACK_REG(): BigInt {
+    let result = super.call("MAX_TRACK_REG", "MAX_TRACK_REG():(uint256)", []);
+
+    return result[0].toBigInt();
+  }
+
+  try_MAX_TRACK_REG(): ethereum.CallResult<BigInt> {
+    let result = super.tryCall(
+      "MAX_TRACK_REG",
+      "MAX_TRACK_REG():(uint256)",
+      [],
+    );
+    if (result.reverted) {
+      return new ethereum.CallResult();
+    }
+    let value = result.value;
+    return ethereum.CallResult.fromValue(value[0].toBigInt());
+  }
+
   getTrack(trackId: Bytes): ScrobbleV4__getTrackResult {
     let result = super.call(
       "getTrack",
-      "getTrack(bytes32):(string,string,string,uint8,bytes32,uint64,string)",
+      "getTrack(bytes32):(string,string,string,uint8,bytes32,uint64,string,uint32)",
       [ethereum.Value.fromFixedBytes(trackId)],
     );
 
@@ -245,6 +442,7 @@ export class ScrobbleV4 extends ethereum.SmartContract {
       result[4].toBytes(),
       result[5].toBigInt(),
       result[6].toString(),
+      result[7].toBigInt(),
     );
   }
 
@@ -253,7 +451,7 @@ export class ScrobbleV4 extends ethereum.SmartContract {
   ): ethereum.CallResult<ScrobbleV4__getTrackResult> {
     let result = super.tryCall(
       "getTrack",
-      "getTrack(bytes32):(string,string,string,uint8,bytes32,uint64,string)",
+      "getTrack(bytes32):(string,string,string,uint8,bytes32,uint64,string,uint32)",
       [ethereum.Value.fromFixedBytes(trackId)],
     );
     if (result.reverted) {
@@ -269,7 +467,464 @@ export class ScrobbleV4 extends ethereum.SmartContract {
         value[4].toBytes(),
         value[5].toBigInt(),
         value[6].toString(),
+        value[7].toBigInt(),
       ),
     );
+  }
+
+  isOperator(param0: Address): boolean {
+    let result = super.call("isOperator", "isOperator(address):(bool)", [
+      ethereum.Value.fromAddress(param0),
+    ]);
+
+    return result[0].toBoolean();
+  }
+
+  try_isOperator(param0: Address): ethereum.CallResult<boolean> {
+    let result = super.tryCall("isOperator", "isOperator(address):(bool)", [
+      ethereum.Value.fromAddress(param0),
+    ]);
+    if (result.reverted) {
+      return new ethereum.CallResult();
+    }
+    let value = result.value;
+    return ethereum.CallResult.fromValue(value[0].toBoolean());
+  }
+
+  isRegistered(trackId: Bytes): boolean {
+    let result = super.call("isRegistered", "isRegistered(bytes32):(bool)", [
+      ethereum.Value.fromFixedBytes(trackId),
+    ]);
+
+    return result[0].toBoolean();
+  }
+
+  try_isRegistered(trackId: Bytes): ethereum.CallResult<boolean> {
+    let result = super.tryCall("isRegistered", "isRegistered(bytes32):(bool)", [
+      ethereum.Value.fromFixedBytes(trackId),
+    ]);
+    if (result.reverted) {
+      return new ethereum.CallResult();
+    }
+    let value = result.value;
+    return ethereum.CallResult.fromValue(value[0].toBoolean());
+  }
+
+  owner(): Address {
+    let result = super.call("owner", "owner():(address)", []);
+
+    return result[0].toAddress();
+  }
+
+  try_owner(): ethereum.CallResult<Address> {
+    let result = super.tryCall("owner", "owner():(address)", []);
+    if (result.reverted) {
+      return new ethereum.CallResult();
+    }
+    let value = result.value;
+    return ethereum.CallResult.fromValue(value[0].toAddress());
+  }
+
+  tracks(param0: Bytes): ScrobbleV4__tracksResult {
+    let result = super.call(
+      "tracks",
+      "tracks(bytes32):(string,string,string,string,bytes32,uint8,uint32,uint64,bool)",
+      [ethereum.Value.fromFixedBytes(param0)],
+    );
+
+    return new ScrobbleV4__tracksResult(
+      result[0].toString(),
+      result[1].toString(),
+      result[2].toString(),
+      result[3].toString(),
+      result[4].toBytes(),
+      result[5].toI32(),
+      result[6].toBigInt(),
+      result[7].toBigInt(),
+      result[8].toBoolean(),
+    );
+  }
+
+  try_tracks(param0: Bytes): ethereum.CallResult<ScrobbleV4__tracksResult> {
+    let result = super.tryCall(
+      "tracks",
+      "tracks(bytes32):(string,string,string,string,bytes32,uint8,uint32,uint64,bool)",
+      [ethereum.Value.fromFixedBytes(param0)],
+    );
+    if (result.reverted) {
+      return new ethereum.CallResult();
+    }
+    let value = result.value;
+    return ethereum.CallResult.fromValue(
+      new ScrobbleV4__tracksResult(
+        value[0].toString(),
+        value[1].toString(),
+        value[2].toString(),
+        value[3].toString(),
+        value[4].toBytes(),
+        value[5].toI32(),
+        value[6].toBigInt(),
+        value[7].toBigInt(),
+        value[8].toBoolean(),
+      ),
+    );
+  }
+}
+
+export class ConstructorCall extends ethereum.Call {
+  get inputs(): ConstructorCall__Inputs {
+    return new ConstructorCall__Inputs(this);
+  }
+
+  get outputs(): ConstructorCall__Outputs {
+    return new ConstructorCall__Outputs(this);
+  }
+}
+
+export class ConstructorCall__Inputs {
+  _call: ConstructorCall;
+
+  constructor(call: ConstructorCall) {
+    this._call = call;
+  }
+
+  get factory_(): Address {
+    return this._call.inputValues[0].value.toAddress();
+  }
+
+  get operator_(): Address {
+    return this._call.inputValues[1].value.toAddress();
+  }
+}
+
+export class ConstructorCall__Outputs {
+  _call: ConstructorCall;
+
+  constructor(call: ConstructorCall) {
+    this._call = call;
+  }
+}
+
+export class RegisterAndScrobbleBatchCall extends ethereum.Call {
+  get inputs(): RegisterAndScrobbleBatchCall__Inputs {
+    return new RegisterAndScrobbleBatchCall__Inputs(this);
+  }
+
+  get outputs(): RegisterAndScrobbleBatchCall__Outputs {
+    return new RegisterAndScrobbleBatchCall__Outputs(this);
+  }
+}
+
+export class RegisterAndScrobbleBatchCall__Inputs {
+  _call: RegisterAndScrobbleBatchCall;
+
+  constructor(call: RegisterAndScrobbleBatchCall) {
+    this._call = call;
+  }
+
+  get user(): Address {
+    return this._call.inputValues[0].value.toAddress();
+  }
+
+  get regKinds(): Array<i32> {
+    return this._call.inputValues[1].value.toI32Array();
+  }
+
+  get regPayloads(): Array<Bytes> {
+    return this._call.inputValues[2].value.toBytesArray();
+  }
+
+  get titles(): Array<string> {
+    return this._call.inputValues[3].value.toStringArray();
+  }
+
+  get artists(): Array<string> {
+    return this._call.inputValues[4].value.toStringArray();
+  }
+
+  get albums(): Array<string> {
+    return this._call.inputValues[5].value.toStringArray();
+  }
+
+  get durations(): Array<BigInt> {
+    return this._call.inputValues[6].value.toBigIntArray();
+  }
+
+  get trackIds(): Array<Bytes> {
+    return this._call.inputValues[7].value.toBytesArray();
+  }
+
+  get timestamps(): Array<BigInt> {
+    return this._call.inputValues[8].value.toBigIntArray();
+  }
+}
+
+export class RegisterAndScrobbleBatchCall__Outputs {
+  _call: RegisterAndScrobbleBatchCall;
+
+  constructor(call: RegisterAndScrobbleBatchCall) {
+    this._call = call;
+  }
+}
+
+export class RegisterTracksBatchCall extends ethereum.Call {
+  get inputs(): RegisterTracksBatchCall__Inputs {
+    return new RegisterTracksBatchCall__Inputs(this);
+  }
+
+  get outputs(): RegisterTracksBatchCall__Outputs {
+    return new RegisterTracksBatchCall__Outputs(this);
+  }
+}
+
+export class RegisterTracksBatchCall__Inputs {
+  _call: RegisterTracksBatchCall;
+
+  constructor(call: RegisterTracksBatchCall) {
+    this._call = call;
+  }
+
+  get kinds(): Array<i32> {
+    return this._call.inputValues[0].value.toI32Array();
+  }
+
+  get payloads(): Array<Bytes> {
+    return this._call.inputValues[1].value.toBytesArray();
+  }
+
+  get titles(): Array<string> {
+    return this._call.inputValues[2].value.toStringArray();
+  }
+
+  get artists(): Array<string> {
+    return this._call.inputValues[3].value.toStringArray();
+  }
+
+  get albums(): Array<string> {
+    return this._call.inputValues[4].value.toStringArray();
+  }
+
+  get durations(): Array<BigInt> {
+    return this._call.inputValues[5].value.toBigIntArray();
+  }
+}
+
+export class RegisterTracksBatchCall__Outputs {
+  _call: RegisterTracksBatchCall;
+
+  constructor(call: RegisterTracksBatchCall) {
+    this._call = call;
+  }
+}
+
+export class ScrobbleBatchCall extends ethereum.Call {
+  get inputs(): ScrobbleBatchCall__Inputs {
+    return new ScrobbleBatchCall__Inputs(this);
+  }
+
+  get outputs(): ScrobbleBatchCall__Outputs {
+    return new ScrobbleBatchCall__Outputs(this);
+  }
+}
+
+export class ScrobbleBatchCall__Inputs {
+  _call: ScrobbleBatchCall;
+
+  constructor(call: ScrobbleBatchCall) {
+    this._call = call;
+  }
+
+  get user(): Address {
+    return this._call.inputValues[0].value.toAddress();
+  }
+
+  get trackIds(): Array<Bytes> {
+    return this._call.inputValues[1].value.toBytesArray();
+  }
+
+  get timestamps(): Array<BigInt> {
+    return this._call.inputValues[2].value.toBigIntArray();
+  }
+}
+
+export class ScrobbleBatchCall__Outputs {
+  _call: ScrobbleBatchCall;
+
+  constructor(call: ScrobbleBatchCall) {
+    this._call = call;
+  }
+}
+
+export class SetOperatorCall extends ethereum.Call {
+  get inputs(): SetOperatorCall__Inputs {
+    return new SetOperatorCall__Inputs(this);
+  }
+
+  get outputs(): SetOperatorCall__Outputs {
+    return new SetOperatorCall__Outputs(this);
+  }
+}
+
+export class SetOperatorCall__Inputs {
+  _call: SetOperatorCall;
+
+  constructor(call: SetOperatorCall) {
+    this._call = call;
+  }
+
+  get operator_(): Address {
+    return this._call.inputValues[0].value.toAddress();
+  }
+
+  get active(): boolean {
+    return this._call.inputValues[1].value.toBoolean();
+  }
+}
+
+export class SetOperatorCall__Outputs {
+  _call: SetOperatorCall;
+
+  constructor(call: SetOperatorCall) {
+    this._call = call;
+  }
+}
+
+export class SetTrackCoverCall extends ethereum.Call {
+  get inputs(): SetTrackCoverCall__Inputs {
+    return new SetTrackCoverCall__Inputs(this);
+  }
+
+  get outputs(): SetTrackCoverCall__Outputs {
+    return new SetTrackCoverCall__Outputs(this);
+  }
+}
+
+export class SetTrackCoverCall__Inputs {
+  _call: SetTrackCoverCall;
+
+  constructor(call: SetTrackCoverCall) {
+    this._call = call;
+  }
+
+  get trackId(): Bytes {
+    return this._call.inputValues[0].value.toBytes();
+  }
+
+  get coverCid(): string {
+    return this._call.inputValues[1].value.toString();
+  }
+}
+
+export class SetTrackCoverCall__Outputs {
+  _call: SetTrackCoverCall;
+
+  constructor(call: SetTrackCoverCall) {
+    this._call = call;
+  }
+}
+
+export class SetTrackCoverBatchCall extends ethereum.Call {
+  get inputs(): SetTrackCoverBatchCall__Inputs {
+    return new SetTrackCoverBatchCall__Inputs(this);
+  }
+
+  get outputs(): SetTrackCoverBatchCall__Outputs {
+    return new SetTrackCoverBatchCall__Outputs(this);
+  }
+}
+
+export class SetTrackCoverBatchCall__Inputs {
+  _call: SetTrackCoverBatchCall;
+
+  constructor(call: SetTrackCoverBatchCall) {
+    this._call = call;
+  }
+
+  get trackIds(): Array<Bytes> {
+    return this._call.inputValues[0].value.toBytesArray();
+  }
+
+  get coverCids(): Array<string> {
+    return this._call.inputValues[1].value.toStringArray();
+  }
+}
+
+export class SetTrackCoverBatchCall__Outputs {
+  _call: SetTrackCoverBatchCall;
+
+  constructor(call: SetTrackCoverBatchCall) {
+    this._call = call;
+  }
+}
+
+export class TransferOwnershipCall extends ethereum.Call {
+  get inputs(): TransferOwnershipCall__Inputs {
+    return new TransferOwnershipCall__Inputs(this);
+  }
+
+  get outputs(): TransferOwnershipCall__Outputs {
+    return new TransferOwnershipCall__Outputs(this);
+  }
+}
+
+export class TransferOwnershipCall__Inputs {
+  _call: TransferOwnershipCall;
+
+  constructor(call: TransferOwnershipCall) {
+    this._call = call;
+  }
+
+  get newOwner(): Address {
+    return this._call.inputValues[0].value.toAddress();
+  }
+}
+
+export class TransferOwnershipCall__Outputs {
+  _call: TransferOwnershipCall;
+
+  constructor(call: TransferOwnershipCall) {
+    this._call = call;
+  }
+}
+
+export class UpdateTrackCall extends ethereum.Call {
+  get inputs(): UpdateTrackCall__Inputs {
+    return new UpdateTrackCall__Inputs(this);
+  }
+
+  get outputs(): UpdateTrackCall__Outputs {
+    return new UpdateTrackCall__Outputs(this);
+  }
+}
+
+export class UpdateTrackCall__Inputs {
+  _call: UpdateTrackCall;
+
+  constructor(call: UpdateTrackCall) {
+    this._call = call;
+  }
+
+  get trackId(): Bytes {
+    return this._call.inputValues[0].value.toBytes();
+  }
+
+  get title(): string {
+    return this._call.inputValues[1].value.toString();
+  }
+
+  get artist(): string {
+    return this._call.inputValues[2].value.toString();
+  }
+
+  get album(): string {
+    return this._call.inputValues[3].value.toString();
+  }
+}
+
+export class UpdateTrackCall__Outputs {
+  _call: UpdateTrackCall;
+
+  constructor(call: UpdateTrackCall) {
+    this._call = call;
   }
 }

@@ -7,13 +7,18 @@ import type { Track } from '@heaven/ui'
 
 // ── Config ──────────────────────────────────────────────────────────
 
-// TODO: move to VITE_RESOLVER_URL env var when deployed
-const RESOLVER_URL = 'https://heaven-resolver.theavenhouse.workers.dev'
+const RESOLVER_URL =
+  import.meta.env.VITE_RESOLVER_URL || 'https://heaven-resolver-production.deletion-backup782.workers.dev'
 
 const GOLDSKY_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/8.0.0/gn'
+  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/9.0.0/gn'
 
 const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
+
+/** Validate CID looks like an IPFS hash (Qm... or bafy...) */
+function isValidCid(cid: string | undefined | null): cid is string {
+  return !!cid && (cid.startsWith('Qm') || cid.startsWith('bafy'))
+}
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -36,6 +41,8 @@ export interface ArtistTrack {
   artist: string
   album: string
   coverCid: string
+  kind: number
+  payload: string
   scrobbleCount: number
   lastPlayed: number // unix seconds
 }
@@ -101,69 +108,19 @@ export async function fetchArtistTracks(
   artistName: string,
   limit = 50,
 ): Promise<{ tracks: ArtistTrack[]; totalScrobbles: number; uniqueListeners: number }> {
-  // The subgraph stores artist as a plain string — we search by exact match
-  // (case-sensitive; MusicBrainz canonical name should match what's on-chain)
-  const query = `{
-    tracks(
-      where: { artist: "${escapeGql(artistName)}" }
-      first: ${limit}
-      orderBy: registeredAt
-      orderDirection: desc
-    ) {
-      id
-      title
-      artist
-      coverCid
-      scrobbles(first: 1000) {
-        id
-        user
-        timestamp
-      }
-    }
-  }`
-
-  const res = await fetch(GOLDSKY_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query }),
-  })
-  if (!res.ok) throw new Error(`Subgraph query failed: ${res.status}`)
-  const json = await res.json()
-
-  const rawTracks: Array<{
-    id: string
-    title: string
-    artist: string
-    coverCid: string | null
-    scrobbles: Array<{ id: string; user: string; timestamp: string }>
-  }> = json.data?.tracks ?? []
-
-  let totalScrobbles = 0
-  const listenerSet = new Set<string>()
-
-  const tracks: ArtistTrack[] = rawTracks.map((t) => {
-    totalScrobbles += t.scrobbles.length
-    for (const s of t.scrobbles) listenerSet.add(s.user)
-
-    const lastPlayed = t.scrobbles.length > 0
-      ? Math.max(...t.scrobbles.map((s) => parseInt(s.timestamp)))
-      : 0
-
-    return {
-      trackId: t.id,
-      title: t.title,
-      artist: t.artist,
-      album: '', // subgraph doesn't index album separately
-      coverCid: t.coverCid ?? '',
-      scrobbleCount: t.scrobbles.length,
-      lastPlayed,
-    }
+  // Use contains_nocase to catch both exact matches AND featuring credits
+  // e.g. "Justice" will match "Justice" and "Justice starring RIMON"
+  const results = await queryArtistTracks({
+    where: `artist_contains_nocase: "${escapeGql(artistName)}"`,
+    limit: Math.max(limit, 200),
   })
 
-  // Sort by scrobble count descending (most played first)
-  tracks.sort((a, b) => b.scrobbleCount - a.scrobbleCount)
+  // Filter client-side to ensure the artist name actually matches
+  // (not just contains as a substring of another word)
+  const target = normalizeArtistName(artistName)
+  const filtered = results.filter((t) => artistMatchesTarget(t.artist, target))
 
-  return { tracks, totalScrobbles, uniqueListeners: listenerSet.size }
+  return mapArtistTracks(filtered)
 }
 
 /**
@@ -187,9 +144,13 @@ export function artistTracksToTracks(artistTracks: ArtistTrack[]): Track[] {
     title: t.title,
     artist: t.artist,
     album: t.album,
-    albumCover: t.coverCid
+    kind: t.kind,
+    payload: t.payload,
+    mbid: t.kind === 1 ? payloadToMbid(t.payload) ?? undefined : undefined,
+    albumCover: isValidCid(t.coverCid)
       ? `${FILEBASE_GATEWAY}/${t.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
       : undefined,
+    scrobbleCount: t.scrobbleCount,
     dateAdded: t.scrobbleCount > 0 ? `${t.scrobbleCount} plays` : '',
     duration: '--:--',
     scrobbleStatus: 'verified' as const,
@@ -200,4 +161,155 @@ export function artistTracksToTracks(artistTracks: ArtistTrack[]): Track[] {
 
 function escapeGql(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
+// ── Internal helpers ───────────────────────────────────────────────
+
+type RawArtistTrack = {
+  id: string
+  title: string
+  artist: string
+  kind: number
+  payload: string
+  coverCid: string | null
+  scrobbles: Array<{ id: string; user: string; timestamp: string }>
+}
+
+async function queryArtistTracks(params: { where: string; limit: number }): Promise<RawArtistTrack[]> {
+  const query = `{
+    tracks(
+      where: { ${params.where} }
+      first: ${params.limit}
+      orderBy: registeredAt
+      orderDirection: desc
+    ) {
+      id
+      title
+      artist
+      kind
+      payload
+      coverCid
+      scrobbles(first: 1000) {
+        id
+        user
+        timestamp
+      }
+    }
+  }`
+
+  const res = await fetch(GOLDSKY_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query }),
+  })
+  if (!res.ok) throw new Error(`Subgraph query failed: ${res.status}`)
+  const json = await res.json()
+  return json.data?.tracks ?? []
+}
+
+function mapArtistTracks(rawTracks: RawArtistTrack[]): { tracks: ArtistTrack[]; totalScrobbles: number; uniqueListeners: number } {
+  let totalScrobbles = 0
+  const listenerSet = new Set<string>()
+
+  const tracks: ArtistTrack[] = rawTracks.map((t) => {
+    totalScrobbles += t.scrobbles.length
+    for (const s of t.scrobbles) listenerSet.add(s.user)
+
+    const lastPlayed = t.scrobbles.length > 0
+      ? Math.max(...t.scrobbles.map((s) => parseInt(s.timestamp)))
+      : 0
+
+    return {
+      trackId: t.id,
+      title: t.title,
+      artist: t.artist,
+      album: '', // subgraph doesn't index album separately
+      coverCid: t.coverCid ?? '',
+      kind: t.kind,
+      payload: t.payload ?? '',
+      scrobbleCount: t.scrobbles.length,
+      lastPlayed,
+    }
+  })
+
+  // Sort by scrobble count descending (most played first)
+  tracks.sort((a, b) => b.scrobbleCount - a.scrobbleCount)
+
+  return { tracks, totalScrobbles, uniqueListeners: listenerSet.size }
+}
+
+export function normalizeArtistName(name: string): string {
+  const folded = name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+  return folded
+    .toLowerCase()
+    .replace(/\$/g, 's')
+    .replace(/&/g, ' and ')
+    .replace(/feat\.?|ft\.?|featuring/g, ' feat ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ')
+}
+
+export function splitArtistNames(name: string): string[] {
+  const unified = name
+    .toLowerCase()
+    .replace(/feat\.?|ft\.?|featuring/g, '|')
+    .replace(/\bstarring\b/g, '|')
+    .replace(/&/g, '|')
+    .replace(/\+/g, '|')
+    .replace(/\bx\b/g, '|')
+    .replace(/\band\b/g, '|')
+    .replace(/\bwith\b/g, '|')
+    .replace(/\//g, '|')
+    .replace(/,/g, '|')
+  return unified
+    .split('|')
+    .map((p) => normalizeArtistName(p))
+    .filter(Boolean)
+}
+
+export function artistMatchesTarget(artistField: string, targetNorm: string): boolean {
+  if (!targetNorm) return false
+  const targetVariants = normalizeArtistVariants(targetNorm)
+  const fieldVariants = normalizeArtistVariants(artistField)
+
+  for (const fieldVariant of fieldVariants) {
+    for (const targetVariant of targetVariants) {
+      if (fieldVariant === targetVariant) return true
+      if (wordContains(fieldVariant, targetVariant)) return true
+      if (wordContains(targetVariant, fieldVariant)) return true
+    }
+  }
+  for (const part of splitArtistNames(artistField)) {
+    for (const targetVariant of targetVariants) {
+      if (part === targetVariant) return true
+      if (wordContains(part, targetVariant)) return true
+    }
+  }
+  return false
+}
+
+export function normalizeArtistVariants(name: string): Set<string> {
+  const base = normalizeArtistName(name)
+  const variants = new Set<string>([base])
+
+  const noParens = base.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim()
+  if (noParens && noParens !== base) variants.add(noParens)
+
+  if (base.startsWith('the ')) {
+    variants.add(base.slice(4))
+  }
+
+  if (base.endsWith(' the')) {
+    const noTrail = base.slice(0, -4)
+    variants.add(noTrail)
+    variants.add(`the ${noTrail}`)
+  }
+
+  return variants
+}
+
+function wordContains(haystack: string, needle: string): boolean {
+  if (!haystack || !needle) return false
+  return ` ${haystack} `.includes(` ${needle} `)
 }

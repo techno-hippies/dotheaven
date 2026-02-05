@@ -10,6 +10,7 @@ import { ScrobbleEngine } from '@heaven/core'
 import type { TrackMetadata, ReadyScrobble } from '@heaven/core'
 import type { PKPInfo, PKPAuthContext } from './lit'
 import { submitScrobbleViaAA, type ScrobbleTrack } from './aa-client'
+import { submitTrackCoverViaLit } from './track-cover-service'
 
 const SESSION_KEY = 'local'
 const TICK_INTERVAL_MS = 15_000
@@ -87,6 +88,7 @@ async function submitScrobble(
     mbid: scrobble.mbid,
     ipId: scrobble.ipId,
     playedAtSec: scrobble.playedAtSec,
+    duration: scrobble.trackMeta?.duration ?? 0,
   }
 
   console.log('[Scrobble] Submitting via AA (ScrobbleV4)...')
@@ -101,6 +103,12 @@ async function submitScrobble(
   )
 
   console.log(`[Scrobble] On-chain! userOpHash: ${result.userOpHash} sender: ${result.sender}`)
+
+  // Best-effort: set track cover (operator-only) via Lit Action
+  submitTrackCoverViaLit(scrobble, pkpInfo, authContext)
+    .catch((err) => {
+      console.warn('[Cover] Submit failed:', err)
+    })
 
   // Invalidate scrobbles query so profile page shows the scrobble
   try {

@@ -2,6 +2,7 @@ import { type Component, createSignal, createResource, Show } from 'solid-js'
 import {
   UpcomingSessions,
   BookingDetail,
+  PageHeader,
   type BookingData,
   type BookingDetailData,
 } from '@heaven/ui'
@@ -267,6 +268,7 @@ export const SchedulePage: Component = () => {
 
   return (
     <div class="h-full overflow-y-auto">
+      <PageHeader title="Schedule" />
       <div class="w-full max-w-xl mx-auto px-4 py-6">
         <Show
           when={selectedBookingDetail()}

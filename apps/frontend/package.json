@@ -9,6 +9,7 @@
     "build": "bunx --bun vite build --config vite.tauri.ts",
     "build:web": "bunx --bun vite build --config vite.web.ts",
     "preview": "bunx --bun vite preview",
+    "test": "bun test",
     "check": "bunx tsc --noEmit",
     "tauri": "bunx tauri"
   },

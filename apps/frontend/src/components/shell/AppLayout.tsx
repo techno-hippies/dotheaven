@@ -16,13 +16,13 @@ import { useAuth } from '../../providers'
 import { useOnboardingStatus } from '../../hooks/useOnboardingStatus'
 import {
   AppShell,
-  Header,
   RightPanel,
   MobileFooter,
   MiniPlayer,
   SidePlayer,
 } from '@heaven/ui'
 import type { MobileFooterTab } from '@heaven/ui'
+import { Header } from './header'
 
 // Mobile footer icons (Phosphor, 256x256 viewBox)
 const HomeIcon = () => (
@@ -91,7 +91,7 @@ import { Toaster } from '../Toaster'
 import { UploadQueue } from '../UploadQueue'
 import { AddToPlaylistDialog } from '../AddToPlaylistDialog'
 import { usePlayer } from '../../providers'
-import { usePlaylistDialog, buildMenuActions } from '../../hooks/useTrackListActions'
+import { usePlaylistDialog, buildMenuActions, useArtistNavigation } from '../../hooks/useTrackListActions'
 
 export const AppLayout: ParentComponent = (props) => {
   const auth = useAuth()
@@ -125,6 +125,7 @@ export const AppLayout: ParentComponent = (props) => {
   // Playlist dialog for SidePlayer menu
   const plDialog = usePlaylistDialog()
   const sidePlayerMenu = buildMenuActions(plDialog)
+  const goToArtist = useArtistNavigation()
   // Never show global header on mobile - pages have their own headers or use the mobile footer for nav
   const showGlobalHeader = createMemo(() => !isMobile())
 
@@ -199,6 +200,7 @@ export const AppLayout: ParentComponent = (props) => {
                   duration: player.durationFormatted(),
                 } : undefined}
                 menuActions={player.currentTrack() ? sidePlayerMenu : undefined}
+                onArtistClick={player.currentTrack() ? () => goToArtist(player.currentTrack()!) : undefined}
               />
             </RightPanel>
           }

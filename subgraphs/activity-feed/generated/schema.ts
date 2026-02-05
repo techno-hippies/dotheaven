@@ -298,6 +298,19 @@ export class Track extends Entity {
     }
   }
 
+  get durationSec(): i32 {
+    let value = this.get("durationSec");
+    if (!value || value.kind == ValueKind.NULL) {
+      return 0;
+    } else {
+      return value.toI32();
+    }
+  }
+
+  set durationSec(value: i32) {
+    this.set("durationSec", Value.fromI32(value));
+  }
+
   get registeredAt(): BigInt {
     let value = this.get("registeredAt");
     if (!value || value.kind == ValueKind.NULL) {

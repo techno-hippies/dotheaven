@@ -31,8 +31,8 @@ const AA_RPC_URL = import.meta.env.VITE_AA_RPC_URL ?? DEFAULT_RPC
 // Deployed contracts
 const ENTRYPOINT = (import.meta.env.VITE_AA_ENTRYPOINT ??
   '0x0000000071727De22E5E9d8BAf0edAc6f37da032') as Address
-const FACTORY = '0xB66BF4066F40b36Da0da34916799a069CBc79408' as Address
-const SCROBBLE_V4 = '0xD41a8991aDF67a1c4CCcb5f7Da6A01a601eC3F37' as Address
+const FACTORY = '0xF78E2a3187DB720F738a5477f42dCAEF4fec10dB' as Address
+const SCROBBLE_V4 = '0x1D23Ad1c20ce54224fEffe8c2E112296C321451E' as Address
 
 // Gateway URL (configurable via env var for EigenCompute deployment)
 const GATEWAY_URL = import.meta.env.VITE_AA_GATEWAY_URL ?? 'http://127.0.0.1:3337'
@@ -78,6 +78,7 @@ const scrobbleAbi = [{
     { name: 'titles', type: 'string[]' },
     { name: 'artists', type: 'string[]' },
     { name: 'albums', type: 'string[]' },
+    { name: 'durations', type: 'uint32[]' },
     { name: 'trackIds', type: 'bytes32[]' },
     { name: 'timestamps', type: 'uint64[]' },
   ],
@@ -135,6 +136,7 @@ export interface ScrobbleTrack {
   mbid: string | null
   ipId: string | null
   playedAtSec: number
+  duration: number  // seconds
 }
 
 export interface AASubmitResult {
@@ -166,6 +168,11 @@ function computeTrackId(
       [kind, payload],
     ),
   )
+}
+
+export function computeTrackIdForScrobble(track: ScrobbleTrack): Hex {
+  const { kind, payload } = deriveTrackKindAndPayload(track)
+  return computeTrackId(kind, payload)
 }
 
 /**
@@ -470,6 +477,7 @@ export async function submitScrobbleViaAA(
   const titles: string[] = []
   const artists: string[] = []
   const albums: string[] = []
+  const durations: number[] = []
   const trackIds: Hex[] = []
   const timestamps: bigint[] = []
 
@@ -482,6 +490,7 @@ export async function submitScrobbleViaAA(
     titles.push(track.title)
     artists.push(track.artist)
     albums.push(track.album ?? '')
+    durations.push(Math.floor(track.duration))
     trackIds.push(trackId)
     timestamps.push(BigInt(track.playedAtSec))
   }
@@ -489,7 +498,7 @@ export async function submitScrobbleViaAA(
   const innerCalldata = encodeFunctionData({
     abi: scrobbleAbi,
     functionName: 'registerAndScrobbleBatch',
-    args: [userAddress, regKinds, regPayloads, titles, artists, albums, trackIds, timestamps],
+    args: [userAddress, regKinds, regPayloads, titles, artists, albums, durations, trackIds, timestamps],
   })
 
   // 5. Build outer calldata: execute(ScrobbleV4, 0, innerCalldata)

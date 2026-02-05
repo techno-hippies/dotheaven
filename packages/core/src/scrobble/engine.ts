@@ -25,6 +25,10 @@ export interface ReadyScrobble {
   mbid: string | null
   /** Optional IPFS CID for album cover art */
   coverCid: string | null
+  /** Local file path for the track (Tauri only) */
+  filePath: string | null
+  /** Local cover image path (Tauri only) */
+  coverPath: string | null
 }
 
 export interface TrackMetadata {
@@ -59,6 +63,8 @@ interface SessionState {
   ipId: string | null
   mbid: string | null
   coverCid: string | null
+  filePath: string | null
+  coverPath: string | null
   startedAtEpochSec: number | null
   accumulatedPlayMs: number
   lastUpdateTimeMs: number
@@ -77,6 +83,8 @@ function createSession(sessionKey: string): SessionState {
     ipId: null,
     mbid: null,
     coverCid: null,
+    filePath: null,
+    coverPath: null,
     startedAtEpochSec: null,
     accumulatedPlayMs: 0,
     lastUpdateTimeMs: 0,
@@ -151,6 +159,8 @@ export class ScrobbleEngine {
     state.ipId = metadata.ipId ?? null
     state.mbid = metadata.mbid ?? null
     state.coverCid = metadata.coverCid ?? null
+    state.filePath = metadata.filePath ?? null
+    state.coverPath = metadata.coverPath ?? null
 
     // If playing and no start time, mark start
     if (newTrackKey != null && state.isPlaying && state.startedAtEpochSec == null) {
@@ -220,6 +230,8 @@ export class ScrobbleEngine {
           ipId: state.ipId,
           mbid: state.mbid,
           coverCid: state.coverCid,
+          filePath: state.filePath,
+          coverPath: state.coverPath,
         })
       }
     }
@@ -247,7 +259,7 @@ export class ScrobbleEngine {
       this.accumulatePlayTime(state)
     }
 
-    const { artist, title, album, durationMs, startedAtEpochSec, accumulatedPlayMs, alreadyScrobbled, ipId, mbid, coverCid } = state
+    const { artist, title, album, durationMs, startedAtEpochSec, accumulatedPlayMs, alreadyScrobbled, ipId, mbid, coverCid, filePath, coverPath } = state
 
     // Reset for next track
     state.trackKey = null
@@ -258,6 +270,8 @@ export class ScrobbleEngine {
     state.ipId = null
     state.mbid = null
     state.coverCid = null
+    state.filePath = null
+    state.coverPath = null
     state.startedAtEpochSec = null
     state.accumulatedPlayMs = 0
     state.lastUpdateTimeMs = 0
@@ -280,6 +294,8 @@ export class ScrobbleEngine {
         ipId,
         mbid,
         coverCid,
+        filePath,
+        coverPath,
       })
     }
   }

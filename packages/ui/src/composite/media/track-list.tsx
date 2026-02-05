@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-} from '../shared/dropdown-menu'
+} from '../../primitives/dropdown-menu'
 
 export type ScrobbleStatus = 'verified' | 'unidentified'
 
@@ -23,7 +23,16 @@ export interface Track {
   albumCover?: string
   dateAdded?: string
   duration?: string
+  scrobbleCount?: number
   scrobbleStatus?: ScrobbleStatus
+  /** MusicBrainz recording MBID (if known) */
+  mbid?: string
+  /** MusicBrainz artist MBID (if known) */
+  artistMbid?: string
+  /** On-chain track kind (1=MBID, 2=ipId, 3=meta) */
+  kind?: number
+  /** On-chain track payload (bytes32 hex) */
+  payload?: string
   /** Filecoin piece CID (cloud playback) */
   pieceCid?: string
   /** Beam CDN dataset owner address (cloud playback) */
@@ -32,6 +41,12 @@ export interface Track {
   contentId?: string
   /** Encryption algorithm: 0 = plaintext, 1 = AES-GCM-256 (cloud playback) */
   algo?: number
+  /** Local file path (Tauri only - indicates user owns this track) */
+  filePath?: string
+  /** Local cover image path (Tauri only) */
+  coverPath?: string
+  /** IPFS CID for cover art */
+  coverCid?: string
 }
 
 export interface TrackMenuActions {
@@ -56,6 +71,8 @@ export interface TrackListProps {
   class?: string
   tracks: Track[]
   showDateAdded?: boolean
+  showDuration?: boolean
+  showScrobbleCount?: boolean
   showScrobbleStatus?: boolean
   activeTrackId?: string
   activeTrackPlaying?: boolean
@@ -71,10 +88,44 @@ export interface TrackListProps {
   onSort?: (field: SortField) => void
   /** Force compact mobile layout regardless of screen size */
   forceCompact?: boolean
+  /** Enable drag-to-playlist for playable tracks (those with filePath, pieceCid, or contentId) */
+  enableDrag?: boolean
 }
 
 const ROW_HEIGHT = 56
 const COMPACT_ROW_HEIGHT = 64
+
+/** Check if a track has a playback source (can be dragged to playlist) */
+const isTrackDraggable = (track: Track): boolean =>
+  !!(track.filePath || track.pieceCid || track.contentId)
+
+/** Create a custom drag preview element */
+const createDragPreview = (track: Track): HTMLElement => {
+  const el = document.createElement('div')
+  el.className = 'fixed pointer-events-none px-3 py-2 rounded-md bg-[var(--bg-elevated)] border border-[var(--bg-highlight)] shadow-lg text-sm text-[var(--text-primary)] whitespace-nowrap z-[9999]'
+  el.textContent = `${track.title} \u2022 ${track.artist}`
+  el.style.cssText = 'position: fixed; top: -1000px; left: -1000px;'
+  document.body.appendChild(el)
+  return el
+}
+
+/** Handle drag start for a track */
+const handleDragStart = (e: DragEvent, track: Track) => {
+  if (!e.dataTransfer) return
+
+  // Set drag data
+  e.dataTransfer.effectAllowed = 'copy'
+  e.dataTransfer.setData('application/x-heaven-track', JSON.stringify(track))
+
+  // Create and position custom drag image
+  const preview = createDragPreview(track)
+  e.dataTransfer.setDragImage(preview, 0, 0)
+
+  // Clean up preview after drag starts
+  requestAnimationFrame(() => {
+    setTimeout(() => preview.remove(), 0)
+  })
+}
 
 /**
  * TrackList - Virtualized track listing with sticky sortable headers.
@@ -86,7 +137,9 @@ export const TrackList: Component<TrackListProps> = (props) => {
   const isMobile = useIsMobile()
   const isCompact = () => props.forceCompact || isMobile()
 
-  const showDate = () => props.showDateAdded !== false && !isCompact()
+  const showDate = () => props.showDateAdded === true && !isCompact()
+  const showDuration = () => props.showDuration !== false && !isCompact()
+  const showScrobbles = () => props.showScrobbleCount === true && !isCompact()
   const showStatus = () => props.showScrobbleStatus === true && !isCompact()
 
   const rowHeight = () => isCompact() ? COMPACT_ROW_HEIGHT : ROW_HEIGHT
@@ -101,7 +154,8 @@ export const TrackList: Component<TrackListProps> = (props) => {
     cols.push('minmax(200px,3fr)')   // Title
     cols.push('minmax(150px,2fr)')   // Artist
     if (showDate()) cols.push('minmax(120px,1fr)') // Date added
-    cols.push('72px')                // Duration
+    if (showScrobbles()) cols.push('100px') // Scrobble count
+    if (showDuration()) cols.push('72px') // Duration
     if (showStatus()) cols.push('48px') // Scrobble status
     cols.push('48px')                // Menu
     return cols.join(' ')
@@ -204,6 +258,7 @@ export const TrackList: Component<TrackListProps> = (props) => {
   // Compact row (mobile)
   const CompactTrackRow: Component<{ track: Track; index: number; isActive: boolean; isSelected: boolean }> = (rowProps) => {
     const [menuOpen, setMenuOpen] = createSignal(false)
+    const draggable = () => props.enableDrag && isTrackDraggable(rowProps.track)
     return (
       <div
         class={cn(
@@ -212,6 +267,8 @@ export const TrackList: Component<TrackListProps> = (props) => {
             ? "bg-[var(--bg-highlight)]"
             : "active:bg-[var(--bg-highlight)]"
         )}
+        draggable={draggable()}
+        onDragStart={(e) => draggable() && handleDragStart(e, rowProps.track)}
         onClick={() => props.onTrackClick?.(rowProps.track)}
         onDblClick={() => props.onTrackPlay?.(rowProps.track)}
       >
@@ -234,7 +291,21 @@ export const TrackList: Component<TrackListProps> = (props) => {
             {rowProps.track.title}
           </div>
           <div class="text-base text-[var(--text-muted)] truncate">
-            {rowProps.track.artist}
+            <Show
+              when={props.menuActions?.onGoToArtist}
+              fallback={rowProps.track.artist}
+            >
+              <button
+                type="button"
+                class="truncate hover:underline hover:text-[var(--text-secondary)] cursor-pointer transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  props.menuActions?.onGoToArtist?.(rowProps.track)
+                }}
+              >
+                {rowProps.track.artist}
+              </button>
+            </Show>
           </div>
         </div>
 
@@ -259,6 +330,7 @@ export const TrackList: Component<TrackListProps> = (props) => {
   // Full row (desktop)
   const FullTrackRow: Component<{ track: Track; index: number; isActive: boolean; isSelected: boolean }> = (rowProps) => {
     const [menuOpen, setMenuOpen] = createSignal(false)
+    const draggable = () => props.enableDrag && isTrackDraggable(rowProps.track)
     return (
       <div
         class={cn(
@@ -268,6 +340,8 @@ export const TrackList: Component<TrackListProps> = (props) => {
             : "hover:bg-[var(--bg-highlight)]"
         )}
         style={{ 'grid-template-columns': gridTemplate() }}
+        draggable={draggable()}
+        onDragStart={(e) => draggable() && handleDragStart(e, rowProps.track)}
         onClick={() => props.onTrackClick?.(rowProps.track)}
         onDblClick={() => props.onTrackPlay?.(rowProps.track)}
       >
@@ -309,11 +383,29 @@ export const TrackList: Component<TrackListProps> = (props) => {
         </div>
 
         {/* Artist */}
-        <div class={cn(
-          "flex items-center text-base truncate",
-          rowProps.isActive ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)]"
-        )}>
-          {rowProps.track.artist}
+        <div class="flex items-center text-base truncate">
+          <Show
+            when={props.menuActions?.onGoToArtist}
+            fallback={
+              <span class={rowProps.isActive ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)]"}>
+                {rowProps.track.artist}
+              </span>
+            }
+          >
+            <button
+              type="button"
+              class={cn(
+                "truncate hover:underline cursor-pointer transition-colors",
+                rowProps.isActive ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              )}
+              onClick={(e) => {
+                e.stopPropagation()
+                props.menuActions?.onGoToArtist?.(rowProps.track)
+              }}
+            >
+              {rowProps.track.artist}
+            </button>
+          </Show>
         </div>
 
         {/* Date Added */}
@@ -323,13 +415,22 @@ export const TrackList: Component<TrackListProps> = (props) => {
           </div>
         </Show>
 
+        {/* Scrobble Count */}
+        <Show when={showScrobbles()}>
+          <div class="flex items-center justify-center text-base text-[var(--text-secondary)]">
+            {rowProps.track.scrobbleCount?.toLocaleString() ?? '0'}
+          </div>
+        </Show>
+
         {/* Duration */}
-        <div class={cn(
-          "flex items-center justify-center text-base",
-          rowProps.isActive ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)]"
-        )}>
-          {rowProps.track.duration}
-        </div>
+        <Show when={showDuration()}>
+          <div class={cn(
+            "flex items-center justify-center text-base",
+            rowProps.isActive ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)]"
+          )}>
+            {rowProps.track.duration}
+          </div>
+        </Show>
 
         {/* Scrobble Status Icon */}
         <Show when={showStatus()}>
@@ -393,12 +494,19 @@ export const TrackList: Component<TrackListProps> = (props) => {
               <Show when={sortIcon('dateAdded')}>{(icon) => <span class="text-[var(--text-secondary)] text-xs">{icon()}</span>}</Show>
             </div>
           </Show>
-          <div class={cn(headerClass, 'justify-center')} onClick={() => handleHeaderClick('duration')}>
-            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 256 256">
-              <path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z" />
-            </svg>
-            <Show when={sortIcon('duration')}>{(icon) => <span class="text-[var(--text-secondary)] text-xs">{icon()}</span>}</Show>
-          </div>
+          <Show when={showScrobbles()}>
+            <div class={cn(headerClass, 'justify-center')}>
+              Scrobbles
+            </div>
+          </Show>
+          <Show when={showDuration()}>
+            <div class={cn(headerClass, 'justify-center')} onClick={() => handleHeaderClick('duration')}>
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 256 256">
+                <path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z" />
+              </svg>
+              <Show when={sortIcon('duration')}>{(icon) => <span class="text-[var(--text-secondary)] text-xs">{icon()}</span>}</Show>
+            </div>
+          </Show>
           <Show when={showStatus()}>
             <div class="flex items-center justify-center" title="Scrobble status">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">

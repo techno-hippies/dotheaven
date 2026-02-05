@@ -18,7 +18,7 @@ import {
   DialogContent,
   DialogBody,
   DialogCloseButton,
-} from '../shared/dialog'
+} from '../../primitives/dialog'
 import {
   Drawer,
   DrawerContent,

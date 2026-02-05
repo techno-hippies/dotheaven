@@ -12,7 +12,7 @@ export interface CommunityTab {
 
 export interface CommunityFeedProps {
   class?: string
-  /** Tab definitions. Defaults to All / Nearby / Travel if not provided. */
+  /** Tab definitions. Defaults to All / Nearby if not provided. */
   tabs?: CommunityTab[]
   /** Currently active tab id */
   activeTab?: string
@@ -22,10 +22,6 @@ export interface CommunityFeedProps {
   members: CommunityCardProps[]
   /** Featured member (shown enlarged at top on mobile, or first in list on desktop) */
   featuredMember?: CommunityCardProps
-  /** Header left slot (e.g. user avatar) */
-  headerLeftSlot?: JSX.Element
-  /** Header right slot (e.g. add friend, filter icons) */
-  headerRightSlot?: JSX.Element
   /** Empty state content */
   emptySlot?: JSX.Element
 }
@@ -33,7 +29,6 @@ export interface CommunityFeedProps {
 const defaultTabs: CommunityTab[] = [
   { id: 'all', label: 'All' },
   { id: 'nearby', label: 'Nearby' },
-  { id: 'travel', label: 'Travel' },
 ]
 
 /**

@@ -355,6 +355,8 @@ export const MyProfilePage: Component = () => {
   }
 
   const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
+  const isValidCid = (cid: string | undefined | null): cid is string =>
+    !!cid && (cid.startsWith('Qm') || cid.startsWith('bafy'))
 
   const scrobbles = (): ProfileScrobble[] => {
     const entries = scrobblesQuery.data ?? []
@@ -365,7 +367,7 @@ export const MyProfilePage: Component = () => {
       album: e.album,
       trackId: e.trackId,
       timestamp: formatTimeAgo(e.playedAt),
-      coverUrl: e.coverCid
+      coverUrl: isValidCid(e.coverCid)
         ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
         : undefined,
     }))
@@ -905,6 +907,8 @@ export const PublicProfilePage: Component = () => {
   }
 
   const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
+  const isValidCid = (cid: string | undefined | null): cid is string =>
+    !!cid && (cid.startsWith('Qm') || cid.startsWith('bafy'))
 
   const scrobbles = (): ProfileScrobble[] => {
     const entries = scrobblesQuery.data ?? []
@@ -915,7 +919,7 @@ export const PublicProfilePage: Component = () => {
       album: e.album,
       trackId: e.trackId,
       timestamp: formatTimeAgo(e.playedAt),
-      coverUrl: e.coverCid
+      coverUrl: isValidCid(e.coverCid)
         ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
         : undefined,
     }))

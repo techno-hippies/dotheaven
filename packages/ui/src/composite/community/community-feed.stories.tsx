@@ -1,9 +1,10 @@
 import type { Meta, StoryObj } from 'storybook-solidjs'
 import { CommunityFeed } from './community-feed'
 import type { CommunityCardProps } from './community-card'
+import { PageHeader } from '../shared/page-header'
 import { Avatar } from '../../primitives/avatar'
 import { IconButton } from '../../primitives/icon-button'
-import { Plus, MagnifyingGlass } from '../../icons'
+import { Sliders } from '../../icons'
 
 const meta: Meta<typeof CommunityFeed> = {
   title: 'Community/CommunityFeed',
@@ -131,7 +132,21 @@ const featuredMember: CommunityCardProps = {
 export const Mobile: Story = {
   decorators: [
     (Story) => (
-      <div style={{ width: '390px', height: '844px', overflow: 'hidden', background: 'var(--bg-page)' }}>
+      <div style={{ width: '390px', height: '844px', background: 'var(--bg-page)' }} class="flex flex-col">
+        <PageHeader
+          title="Community"
+          leftSlot={
+            <Avatar
+              src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80&h=80&fit=crop&crop=face"
+              size="sm"
+            />
+          }
+          rightSlot={
+            <IconButton size="sm" variant="ghost" aria-label="Filter">
+              <Sliders class="w-5 h-5" />
+            </IconButton>
+          }
+        />
         <Story />
       </div>
     ),
@@ -142,24 +157,7 @@ export const Mobile: Story = {
     tabs: [
       { id: 'all', label: 'All' },
       { id: 'nearby', label: 'Nearby', badge: '99+' },
-      { id: 'travel', label: 'Travel' },
     ],
-    headerLeftSlot: (
-      <Avatar
-        src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80&h=80&fit=crop&crop=face"
-        size="sm"
-      />
-    ),
-    headerRightSlot: (
-      <>
-        <IconButton size="sm" variant="ghost" aria-label="Add friend">
-          <Plus class="w-5 h-5" />
-        </IconButton>
-        <IconButton size="sm" variant="ghost" aria-label="Search">
-          <MagnifyingGlass class="w-5 h-5" />
-        </IconButton>
-      </>
-    ),
   },
 }
 
@@ -168,7 +166,21 @@ export const Mobile: Story = {
 export const Desktop: Story = {
   decorators: [
     (Story) => (
-      <div style={{ width: '800px', height: '700px', overflow: 'hidden', background: 'var(--bg-page)' }}>
+      <div style={{ width: '800px', height: '700px', background: 'var(--bg-page)' }} class="flex flex-col">
+        <PageHeader
+          title="Community"
+          leftSlot={
+            <Avatar
+              src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80&h=80&fit=crop&crop=face"
+              size="sm"
+            />
+          }
+          rightSlot={
+            <IconButton size="sm" variant="ghost" aria-label="Filter">
+              <Sliders class="w-5 h-5" />
+            </IconButton>
+          }
+        />
         <Story />
       </div>
     ),
@@ -179,24 +191,7 @@ export const Desktop: Story = {
     tabs: [
       { id: 'all', label: 'All' },
       { id: 'nearby', label: 'Nearby', badge: '99+' },
-      { id: 'travel', label: 'Travel' },
     ],
-    headerLeftSlot: (
-      <Avatar
-        src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80&h=80&fit=crop&crop=face"
-        size="sm"
-      />
-    ),
-    headerRightSlot: (
-      <>
-        <IconButton size="sm" variant="ghost" aria-label="Add friend">
-          <Plus class="w-5 h-5" />
-        </IconButton>
-        <IconButton size="sm" variant="ghost" aria-label="Search">
-          <MagnifyingGlass class="w-5 h-5" />
-        </IconButton>
-      </>
-    ),
   },
 }
 
@@ -205,7 +200,15 @@ export const Desktop: Story = {
 export const NoFeatured: Story = {
   decorators: [
     (Story) => (
-      <div style={{ width: '390px', height: '844px', overflow: 'hidden', background: 'var(--bg-page)' }}>
+      <div style={{ width: '390px', height: '844px', background: 'var(--bg-page)' }} class="flex flex-col">
+        <PageHeader
+          title="Community"
+          rightSlot={
+            <IconButton size="sm" variant="ghost" aria-label="Filter">
+              <Sliders class="w-5 h-5" />
+            </IconButton>
+          }
+        />
         <Story />
       </div>
     ),
@@ -215,7 +218,6 @@ export const NoFeatured: Story = {
     tabs: [
       { id: 'all', label: 'All' },
       { id: 'nearby', label: 'Nearby', badge: '99+' },
-      { id: 'travel', label: 'Travel' },
     ],
   },
 }
@@ -225,7 +227,15 @@ export const NoFeatured: Story = {
 export const Empty: Story = {
   decorators: [
     (Story) => (
-      <div style={{ width: '390px', height: '400px', overflow: 'hidden', background: 'var(--bg-page)' }}>
+      <div style={{ width: '390px', height: '400px', background: 'var(--bg-page)' }} class="flex flex-col">
+        <PageHeader
+          title="Community"
+          rightSlot={
+            <IconButton size="sm" variant="ghost" aria-label="Filter">
+              <Sliders class="w-5 h-5" />
+            </IconButton>
+          }
+        />
         <Story />
       </div>
     ),
@@ -235,7 +245,6 @@ export const Empty: Story = {
     tabs: [
       { id: 'all', label: 'All' },
       { id: 'nearby', label: 'Nearby' },
-      { id: 'travel', label: 'Travel' },
     ],
     activeTab: 'nearby',
   },
@@ -246,7 +255,15 @@ export const Empty: Story = {
 export const NearbyTab: Story = {
   decorators: [
     (Story) => (
-      <div style={{ width: '390px', height: '844px', overflow: 'hidden', background: 'var(--bg-page)' }}>
+      <div style={{ width: '390px', height: '844px', background: 'var(--bg-page)' }} class="flex flex-col">
+        <PageHeader
+          title="Community"
+          rightSlot={
+            <IconButton size="sm" variant="ghost" aria-label="Filter">
+              <Sliders class="w-5 h-5" />
+            </IconButton>
+          }
+        />
         <Story />
       </div>
     ),
@@ -256,7 +273,6 @@ export const NearbyTab: Story = {
     tabs: [
       { id: 'all', label: 'All' },
       { id: 'nearby', label: 'Nearby', badge: '3' },
-      { id: 'travel', label: 'Travel' },
     ],
     activeTab: 'nearby',
   },

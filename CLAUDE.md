@@ -80,7 +80,7 @@ bun check            # Type check all packages
 - **ScrobbleEngine** (`packages/core/src/scrobble/engine.ts`): State machine tracking play time per session. Threshold: `min(duration × 50%, 240s)`. Emits `ReadyScrobble` when met
 - **ScrobbleService** (`apps/frontend/src/lib/scrobble-service.ts`): Wires engine to AA client (ScrobbleV4). Each scrobble submits a UserOp via the AA gateway immediately (no queue/batch)
 - **AA client** (`apps/frontend/src/lib/aa-client.ts`): Builds ERC-4337 UserOps targeting ScrobbleV4. PKP signs `userOpHash`, gateway adds paymaster signature, bundler (Alto) submits to EntryPoint
-- **ScrobbleV4 contract**: `0xD41a8991aDF67a1c4CCcb5f7Da6A01a601eC3F37` on MegaETH (chain 6343). AA-enabled — `onlyAccountOf(user)` gating via factory-derived SimpleAccount
+- **ScrobbleV4 contract**: `0x1D23Ad1c20ce54224fEffe8c2E112296C321451E` on MegaETH (chain 6343). AA-enabled — `onlyAccountOf(user)` gating via factory-derived SimpleAccount. Stores `uint32 durationSec` per track.
 - **ScrobbleV3 contract**: `0x144c450cd5B641404EEB5D5eD523399dD94049E0` on MegaETH (chain 6343). Legacy sponsor-gated version — still deployed, used by playlists Lit Action for track registration
 - **Subgraph**: Goldsky `dotheaven-activity/7.0.0` indexes `TrackRegistered` + `TrackCoverSet` + `Scrobbled` + `PostCreated` + `ContentRegistered` events
 - **Frontend**: `ScrobblesPage` fetches from subgraph, displays verified/unidentified status with cover art
@@ -95,6 +95,8 @@ bun check            # Type check all packages
 - **Event-sourced**: name/coverCid/trackIds stored only in events; contract stores checkpoints (tracksHash, trackCount, version)
 - **Replay protection**: On-chain monotonic nonce per user (`userNonces` mapping + `consumeNonce()`)
 - **Lit Action**: `playlist-v1.js` — signs EIP-191, registers tracks in ScrobbleV3, then executes playlist op
+- **UI sync**: Add-to-playlist uses optimistic trackIds + subgraph polling to avoid “track disappears” during indexing delays.
+- **Cover fallback**: Local cover cache is keyed by normalized artist/title and trackId so new playlist entries keep album art even before on-chain coverCid is set.
 - **Subgraph**: Goldsky `dotheaven-playlists/1.0.0` indexes PlaylistCreated, PlaylistTracksSet, PlaylistMetaUpdated, PlaylistDeleted
   - API: `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-playlists/1.0.0/gn`
 

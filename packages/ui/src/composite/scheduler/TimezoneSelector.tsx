@@ -5,7 +5,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-} from '../shared/dropdown-menu'
+} from '../../primitives/dropdown-menu'
 
 // =============================================================================
 // Types

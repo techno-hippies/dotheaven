@@ -174,10 +174,11 @@ async function handleArtist(mbid: string, env: Env): Promise<Response> {
 
   // Extract useful links
   const links: Record<string, string> = {}
+  let commonsImagePage: string | null = null
   for (const rel of data.relations ?? []) {
     if (rel.url?.resource) {
       if (rel.type === 'wikidata') links.wikidata = rel.url.resource
-      else if (rel.type === 'image') links.image = rel.url.resource
+      else if (rel.type === 'image') commonsImagePage = rel.url.resource
       else if (rel.type === 'official homepage') links.website = rel.url.resource
       else if (rel.type === 'social network') {
         const u = rel.url.resource
@@ -191,6 +192,12 @@ async function handleArtist(mbid: string, env: Env): Promise<Response> {
         else if (u.includes('soundcloud.com')) links.soundcloud = u
       }
     }
+  }
+
+  // Resolve Wikimedia Commons image page URL to actual image URL
+  if (commonsImagePage) {
+    const imageUrl = await resolveCommonsImage(commonsImagePage, env)
+    if (imageUrl) links.image = imageUrl
   }
 
   const result = {
@@ -489,6 +496,54 @@ async function handleResolveSpotifyArtist(spotifyId: string, env: Env): Promise<
 function luceneEscape(s: string): string {
   // Lucene special chars: + - && || ! ( ) { } [ ] ^ " ~ * ? : \ /
   return s.replace(/([+\-&|!(){}[\]^"~*?:\\/])/g, '\\$1')
+}
+
+/**
+ * Resolve a Wikimedia Commons file page URL to an actual image URL.
+ * Input: https://commons.wikimedia.org/wiki/File:The_Fabs.JPG
+ * Output: https://upload.wikimedia.org/wikipedia/commons/thumb/d/df/The_Fabs.JPG/400px-The_Fabs.JPG
+ */
+async function resolveCommonsImage(pageUrl: string, env: Env): Promise<string | null> {
+  // Extract filename from URL: File:Name.ext
+  const match = pageUrl.match(/\/wiki\/File:(.+)$/)
+  if (!match) return null
+  const filename = decodeURIComponent(match[1])
+
+  // Check cache
+  const cacheKey = `commons:${filename}`
+  const cached = await env.CACHE.get(cacheKey)
+  if (cached) return cached === 'null' ? null : cached
+
+  // Use MediaWiki API to get the actual image URL
+  const apiUrl = `https://commons.wikimedia.org/w/api.php?action=query&titles=File:${encodeURIComponent(filename)}&prop=imageinfo&iiprop=url&iiurlwidth=400&format=json`
+
+  try {
+    const res = await fetch(apiUrl, {
+      headers: { 'User-Agent': env.MB_USER_AGENT },
+    })
+    if (!res.ok) return null
+
+    const data = await res.json() as {
+      query?: {
+        pages?: Record<string, {
+          imageinfo?: Array<{ thumburl?: string; url?: string }>
+        }>
+      }
+    }
+
+    const pages = data.query?.pages
+    if (!pages) return null
+
+    const page = Object.values(pages)[0]
+    const imageUrl = page?.imageinfo?.[0]?.thumburl || page?.imageinfo?.[0]?.url || null
+
+    // Cache the result (use 'null' string for negative cache)
+    await env.CACHE.put(cacheKey, imageUrl ?? 'null', { expirationTtl: CACHE_TTL_POSITIVE })
+
+    return imageUrl
+  } catch {
+    return null
+  }
 }
 
 // ── Router ───────────────────────────────────────────────────────────

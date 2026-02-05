@@ -33,9 +33,9 @@ dataSources:
     name: ScrobbleV4
     network: megaeth-testnet-v2
     source:
-      address: "0xD41a8991aDF67a1c4CCcb5f7Da6A01a601eC3F37"
+      address: "0x1D23Ad1c20ce54224fEffe8c2E112296C321451E"
       abi: ScrobbleV4
-      startBlock: 10474742
+      startBlock: 10593338
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -47,7 +47,7 @@ dataSources:
         - name: ScrobbleV4
           file: ./abis/ScrobbleV4.json
       eventHandlers:
-        - event: TrackRegistered(indexed bytes32,indexed uint8,bytes32,indexed bytes32,uint64)
+        - event: TrackRegistered(indexed bytes32,indexed uint8,bytes32,indexed bytes32,uint64,uint32)
           handler: handleTrackRegisteredV4
         - event: TrackCoverSet(indexed bytes32,string)
           handler: handleTrackCoverSetV4

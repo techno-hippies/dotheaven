@@ -10,7 +10,10 @@ import { Track, Scrobble } from "../generated/schema";
 export function handleTrackRegistered(event: TrackRegisteredEvent): void {
   let id = event.params.trackId.toHexString();
 
-  let track = new Track(id);
+  let track = Track.load(id);
+  if (!track) {
+    track = new Track(id);
+  }
   track.kind = event.params.kind;
   track.payload = event.params.payload;
   track.metaHash = event.params.metaHash;

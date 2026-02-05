@@ -15,8 +15,9 @@ import { fetchUserPlaylists, type OnChainPlaylist } from '../lib/heaven/playlist
 import { createPlaylistService } from '../lib/playlist-service'
 import { useAuth } from '../providers'
 import { addToast, updateToast } from '../lib/toast'
-import { setCoverCache } from '../lib/cover-cache'
+import { setCoverCache, setCoverCacheById } from '../lib/cover-cache'
 import { readCoverBase64 } from '../lib/cover-image'
+import { computeTrackIdFromMeta } from '../lib/track-id'
 
 interface AddToPlaylistDialogProps {
   open: boolean
@@ -26,6 +27,8 @@ interface AddToPlaylistDialogProps {
 
 /** Delay invalidation so optimistic data isn't overwritten by stale subgraph. */
 const INVALIDATION_DELAY = 8000
+const INDEX_POLL_INTERVAL = 5000
+const INDEX_POLL_MAX_ATTEMPTS = 6
 
 export const AddToPlaylistDialog: Component<AddToPlaylistDialogProps> = (props) => {
   const auth = useAuth()
@@ -54,9 +57,24 @@ export const AddToPlaylistDialog: Component<AddToPlaylistDialogProps> = (props) 
     // Close dialog immediately
     props.onOpenChange(false)
 
+    const local = track as Track & {
+      mbid?: string | null
+      ipId?: string | null
+      coverCid?: string | null
+      coverPath?: string | null
+    }
+    const computedTrackId = computeTrackIdFromMeta({
+      artist: track.artist,
+      title: track.title,
+      album: track.album ?? null,
+      mbid: local.mbid ?? null,
+      ipId: local.ipId ?? null,
+    })
+
     // Cache local cover so it survives refetch for unscrobbled tracks
     if (track.albumCover) {
       setCoverCache(track.artist, track.title, track.album, track.albumCover)
+      setCoverCacheById(computedTrackId ?? undefined, track.albumCover)
     }
 
     // Optimistic cache updates
@@ -66,7 +84,7 @@ export const AddToPlaylistDialog: Component<AddToPlaylistDialogProps> = (props) 
       queryClient.setQueryData(['playlist', playlist.id], {
         playlist: { ...cached.playlist, trackCount: Number(cached.playlist.trackCount) + 1 },
         tracks: [...cached.tracks, {
-          id: `optimistic-${Date.now()}`,
+          id: computedTrackId ?? `optimistic-${Date.now()}`,
           title: track.title,
           artist: track.artist,
           album: track.album || '',
@@ -87,12 +105,6 @@ export const AddToPlaylistDialog: Component<AddToPlaylistDialogProps> = (props) 
 
     ;(async () => {
       try {
-        const local = track as Track & {
-          mbid?: string | null
-          ipId?: string | null
-          coverCid?: string | null
-          coverPath?: string | null
-        }
         const coverImage = (!local.coverCid && local.coverPath)
           ? await readCoverBase64(local.coverPath)
           : null
@@ -125,20 +137,39 @@ export const AddToPlaylistDialog: Component<AddToPlaylistDialogProps> = (props) 
         })
 
         if (result.success) {
-          updateToast(toastId, `Added to ${playlist.name}`, 'success')
+          updateToast(toastId, `Added to ${playlist.name}`, 'success', 4000)
         } else {
-          updateToast(toastId, `Failed to add to ${playlist.name}`, 'error')
+          updateToast(toastId, `Failed to add to ${playlist.name}`, 'error', 4000)
           console.error('[AddToPlaylist] Failed:', result.error)
         }
       } catch (err) {
-        updateToast(toastId, `Failed to add to ${playlist.name}`, 'error')
+        updateToast(toastId, `Failed to add to ${playlist.name}`, 'error', 4000)
         console.error('[AddToPlaylist] Error:', err)
       }
-      // Delayed invalidation — give subgraph time to index
-      setTimeout(() => {
+
+      // Delay invalidation until the subgraph indexes the new track
+      const invalidate = () => {
         queryClient.invalidateQueries({ queryKey: ['playlist', playlist.id] })
         queryClient.invalidateQueries({ queryKey: ['userPlaylists'] })
-      }, INVALIDATION_DELAY)
+      }
+
+      if (computedTrackId) {
+        try {
+          const { fetchPlaylistTracks } = await import('../lib/heaven/playlists')
+          for (let i = 0; i < INDEX_POLL_MAX_ATTEMPTS; i++) {
+            await new Promise((r) => setTimeout(r, INDEX_POLL_INTERVAL))
+            const subgraphTracks = await fetchPlaylistTracks(playlist.id)
+            if (subgraphTracks.some((t) => t.trackId.toLowerCase() === computedTrackId.toLowerCase())) {
+              invalidate()
+              return
+            }
+          }
+        } catch {
+          // ignore and fall back to delayed invalidation
+        }
+      }
+
+      setTimeout(invalidate, INVALIDATION_DELAY)
     })()
   }
 
@@ -152,21 +183,30 @@ export const AddToPlaylistDialog: Component<AddToPlaylistDialogProps> = (props) 
     setShowCreate(false)
     setNewName('')
 
+    const local = track as Track & {
+      mbid?: string | null
+      ipId?: string | null
+      coverCid?: string | null
+      coverPath?: string | null
+    }
+    const computedTrackId = computeTrackIdFromMeta({
+      artist: track.artist,
+      title: track.title,
+      album: track.album ?? null,
+      mbid: local.mbid ?? null,
+      ipId: local.ipId ?? null,
+    })
+
     // Cache local cover
     if (track.albumCover) {
       setCoverCache(track.artist, track.title, track.album, track.albumCover)
+      setCoverCacheById(computedTrackId ?? undefined, track.albumCover)
     }
 
     const toastId = addToast(`Creating "${name}"...`, 'info', 0)
 
     ;(async () => {
       try {
-        const local = track as Track & {
-          mbid?: string | null
-          ipId?: string | null
-          coverCid?: string | null
-          coverPath?: string | null
-        }
         const coverImage = (!local.coverCid && local.coverPath)
           ? await readCoverBase64(local.coverPath)
           : null
@@ -208,7 +248,7 @@ export const AddToPlaylistDialog: Component<AddToPlaylistDialogProps> = (props) 
           queryClient.setQueryData(['playlist', result.playlistId], {
             playlist: optimisticPlaylist,
             tracks: [{
-              id: `optimistic-${Date.now()}`,
+              id: computedTrackId ?? `optimistic-${Date.now()}`,
               title: track.title,
               artist: track.artist,
               album: track.album || '',
@@ -220,18 +260,18 @@ export const AddToPlaylistDialog: Component<AddToPlaylistDialogProps> = (props) 
           const cachedPlaylists = queryClient.getQueryData<OnChainPlaylist[]>(['userPlaylists', addr]) ?? []
           queryClient.setQueryData(['userPlaylists', addr], [optimisticPlaylist, ...cachedPlaylists])
 
-          updateToast(toastId, `Created "${name}"`, 'success')
+          updateToast(toastId, `Created "${name}"`, 'success', 4000)
 
           // Delayed invalidation
           setTimeout(() => {
             queryClient.invalidateQueries({ queryKey: ['userPlaylists'] })
           }, INVALIDATION_DELAY)
         } else {
-          updateToast(toastId, `Failed to create playlist`, 'error')
+          updateToast(toastId, `Failed to create playlist`, 'error', 4000)
           console.error('[AddToPlaylist] Create failed:', result.error)
         }
       } catch (err) {
-        updateToast(toastId, `Failed to create playlist`, 'error')
+        updateToast(toastId, `Failed to create playlist`, 'error', 4000)
         console.error('[AddToPlaylist] Create error:', err)
       }
     })()

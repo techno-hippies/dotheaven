@@ -1,7 +1,7 @@
 import { createSignal } from 'solid-js'
 import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { ScheduleDashboard } from './schedule-dashboard'
-import type { SessionSlotData } from './schedule-tab'
+import type { SessionSlotData, SessionRequestData } from './schedule-tab'
 
 const meta: Meta = {
   title: 'Scheduling/ScheduleDashboard',

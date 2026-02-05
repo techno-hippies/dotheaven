@@ -12,7 +12,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogCloseButton,
-} from '../composite/dialog'
+} from '../primitives/dialog'
 import { Avatar, IconButton, Button } from '../primitives'
 
 // Home icon (Phosphor-style)

@@ -10,7 +10,7 @@ import {
   DialogBody,
   DialogFooter,
   DialogCloseButton,
-} from '../shared/dialog'
+} from '../../primitives/dialog'
 import { VerificationBadge } from './verification-badge'
 
 export type VerifyStep = 'qr' | 'polling' | 'mirroring' | 'success' | 'error'

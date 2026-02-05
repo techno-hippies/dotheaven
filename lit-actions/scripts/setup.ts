@@ -99,6 +99,14 @@ const ACTIONS: Record<string, ActionDef> = {
       { name: 'filebase_covers_key', envVar: 'FILEBASE_COVERS_KEY' },
     ],
   },
+  trackCoverV4: {
+    name: 'trackCoverV4',
+    path: 'actions/track-cover-v4.js',
+    displayName: 'Track Cover v4',
+    keys: [
+      { name: 'filebase_covers_key', envVar: 'FILEBASE_COVERS_KEY' },
+    ],
+  },
   heavenSetRecords: {
     name: 'heavenSetRecords',
     path: 'actions/heaven-set-records-v1.js',
@@ -109,7 +117,9 @@ const ACTIONS: Record<string, ActionDef> = {
     name: 'contentRegisterV1',
     path: 'actions/content-register-v1.js',
     displayName: 'Content Register v1',
-    keys: [], // No encrypted keys — sponsor PKP pays gas directly
+    keys: [
+      { name: 'filebase_covers_key', envVar: 'FILEBASE_COVERS_KEY' },
+    ],
   },
   contentAccessV1: {
     name: 'contentAccessV1',

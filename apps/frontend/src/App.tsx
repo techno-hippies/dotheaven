@@ -79,7 +79,7 @@ export const App: Component = () => {
   const activeFilterCount = () => countActiveFilters(filters())
 
   return (
-    <div class="flex flex-col h-full">
+    <div class="h-full overflow-y-auto">
       <PageHeader
         title="Community"
         leftSlot={

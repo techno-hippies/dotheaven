@@ -97,28 +97,26 @@ export function useTrackPlayback() {
   }
 }
 
-// ── Standard menu actions (AddToPlaylist + AddToQueue + GoToArtist) ─
+// ── Artist navigation helper ─────────────────────────────────────
 
-export function buildMenuActions(
-  playlistDialog: ReturnType<typeof usePlaylistDialog>,
-  extra?: Partial<TrackMenuActions>,
-): TrackMenuActions {
+/**
+ * Resolves a track to its artist MBID and navigates to the artist page.
+ * Returns a function that can be called with a Track.
+ */
+export function useArtistNavigation() {
   const navigate = useNavigate()
 
-  const goToArtist = async (track: Track) => {
+  return async (track: Track) => {
     // 1. Check for artistMbid on extended track types (e.g. LocalTrack)
-    const artistMbid = (track as any).artistMbid as string | undefined
-    if (artistMbid) {
-      navigate(`/artist/${artistMbid}`)
+    if (track.artistMbid) {
+      navigate(`/artist/${track.artistMbid}`)
       return
     }
 
     // 2. For on-chain scrobbles with kind=1 (MBID), resolve via recording payload
-    const mbid = (track as any).mbid as string | undefined
-    if (mbid) {
-      // mbid is a recording MBID — resolve to artist via heaven-resolver
+    if (track.mbid) {
       try {
-        const result = await fetchRecordingArtists(mbid)
+        const result = await fetchRecordingArtists(track.mbid)
         if (result.artists.length > 0) {
           navigate(`/artist/${result.artists[0].mbid}`)
           return
@@ -127,10 +125,8 @@ export function buildMenuActions(
     }
 
     // 3. Try to decode recording MBID from payload (on-chain scrobble entries)
-    const payload = (track as any).payload as string | undefined
-    const kind = (track as any).kind as number | undefined
-    if (kind === 1 && payload) {
-      const recordingMbid = payloadToMbid(payload)
+    if (track.kind === 1 && track.payload) {
+      const recordingMbid = payloadToMbid(track.payload)
       if (recordingMbid) {
         try {
           const result = await fetchRecordingArtists(recordingMbid)
@@ -144,6 +140,15 @@ export function buildMenuActions(
 
     // 4. No MBID available — no artist page to navigate to
   }
+}
+
+// ── Standard menu actions (AddToPlaylist + AddToQueue + GoToArtist) ─
+
+export function buildMenuActions(
+  playlistDialog: ReturnType<typeof usePlaylistDialog>,
+  extra?: Partial<TrackMenuActions>,
+): TrackMenuActions {
+  const goToArtist = useArtistNavigation()
 
   return {
     onAddToPlaylist: playlistDialog.trigger,

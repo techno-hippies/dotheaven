@@ -1,8 +1,7 @@
 import { type Component, Show } from 'solid-js'
 import { Button } from '@heaven/ui'
 import { useAuth } from '../../providers'
-import { authDialogOpen, setAuthDialogOpen } from '../../lib/auth-dialog'
-import { AuthDialog } from './AuthDialog'
+import { setAuthDialogOpen } from '../../lib/auth-dialog'
 
 /**
  * Shared header actions with auth state handling.

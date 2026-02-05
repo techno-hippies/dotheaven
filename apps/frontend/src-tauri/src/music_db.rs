@@ -273,6 +273,10 @@ impl MusicDb {
             .get_setting("mbid_columns_v1")
             .as_deref()
             != Some("1");
+        let needs_cover_backfill = self
+            .get_setting("cover_path_backfill_v1")
+            .as_deref()
+            != Some("1");
         for (i, path) in audio_files.iter().enumerate() {
             let path_str = path.to_string_lossy().to_string();
             seen_paths.insert(path_str.clone());
@@ -306,11 +310,15 @@ impl MusicDb {
                 existing_cover_path = cover_path_cached;
                 existing_cover_cid = cover_cid_cached;
                 if sz == file_size && mt == file_mtime {
-                    let cover_missing = existing_cover_path
+                    let cover_file_missing = existing_cover_path
                         .as_deref()
                         .filter(|p| !p.is_empty())
                         .map(|p| !Path::new(p).exists())
                         .unwrap_or(false);
+                    let cover_path_missing = existing_cover_path
+                        .as_deref()
+                        .map(|p| p.is_empty())
+                        .unwrap_or(true);
                     let mbid_missing = artist_mbid_cached
                         .as_deref()
                         .map(|s| s.is_empty())
@@ -319,8 +327,10 @@ impl MusicDb {
                             .as_deref()
                             .map(|s| s.is_empty())
                             .unwrap_or(true);
-                    let force_backfill = needs_mbid_backfill && mbid_missing;
-                    if !cover_missing && !force_backfill {
+                    let force_backfill =
+                        (needs_mbid_backfill && mbid_missing) ||
+                        (needs_cover_backfill && cover_path_missing);
+                    if !cover_file_missing && !force_backfill {
                         cache_hits += 1;
                         if i % 100 == 0 {
                             if let Some(app) = app {
@@ -410,6 +420,9 @@ impl MusicDb {
 
         if needs_mbid_backfill {
             let _ = self.set_setting("mbid_columns_v1", "1");
+        }
+        if needs_cover_backfill {
+            let _ = self.set_setting("cover_path_backfill_v1", "1");
         }
 
         // 4. Return count

@@ -11,10 +11,14 @@ import { Track, Scrobble } from "../generated/schema";
 export function handleTrackRegisteredV4(event: TrackRegisteredEvent): void {
   let id = event.params.trackId.toHexString();
 
-  let track = new Track(id);
+  let track = Track.load(id);
+  if (!track) {
+    track = new Track(id);
+  }
   track.kind = event.params.kind;
   track.payload = event.params.payload;
   track.metaHash = event.params.metaHash;
+  track.durationSec = event.params.durationSec.toI32();
   track.registeredAt = BigInt.fromI64(event.params.registeredAt.toI64());
   track.blockNumber = event.block.number;
   track.transactionHash = event.transaction.hash;

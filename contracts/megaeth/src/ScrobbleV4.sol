@@ -69,6 +69,7 @@ contract ScrobbleV4 is AccountBinding {
         string coverCid;
         bytes32 payload;
         uint8 kind;
+        uint32 durationSec;
         uint64 registeredAt;
         bool exists;
     }
@@ -80,7 +81,8 @@ contract ScrobbleV4 is AccountBinding {
         uint8 indexed kind,
         bytes32 payload,
         bytes32 indexed metaHash,
-        uint64 registeredAt
+        uint64 registeredAt,
+        uint32 durationSec
     );
 
     event TrackUpdated(
@@ -115,20 +117,22 @@ contract ScrobbleV4 is AccountBinding {
         bytes32[] calldata payloads,
         string[] calldata titles,
         string[] calldata artists,
-        string[] calldata albums
+        string[] calldata albums,
+        uint32[] calldata durations
     ) external onlyOperator {
         uint256 len = kinds.length;
         require(
             len == payloads.length &&
             len == titles.length &&
             len == artists.length &&
-            len == albums.length,
+            len == albums.length &&
+            len == durations.length,
             "length mismatch"
         );
         require(len <= MAX_TRACK_REG, "batch too large");
 
         for (uint256 i; i < len; ) {
-            _registerOne(kinds[i], payloads[i], titles[i], artists[i], albums[i]);
+            _registerOne(kinds[i], payloads[i], titles[i], artists[i], albums[i], durations[i]);
             unchecked { ++i; }
         }
     }
@@ -144,6 +148,7 @@ contract ScrobbleV4 is AccountBinding {
         string[] calldata titles,
         string[] calldata artists,
         string[] calldata albums,
+        uint32[] calldata durations,
         bytes32[] calldata trackIds,
         uint64[] calldata timestamps
     ) external onlyAccountOf(user) {
@@ -154,12 +159,13 @@ contract ScrobbleV4 is AccountBinding {
                 regLen == regPayloads.length &&
                 regLen == titles.length &&
                 regLen == artists.length &&
-                regLen == albums.length,
+                regLen == albums.length &&
+                regLen == durations.length,
                 "reg length mismatch"
             );
             require(regLen <= MAX_TRACK_REG, "reg batch too large");
             for (uint256 i; i < regLen; ) {
-                _registerOne(regKinds[i], regPayloads[i], titles[i], artists[i], albums[i]);
+                _registerOne(regKinds[i], regPayloads[i], titles[i], artists[i], albums[i], durations[i]);
                 unchecked { ++i; }
             }
         }
@@ -250,11 +256,12 @@ contract ScrobbleV4 is AccountBinding {
         uint8 kind,
         bytes32 payload,
         uint64 registeredAt,
-        string memory coverCid
+        string memory coverCid,
+        uint32 durationSec
     ) {
         Track storage t = tracks[trackId];
         require(t.exists, "not registered");
-        return (t.title, t.artist, t.album, t.kind, t.payload, t.registeredAt, t.coverCid);
+        return (t.title, t.artist, t.album, t.kind, t.payload, t.registeredAt, t.coverCid, t.durationSec);
     }
 
     // ── Internal ─────────────────────────────────────────────────────────
@@ -264,7 +271,8 @@ contract ScrobbleV4 is AccountBinding {
         bytes32 payload,
         string calldata title,
         string calldata artist,
-        string calldata album
+        string calldata album,
+        uint32 durationSec
     ) internal {
         require(kind >= 1 && kind <= 3, "invalid kind");
         require(payload != bytes32(0), "zero payload");
@@ -290,12 +298,13 @@ contract ScrobbleV4 is AccountBinding {
             coverCid: "",
             payload: payload,
             kind: kind,
+            durationSec: durationSec,
             registeredAt: nowTs,
             exists: true
         });
 
         bytes32 metaHash = keccak256(abi.encode(title, artist, album));
-        emit TrackRegistered(trackId, kind, payload, metaHash, nowTs);
+        emit TrackRegistered(trackId, kind, payload, metaHash, nowTs, durationSec);
     }
 
     function _scrobbleBatch(
