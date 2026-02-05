@@ -1,7 +1,6 @@
 import { Show, For, type Component, type JSX, createSignal } from 'solid-js'
 import {
   AlbumCover,
-  FeedPost,
   ProfileInfoSection,
   ScheduleTab,
   IconButton,
@@ -208,31 +207,20 @@ export const ProfilePage: Component<ProfilePageProps> = (props) => {
                   <div class="divide-y divide-[var(--bg-highlight)]">
                     <For each={props.scrobbles}>
                       {(scrobble) => (
-                        <FeedPost
-                          authorName={props.displayName}
-                          timestamp={scrobble.timestamp}
-                          hideAuthor
-                          contentSlot={
-                            <div class="flex items-center gap-4">
-                              <AlbumCover
-                                src={scrobble.coverUrl}
-                                alt={scrobble.album || scrobble.title}
-                                class="w-14 h-14 flex-shrink-0"
-                              />
-                              <div class="flex-1 min-w-0">
-                                <div class="text-base font-semibold text-[var(--text-primary)] truncate">{scrobble.title}</div>
-                                <div class="text-base text-[var(--text-muted)] truncate">
-                                  {[scrobble.artist, scrobble.album].filter(Boolean).join(' \u00b7 ')}
-                                </div>
-                              </div>
-                              <span class="text-base text-[var(--text-muted)] flex-shrink-0">{scrobble.timestamp}</span>
+                        <div class="flex items-center gap-4 py-3 px-4">
+                          <AlbumCover
+                            src={scrobble.coverUrl}
+                            alt={scrobble.album || scrobble.title}
+                            class="w-14 h-14 flex-shrink-0"
+                          />
+                          <div class="flex-1 min-w-0">
+                            <div class="text-base font-semibold text-[var(--text-primary)] truncate">{scrobble.title}</div>
+                            <div class="text-base text-[var(--text-muted)] truncate">
+                              {[scrobble.artist, scrobble.album].filter(Boolean).join(' · ')}
                             </div>
-                          }
-                          likes={0}
-                          comments={0}
-                          onLike={() => {}}
-                          onComment={() => {}}
-                        />
+                          </div>
+                          <span class="text-base text-[var(--text-muted)] flex-shrink-0">{scrobble.timestamp}</span>
+                        </div>
                       )}
                     </For>
                   </div>
