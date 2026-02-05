@@ -13,7 +13,7 @@ import {
 } from './dialog'
 import { Button } from '../../primitives/button'
 import { Spinner } from '../../primitives/spinner'
-import { AlbumCover } from './album-cover'
+import { AlbumCover } from '../media/album-cover'
 
 const meta: Meta<typeof Dialog> = {
   title: 'Shared/Dialog',
