@@ -4,7 +4,7 @@ export { TimeSlotList } from './TimeSlotList'
 export { TimezoneSelector } from './TimezoneSelector'
 export { BookingConfirmation } from './BookingConfirmation'
 export type {
-  TimeSlot,
+  TimeSlot as SchedulerTimeSlot,
   DayAvailability,
   SchedulerProps
 } from './types'

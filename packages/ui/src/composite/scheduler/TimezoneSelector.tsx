@@ -5,7 +5,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-} from '../dropdown-menu'
+} from '../shared/dropdown-menu'
 
 // =============================================================================
 // Types
