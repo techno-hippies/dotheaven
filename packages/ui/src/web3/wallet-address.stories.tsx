@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { WalletAddress } from './wallet-address'
 
 const meta: Meta<typeof WalletAddress> = {
-  title: 'Web3/WalletAddress',
+  title: 'Shared/WalletAddress',
   component: WalletAddress,
   tags: ['autodocs'],
   parameters: {

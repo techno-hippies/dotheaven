@@ -4,7 +4,7 @@ import { ProfilePage } from './profile-page'
 import type { ProfileTab } from './profile-tabs'
 
 const meta = {
-  title: 'Pages/ProfilePage',
+  title: 'Profile/ProfilePage',
   component: ProfilePage,
   parameters: {
     layout: 'fullscreen',
