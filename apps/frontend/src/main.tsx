@@ -37,8 +37,6 @@ import { PlaylistPage } from './pages/PlaylistPage'
 import { ArtistPage } from './pages/ArtistPage'
 import { SchedulePage } from './pages/SchedulePage'
 import { ChatLayout } from './pages/ChatLayout'
-// PostPage moved to legacy/ — route kept for deep-link compat
-import { PostPage } from './legacy/PostPage'
 
 function maybeRedirectHandshakeProfile() {
   if (typeof window === 'undefined') return
@@ -86,7 +84,6 @@ render(
                 <Route path="/" component={AppLayout}>
                   <Route path="/" component={App} />
                   <Route path="/u/:id" component={PublicProfilePage} />
-                  <Route path="/post/:id" component={PostPage} />
                   <Route path="/playlist/:id" component={PlaylistPage} />
                   <Route path="/artist/:mbid" component={ArtistPage} />
                   <Route path="/profile" component={MyProfilePage} />
