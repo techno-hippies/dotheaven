@@ -31,7 +31,7 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 
 | Action | File | CID (prefix) |
 |--------|------|--------------|
-| Playlist v1 | `features/playlists/playlist-v1.js` | `QmYvozSn...` |
+| Playlist v1 | `features/music/playlist-v1.js` | `QmYvozSn...` |
 | Heaven Claim Name | `features/profile/heaven-claim-name-v1.js` | `QmVx1YrP...` |
 | Heaven Set Profile | `features/profile/heaven-set-profile-v1.js` | `Qmc6657y...` |
 | Heaven Set Records | `features/profile/heaven-set-records-v1.js` | `QmNTJXB8...` |
@@ -191,7 +191,7 @@ bun scripts/verify.ts                      # Verify all actions configured
 bun features/music/song-publish.test.ts             # Test song publish
 bun features/music/lyrics-translate.test.ts         # Test batch lyrics translation
 bun features/music/story-register-sponsor.test.ts   # Test Story registration
-bun features/playlists/playlist-v1.test.ts          # Test playlist CRUD
+bun features/music/playlist-v1.test.ts          # Test playlist CRUD
 bun features/profile/heaven-claim-name.test.ts      # Test .heaven name claim
 bun features/profile/heaven-set-profile.test.ts     # Test profile write
 bun features/profile/heaven-set-records.test.ts     # Test records write
@@ -243,10 +243,9 @@ lit-actions/
 │   │   ├── post-register-v1.js        # Unified text + photo post registration
 │   │   ├── post-translate-v1.js       # LLM translation → EngagementV2
 │   │   └── post-translate.test.ts
-│   ├── playlists/                     # Playlist CRUD
+│   ├── music/                         # Playlists, publishing, lyrics
 │   │   ├── playlist-v1.js             # Event-sourced playlist operations
-│   │   └── playlist-v1.test.ts
-│   ├── music/                         # Music publishing (future)
+│   │   ├── playlist-v1.test.ts
 │   │   ├── song-publish-v1.js         # Upload + alignment + translation
 │   │   ├── song-publish.test.ts
 │   │   ├── lyrics-translate-v1.js     # Batch multi-language translation

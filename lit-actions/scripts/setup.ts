@@ -93,7 +93,7 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   playlistV1: {
     name: 'playlistV1',
-    path: 'features/playlists/playlist-v1.js',
+    path: 'features/music/playlist-v1.js',
     displayName: 'Playlist v1',
     keys: [
       { name: 'filebase_covers_key', envVar: 'FILEBASE_COVERS_KEY' },
