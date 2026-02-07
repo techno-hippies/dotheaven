@@ -76,7 +76,7 @@ async function main() {
   if (!openrouterKey) throw new Error("OPENROUTER_API_KEY not set");
 
   // Load action code (inline — haven't redeployed to IPFS yet)
-  const actionCode = readFileSync(join(ROOT_DIR, "features/content/avatar-upload-v1.js"), "utf-8");
+  const actionCode = readFileSync(join(ROOT_DIR, "features/profile/avatar-upload-v1.js"), "utf-8");
   console.log(`   Action:      inline (${actionCode.length} bytes)`);
 
   console.log("\nConnecting to Lit Protocol...");

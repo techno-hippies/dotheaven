@@ -35,10 +35,10 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 | Heaven Claim Name | `features/profile/heaven-claim-name-v1.js` | `QmVx1YrP...` |
 | Heaven Set Profile | `features/profile/heaven-set-profile-v1.js` | `Qmc6657y...` |
 | Heaven Set Records | `features/profile/heaven-set-records-v1.js` | `QmNTJXB8...` |
-| Avatar Upload | `features/content/avatar-upload-v1.js` | `QmTWwoC5...` |
-| Content Register v1 | `features/content/content-register-v1.js` | `QmchDhdr...` |
-| Content Access v1 | `features/content/content-access-v1.js` | `QmXnhhG1...` |
-| Link EOA v1 | `features/content/link-eoa-v1.js` | `QmYPeQEp...` |
+| Avatar Upload | `features/profile/avatar-upload-v1.js` | `QmTWwoC5...` |
+| Content Register v1 | `features/media/content-register-v1.js` | `QmchDhdr...` |
+| Content Access v1 | `features/media/content-access-v1.js` | `QmXnhhG1...` |
+| Link EOA v1 | `features/media/link-eoa-v1.js` | `QmYPeQEp...` |
 | Post Register v1 | `features/social/post-register-v1.js` | `QmeVChS4...` |
 
 ### Future (in `setup.ts` but not in `action-cids.ts`)
@@ -220,17 +220,17 @@ bun data-scripts/ingest-dateme.ts          # Ingest dateme.directory profiles
 ```
 lit-actions/
 ├── features/                          # Actions + tests organized by feature domain
-│   ├── profile/                       # Heaven names, profiles, records
+│   ├── profile/                       # Heaven names, profiles, avatars
 │   │   ├── heaven-claim-name-v1.js    # Gasless .heaven name claim
 │   │   ├── heaven-claim-name.test.ts
 │   │   ├── heaven-set-profile-v1.js   # Gasless profile write to ProfileV2
 │   │   ├── heaven-set-profile.test.ts
 │   │   ├── heaven-set-records-v1.js   # Gasless ENS text record writes
-│   │   └── heaven-set-records.test.ts
-│   ├── content/                       # Uploads, access control, covers
+│   │   ├── heaven-set-records.test.ts
 │   │   ├── avatar-upload-v1.js        # IPFS upload with anime style enforcement
 │   │   ├── avatar-upload.test.ts
-│   │   ├── avatar-style-check.test.ts
+│   │   └── avatar-style-check.test.ts
+│   ├── media/                         # Encrypted music files, covers, access control
 │   │   ├── content-register-v1.js     # Filecoin content registration
 │   │   ├── content-register.test.ts
 │   │   ├── content-access-v1.js       # Grant/revoke content access
