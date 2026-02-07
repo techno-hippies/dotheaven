@@ -101,7 +101,7 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   trackCoverV4: {
     name: 'trackCoverV4',
-    path: 'features/media/track-cover-v4.js',
+    path: 'features/music/track-cover-v4.js',
     displayName: 'Track Cover v4',
     keys: [
       { name: 'filebase_covers_key', envVar: 'FILEBASE_COVERS_KEY' },
@@ -115,7 +115,7 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   contentRegisterV1: {
     name: 'contentRegisterV1',
-    path: 'features/media/content-register-v1.js',
+    path: 'features/music/content-register-v1.js',
     displayName: 'Content Register v1',
     keys: [
       { name: 'filebase_covers_key', envVar: 'FILEBASE_COVERS_KEY' },
@@ -123,13 +123,13 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   contentAccessV1: {
     name: 'contentAccessV1',
-    path: 'features/media/content-access-v1.js',
+    path: 'features/music/content-access-v1.js',
     displayName: 'Content Access v1',
     keys: [], // No encrypted keys — sponsor PKP pays gas directly
   },
   linkEoaV1: {
     name: 'linkEoaV1',
-    path: 'features/media/link-eoa-v1.js',
+    path: 'features/music/link-eoa-v1.js',
     displayName: 'Link EOA v1',
     keys: [], // No encrypted keys — sponsor PKP pays gas directly
   },

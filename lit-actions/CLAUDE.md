@@ -36,9 +36,9 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 | Heaven Set Profile | `features/profile/heaven-set-profile-v1.js` | `Qmc6657y...` |
 | Heaven Set Records | `features/profile/heaven-set-records-v1.js` | `QmNTJXB8...` |
 | Avatar Upload | `features/profile/avatar-upload-v1.js` | `QmTWwoC5...` |
-| Content Register v1 | `features/media/content-register-v1.js` | `QmchDhdr...` |
-| Content Access v1 | `features/media/content-access-v1.js` | `QmXnhhG1...` |
-| Link EOA v1 | `features/media/link-eoa-v1.js` | `QmYPeQEp...` |
+| Content Register v1 | `features/music/content-register-v1.js` | `QmchDhdr...` |
+| Content Access v1 | `features/music/content-access-v1.js` | `QmXnhhG1...` |
+| Link EOA v1 | `features/music/link-eoa-v1.js` | `QmYPeQEp...` |
 | Post Register v1 | `features/social/post-register-v1.js` | `QmeVChS4...` |
 
 ### Future (in `setup.ts` but not in `action-cids.ts`)
@@ -230,7 +230,13 @@ lit-actions/
 │   │   ├── avatar-upload-v1.js        # IPFS upload with anime style enforcement
 │   │   ├── avatar-upload.test.ts
 │   │   └── avatar-style-check.test.ts
-│   ├── media/                         # Encrypted music files, covers, access control
+│   ├── social/                        # Posts and engagement
+│   │   ├── post-register-v1.js        # Unified text + photo post registration
+│   │   ├── post-translate-v1.js       # LLM translation → EngagementV2
+│   │   └── post-translate.test.ts
+│   ├── music/                         # Playlists, publishing, content, covers
+│   │   ├── playlist-v1.js             # Event-sourced playlist operations
+│   │   ├── playlist-v1.test.ts
 │   │   ├── content-register-v1.js     # Filecoin content registration
 │   │   ├── content-register.test.ts
 │   │   ├── content-access-v1.js       # Grant/revoke content access
@@ -238,14 +244,7 @@ lit-actions/
 │   │   ├── content-upload.test.ts
 │   │   ├── content-decrypt.test.ts
 │   │   ├── link-eoa-v1.js             # Link PKP to EOA
-│   │   └── track-cover-v4.js          # Track cover art management
-│   ├── social/                        # Posts and engagement
-│   │   ├── post-register-v1.js        # Unified text + photo post registration
-│   │   ├── post-translate-v1.js       # LLM translation → EngagementV2
-│   │   └── post-translate.test.ts
-│   ├── music/                         # Playlists, publishing, lyrics
-│   │   ├── playlist-v1.js             # Event-sourced playlist operations
-│   │   ├── playlist-v1.test.ts
+│   │   ├── track-cover-v4.js          # Track cover art management
 │   │   ├── song-publish-v1.js         # Upload + alignment + translation
 │   │   ├── song-publish.test.ts
 │   │   ├── lyrics-translate-v1.js     # Batch multi-language translation
