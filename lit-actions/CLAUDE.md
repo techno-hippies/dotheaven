@@ -45,6 +45,7 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 
 | Action | File | Notes |
 |--------|------|-------|
+| Post Translate v1 | `actions/post-translate-v1.js` | Translates post text via LLM → EngagementV2.translateFor() on MegaETH |
 | Song Publish | `actions/song-publish-v1.js` | Not wired to frontend yet |
 | Lyrics Translate | `actions/lyrics-translate-v1.js` | Not wired to frontend yet |
 | Story Register Sponsor | `actions/story-register-sponsor-v1.js` | Not wired to frontend yet |
@@ -178,6 +179,7 @@ bun scripts/setup.ts contentRegisterV1     # Deploy content register action
 bun scripts/setup.ts contentAccessV1       # Deploy content access action
 bun scripts/setup.ts linkEoaV1             # Deploy link EOA action
 bun scripts/setup.ts postRegisterV1        # Deploy post register action
+bun scripts/setup.ts postTranslateV1      # Deploy post translate action
 bun scripts/setup.ts songPublish           # Deploy song publish action (future)
 bun scripts/setup.ts lyricsTranslate       # Deploy lyrics translate action (future)
 bun scripts/setup.ts storyRegisterSponsor  # Deploy story register action (future)
@@ -194,6 +196,8 @@ bun tests/heaven-claim-name.test.ts        # Test .heaven name claim (MegaETH br
 bun tests/heaven-set-profile.test.ts       # Test profile write (MegaETH broadcast)
 bun tests/heaven-set-profile.test.ts --dry-run  # Dry run (sign only, no broadcast)
 bun tests/heaven-set-records.test.ts       # Test records write (claims name + sets text record)
+bun tests/post-translate.test.ts           # Test post translation (LLM + MegaETH broadcast)
+bun tests/post-translate.test.ts --dry-run # Dry run (translate only, no broadcast)
 ```
 
 ## Updating an Action
@@ -222,6 +226,7 @@ lit-actions/
 │   ├── content-access-v1.js           # Grant/revoke content access on ContentRegistry
 │   ├── link-eoa-v1.js                 # Link PKP to EOA on ContentAccessMirror
 │   ├── post-register-v1.js            # Unified text + photo post registration
+│   ├── post-translate-v1.js           # LLM translation → EngagementV2.translateFor()
 │   ├── song-publish-v1.js             # Upload + alignment + translation (future)
 │   ├── lyrics-translate-v1.js         # Batch multi-language translation (future)
 │   ├── story-register-sponsor-v1.js   # Gasless Story IP registration (future)
@@ -247,6 +252,7 @@ lit-actions/
 │   ├── heaven-claim-name.test.ts      # E2E test for .heaven name claim
 │   ├── heaven-set-profile.test.ts     # E2E test for profile write
 │   ├── heaven-set-records.test.ts     # E2E test for records write (claims name + sets text record)
+│   ├── post-translate.test.ts         # E2E test for post translation (LLM + broadcast)
 │   └── shared/env.ts                  # Network detection + config loading
 ├── fixtures/
 │   └── test-song.mp3                  # Test audio file
@@ -266,6 +272,12 @@ lit-actions/
 message = `heaven:publish:${audioHash}:${previewHash}:${coverHash}:${songMetadataHash}:${ipaMetadataHash}:${nftMetadataHash}:${lyricsHash}:${sourceLanguage}:${targetLanguage}:${timestamp}:${nonce}`
 ```
 Action fetches content, re-hashes, verifies signature recovers to user's address. All metadata, lyrics, and language params are authenticated.
+
+### Post Translate (EIP-191)
+```
+message = `heaven:translate-post:${postId}:${textHash}:${targetLang}:${timestamp}:${nonce}`
+```
+`textHash` = SHA-256 of original post text. `targetLang` = ISO 639-1 code (e.g. "ja"). Action verifies signature, calls LLM for translation, then sponsor PKP broadcasts `EngagementV2.translateFor()` on MegaETH. Translation stored as event only (no storage cost).
 
 ### Lyrics Translate (EIP-191)
 ```

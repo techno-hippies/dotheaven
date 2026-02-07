@@ -1,6 +1,8 @@
-import { type Component, createSignal, createResource, Show } from 'solid-js'
+import { type Component, createSignal, createResource, createMemo, Show } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
-import { Button, Switch } from '@heaven/ui'
+import { Button, PageHeader, SettingsMenu, type SettingsMenuItem, Switch } from '@heaven/ui'
+import { Globe, UserCircle, SignOut } from '@heaven/ui/icons'
+import { HOME } from '@heaven/core'
 import { useAuth } from '../providers'
 import { openAuthDialog } from '../lib/auth-dialog'
 import { getEnsProfile, getTextRecord, setTextRecord, computeNode, getPrimaryName } from '../lib/heaven'
@@ -9,6 +11,7 @@ export const SettingsPage: Component = () => {
   const auth = useAuth()
   const navigate = useNavigate()
   const [saving, setSaving] = createSignal(false)
+  const [identityOpen, setIdentityOpen] = createSignal(false)
 
   // Fetch linked EOA's ENS profile
   const [ensProfile] = createResource(
@@ -71,14 +74,56 @@ export const SettingsPage: Component = () => {
 
   const handleLogout = async () => {
     await auth.logout()
-    navigate('/')
+    navigate(HOME)
   }
+
+  const truncatedAddress = () => {
+    const addr = auth.pkpAddress()
+    return addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : ''
+  }
+
+  const identityValue = () => {
+    if (displayIdentity() === 'heaven' && heavenName()) return `${heavenName()}.heaven`
+    if (ensProfile()?.name) return ensProfile()!.name!
+    return undefined
+  }
+
+  const menuItems = createMemo<SettingsMenuItem[]>(() => {
+    const items: SettingsMenuItem[] = []
+
+    if (showIdentityToggle()) {
+      items.push({
+        key: 'identity',
+        icon: Globe,
+        label: 'Identity',
+        value: identityValue(),
+        onClick: () => setIdentityOpen(!identityOpen()),
+      })
+    }
+
+    items.push({
+      key: 'account',
+      icon: UserCircle,
+      label: 'Account',
+      description: truncatedAddress(),
+    })
+
+    items.push({
+      key: 'logout',
+      icon: SignOut,
+      label: 'Log Out',
+      onClick: handleLogout,
+      destructive: true,
+    })
+
+    return items
+  })
 
   return (
     <div class="h-full overflow-y-auto">
-      <div class="max-w-2xl mx-auto px-6 py-8">
-        <h1 class="text-2xl font-bold text-[var(--text-primary)] mb-6">Settings</h1>
+      <PageHeader title="Settings" />
 
+      <div class="max-w-2xl mx-auto px-4 md:px-6 py-6">
         <Show
           when={auth.isAuthenticated()}
           fallback={
@@ -88,41 +133,25 @@ export const SettingsPage: Component = () => {
             </div>
           }
         >
-          {/* Identity section */}
-          <Show when={showIdentityToggle()}>
-            <div class="border-b border-[var(--bg-highlight)] pb-6 mb-6">
-              <h2 class="text-lg font-semibold text-[var(--text-primary)] mb-2">Identity</h2>
-              <p class="text-base text-[var(--text-secondary)] mb-4">
-                You have both <span class="text-[var(--text-primary)] font-medium">{heavenName()}.heaven</span> and{' '}
-                <span class="text-[var(--text-primary)] font-medium">{ensProfile()?.name}</span>. Choose which to display on your posts.
+          <SettingsMenu items={menuItems()} />
+
+          {/* Expanded identity toggle */}
+          <Show when={identityOpen() && showIdentityToggle()}>
+            <div class="mt-4 rounded-md bg-[var(--bg-surface)] px-4 py-4">
+              <p class="text-sm text-[var(--text-secondary)] mb-3">
+                Choose which name to display on your posts.
               </p>
-              <div class="flex items-center gap-3">
-                <Switch
-                  checked={displayIdentity() === 'heaven'}
-                  onChange={(checked) => handleToggle(checked)}
-                  disabled={saving() || displayIdentity.loading}
-                  label={displayIdentity() === 'heaven' ? `Show as ${heavenName()}.heaven` : `Show as ${ensProfile()?.name}`}
-                  description={displayIdentity() === 'heaven'
-                    ? 'Your Heaven name will be shown on posts'
-                    : 'Your ENS name will be shown on posts'}
-                />
-              </div>
+              <Switch
+                checked={displayIdentity() === 'heaven'}
+                onChange={(checked) => handleToggle(checked)}
+                disabled={saving() || displayIdentity.loading}
+                label={displayIdentity() === 'heaven' ? `Show as ${heavenName()}.heaven` : `Show as ${ensProfile()?.name}`}
+                description={displayIdentity() === 'heaven'
+                  ? 'Your Heaven name will be shown on posts'
+                  : 'Your ENS name will be shown on posts'}
+              />
             </div>
           </Show>
-
-          {/* Account section */}
-          <div class="border-b border-[var(--bg-highlight)] pb-6 mb-6">
-            <h2 class="text-lg font-semibold text-[var(--text-primary)] mb-2">Account</h2>
-            <p class="text-base text-[var(--text-secondary)] mb-4">
-              Signed in as {auth.pkpAddress()?.slice(0, 6)}...{auth.pkpAddress()?.slice(-4)}
-            </p>
-            <Button
-              variant="destructive"
-              onClick={handleLogout}
-            >
-              Log Out
-            </Button>
-          </div>
         </Show>
       </div>
     </div>

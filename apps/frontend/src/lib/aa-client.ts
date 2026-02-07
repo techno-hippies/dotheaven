@@ -22,17 +22,21 @@ import {
 } from 'viem'
 import type { PKPInfo, PKPAuthContext } from './lit'
 import { getLitClient } from './lit/client'
+import {
+  MEGAETH_RPC,
+  ENTRYPOINT as ENTRYPOINT_ADDR,
+  ACCOUNT_FACTORY,
+  SCROBBLE_V4 as SCROBBLE_V4_ADDR,
+} from '@heaven/core'
 
 // ── Config ────────────────────────────────────────────────────────────────
 
-const DEFAULT_RPC = 'https://carrot.megaeth.com/rpc'
-const AA_RPC_URL = import.meta.env.VITE_AA_RPC_URL ?? DEFAULT_RPC
+const AA_RPC_URL = import.meta.env.VITE_AA_RPC_URL ?? MEGAETH_RPC
 
-// Deployed contracts
-const ENTRYPOINT = (import.meta.env.VITE_AA_ENTRYPOINT ??
-  '0x0000000071727De22E5E9d8BAf0edAc6f37da032') as Address
-const FACTORY = '0xF78E2a3187DB720F738a5477f42dCAEF4fec10dB' as Address
-const SCROBBLE_V4 = '0x1D23Ad1c20ce54224fEffe8c2E112296C321451E' as Address
+// Deployed contracts (from centralized config, with env override for testing)
+const ENTRYPOINT = (import.meta.env.VITE_AA_ENTRYPOINT ?? ENTRYPOINT_ADDR) as Address
+const FACTORY = ACCOUNT_FACTORY as Address
+const SCROBBLE_V4 = SCROBBLE_V4_ADDR as Address
 
 // Gateway URL (configurable via env var for EigenCompute deployment)
 const GATEWAY_URL = import.meta.env.VITE_AA_GATEWAY_URL ?? 'http://127.0.0.1:3337'

@@ -1,4 +1,5 @@
 import type { Track } from '@heaven/ui'
+import { MEGAETH_RPC, SCROBBLE_V3, SCROBBLE_V4 } from '@heaven/core'
 import { payloadToMbid } from './artist'
 
 /**
@@ -13,7 +14,7 @@ import { payloadToMbid } from './artist'
  */
 
 const GOLDSKY_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/9.0.0/gn'
+  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/12.0.0/gn'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -147,10 +148,6 @@ function formatDuration(seconds: number): string {
 }
 
 // ── Track metadata resolution (on-chain via MegaETH RPC) ──────────
-
-const MEGAETH_RPC = 'https://carrot.megaeth.com/rpc'
-const SCROBBLE_V3 = '0x144c450cd5B641404EEB5D5eD523399dD94049E0'
-const SCROBBLE_V4 = '0x1D23Ad1c20ce54224fEffe8c2E112296C321451E'
 
 interface TrackMeta {
   title: string

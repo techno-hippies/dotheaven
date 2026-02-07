@@ -189,3 +189,52 @@ export function getNativeLanguages(entries: LanguageEntry[]): LanguageEntry[] {
 export function getLearningLanguages(entries: LanguageEntry[]): LanguageEntry[] {
   return entries.filter((e) => e.proficiency > 0 && e.proficiency < PROFICIENCY.NATIVE)
 }
+
+/** ISO 639-1 code → English language name */
+export const LANGUAGE_NAMES: Record<string, string> = {
+  en: 'English',
+  es: 'Spanish',
+  fr: 'French',
+  de: 'German',
+  it: 'Italian',
+  pt: 'Portuguese',
+  ru: 'Russian',
+  ja: 'Japanese',
+  ko: 'Korean',
+  zh: 'Chinese',
+  ar: 'Arabic',
+  hi: 'Hindi',
+  bn: 'Bengali',
+  pa: 'Punjabi',
+  jv: 'Javanese',
+  vi: 'Vietnamese',
+  tr: 'Turkish',
+  pl: 'Polish',
+  nl: 'Dutch',
+  sv: 'Swedish',
+  no: 'Norwegian',
+  da: 'Danish',
+  fi: 'Finnish',
+  cs: 'Czech',
+  el: 'Greek',
+  he: 'Hebrew',
+  th: 'Thai',
+  id: 'Indonesian',
+  ms: 'Malay',
+  tl: 'Tagalog',
+  uk: 'Ukrainian',
+  ro: 'Romanian',
+  hu: 'Hungarian',
+  fa: 'Persian',
+  ur: 'Urdu',
+  sw: 'Swahili',
+  ta: 'Tamil',
+  te: 'Telugu',
+  mr: 'Marathi',
+  ca: 'Catalan',
+}
+
+/** Get the English name for a language code */
+export function getLanguageName(code: string): string {
+  return LANGUAGE_NAMES[code.toLowerCase()] ?? code.toUpperCase()
+}

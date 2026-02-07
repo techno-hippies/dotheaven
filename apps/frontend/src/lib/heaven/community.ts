@@ -41,6 +41,8 @@ interface ProfileGQL {
 
 export interface CommunityMember extends CommunityCardProps {
   address: string
+  bio?: string
+  topArtists?: string[]
   locationCityId: string
   createdAt: number
   updatedAt: number

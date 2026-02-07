@@ -1,4 +1,5 @@
 import type { Track } from '@heaven/ui'
+import { MEGAETH_RPC, PLAYLIST_V1 } from '@heaven/core'
 import { getCoverCache, getCoverCacheById } from '../cover-cache'
 import { payloadToMbid } from './artist'
 
@@ -16,11 +17,7 @@ const PLAYLIST_ENDPOINT =
   'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-playlists/1.0.0/gn'
 
 const ACTIVITY_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/9.0.0/gn'
-
-const MEGAETH_RPC = 'https://carrot.megaeth.com/rpc'
-const SCROBBLE_V3 = '0x144c450cd5B641404EEB5D5eD523399dD94049E0'
-const PLAYLIST_V1 = '0xF0337C4A335cbB3B31c981945d3bE5B914F7B329'
+  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/12.0.0/gn'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -50,6 +47,7 @@ interface TrackMeta {
   coverCid: string
   kind: number
   payload: string
+  durationSec: number
 }
 
 // ── Subgraph Queries ───────────────────────────────────────────────
@@ -231,7 +229,7 @@ export async function resolvePlaylistTracks(
       payload,
       mbid,
       albumCover: onChainCover ?? localCover,
-      duration: '--:--',
+      duration: formatDuration(meta?.durationSec ?? 0),
       ...(content ? {
         contentId: content.contentId,
         pieceCid: content.pieceCid,
@@ -240,6 +238,13 @@ export async function resolvePlaylistTracks(
       } : {}),
     }
   })
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds === 0) return '--:--'
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
 }
 
 // ── On-Chain Nonce (for write operations) ──────────────────────────
@@ -276,61 +281,58 @@ function mapPlaylist(p: any): OnChainPlaylist {
 
 async function batchGetTracks(trackIds: string[]): Promise<Map<string, TrackMeta>> {
   const results = new Map<string, TrackMeta>()
-  // getTrack(bytes32) → 0x82368a6b
-  const selector = '0x82368a6b'
+  if (trackIds.length === 0) return results
 
-  const promises = trackIds.map(async (trackId) => {
-    try {
-      const data = selector + trackId.slice(2).padStart(64, '0')
-      const result = await rpcCall('eth_call', [
-        { to: SCROBBLE_V3, data },
-        'latest',
-      ])
-      if (result && result !== '0x' && result.length > 66) {
-        const decoded = decodeGetTrackResult(result)
-        if (decoded) results.set(trackId, decoded)
-      }
-    } catch {
-      // Skip failed lookups
+  const ids = trackIds.map((id) => `"${id.toLowerCase()}"`).join(',')
+  const query = `{
+    tracks(
+      where: { id_in: [${ids}] }
+      first: 1000
+    ) {
+      id
+      title
+      artist
+      kind
+      payload
+      coverCid
+      durationSec
     }
-  })
+  }`
 
-  await Promise.all(promises)
-  return results
-}
-
-function decodeGetTrackResult(hex: string): TrackMeta | null {
   try {
-    const data = hex.slice(2)
-    // 7-tuple: (string title, string artist, string album, uint8 kind, bytes32 payload, uint64 registeredAt, string coverCid)
-    const titleOffset = parseInt(data.slice(0, 64), 16) * 2
-    const artistOffset = parseInt(data.slice(64, 128), 16) * 2
-    const albumOffset = parseInt(data.slice(128, 192), 16) * 2
-    const kind = parseInt(data.slice(192, 256), 16)           // slot 3: uint8
-    const payload = '0x' + data.slice(256, 320)               // slot 4: bytes32
-    const coverCidOffset = parseInt(data.slice(384, 448), 16) * 2 // slot 6
-    return {
-      title: decodeString(data, titleOffset),
-      artist: decodeString(data, artistOffset),
-      album: decodeString(data, albumOffset),
-      coverCid: decodeString(data, coverCidOffset),
-      kind,
-      payload,
+    const res = await fetch(ACTIVITY_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    })
+    if (!res.ok) return results
+    const json = await res.json()
+    const tracks: Array<{
+      id: string
+      title: string
+      artist: string
+      kind: number
+      payload: string
+      coverCid: string | null
+      durationSec: number | null
+    }> = json.data?.tracks ?? []
+
+    for (const t of tracks) {
+      results.set(t.id, {
+        title: t.title,
+        artist: t.artist,
+        album: '', // subgraph doesn't index album
+        coverCid: t.coverCid ?? '',
+        kind: t.kind,
+        payload: t.payload,
+        durationSec: t.durationSec ?? 0,
+      })
     }
   } catch {
-    return null
+    // Subgraph unavailable — degrade gracefully
   }
-}
 
-function decodeString(data: string, offset: number): string {
-  const len = parseInt(data.slice(offset, offset + 64), 16)
-  if (len === 0) return ''
-  const hexStr = data.slice(offset + 64, offset + 64 + len * 2)
-  const bytes = new Uint8Array(hexStr.length / 2)
-  for (let i = 0; i < hexStr.length; i += 2) {
-    bytes[i / 2] = parseInt(hexStr.slice(i, i + 2), 16)
-  }
-  return new TextDecoder().decode(bytes)
+  return results
 }
 
 interface ContentMeta {

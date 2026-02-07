@@ -18,10 +18,6 @@ const IS_DEV = import.meta.env.DEV
 // Worker base URL - production deployed worker
 const VOICE_WORKER_URL = import.meta.env.VITE_VOICE_WORKER_URL || 'https://neodate-voice.deletion-backup782.workers.dev'
 
-if (IS_DEV) {
-  console.log('[VoiceAPI] Worker URL:', VOICE_WORKER_URL)
-}
-
 // Agora App ID - must match worker config
 export const AGORA_APP_ID = import.meta.env.VITE_AGORA_APP_ID || '3260ad15ace147c88a8bf32da798a114'
 

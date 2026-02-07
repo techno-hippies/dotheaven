@@ -2,17 +2,9 @@ import type { Component, JSX } from 'solid-js'
 import { Show, For } from 'solid-js'
 import { cn } from '../../lib/utils'
 import { Avatar } from '../../primitives/avatar'
-import { FlagIcon } from '../../primitives/flag-icon'
-import { ChatCircle } from '../../icons'
-import { type LanguageEntry, LANG_TO_FLAG, PROFICIENCY } from '../../data/languages'
+import { type LanguageEntry, getLanguageName } from '../../data/languages'
 import { VerificationBadge, type VerificationState } from '../profile/verification-badge'
-
-export interface LanguageInfo {
-  /** ISO 3166-1 alpha-2 country code (e.g. "US", "JP") */
-  code: string
-  /** Optional label (e.g. "English") */
-  label?: string
-}
+import { LanguageChip } from '../../primitives/language-chip'
 
 export interface CommunityCardProps {
   class?: string
@@ -20,31 +12,18 @@ export interface CommunityCardProps {
   name: string
   /** Avatar image URL */
   avatarUrl?: string
-  /** Bio / intro text */
-  bio?: string
+  /** ISO 3166-1 alpha-2 nationality code (e.g. "US"). Shows a flag badge on the avatar. */
+  nationalityCode?: string
   /** Whether user is online */
   online?: boolean
   /** Whether this is a featured/highlighted card */
   featured?: boolean
-  /**
-   * Unified language entries with proficiency.
-   * When provided, Native/Learns rows are derived automatically
-   * (proficiency === 7 → Native, 1-6 → Learns).
-   * Takes precedence over nativeLanguages/learningLanguages.
-   */
+  /** Language entries with proficiency (7 = native, 1-6 = learning) */
   languages?: LanguageEntry[]
-  /** Native languages (legacy — use `languages` instead) */
-  nativeLanguages?: LanguageInfo[]
-  /** Languages being learned (legacy — use `languages` instead) */
-  learningLanguages?: LanguageInfo[]
-  /** Number of comments/messages */
-  commentCount?: number
   /** Age (0 = unset) */
   age?: number
-  /** Gender label (e.g. "Woman", "Man") */
+  /** Gender label (e.g. "F", "M", "NB") */
   gender?: string
-  /** Top artists from scrobble history */
-  topArtists?: string[]
   /** Verification state */
   verified?: VerificationState
   /** Click handler for the entire card */
@@ -53,60 +32,26 @@ export interface CommunityCardProps {
   rightSlot?: JSX.Element
 }
 
-/** Render a row of flags with "+N" overflow */
-const LanguageRow: Component<{ label: string; languages: LanguageInfo[] }> = (props) => {
-  const visible = () => props.languages.slice(0, 3)
-  const overflow = () => Math.max(0, props.languages.length - 3)
-
-  return (
-    <div class="flex items-center gap-2">
-      <span class="text-sm font-medium text-[var(--text-muted)]">
-        {props.label}
-      </span>
-      <For each={visible()}>
-        {(lang) => (
-          <FlagIcon code={lang.code} class="w-5 h-5 flex-shrink-0" />
-        )}
-      </For>
-      <Show when={overflow() > 0}>
-        <span class="text-sm font-medium text-[var(--text-muted)]">
-          +{overflow()}
-        </span>
-      </Show>
-    </div>
-  )
-}
-
 /**
- * CommunityCard - A card showing a community member with their photo, bio, and languages.
+ * CommunityCard - A card showing a community member with their photo and languages.
  *
- * Features:
- * - Large avatar with optional online indicator
- * - Age / gender subtitle
- * - Verification badge next to name
- * - Bio text preview
- * - Top artists from scrobble history
- * - Native and learning language flags
- * - Featured variant with larger layout and star badge
+ * Design:
+ * - Nationality flag on avatar (decoupled from language)
+ * - Chip-based language display with CEFR levels
+ * - All languages shown together (native + learning)
  */
 export const CommunityCard: Component<CommunityCardProps> = (props) => {
-  // Derive Native/Learns from unified languages prop, or fall back to legacy props
-  const nativeLangs = (): LanguageInfo[] => {
-    if (props.languages) {
-      return props.languages
-        .filter((e) => e.proficiency === PROFICIENCY.NATIVE)
-        .map((e) => ({ code: LANG_TO_FLAG[e.code] ?? e.code.toUpperCase() }))
-    }
-    return props.nativeLanguages ?? []
+  const MAX_CHIPS = 5 // Show max 5 languages total
+
+  // All languages sorted by proficiency (native first, then by level)
+  const allLanguages = () => {
+    if (!props.languages) return []
+    return [...props.languages].sort((a, b) => b.proficiency - a.proficiency)
   }
-  const learningLangs = (): LanguageInfo[] => {
-    if (props.languages) {
-      return props.languages
-        .filter((e) => e.proficiency > 0 && e.proficiency < PROFICIENCY.NATIVE)
-        .map((e) => ({ code: LANG_TO_FLAG[e.code] ?? e.code.toUpperCase() }))
-    }
-    return props.learningLanguages ?? []
-  }
+
+  // Visible languages (first MAX_CHIPS)
+  const visibleLanguages = () => allLanguages().slice(0, MAX_CHIPS)
+  const overflowCount = () => Math.max(0, allLanguages().length - MAX_CHIPS)
 
   return (
     <div
@@ -132,81 +77,67 @@ export const CommunityCard: Component<CommunityCardProps> = (props) => {
         'flex gap-3',
         props.featured ? 'p-4' : 'p-3',
       )}>
-        {/* Avatar */}
+        {/* Avatar with nationality flag */}
         <div class="relative flex-shrink-0">
           <Avatar
             src={props.avatarUrl}
-            size={props.featured ? '4xl' : '2xl'}
+            size={props.featured ? '2xl' : 'xl'}
+            nationalityCode={props.nationalityCode}
           />
         </div>
 
         {/* Content */}
-        <div class="flex-1 min-w-0 flex flex-col">
-          <div class="flex-1 flex flex-col gap-1.5">
-            {/* Name row with age/gender inline */}
-            <div class="flex items-center gap-2">
-              <Show when={props.online}>
-                <div class="w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0" />
-              </Show>
+        <div class="flex-1 min-w-0 flex flex-col gap-1">
+          {/* Name row with age/gender inline */}
+          <div class="flex items-center gap-2">
+            <Show when={props.online}>
+              <div class="w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0" />
+            </Show>
+            <span class={cn(
+              'font-semibold text-[var(--text-primary)] truncate',
+              props.featured ? 'text-lg' : 'text-base',
+            )}>
+              {props.name}
+            </span>
+            <Show when={props.age || props.gender}>
               <span class={cn(
-                'font-semibold text-[var(--text-primary)] truncate',
+                'font-semibold text-[var(--text-muted)]',
                 props.featured ? 'text-lg' : 'text-base',
               )}>
-                {props.name}
+                {[props.age && props.age > 0 ? String(props.age) : null, props.gender]
+                  .filter(Boolean)
+                  .join('')}
               </span>
-              <Show when={props.age || props.gender}>
-                <span class={cn(
-                  'font-semibold text-[var(--text-muted)]',
-                  props.featured ? 'text-lg' : 'text-base',
-                )}>
-                  {[props.age && props.age > 0 ? String(props.age) : null, props.gender]
-                    .filter(Boolean)
-                    .join('')}
-                </span>
-              </Show>
-              <Show when={props.verified && props.verified !== 'none'}>
-                <VerificationBadge state={props.verified!} size="sm" />
-              </Show>
+            </Show>
+            <Show when={props.verified && props.verified !== 'none'}>
+              <VerificationBadge state={props.verified!} size="sm" />
+            </Show>
 
-              {/* Right side: comment count */}
-              <div class="flex items-center gap-2 ml-auto flex-shrink-0">
-                <Show when={props.commentCount != null && props.commentCount! > 0}>
-                  <div class="flex items-center gap-1 text-[var(--accent-blue)]">
-                    <span class="text-sm font-medium">{props.commentCount}</span>
-                    <ChatCircle class="w-4 h-4" />
-                  </div>
-                </Show>
+            {/* Right slot */}
+            <Show when={props.rightSlot}>
+              <div class="ml-auto flex-shrink-0">
                 {props.rightSlot}
               </div>
+            </Show>
+          </div>
+
+          {/* Languages - chip based with CEFR levels */}
+          <Show when={visibleLanguages().length > 0}>
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <For each={visibleLanguages()}>
+                {(entry) => (
+                  <LanguageChip
+                    language={getLanguageName(entry.code)}
+                    proficiency={entry.proficiency}
+                    size="sm"
+                  />
+                )}
+              </For>
+              <Show when={overflowCount() > 0}>
+                <span class="text-xs text-[var(--text-muted)] px-1">+{overflowCount()}</span>
+              </Show>
             </div>
-
-            {/* Bio */}
-            <Show when={props.bio}>
-              <p class={cn(
-                'text-[var(--text-secondary)] leading-snug',
-                props.featured ? 'text-base line-clamp-3' : 'text-sm line-clamp-2',
-              )}>
-                {props.bio}
-              </p>
-            </Show>
-
-            {/* Top artists */}
-            <Show when={props.topArtists && props.topArtists.length > 0}>
-              <p class="text-sm text-[var(--text-muted)] line-clamp-2">
-                {props.topArtists!.slice(0, 3).join(', ')}
-              </p>
-            </Show>
-          </div>
-
-          {/* Language rows - always at bottom */}
-          <div class="flex items-center gap-4 flex-wrap mt-2">
-            <Show when={nativeLangs().length > 0}>
-              <LanguageRow label="Native" languages={nativeLangs()} />
-            </Show>
-            <Show when={learningLangs().length > 0}>
-              <LanguageRow label="Learns" languages={learningLangs()} />
-            </Show>
-          </div>
+          </Show>
         </div>
       </div>
     </div>

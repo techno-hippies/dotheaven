@@ -122,9 +122,9 @@ export const DIET_OPTIONS: SelectOption[] = [
 ]
 
 export const RELOCATE_OPTIONS: SelectOption[] = [
-  { value: 'no', label: 'No' },
-  { value: 'maybe', label: 'Maybe' },
-  { value: 'yes', label: 'Yes' },
+  { value: 'no', label: "Won't travel" },
+  { value: 'maybe', label: 'Might travel' },
+  { value: 'yes', label: 'Can travel' },
 ]
 
 export const DEGREE_OPTIONS: SelectOption[] = [

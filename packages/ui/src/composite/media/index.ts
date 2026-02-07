@@ -1,5 +1,5 @@
 export { AlbumCover, type AlbumCoverProps } from './album-cover'
-export { MediaHeader, type MediaHeaderProps } from './media-header'
+export { MediaHeader, type MediaHeaderProps, type MediaHeaderMenuItem } from './media-header'
 export { MiniPlayer, type MiniPlayerProps } from './mini-player'
 export { Scrubber, type ScrubberProps } from './scrubber'
 export { SidePlayer, type SidePlayerProps } from './side-player'

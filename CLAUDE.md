@@ -80,9 +80,9 @@ bun check            # Type check all packages
 - **ScrobbleEngine** (`packages/core/src/scrobble/engine.ts`): State machine tracking play time per session. Threshold: `min(duration × 50%, 240s)`. Emits `ReadyScrobble` when met
 - **ScrobbleService** (`apps/frontend/src/lib/scrobble-service.ts`): Wires engine to AA client (ScrobbleV4). Each scrobble submits a UserOp via the AA gateway immediately (no queue/batch)
 - **AA client** (`apps/frontend/src/lib/aa-client.ts`): Builds ERC-4337 UserOps targeting ScrobbleV4. PKP signs `userOpHash`, gateway adds paymaster signature, bundler (Alto) submits to EntryPoint
-- **ScrobbleV4 contract**: `0x1D23Ad1c20ce54224fEffe8c2E112296C321451E` on MegaETH (chain 6343). AA-enabled — `onlyAccountOf(user)` gating via factory-derived SimpleAccount. Stores `uint32 durationSec` per track.
+- **ScrobbleV4 contract**: `0xBcD4EbBb964182ffC5EA03FF70761770a326Ccf1` on MegaETH (chain 6343). AA-enabled — `onlyAccountOf(user)` gating via factory-derived SimpleAccount. Stores `uint32 durationSec` per track.
 - **ScrobbleV3 contract**: `0x144c450cd5B641404EEB5D5eD523399dD94049E0` on MegaETH (chain 6343). Legacy sponsor-gated version — still deployed, used by playlists Lit Action for track registration
-- **Subgraph**: Goldsky `dotheaven-activity/7.0.0` indexes `TrackRegistered` + `TrackCoverSet` + `Scrobbled` + `PostCreated` + `ContentRegistered` events
+- **Subgraph**: Goldsky `dotheaven-activity/11.0.0` indexes `TrackRegistered` + `TrackCoverSet` + `Scrobbled` + `PostCreated` + `ContentRegistered` events from both ScrobbleV3 and ScrobbleV4
 - **Frontend**: `ScrobblesPage` fetches from subgraph, displays verified/unidentified status with cover art
 - **Cover art pipeline** (Tauri): Rust extracts cover from audio tags → Tauri reads bytes → base64 sent via AA → cached in local SQLite → displayed via `heaven.myfilebase.com` dedicated gateway with image optimization params
 - **Auto-refresh**: After scrobble, `queryClient.invalidateQueries(['scrobbles'])` refreshes profile. Waits for cover TX confirmation before invalidating.
@@ -197,7 +197,7 @@ Three Goldsky subgraphs on MegaETH testnet (3-slot limit):
 
 | Subgraph | Version | Indexes | Source Dir |
 |----------|---------|---------|------------|
-| `dotheaven-activity` | 7.0.0 | ScrobbleV3 + PostsV1 + ContentRegistry | `subgraphs/activity-feed/` |
+| `dotheaven-activity` | 11.0.0 | ScrobbleV3 + ScrobbleV4 + PostsV1 + ContentRegistry | `subgraphs/activity-feed/` |
 | `dotheaven-profiles` | 1.0.0 | ProfileV2 | `subgraphs/profiles/` |
 | `dotheaven-playlists` | 1.0.0 | PlaylistV1 | `subgraphs/playlist-feed/` |
 
@@ -205,7 +205,7 @@ API base: `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/
 
 Deploy: `cd subgraphs/<dir> && npx graph codegen && npx graph build && goldsky subgraph deploy <name>/<version>`
 
-**Note**: `dotheaven-content` was merged into `dotheaven-activity` v7.0.0. Old content-feed subgraph dir remains for reference but is no longer deployed.
+**Note**: `dotheaven-content` was merged into `dotheaven-activity` v7.0.0. ScrobbleV4 was added in v11.0.0.
 
 ### Local Music Library (Tauri-only)
 - **Rust SQLite backend** (`src-tauri/src/music_db.rs`): rusqlite + lofty + walkdir
@@ -243,6 +243,21 @@ Deploy: `cd subgraphs/<dir> && npx graph codegen && npx graph build && goldsky s
 /settings              # Settings page
 ```
 
+### Music Metadata & Artist/Album Pages
+- **Heaven Resolver** (Cloudflare Worker): MusicBrainz API proxy + external image rehosting
+  - Artist/album metadata fetched from MusicBrainz via `/artist/:mbid` and `/release-group/:mbid`
+  - Wikimedia Commons images automatically rehosted to IPFS via Filebase
+  - Client-side rehosting (`apps/frontend/src/lib/image-cache.ts`) detects external URLs and calls `/rehost/image`
+  - In-memory cache + KV cache (1 year TTL) prevents duplicate work
+  - Eliminates 429 rate limit errors from Wikipedia servers
+  - IPFS gateway: `https://heaven.myfilebase.com/ipfs/`
+- **Artist Page** (`apps/frontend/src/pages/ArtistPage.tsx`):
+  - Hero image from MusicBrainz artist info (Wikimedia Commons)
+  - Track list with scrobble counts
+  - Skeleton loader while rehosting images
+- **Album Page**: Similar pattern for release group cover art
+- See `services/heaven-resolver/README.md` for full details
+
 ## Environment Variables
 ```bash
 VITE_CHAT_WORKER_URL     # Cloudflare Worker for AI chat
@@ -251,6 +266,7 @@ VITE_MEDIA_WORKER_URL    # Media Worker for photo upload + AI conversion
 VITE_HEAVEN_IMAGES_URL   # Heaven Images service for watermarking
 VITE_AA_GATEWAY_URL      # AA Gateway URL (default: http://127.0.0.1:3337)
 VITE_AA_GATEWAY_KEY      # AA Gateway API key (optional, for protected endpoints)
+VITE_RESOLVER_URL        # Heaven Resolver (MusicBrainz proxy + image rehosting)
 ```
 
 ## Color Scheme (Heaven Dark Theme)

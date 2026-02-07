@@ -1,14 +1,23 @@
-import { type Component, createSignal, createEffect, Show, createMemo, onCleanup } from 'solid-js'
+import { type Component, createSignal, createEffect, Show, createMemo, onCleanup, onMount } from 'solid-js'
 import { useNavigate, useParams } from '@solidjs/router'
 import { createQuery } from '@tanstack/solid-query'
 import { ProfilePage, type ProfileTab, type ProfileScrobble } from '../components/profile'
 import { useAuth } from '../providers'
 import { openAuthDialog } from '../lib/auth-dialog'
-import { fetchScrobbleEntries, getProfile, setProfile, setTextRecord, setTextRecords, computeNode, getTextRecord, checkNameAvailable, registerHeavenName, resolveAvatarUri, resolveIpfsUri, getEnsProfile, getAddr, resolveEnsName, getPrimaryName, getVerificationStatus, buildSelfVerifyLink, syncVerificationToMegaEth, getHostBasePrice, getHostOpenSlots, SlotStatus } from '../lib/heaven'
+import { fetchScrobbleEntries, getProfile, setProfile, setTextRecord, setTextRecords, computeNode, getTextRecord, checkNameAvailable, registerHeavenName, resolveAvatarUri, resolveIpfsUri, getEnsProfile, getAddr, resolveEnsName, getPrimaryName, getVerificationStatus, buildSelfVerifyLink, syncVerificationToMegaEth, getHostBasePrice, getHostOpenSlots, getSlot, SlotStatus } from '../lib/heaven'
+import {
+  initSessionService,
+  setBasePrice as setBasePriceTx,
+  cancelSlot as cancelSlotTx,
+  bookSlot as bookSlotTx,
+  createRequest as createRequestTx,
+} from '../lib/session-service'
 import { uploadAvatar } from '../lib/heaven/avatar'
-import { type ProfileInput, type VerificationState, type VerifyStep, type VerificationData, type TimeSlot, type SessionSlotData, getTagLabel, VerifyIdentityDialog, alpha3ToAlpha2, Button, Switch } from '@heaven/ui'
+import { type ProfileInput, type VerificationState, type VerifyStep, type VerificationData, type TimeSlot, type SessionSlotData, getTagLabel, VerifyIdentityDialog, alpha3ToAlpha2, WalletAssets, type WalletAsset } from '@heaven/ui'
+import { publicProfile, peerChat } from '@heaven/core'
 import { parseTagCsv } from '../lib/heaven/profile'
-import { isAddress, zeroAddress, type Address } from 'viem'
+import { isAddress, zeroAddress, parseEther, type Address } from 'viem'
+import { CHAINS, getNativeBalance, getErc20Balance } from '../lib/web3'
 
 function formatTimeAgo(ts: number): string {
   const now = Math.floor(Date.now() / 1000)
@@ -130,15 +139,88 @@ async function applyHeavenRecords(profile: ProfileInput, node: `0x${string}`): P
   return enriched
 }
 
+// ── Wallet tab config ──
+import { ASSET_CONFIGS } from '../lib/wallet-assets'
+
+/** Wallet tab content — fetches balances for any address (read-only) */
+const ProfileWalletTab: Component<{ address: string }> = (props) => {
+  const balancesQuery = createQuery(() => ({
+    queryKey: ['walletBalances', props.address],
+    queryFn: async () => {
+      const results = await Promise.allSettled(
+        ASSET_CONFIGS.map(async (config) => {
+          const chain = CHAINS[config.chainKey]
+          let formatted: string
+          if (config.isNative) {
+            const result = await getNativeBalance(chain, props.address as `0x${string}`)
+            formatted = result.formatted
+          } else {
+            const result = await getErc20Balance(chain, config.tokenAddress! as `0x${string}`, props.address as `0x${string}`)
+            formatted = result.formatted
+          }
+          const num = parseFloat(formatted)
+          return { key: config.key, formatted, usd: num * config.priceUsd }
+        })
+      )
+      const map: Record<string, { formatted: string; usd: number }> = {}
+      results.forEach((r, i) => {
+        if (r.status === 'fulfilled') map[ASSET_CONFIGS[i].key] = r.value
+      })
+      return map
+    },
+    get enabled() { return !!props.address },
+    staleTime: 30_000,
+  }))
+
+  const assets = (): WalletAsset[] =>
+    ASSET_CONFIGS.map((config) => {
+      const data = balancesQuery.data?.[config.key]
+      const num = data ? parseFloat(data.formatted) : 0
+      const usd = data?.usd ?? 0
+      return {
+        id: config.id,
+        name: config.name,
+        symbol: config.symbol,
+        icon: <config.icon />,
+        chainBadge: <config.chainBadge />,
+        balance: data ? num.toFixed(4) : '—',
+        balanceUSD: data ? `$${usd.toFixed(2)}` : '$—',
+        amount: data ? `${num.toFixed(4)} ${config.unitSymbol}` : `— ${config.unitSymbol}`,
+      }
+    })
+
+  const totalUsd = () => {
+    if (!balancesQuery.data) return '$—'
+    const sum = Object.values(balancesQuery.data).reduce((s, v) => s + v.usd, 0)
+    return `$${sum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  }
+
+  return (
+    <WalletAssets
+      address={props.address}
+      totalBalance={totalUsd()}
+      assets={assets()}
+      readOnly
+    />
+  )
+}
+
 export const MyProfilePage: Component = () => {
   const auth = useAuth()
-  const navigate = useNavigate()
-  const [activeTab, setActiveTab] = createSignal<ProfileTab>('about')
+  const [activeTab, setActiveTab] = createSignal<ProfileTab>('posts')
   const [heavenName, setHeavenName] = createSignal<string | null>(localStorage.getItem('heaven:username'))
   const [nameClaiming, setNameClaiming] = createSignal(false)
   const [nameClaimError, setNameClaimError] = createSignal<string | null>(null)
 
   const address = () => auth.pkpAddress()
+
+  // Initialize session service for escrow transactions
+  onMount(() => {
+    initSessionService({
+      getAuthContext: () => auth.getAuthContext(),
+      getPkp: () => auth.pkpInfo(),
+    })
+  })
 
   // On-chain reverse lookup: discover heaven name even if localStorage is empty (cross-client)
   const primaryNameQuery = createQuery(() => ({
@@ -206,14 +288,22 @@ export const MyProfilePage: Component = () => {
     staleTime: 1000 * 60 * 2,
   }))
 
-  const handleSetBasePrice = (priceEth: string) => {
-    // TODO: Call contract via Lit Action or direct tx
-    console.log('[Schedule] Set base price:', priceEth, 'ETH')
+  const handleSetBasePrice = async (priceEth: string) => {
+    try {
+      await setBasePriceTx(priceEth)
+      basePriceQuery.refetch()
+    } catch (err) {
+      console.error('[Schedule] setBasePrice failed:', err)
+    }
   }
 
-  const handleCancelSlot = (slotId: number) => {
-    // TODO: Call contract via Lit Action or direct tx
-    console.log('[Schedule] Cancel slot:', slotId)
+  const handleCancelSlot = async (slotId: number) => {
+    try {
+      await cancelSlotTx(slotId)
+      slotsQuery.refetch()
+    } catch (err) {
+      console.error('[Schedule] cancelSlot failed:', err)
+    }
   }
 
   const scrobblesQuery = createQuery(() => ({
@@ -609,94 +699,6 @@ export const MyProfilePage: Component = () => {
 
   const initialLoading = () => profileQuery.isLoading || ensQuery.isLoading
 
-  // ── Settings (inline on profile page) ────────────────────────────
-  const [settingsSaving, setSettingsSaving] = createSignal(false)
-
-  // Fetch current display identity preference
-  const displayIdentityQuery = createQuery(() => ({
-    queryKey: ['displayIdentity', resolvedNode()],
-    queryFn: async () => {
-      const node = resolvedNode()
-      if (!node) return 'ens'
-      const pref = await getTextRecord(node as `0x${string}`, 'heaven.displayIdentity').catch(() => '')
-      return pref === 'heaven' ? 'heaven' : 'ens'
-    },
-    get enabled() { return !!resolvedNode() },
-    staleTime: 1000 * 60 * 5,
-  }))
-
-  const hasEns = () => !!ensQuery.data?.name
-  const hasHeaven = () => !!heavenName()
-  const showIdentityToggle = () => hasEns() && hasHeaven()
-
-  const handleIdentityToggle = async (preferHeaven: boolean) => {
-    const name = heavenName()
-    const pkp = auth.pkpInfo()
-    if (!name || !pkp) return
-
-    setSettingsSaving(true)
-    try {
-      const authContext = await auth.getAuthContext()
-      const node = computeNode(name)
-      const value = preferHeaven ? 'heaven' : 'ens'
-      const result = await setTextRecord(node, 'heaven.displayIdentity', value, pkp.publicKey, authContext)
-      if (result.success) {
-        displayIdentityQuery.refetch()
-      } else {
-        console.error('[Settings] Failed to save identity preference:', result.error)
-      }
-    } catch (err) {
-      console.error('[Settings] Error saving identity preference:', err)
-    } finally {
-      setSettingsSaving(false)
-    }
-  }
-
-  const handleLogout = async () => {
-    await auth.logout()
-    navigate('/')
-  }
-
-  const settingsSlot = (
-    <>
-      {/* Identity section */}
-      <Show when={showIdentityToggle()}>
-        <div class="border-b border-[var(--bg-highlight)] pb-6 mb-6">
-          <h2 class="text-lg font-semibold text-[var(--text-primary)] mb-2">Identity</h2>
-          <p class="text-base text-[var(--text-secondary)] mb-4">
-            You have both <span class="text-[var(--text-primary)] font-medium">{heavenName()}.heaven</span> and{' '}
-            <span class="text-[var(--text-primary)] font-medium">{ensQuery.data?.name}</span>. Choose which to display.
-          </p>
-          <div class="flex items-center gap-3">
-            <Switch
-              checked={displayIdentityQuery.data === 'heaven'}
-              onChange={(checked) => handleIdentityToggle(checked)}
-              disabled={settingsSaving() || displayIdentityQuery.isLoading}
-              label={displayIdentityQuery.data === 'heaven' ? `Show as ${heavenName()}.heaven` : `Show as ${ensQuery.data?.name}`}
-              description={displayIdentityQuery.data === 'heaven'
-                ? 'Your Heaven name will be shown on posts'
-                : 'Your ENS name will be shown on posts'}
-            />
-          </div>
-        </div>
-      </Show>
-
-      {/* Account section */}
-      <div>
-        <h2 class="text-lg font-semibold text-[var(--text-primary)] mb-2">Account</h2>
-        <p class="text-base text-[var(--text-secondary)] mb-4">
-          Signed in as {auth.pkpAddress()?.slice(0, 6)}...{auth.pkpAddress()?.slice(-4)}
-        </p>
-        <Button
-          variant="destructive"
-          onClick={handleLogout}
-        >
-          Log Out
-        </Button>
-      </div>
-    </>
-  )
-
   return (
     <div class="h-full overflow-y-auto">
       <Show
@@ -731,6 +733,7 @@ export const MyProfilePage: Component = () => {
           isOwnProfile={true}
           verificationState={verificationState()}
           onVerifyClick={handleVerifyClick}
+          walletSlot={address() ? <ProfileWalletTab address={address()!} /> : undefined}
           activeTab={activeTab()}
           onTabChange={setActiveTab}
           scrobbles={scrobbles()}
@@ -748,7 +751,6 @@ export const MyProfilePage: Component = () => {
           ensLoading={ensQuery.isLoading}
           onImportAvatar={handleImportAvatar}
           verification={verificationData()}
-          settingsSlot={settingsSlot}
           scheduleBasePrice={basePriceQuery.data}
           scheduleAccepting={scheduleAccepting()}
           scheduleAvailability={scheduleAvailability()}
@@ -807,13 +809,13 @@ const ProfileSkeleton: Component = () => (
 export const PublicProfilePage: Component = () => {
   const params = useParams()
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = createSignal<ProfileTab>('about')
+  const [activeTab, setActiveTab] = createSignal<ProfileTab>('posts')
 
   // Canonicalize bare heaven labels → /u/label.heaven
   createEffect(() => {
     const id = (params.id ?? '').trim().toLowerCase()
     if (id && !id.includes('.') && !id.startsWith('0x')) {
-      navigate(`/u/${id}.heaven`, { replace: true })
+      navigate(publicProfile(`${id}.heaven`), { replace: true })
     }
   })
 
@@ -852,14 +854,33 @@ export const PublicProfilePage: Component = () => {
     staleTime: 1000 * 60 * 2,
   }))
 
-  const handleBookSlot = (slotId: number) => {
-    // TODO: Call contract book() — requires wallet tx
-    console.log('[Schedule] Book slot:', slotId)
+  const handleBookSlot = async (slotId: number) => {
+    try {
+      const slot = await getSlot(slotId)
+      const priceWei = parseEther(slot.priceEth)
+      await bookSlotTx(slotId, priceWei)
+      publicSlotsQuery.refetch()
+    } catch (err) {
+      console.error('[Schedule] bookSlot failed:', err)
+    }
   }
 
-  const handleRequestCustomTime = (params: { windowStart: number; windowEnd: number; durationMins: number; amountEth: string }) => {
-    // TODO: Call contract createRequest() — requires wallet tx
-    console.log('[Schedule] Request custom time:', params)
+  const handleRequestCustomTime = async (params: { windowStart: number; windowEnd: number; durationMins: number; amountEth: string }) => {
+    const hostAddr = address()
+    if (!hostAddr) return
+    try {
+      await createRequestTx({
+        hostTarget: hostAddr as `0x${string}`,
+        windowStart: params.windowStart,
+        windowEnd: params.windowEnd,
+        durationMins: params.durationMins,
+        expiry: Math.floor(Date.now() / 1000) + 86400 * 7, // 7 day expiry
+        amountWei: parseEther(params.amountEth),
+      })
+      publicSlotsQuery.refetch()
+    } catch (err) {
+      console.error('[Schedule] createRequest failed:', err)
+    }
   }
 
   const scrobblesQuery = createQuery(() => ({
@@ -980,6 +1001,7 @@ export const PublicProfilePage: Component = () => {
             avatarUrl={profileQuery.data?.avatar || ensProfileQuery.data?.avatar || undefined}
             nationalityCode={publicNationalityCode()}
             isOwnProfile={false}
+            walletSlot={address() ? <ProfileWalletTab address={address()!} /> : undefined}
             activeTab={activeTab()}
             onTabChange={setActiveTab}
             scrobbles={scrobbles()}
@@ -998,7 +1020,7 @@ export const PublicProfilePage: Component = () => {
             onMessageClick={() => {
               const addr = address()
               if (addr) {
-                navigate(`/chat/${encodeURIComponent(addr)}`)
+                navigate(peerChat(addr))
               }
             }}
           />

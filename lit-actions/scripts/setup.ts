@@ -142,6 +142,14 @@ const ACTIONS: Record<string, ActionDef> = {
       { name: 'openrouter_api_key', envVar: 'OPENROUTER_API_KEY' },
     ],
   },
+  postTranslateV1: {
+    name: 'postTranslateV1',
+    path: 'actions/post-translate-v1.js',
+    displayName: 'Post Translate v1',
+    keys: [
+      { name: 'openrouter_api_key', envVar: 'OPENROUTER_API_KEY' },
+    ],
+  },
 };
 
 // Parse CLI args

@@ -48,9 +48,9 @@ All names are **FREE** (`pricePerYear = 0`). Tiered pricing for short names (2-4
 | EngagementV1 | `0x2A3beA895AE5bb4415c436155cbA15a97ACc2C77` |
 | EngagementV2 | `0xAF769d204e51b64D282083Eb0493F6f37cd93138` |
 | PostsV1 | `0xFe674F421c2bBB6D664c7F5bc0D5A0204EE0bFA6` |
-| HeavenAccountFactory | `0xF78E2a3187DB720F738a5477f42dCAEF4fec10dB` |
+| HeavenAccountFactory | `0xB66BF4066F40b36Da0da34916799a069CBc79408` |
 | HeavenPaymaster | `0xd7C9436b7d6D62cF2bd5B3eE48f0f2D55d974c67` |
-| ScrobbleV4 | `0x1D23Ad1c20ce54224fEffe8c2E112296C321451E` |
+| ScrobbleV4 | `0xBcD4EbBb964182ffC5EA03FF70761770a326Ccf1` |
 | SessionEscrowV1 | `0x132212B78C4a7A3F19DE1BF63f119848c765c1d2` |
 
 Internal (deployed by factory constructor):

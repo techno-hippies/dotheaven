@@ -13,7 +13,12 @@ import {
   DialogTitle,
   DialogDescription,
   DialogCloseButton,
+  DownloadDialog,
 } from '@heaven/ui'
+import {
+  HOME, PROFILE, WALLET, SCHEDULE, SEARCH, CHAT, SETTINGS,
+  musicTab, playlist,
+} from '@heaven/core'
 import { AppLogo } from './header'
 import { useNavigate, useLocation } from '@solidjs/router'
 import { createQuery, useQueryClient } from '@tanstack/solid-query'
@@ -48,15 +53,33 @@ const UserIcon = () => (
 )
 
 
-const WalletIcon = () => (
+const SearchIcon = () => (
   <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
-    <path d="M216,64H56A8,8,0,0,1,56,48H192a8,8,0,0,0,0-16H56A24,24,0,0,0,32,56V184a24,24,0,0,0,24,24H216a16,16,0,0,0,16-16V80A16,16,0,0,0,216,64Zm0,128H56a8,8,0,0,1-8-8V78.63A23.84,23.84,0,0,0,56,80H216Zm-36-60a12,12,0,1,1,12-12A12,12,0,0,1,180,132Z" />
+    <path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z" />
   </svg>
 )
 
 const CalendarIcon = () => (
   <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
     <path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM72,48v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24V80H48V48ZM208,208H48V96H208V208Z" />
+  </svg>
+)
+
+const WalletIcon = () => (
+  <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
+    <path d="M216,64H56A8,8,0,0,1,56,48H192a8,8,0,0,0,0-16H56A24,24,0,0,0,32,56V184a24,24,0,0,0,24,24H216a16,16,0,0,0,16-16V80A16,16,0,0,0,216,64Zm0,128H56a8,8,0,0,1-8-8V78.63A23.84,23.84,0,0,0,56,80H216Zm-36-60a12,12,0,1,1,12-12A12,12,0,0,1,180,132Z" />
+  </svg>
+)
+
+const GearIcon = () => (
+  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
+    <path d="M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Zm88-29.84q.06-2.16,0-4.32l14.92-18.64a8,8,0,0,0,1.48-7.06,107.21,107.21,0,0,0-10.88-26.25,8,8,0,0,0-6-3.93l-23.72-2.64q-1.48-1.56-3-3L186,40.54a8,8,0,0,0-3.94-6,107.71,107.71,0,0,0-26.25-10.87,8,8,0,0,0-7.06,1.49L130.16,40Q128,40,125.84,40L107.2,25.11a8,8,0,0,0-7.06-1.48A107.6,107.6,0,0,0,73.89,34.51a8,8,0,0,0-3.93,6L67.32,64.27q-1.56,1.49-3,3L40.54,70a8,8,0,0,0-6,3.94,107.71,107.71,0,0,0-10.87,26.25,8,8,0,0,0,1.49,7.06L40,125.84Q40,128,40,130.16L25.11,148.8a8,8,0,0,0-1.48,7.06,107.21,107.21,0,0,0,10.88,26.25,8,8,0,0,0,6,3.93l23.72,2.64q1.49,1.56,3,3L70,215.46a8,8,0,0,0,3.94,6,107.71,107.71,0,0,0,26.25,10.87,8,8,0,0,0,7.06-1.49L125.84,216q2.16.06,4.32,0l18.64,14.92a8,8,0,0,0,7.06,1.48,107.21,107.21,0,0,0,26.25-10.88,8,8,0,0,0,3.93-6l2.64-23.72q1.56-1.48,3-3L215.46,186a8,8,0,0,0,6-3.94,107.71,107.71,0,0,0,10.87-26.25,8,8,0,0,0-1.49-7.06Zm-16.1-6.5a73.93,73.93,0,0,1,0,8.68,8,8,0,0,0,1.74,5.48l14.19,17.73a91.57,91.57,0,0,1-6.23,15L187,173.11a8,8,0,0,0-5.1,2.64,74.11,74.11,0,0,1-6.14,6.14,8,8,0,0,0-2.64,5.1l-2.51,22.58a91.32,91.32,0,0,1-15,6.23l-17.74-14.19a8,8,0,0,0-5-1.75h-.48a73.93,73.93,0,0,1-8.68,0,8,8,0,0,0-5.48,1.74L100.45,215.8a91.57,91.57,0,0,1-15-6.23L82.89,187a8,8,0,0,0-2.64-5.1,74.11,74.11,0,0,1-6.14-6.14,8,8,0,0,0-5.1-2.64L46.43,170.6a91.32,91.32,0,0,1-6.23-15l14.19-17.74a8,8,0,0,0,1.74-5.48,73.93,73.93,0,0,1,0-8.68,8,8,0,0,0-1.74-5.48L40.2,100.45a91.57,91.57,0,0,1,6.23-15L69,82.89a8,8,0,0,0,5.1-2.64,74.11,74.11,0,0,1,6.14-6.14A8,8,0,0,0,82.89,69L85.4,46.43a91.32,91.32,0,0,1,15-6.23l17.74,14.19a8,8,0,0,0,5.48,1.74,73.93,73.93,0,0,1,8.68,0,8,8,0,0,0,5.48-1.74L155.55,40.2a91.57,91.57,0,0,1,15,6.23L173.11,69a8,8,0,0,0,2.64,5.1,74.11,74.11,0,0,1,6.14,6.14,8,8,0,0,0,5.1,2.64l22.58,2.51a91.32,91.32,0,0,1,6.23,15l-14.19,17.74A8,8,0,0,0,199.87,123.66Z" />
+  </svg>
+)
+
+const DownloadIcon = () => (
+  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
+    <path d="M224,144v64a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V144a8,8,0,0,1,16,0v56H208V144a8,8,0,0,1,16,0Zm-101.66,5.66a8,8,0,0,0,11.32,0l40-40a8,8,0,0,0-11.32-11.32L136,124.69V32a8,8,0,0,0-16,0v92.69L93.66,98.34a8,8,0,0,0-11.32,11.32Z" />
   </svg>
 )
 
@@ -99,6 +122,7 @@ interface PlaylistDropTargetProps {
   isActive: boolean
   onClick: () => void
   onDrop: (track: Track, playlist: OnChainPlaylist) => void
+  compact?: boolean
 }
 
 const PlaylistDropTarget: Component<PlaylistDropTargetProps> = (props) => {
@@ -125,30 +149,46 @@ const PlaylistDropTarget: Component<PlaylistDropTargetProps> = (props) => {
     }
   }
 
+  const coverSrc = () => props.playlist.coverCid
+    ? `https://heaven.myfilebase.com/ipfs/${props.playlist.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
+    : undefined
+
   return (
     <button
       type="button"
-      class={`flex items-center gap-3 w-full px-3 py-2 rounded-md cursor-pointer transition-colors ${
+      class={`flex items-center rounded-md cursor-pointer transition-colors ${
         isDragOver()
           ? 'ring-2 ring-[var(--accent-blue)] bg-[var(--bg-highlight)]'
           : props.isActive
             ? 'bg-[var(--bg-highlight)]'
             : 'hover:bg-[var(--bg-highlight-hover)]'
-      }`}
+      } ${props.compact ? 'w-11 h-11 justify-center p-0 overflow-hidden' : 'gap-3 w-full px-3 py-2'}`}
       onClick={props.onClick}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      title={props.playlist.name}
     >
-      <AlbumCover
-        size="sm"
-        src={props.playlist.coverCid ? `https://heaven.myfilebase.com/ipfs/${props.playlist.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80` : undefined}
-        icon="playlist"
-      />
-      <div class="flex flex-col min-w-0 text-left">
-        <span class="text-base text-[var(--text-primary)] truncate">{props.playlist.name}</span>
-        <span class="text-sm text-[var(--text-muted)]">{props.playlist.trackCount} songs</span>
-      </div>
+      <Show when={props.compact} fallback={
+        <>
+          <AlbumCover
+            size="sm"
+            src={coverSrc()}
+            icon="playlist"
+            class="flex-shrink-0"
+          />
+          <div class="flex flex-col min-w-0 text-left">
+            <span class="text-base text-[var(--text-primary)] truncate whitespace-nowrap">{props.playlist.name}</span>
+            <span class="text-sm text-[var(--text-muted)] whitespace-nowrap">{props.playlist.trackCount} songs</span>
+          </div>
+        </>
+      }>
+        <AlbumCover
+          size="sm"
+          src={coverSrc()}
+          icon="playlist"
+        />
+      </Show>
     </button>
   )
 }
@@ -160,15 +200,17 @@ interface NavItemProps {
   active: boolean
   onClick: () => void
   badge?: number
+  compact?: boolean
 }
 
 const NavItem: Component<NavItemProps> = (props) => (
   <button
     type="button"
-    class={`flex items-center gap-3 w-full px-3 py-3 rounded-md cursor-pointer transition-colors hover:bg-[var(--bg-highlight-hover)] ${props.active ? 'bg-[var(--bg-highlight)]' : ''}`}
+    class={`flex items-center gap-3 rounded-md cursor-pointer transition-colors hover:bg-[var(--bg-highlight-hover)] ${props.active ? 'bg-[var(--bg-highlight)]' : ''} ${props.compact ? 'w-11 h-12 justify-center p-0' : 'w-full px-3 py-3'}`}
     onClick={props.onClick}
+    title={props.label}
   >
-    <span class="relative w-6 h-6 flex items-center justify-center text-[var(--text-secondary)]">
+    <span class="relative w-6 h-6 flex-shrink-0 flex items-center justify-center text-[var(--text-secondary)]">
       <props.icon />
       <Show when={props.badge && props.badge > 0}>
         <span class="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold px-1">
@@ -176,11 +218,13 @@ const NavItem: Component<NavItemProps> = (props) => (
         </span>
       </Show>
     </span>
-    <span class="text-base font-semibold text-[var(--text-secondary)]">{props.label}</span>
+    <Show when={!props.compact}>
+      <span class="text-base font-semibold text-[var(--text-secondary)] whitespace-nowrap">{props.label}</span>
+    </Show>
   </button>
 )
 
-export const AppSidebar: Component = () => {
+export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
   const navigate = useNavigate()
   const location = useLocation()
   const platform = usePlatform()
@@ -188,6 +232,7 @@ export const AppSidebar: Component = () => {
   const xmtp = useXMTP()
   const player = usePlayer()
   const queryClient = useQueryClient()
+  const [downloadOpen, setDownloadOpen] = createSignal(false)
   const [createPlaylistOpen, setCreatePlaylistOpen] = createSignal(false)
   const [newPlaylistName, setNewPlaylistName] = createSignal('')
   const [creatingPlaylist, setCreatingPlaylist] = createSignal(false)
@@ -377,7 +422,7 @@ export const AppSidebar: Component = () => {
 
         setCreatePlaylistOpen(false)
         setNewPlaylistName('')
-        navigate(`/playlist/${result.playlistId}`)
+        navigate(playlist(result.playlistId))
 
         const signal = retryAbort.signal
         ;(async () => {
@@ -415,90 +460,150 @@ export const AppSidebar: Component = () => {
 
   return (
     <>
-      <Sidebar>
+      <Sidebar compact={props.compact}>
         {/* Logo */}
-        <div class="px-3 py-4 mb-2">
+        <div class={`py-4 mb-2 flex items-center ${props.compact ? 'justify-center' : 'px-3'}`}>
           <AppLogo size={36} />
         </div>
 
         {/* Main navigation */}
         <nav class="flex flex-col gap-1">
-          <NavItem icon={HomeIcon} label="Home" path="/" active={isActive('/')} onClick={() => navigate('/')} />
-          <NavItem icon={ChatCircleIcon} label="Messages" path="/chat" active={location.pathname.startsWith('/chat')} onClick={() => navigate('/chat')} badge={unreadMessageCount()} />
-          <NavItem icon={WalletIcon} label="Wallet" path="/wallet" active={isActive('/wallet')} onClick={() => navigate('/wallet')} />
-          <NavItem icon={CalendarIcon} label="Schedule" path="/schedule" active={isActive('/schedule')} onClick={() => navigate('/schedule')} />
-          <NavItem icon={UserIcon} label="Profile" path="/profile" active={isActive('/profile')} onClick={() => navigate('/profile')} />
+          <NavItem icon={HomeIcon} label="Home" path={HOME} active={isActive(HOME)} onClick={() => navigate(HOME)} compact={props.compact} />
+          <NavItem icon={SearchIcon} label="Search" path={SEARCH} active={isActive(SEARCH)} onClick={() => navigate(SEARCH)} compact={props.compact} />
+          <NavItem icon={ChatCircleIcon} label="Messages" path={CHAT} active={location.pathname.startsWith(CHAT)} onClick={() => navigate(CHAT)} badge={unreadMessageCount()} compact={props.compact} />
+          <NavItem icon={WalletIcon} label="Wallet" path={WALLET} active={isActive(WALLET)} onClick={() => navigate(WALLET)} compact={props.compact} />
+          <NavItem icon={CalendarIcon} label="Schedule" path={SCHEDULE} active={isActive(SCHEDULE)} onClick={() => navigate(SCHEDULE)} compact={props.compact} />
+          <NavItem icon={UserIcon} label="Profile" path={PROFILE} active={isActive(PROFILE)} onClick={() => navigate(PROFILE)} compact={props.compact} />
         </nav>
 
         {/* Music section - unified library + playlists */}
         <div class="mt-6 -mx-3 px-3 border-t border-[var(--bg-highlight)] pt-4">
-          <div class="flex items-center justify-between px-3 mb-2">
-            <span class="text-base text-[var(--text-muted)] font-medium">Music</span>
-            <IconButton variant="soft" size="md" aria-label="Create playlist" onClick={() => auth.isAuthenticated() ? setCreatePlaylistOpen(true) : openAuthDialog()}>
-              <PlusIcon />
-            </IconButton>
+          <div class="flex items-center justify-between px-3 mb-2 min-h-10">
+            <Show when={!props.compact}>
+              <span class="text-base text-[var(--text-muted)] font-medium whitespace-nowrap">Music</span>
+              <IconButton variant="soft" size="md" aria-label="Create playlist" onClick={() => auth.isAuthenticated() ? setCreatePlaylistOpen(true) : openAuthDialog()}>
+                <PlusIcon />
+              </IconButton>
+            </Show>
           </div>
 
-          <div class="flex flex-col gap-0.5">
+          <div class={`flex flex-col ${props.compact ? 'gap-1.5' : 'gap-0.5'}`}>
             {/* System collections (Local, Cloud, Shared) */}
             <Show when={platform.isTauri}>
+              <Show when={props.compact} fallback={
+                <button
+                  type="button"
+                  class={`flex items-center gap-3 w-full px-3 py-2 rounded-md cursor-pointer transition-colors hover:bg-[var(--bg-highlight-hover)] ${isActive(musicTab('local')) ? 'bg-[var(--bg-highlight)]' : ''}`}
+                  onClick={() => navigate(musicTab('local'))}
+                >
+                  <div class="w-10 h-10 flex-shrink-0 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)]">
+                    <FolderIcon />
+                  </div>
+                  <div class="flex flex-col min-w-0 text-left">
+                    <span class="text-base text-[var(--text-primary)] whitespace-nowrap">Local</span>
+                    <span class="text-sm text-[var(--text-muted)] whitespace-nowrap">{localTrackCount().toLocaleString()} songs</span>
+                  </div>
+                </button>
+              }>
+                <button
+                  type="button"
+                  class={`w-11 h-11 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--bg-highlight-hover)] transition-colors ${isActive(musicTab('local')) ? 'ring-1 ring-[var(--accent-blue)]' : ''}`}
+                  onClick={() => navigate(musicTab('local'))}
+                  title="Local"
+                >
+                  <FolderIcon />
+                </button>
+              </Show>
+            </Show>
+
+            <Show when={props.compact} fallback={
               <button
                 type="button"
-                class={`flex items-center gap-3 w-full px-3 py-2 rounded-md cursor-pointer transition-colors hover:bg-[var(--bg-highlight-hover)] ${isActive('/music/local') ? 'bg-[var(--bg-highlight)]' : ''}`}
-                onClick={() => navigate('/music/local')}
+                class={`flex items-center gap-3 w-full px-3 py-2 rounded-md cursor-pointer transition-colors hover:bg-[var(--bg-highlight-hover)] ${isActive(musicTab('cloud')) ? 'bg-[var(--bg-highlight)]' : ''}`}
+                onClick={() => navigate(musicTab('cloud'))}
               >
-                <div class="w-10 h-10 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)]">
-                  <FolderIcon />
+                <div class="w-10 h-10 flex-shrink-0 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)]">
+                  <CloudIcon />
                 </div>
                 <div class="flex flex-col min-w-0 text-left">
-                  <span class="text-base text-[var(--text-primary)]">Local</span>
-                  <span class="text-sm text-[var(--text-muted)]">{localTrackCount().toLocaleString()} songs</span>
+                  <span class="text-base text-[var(--text-primary)] whitespace-nowrap">Cloud</span>
+                  <span class="text-sm text-[var(--text-muted)] whitespace-nowrap">{cloudTrackCount()} songs</span>
                 </div>
               </button>
-            </Show>
-            <button
-              type="button"
-              class={`flex items-center gap-3 w-full px-3 py-2 rounded-md cursor-pointer transition-colors hover:bg-[var(--bg-highlight-hover)] ${isActive('/music/cloud') ? 'bg-[var(--bg-highlight)]' : ''}`}
-              onClick={() => navigate('/music/cloud')}
-            >
-              <div class="w-10 h-10 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)]">
+            }>
+              <button
+                type="button"
+                class={`w-11 h-11 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--bg-highlight-hover)] transition-colors ${isActive(musicTab('cloud')) ? 'ring-1 ring-[var(--accent-blue)]' : ''}`}
+                onClick={() => navigate(musicTab('cloud'))}
+                title="Cloud"
+              >
                 <CloudIcon />
-              </div>
-              <div class="flex flex-col min-w-0 text-left">
-                <span class="text-base text-[var(--text-primary)]">Cloud</span>
-                <span class="text-sm text-[var(--text-muted)]">{cloudTrackCount()} songs</span>
-              </div>
-            </button>
-            <button
-              type="button"
-              class={`flex items-center gap-3 w-full px-3 py-2 rounded-md cursor-pointer transition-colors hover:bg-[var(--bg-highlight-hover)] ${isActive('/music/shared') ? 'bg-[var(--bg-highlight)]' : ''}`}
-              onClick={() => navigate('/music/shared')}
-            >
-              <div class="w-10 h-10 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)]">
+              </button>
+            </Show>
+
+            <Show when={props.compact} fallback={
+              <button
+                type="button"
+                class={`flex items-center gap-3 w-full px-3 py-2 rounded-md cursor-pointer transition-colors hover:bg-[var(--bg-highlight-hover)] ${isActive(musicTab('shared')) ? 'bg-[var(--bg-highlight)]' : ''}`}
+                onClick={() => navigate(musicTab('shared'))}
+              >
+                <div class="w-10 h-10 flex-shrink-0 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)]">
+                  <ShareIcon />
+                </div>
+                <div class="flex flex-col min-w-0 text-left">
+                  <span class="text-base text-[var(--text-primary)] whitespace-nowrap">Shared</span>
+                  <span class="text-sm text-[var(--text-muted)] whitespace-nowrap">{sharedTrackCount()} songs</span>
+                </div>
+              </button>
+            }>
+              <button
+                type="button"
+                class={`w-11 h-11 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--bg-highlight-hover)] transition-colors ${isActive(musicTab('shared')) ? 'ring-1 ring-[var(--accent-blue)]' : ''}`}
+                onClick={() => navigate(musicTab('shared'))}
+                title="Shared"
+              >
                 <ShareIcon />
-              </div>
-              <div class="flex flex-col min-w-0 text-left">
-                <span class="text-base text-[var(--text-primary)]">Shared</span>
-                <span class="text-sm text-[var(--text-muted)]">{sharedTrackCount()} songs</span>
-              </div>
-            </button>
+              </button>
+            </Show>
 
             {/* User playlists */}
             <For each={playlists()}>
               {(pl) => (
                 <PlaylistDropTarget
                   playlist={pl}
-                  isActive={location.pathname === `/playlist/${pl.id}`}
-                  onClick={() => navigate(`/playlist/${pl.id}`)}
+                  isActive={location.pathname === playlist(pl.id)}
+                  onClick={() => navigate(playlist(pl.id))}
                   onDrop={handleTrackDrop}
+                  compact={props.compact}
                 />
               )}
             </For>
           </div>
         </div>
 
-
+        {/* Download + Settings - bottom sidebar actions */}
+        <div class="mt-auto pt-3 flex flex-col gap-1">
+          <NavItem
+            icon={DownloadIcon}
+            label="Download"
+            path=""
+            active={false}
+            onClick={() => setDownloadOpen(true)}
+            compact={props.compact}
+          />
+          <NavItem
+            icon={GearIcon}
+            label="Settings"
+            path={SETTINGS}
+            active={isActive(SETTINGS)}
+            onClick={() => navigate(SETTINGS)}
+            compact={props.compact}
+          />
+        </div>
       </Sidebar>
+
+      {/* Download Dialog */}
+      <DownloadDialog open={downloadOpen()} onOpenChange={setDownloadOpen} />
 
       {/* Create Playlist Dialog */}
       <Dialog open={createPlaylistOpen()} onOpenChange={setCreatePlaylistOpen}>

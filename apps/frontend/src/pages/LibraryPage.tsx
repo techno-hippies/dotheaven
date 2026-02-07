@@ -1,14 +1,17 @@
 import { type Component, createSignal, createMemo, Show, onCleanup, createEffect, createResource } from 'solid-js'
 import {
   MediaHeader,
+  type MediaHeaderMenuItem,
   TrackList,
   IconButton,
+  Button,
   PlayButton,
   DownloadAppCta,
   type Track,
   type SortField,
   type SortState,
 } from '@heaven/ui'
+import { musicTab } from '@heaven/core'
 import { usePlatform } from 'virtual:heaven-platform'
 import { useParams, useNavigate } from '@solidjs/router'
 import { pickFolder, type LocalTrack } from '../lib/local-music'
@@ -49,11 +52,10 @@ export const LibraryPage: Component = () => {
     return platform.isTauri ? 'local' : 'cloud'
   })
 
-  // Redirect /music to the default tab on mount
+  // Redirect /music to /music/local on Tauri (desktop app has local files as default)
   createEffect(() => {
-    if (!params.tab) {
-      const defaultTab = platform.isTauri ? 'local' : 'cloud'
-      navigate(`/music/${defaultTab}`, { replace: true })
+    if (!params.tab && platform.isTauri) {
+      navigate(musicTab('local'), { replace: true })
     }
   })
 
@@ -111,8 +113,9 @@ export const LibraryPage: Component = () => {
       contentId: e.contentId,
       pieceCid: e.pieceCid,
       title: e.title,
-      artist: `${e.artist} • from ${e.sharedBy.slice(0, 6)}...${e.sharedBy.slice(-4)}`,
+      artist: e.artist,
       album: '',
+      sharedBy: e.sharedBy,
       kind: e.kind,
       payload: e.payload,
       mbid: e.mbid,
@@ -299,80 +302,125 @@ export const LibraryPage: Component = () => {
         title={tab() === 'local' ? 'Local Files' : tab() === 'cloud' ? 'Cloud Library' : 'Shared with Me'}
         creator={tab() === 'local' ? (player.folderPath() || 'No folder selected') : tab() === 'cloud' ? `${uploadedTracks()?.length ?? 0} tracks` : `${sharedTracks()?.length ?? 0} tracks`}
         stats={tab() === 'local' ? { songCount: player.tracks().length } : { songCount: (tab() === 'cloud' ? uploadedTracks()?.length : sharedTracks()?.length) ?? 0 }}
+        onBack={() => navigate(-1)}
+        mobileMenuItems={[
+          {
+            label: 'Request Access',
+            icon: (
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+              </svg>
+            ),
+            onSelect: () => console.log('Request Access'),
+          } satisfies MediaHeaderMenuItem,
+          {
+            label: 'Mint NFT',
+            icon: (
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+              </svg>
+            ),
+            onSelect: () => console.log('Mint NFT'),
+          } satisfies MediaHeaderMenuItem,
+        ]}
         actionsSlot={
-          <Show when={tab() === 'local'}>
-            <div class="flex items-center gap-4">
-              <PlayButton
-                variant="primary"
-                size="lg"
-                onClick={() => {
-                  if (player.tracks().length > 0) player.playTrack(0)
-                }}
-                aria-label="Play library"
-              />
+          <>
+            <Show when={tab() === 'local'}>
+              <div class="flex items-center gap-4">
+                <PlayButton
+                  variant="primary"
+                  size="lg"
+                  onClick={() => {
+                    if (player.tracks().length > 0) player.playTrack(0)
+                  }}
+                  aria-label="Play library"
+                />
 
-              <IconButton
-                variant="soft"
-                size="lg"
-                onClick={() => {
-                  const t = [...player.tracks()]
-                  for (let i = t.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1))
-                    ;[t[i], t[j]] = [t[j], t[i]]
-                  }
-                  player.setTracks(t)
-                  if (t.length > 0) player.playTrack(0)
-                }}
-                aria-label="Shuffle"
-              >
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                </svg>
-              </IconButton>
-
-              <Show when={platform.isTauri}>
                 <IconButton
                   variant="soft"
                   size="lg"
-                  onClick={handlePickFolder}
-                  aria-label="Select music folder"
+                  onClick={() => {
+                    const t = [...player.tracks()]
+                    for (let i = t.length - 1; i > 0; i--) {
+                      const j = Math.floor(Math.random() * (i + 1))
+                      ;[t[i], t[j]] = [t[j], t[i]]
+                    }
+                    player.setTracks(t)
+                    if (t.length > 0) player.playTrack(0)
+                  }}
+                  aria-label="Shuffle"
                 >
                   <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
                   </svg>
                 </IconButton>
-              </Show>
 
-              <Show when={platform.isTauri && player.folderPath()}>
-                <IconButton
-                  variant="soft"
-                  size="lg"
-                  onClick={() => player.rescanLibrary()}
-                  aria-label="Re-sync folder"
-                  disabled={player.scanning()}
-                >
-                  <svg
-                    class={`w-6 h-6 ${player.scanning() ? 'animate-spin' : ''}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    stroke-width="2"
+                <Show when={platform.isTauri}>
+                  <IconButton
+                    variant="soft"
+                    size="lg"
+                    onClick={handlePickFolder}
+                    aria-label="Select music folder"
                   >
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                </IconButton>
-                <Show when={player.scanning() && player.scanProgress()}>
-                  {(p) => (
-                    <span class="text-base text-[var(--text-muted)] tabular-nums hidden md:inline">
-                      {p().done === 0
-                        ? `Finding files... ${p().total.toLocaleString()}`
-                        : `${p().done.toLocaleString()}/${p().total.toLocaleString()}`}
-                    </span>
-                  )}
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                    </svg>
+                  </IconButton>
                 </Show>
-              </Show>
-            </div>
-          </Show>
+
+                <Show when={platform.isTauri && player.folderPath()}>
+                  <IconButton
+                    variant="soft"
+                    size="lg"
+                    onClick={() => player.rescanLibrary()}
+                    aria-label="Re-sync folder"
+                    disabled={player.scanning()}
+                  >
+                    <svg
+                      class={`w-6 h-6 ${player.scanning() ? 'animate-spin' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      stroke-width="2"
+                    >
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </IconButton>
+                  <Show when={player.scanning() && player.scanProgress()}>
+                    {(p) => (
+                      <span class="text-base text-[var(--text-muted)] tabular-nums hidden md:inline">
+                        {p().done === 0
+                          ? `Finding files... ${p().total.toLocaleString()}`
+                          : `${p().done.toLocaleString()}/${p().total.toLocaleString()}`}
+                      </span>
+                    )}
+                  </Show>
+                </Show>
+              </div>
+            </Show>
+            <Show when={tab() === 'shared'}>
+              <div class="flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => console.log('Request Access')}
+                >
+                  <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+                  </svg>
+                  Request Access
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => console.log('Mint NFT')}
+                >
+                  <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+                  </svg>
+                  Mint NFT
+                </Button>
+              </div>
+            </Show>
+          </>
         }
       />
 
@@ -489,32 +537,24 @@ export const LibraryPage: Component = () => {
             </div>
           </div>
         </Show>
-        <Show when={!sharedTracks.loading}>
-          <Show
-            when={sharedTracksAsTrack().length > 0}
-            fallback={
-              <div class="flex flex-col items-center justify-center py-20 text-[var(--text-muted)]">
-                <p class="text-lg mb-2">No shared tracks yet</p>
-                <p>When someone shares content with you, it will appear here.</p>
-              </div>
-            }
-          >
-            <Show when={scrollRef()}>
-              {(el) => (
-                <TrackList
-                  tracks={sharedTracksAsTrack()}
-                  showDateAdded
-                  activeTrackId={player.currentTrack()?.id}
-                  activeTrackPlaying={player.isPlaying()}
-                  selectedTrackId={player.selectedTrackId() || undefined}
-                  scrollRef={el()}
-                  enableDrag
-                  onTrackClick={(track) => player.setSelectedTrackId(track.id)}
-                  onTrackPlay={(track) => handleEncryptedTrackPlay(track, sharedEntriesMap())}
-                  menuActions={menuActionsShared}
-                />
-              )}
-            </Show>
+        <Show when={!sharedTracks.loading && sharedTracksAsTrack().length > 0}>
+          <Show when={scrollRef()}>
+            {(el) => (
+              <TrackList
+                tracks={sharedTracksAsTrack()}
+                showAlbum={false}
+                showSharedBy
+                showDateAdded
+                activeTrackId={player.currentTrack()?.id}
+                activeTrackPlaying={player.isPlaying()}
+                selectedTrackId={player.selectedTrackId() || undefined}
+                scrollRef={el()}
+                enableDrag
+                onTrackClick={(track) => player.setSelectedTrackId(track.id)}
+                onTrackPlay={(track) => handleEncryptedTrackPlay(track, sharedEntriesMap())}
+                menuActions={menuActionsShared}
+              />
+            )}
           </Show>
         </Show>
       </Show>

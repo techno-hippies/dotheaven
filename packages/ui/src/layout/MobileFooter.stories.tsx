@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from 'storybook-solidjs'
 import { MobileFooter, MobileFooterItem } from './MobileFooter'
+import { MusicNotes, MusicNotesFill } from '../icons'
 
-// Phosphor icons (regular weight) - same style as AppSidebar
-// Regular weight icons
+// Phosphor icons (regular weight)
 const HomeIcon = () => (
   <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
     <path d="M219.31,108.68l-80-80a16,16,0,0,0-22.62,0l-80,80A15.87,15.87,0,0,0,32,120v96a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V160h32v56a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V120A15.87,15.87,0,0,0,219.31,108.68ZM208,208H160V152a8,8,0,0,0-8-8H104a8,8,0,0,0-8,8v56H48V120l80-80,80,80Z" />
@@ -15,15 +15,15 @@ const SearchIcon = () => (
   </svg>
 )
 
-const MusicNotesIcon = () => (
-  <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
-    <path d="M212.92,17.69a8,8,0,0,0-6.86-1.45l-128,32A8,8,0,0,0,72,56V166.08A36,36,0,1,0,88,196V62.25l112-28V134.08A36,36,0,1,0,216,164V24A8,8,0,0,0,212.92,17.69ZM52,216a20,20,0,1,1,20-20A20,20,0,0,1,52,216Zm128-32a20,20,0,1,1,20-20A20,20,0,0,1,180,184Z" />
-  </svg>
-)
-
 const ChatCircleIcon = () => (
   <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
     <path d="M128,24A104,104,0,0,0,36.18,176.88L24.83,210.93a16,16,0,0,0,20.24,20.24l34.05-11.35A104,104,0,1,0,128,24Zm0,192a87.87,87.87,0,0,1-44.06-11.81,8,8,0,0,0-4-1.08,7.85,7.85,0,0,0-2.53.42L40,216,52.47,178.6a8,8,0,0,0-.66-6.54A88,88,0,1,1,128,216Z" />
+  </svg>
+)
+
+const WalletIcon = () => (
+  <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
+    <path d="M216,64H56A8,8,0,0,1,56,48H192a8,8,0,0,0,0-16H56A24,24,0,0,0,32,56V184a24,24,0,0,0,24,24H216a16,16,0,0,0,16-16V80A16,16,0,0,0,216,64Zm0,128H56a8,8,0,0,1-8-8V78.63A23.84,23.84,0,0,0,56,80H216Zm-36-60a12,12,0,1,1,12-12A12,12,0,0,1,180,132Z" />
   </svg>
 )
 
@@ -46,30 +46,43 @@ const SearchFillIcon = () => (
   </svg>
 )
 
-const MusicNotesFillIcon = () => (
-  <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
-    <path d="M212.92,17.69a8,8,0,0,0-6.86-1.45l-128,32A8,8,0,0,0,72,56V166.08A36,36,0,1,0,88,196V98.75l112-28v69.33A36,36,0,1,0,216,164V24A8,8,0,0,0,212.92,17.69Z" />
-  </svg>
-)
-
 const ChatCircleFillIcon = () => (
   <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
     <path d="M232,128A104,104,0,0,1,79.12,219.82L45.07,231.17a16,16,0,0,1-20.24-20.24l11.35-34.05A104,104,0,1,1,232,128Z" />
   </svg>
 )
 
+const WalletFillIcon = () => (
+  <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
+    <path d="M216,64H56a8,8,0,0,1,0-16H192a8,8,0,0,0,0-16H56A24,24,0,0,0,32,56V184a24,24,0,0,0,24,24H216a16,16,0,0,0,16-16V80A16,16,0,0,0,216,64Zm-36,80a12,12,0,1,1,12-12A12,12,0,0,1,180,144Z" />
+  </svg>
+)
+
+const CalendarIcon = () => (
+  <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
+    <path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM72,48v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24V80H48V48ZM208,208H48V96H208V208Z" />
+  </svg>
+)
+
+const CalendarFillIcon = () => (
+  <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
+    <path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32Zm0,48H48V48H72v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24Z" />
+  </svg>
+)
+
 const UserFillIcon = () => (
   <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 256 256">
-    <path d="M230.92,212c-15.23-26.33-38.7-45.21-66.09-54.16a72,72,0,1,0-73.66,0C63.78,166.78,40.31,185.66,25.08,212a8,8,0,1,0,13.85,8c18.84-32.56,52.14-52,89.07-52s70.23,19.44,89.07,52a8,8,0,1,0,13.85-8ZM72,96a56,56,0,1,1,56,56A56.06,56.06,0,0,1,72,96Z" />
+    <path d="M230.93,220a8,8,0,0,1-6.93,4H32a8,8,0,0,1-6.92-12c15.23-26.33,38.7-45.21,66.09-54.16a72,72,0,1,1,73.66,0c27.39,8.95,50.86,27.83,66.09,54.16A8,8,0,0,1,230.93,220Z" />
   </svg>
 )
 
 const defaultTabs = [
   { id: 'home', icon: <HomeIcon />, activeIcon: <HomeFillIcon />, label: 'Home' },
   { id: 'search', icon: <SearchIcon />, activeIcon: <SearchFillIcon />, label: 'Search' },
-  { id: 'library', icon: <MusicNotesIcon />, activeIcon: <MusicNotesFillIcon />, label: 'Library' },
+  { id: 'music', icon: <MusicNotes />, activeIcon: <MusicNotesFill />, label: 'Music' },
   { id: 'messages', icon: <ChatCircleIcon />, activeIcon: <ChatCircleFillIcon />, label: 'Messages' },
-  { id: 'profile', icon: <UserIcon />, activeIcon: <UserFillIcon />, label: 'Profile' },
+  { id: 'schedule', icon: <CalendarIcon />, activeIcon: <CalendarFillIcon />, label: 'Schedule' },
+  { id: 'wallet', icon: <WalletIcon />, activeIcon: <WalletFillIcon />, label: 'Wallet' },
 ]
 
 const meta: Meta<typeof MobileFooter> = {
@@ -104,9 +117,10 @@ export const WithMessageBadge: Story = {
     tabs: [
       { id: 'home', icon: <HomeIcon />, activeIcon: <HomeFillIcon />, label: 'Home' },
       { id: 'search', icon: <SearchIcon />, activeIcon: <SearchFillIcon />, label: 'Search' },
-      { id: 'library', icon: <MusicNotesIcon />, activeIcon: <MusicNotesFillIcon />, label: 'Library' },
+      { id: 'music', icon: <MusicNotes />, activeIcon: <MusicNotesFill />, label: 'Music' },
       { id: 'messages', icon: <ChatCircleIcon />, activeIcon: <ChatCircleFillIcon />, label: 'Messages', badge: 3 },
-      { id: 'profile', icon: <UserIcon />, activeIcon: <UserFillIcon />, label: 'Profile' },
+      { id: 'schedule', icon: <CalendarIcon />, activeIcon: <CalendarFillIcon />, label: 'Schedule' },
+      { id: 'wallet', icon: <WalletIcon />, activeIcon: <WalletFillIcon />, label: 'Wallet' },
     ],
     activeTab: 'home',
     onTabPress: (id) => console.log('Tab pressed:', id),
@@ -118,9 +132,10 @@ export const HighBadgeCount: Story = {
     tabs: [
       { id: 'home', icon: <HomeIcon />, activeIcon: <HomeFillIcon />, label: 'Home' },
       { id: 'search', icon: <SearchIcon />, activeIcon: <SearchFillIcon />, label: 'Search' },
-      { id: 'library', icon: <MusicNotesIcon />, activeIcon: <MusicNotesFillIcon />, label: 'Library' },
+      { id: 'music', icon: <MusicNotes />, activeIcon: <MusicNotesFill />, label: 'Music' },
       { id: 'messages', icon: <ChatCircleIcon />, activeIcon: <ChatCircleFillIcon />, label: 'Messages', badge: 150 },
-      { id: 'profile', icon: <UserIcon />, activeIcon: <UserFillIcon />, label: 'Profile' },
+      { id: 'schedule', icon: <CalendarIcon />, activeIcon: <CalendarFillIcon />, label: 'Schedule' },
+      { id: 'wallet', icon: <WalletIcon />, activeIcon: <WalletFillIcon />, label: 'Wallet' },
     ],
     activeTab: 'home',
     onTabPress: (id) => console.log('Tab pressed:', id),
@@ -132,32 +147,41 @@ export const MessagesActive: Story = {
     tabs: [
       { id: 'home', icon: <HomeIcon />, activeIcon: <HomeFillIcon />, label: 'Home' },
       { id: 'search', icon: <SearchIcon />, activeIcon: <SearchFillIcon />, label: 'Search' },
-      { id: 'library', icon: <MusicNotesIcon />, activeIcon: <MusicNotesFillIcon />, label: 'Library' },
+      { id: 'music', icon: <MusicNotes />, activeIcon: <MusicNotesFill />, label: 'Music' },
       { id: 'messages', icon: <ChatCircleIcon />, activeIcon: <ChatCircleFillIcon />, label: 'Messages', badge: 5 },
-      { id: 'profile', icon: <UserIcon />, activeIcon: <UserFillIcon />, label: 'Profile' },
+      { id: 'schedule', icon: <CalendarIcon />, activeIcon: <CalendarFillIcon />, label: 'Schedule' },
+      { id: 'wallet', icon: <WalletIcon />, activeIcon: <WalletFillIcon />, label: 'Wallet' },
     ],
     activeTab: 'messages',
     onTabPress: (id) => console.log('Tab pressed:', id),
   },
 }
 
-export const ProfileActive: Story = {
+export const WalletActive: Story = {
   args: {
     tabs: defaultTabs,
-    activeTab: 'profile',
+    activeTab: 'wallet',
     onTabPress: (id) => console.log('Tab pressed:', id),
   },
 }
 
-// Mobile viewport simulation
+export const ScheduleActive: Story = {
+  args: {
+    tabs: defaultTabs,
+    activeTab: 'schedule',
+    onTabPress: (id) => console.log('Tab pressed:', id),
+  },
+}
+
 export const MobileViewport: Story = {
   args: {
     tabs: [
       { id: 'home', icon: <HomeIcon />, activeIcon: <HomeFillIcon />, label: 'Home' },
       { id: 'search', icon: <SearchIcon />, activeIcon: <SearchFillIcon />, label: 'Search' },
-      { id: 'library', icon: <MusicNotesIcon />, activeIcon: <MusicNotesFillIcon />, label: 'Library' },
+      { id: 'music', icon: <MusicNotes />, activeIcon: <MusicNotesFill />, label: 'Music' },
       { id: 'messages', icon: <ChatCircleIcon />, activeIcon: <ChatCircleFillIcon />, label: 'Messages', badge: 2 },
-      { id: 'profile', icon: <UserIcon />, activeIcon: <UserFillIcon />, label: 'Profile' },
+      { id: 'schedule', icon: <CalendarIcon />, activeIcon: <CalendarFillIcon />, label: 'Schedule' },
+      { id: 'wallet', icon: <WalletIcon />, activeIcon: <WalletFillIcon />, label: 'Wallet' },
     ],
     activeTab: 'home',
     onTabPress: (id) => console.log('Tab pressed:', id),
@@ -170,18 +194,6 @@ export const MobileViewport: Story = {
 }
 
 // Individual item stories
-const itemMeta: Meta<typeof MobileFooterItem> = {
-  title: 'Layout/MobileFooterItem',
-  component: MobileFooterItem,
-  decorators: [
-    (Story) => (
-      <div class="bg-[var(--bg-surface)] p-4 inline-flex">
-        <Story />
-      </div>
-    ),
-  ],
-}
-
 export const ItemDefault: StoryObj<typeof MobileFooterItem> = {
   render: () => (
     <MobileFooterItem
@@ -195,7 +207,7 @@ export const ItemDefault: StoryObj<typeof MobileFooterItem> = {
 export const ItemActive: StoryObj<typeof MobileFooterItem> = {
   render: () => (
     <MobileFooterItem
-      icon={<HomeIcon />}
+      icon={<HomeFillIcon />}
       label="Home"
       active
       onClick={() => console.log('clicked')}
@@ -217,7 +229,7 @@ export const ItemWithBadge: StoryObj<typeof MobileFooterItem> = {
 export const ItemActiveBadge: StoryObj<typeof MobileFooterItem> = {
   render: () => (
     <MobileFooterItem
-      icon={<ChatCircleIcon />}
+      icon={<ChatCircleFillIcon />}
       label="Messages"
       active
       badge={12}

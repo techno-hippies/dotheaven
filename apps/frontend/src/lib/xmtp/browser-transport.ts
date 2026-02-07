@@ -28,6 +28,7 @@ const XMTP_ENV = (import.meta.env.VITE_XMTP_ENV || (IS_DEV ? 'dev' : 'production
   | 'dev'
   | 'production'
 const CONNECT_TIMEOUT_MS = 20000
+const REVOCATION_TIMEOUT_MS = 30000
 
 function hexToBytes(hex: string): Uint8Array {
   const clean = hex.startsWith('0x') ? hex.slice(2) : hex
@@ -55,6 +56,115 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   return Promise.race([promise, timeout]).finally(() => {
     if (timeoutId) clearTimeout(timeoutId)
   })
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  return String(error)
+}
+
+function isInstallationLimitError(error: unknown): boolean {
+  const message = getErrorMessage(error)
+  return /10\/10\s+installations/i.test(message)
+}
+
+function extractInboxId(message: string): string | null {
+  const match =
+    message.match(/InboxID\s+([a-f0-9]{64})/i) ??
+    message.match(/inbox(?:\s*id)?[:\s]+([a-f0-9]{64})/i)
+  return match?.[1]?.toLowerCase() ?? null
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') return null
+  return value as Record<string, unknown>
+}
+
+function parseHexBytes(value: string): Uint8Array | null {
+  const clean = value.startsWith('0x') ? value.slice(2) : value
+  if (clean.length === 0 || clean.length % 2 !== 0) return null
+  if (!/^[0-9a-f]+$/i.test(clean)) return null
+  return hexToBytes(clean)
+}
+
+function toUint8Array(value: unknown): Uint8Array | null {
+  if (value instanceof Uint8Array) return value
+
+  if (Array.isArray(value) && value.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) {
+    return new Uint8Array(value)
+  }
+
+  if (typeof value === 'string') {
+    return parseHexBytes(value)
+  }
+
+  return null
+}
+
+function getInstallationBytes(installations: unknown[]): Uint8Array[] {
+  const bytes: Uint8Array[] = []
+  for (const installation of installations) {
+    const direct = toUint8Array(installation)
+    if (direct) {
+      bytes.push(direct)
+      continue
+    }
+
+    const record = asRecord(installation)
+    if (!record) continue
+
+    const candidate = toUint8Array(record.bytes) ?? toUint8Array(record.id) ?? toUint8Array(record.installationId)
+    if (candidate) {
+      bytes.push(candidate)
+    }
+  }
+  return bytes
+}
+
+async function fetchInboxStatesWithFallback(inboxId: string): Promise<unknown[]> {
+  const fetchInboxStates = Client.fetchInboxStates.bind(Client) as (...args: unknown[]) => Promise<unknown[]>
+
+  try {
+    return await withTimeout(
+      fetchInboxStates([inboxId], XMTP_ENV),
+      REVOCATION_TIMEOUT_MS,
+      'Client.fetchInboxStates'
+    )
+  } catch (error) {
+    if (IS_DEV) {
+      console.warn('[XMTP/Browser] fetchInboxStates with env failed, retrying without env:', error)
+    }
+    return withTimeout(
+      fetchInboxStates([inboxId]),
+      REVOCATION_TIMEOUT_MS,
+      'Client.fetchInboxStates (no env)'
+    )
+  }
+}
+
+async function revokeInstallationsWithFallback(
+  signer: Signer,
+  inboxId: string,
+  installationBytes: Uint8Array[],
+): Promise<void> {
+  const revokeInstallations = Client.revokeInstallations.bind(Client) as (...args: unknown[]) => Promise<void>
+
+  try {
+    await withTimeout(
+      revokeInstallations(signer, inboxId, installationBytes, XMTP_ENV),
+      REVOCATION_TIMEOUT_MS,
+      'Client.revokeInstallations'
+    )
+  } catch (error) {
+    if (IS_DEV) {
+      console.warn('[XMTP/Browser] revokeInstallations with env failed, retrying without env:', error)
+    }
+    await withTimeout(
+      revokeInstallations(signer, inboxId, installationBytes),
+      REVOCATION_TIMEOUT_MS,
+      'Client.revokeInstallations (no env)'
+    )
+  }
 }
 
 function createPKPSigner(address: string, signMessage: SignMessageFn): Signer {
@@ -134,17 +244,38 @@ export class BrowserTransport implements XmtpTransport {
       try {
         client = await withTimeout(Client.create(signer, createOpts), CONNECT_TIMEOUT_MS, 'Client.create')
       } catch (err) {
-        if (err instanceof Error && err.message.includes('registered 10/10 installations')) {
-          console.warn('[XMTP/Browser] Installation limit reached, revoking all installations...')
-          const inboxIdMatch = err.message.match(/InboxID\s+([a-f0-9]+)/)
-          const inboxId = inboxIdMatch?.[1]
-          if (!inboxId) throw err
+        if (isInstallationLimitError(err)) {
+          const errMessage = getErrorMessage(err)
+          const inboxId = extractInboxId(errMessage)
+          if (!inboxId) {
+            console.error('[XMTP/Browser] Installation limit reached but inboxId was not found in error:', errMessage)
+            throw err
+          }
 
-          const inboxStates = await Client.fetchInboxStates([inboxId], XMTP_ENV)
-          const installationBytes = inboxStates[0].installations.map((i: { bytes: Uint8Array }) => i.bytes)
-          await Client.revokeInstallations(signer, inboxId, installationBytes, XMTP_ENV)
+          console.warn(`[XMTP/Browser] Installation limit reached for inbox ${inboxId}, revoking old installations...`)
 
-          client = await withTimeout(Client.create(signer, createOpts), CONNECT_TIMEOUT_MS, 'Client.create (retry)')
+          try {
+            const inboxStates = await fetchInboxStatesWithFallback(inboxId)
+            const state = asRecord(inboxStates[0])
+            const installations = Array.isArray(state?.installations) ? state.installations : []
+            const installationBytes = getInstallationBytes(installations)
+
+            if (installationBytes.length === 0) {
+              throw new Error('Inbox state did not include any revocable installations')
+            }
+
+            await revokeInstallationsWithFallback(signer, inboxId, installationBytes)
+            console.warn(`[XMTP/Browser] Revoked ${installationBytes.length} installations, retrying client creation`)
+          } catch (revokeError) {
+            console.error('[XMTP/Browser] Failed to revoke installations for auto-recovery:', revokeError)
+            throw err
+          }
+
+          client = await withTimeout(
+            Client.create(signer, createOpts),
+            CONNECT_TIMEOUT_MS,
+            'Client.create (retry)'
+          )
         } else {
           throw err
         }

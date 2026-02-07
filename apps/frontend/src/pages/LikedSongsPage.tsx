@@ -1,4 +1,5 @@
 import type { Component } from 'solid-js'
+import { useNavigate } from '@solidjs/router'
 import {
   MediaHeader,
   TrackList,
@@ -30,12 +31,14 @@ const likedSongs: Track[] = [
 ]
 
 export const LikedSongsPage: Component = () => {
+  const navigate = useNavigate()
   return (
     <div class="h-full overflow-y-auto bg-gradient-to-b from-[#5a3a7a] via-[#3a2550] to-[var(--bg-page)] rounded-t-lg">
         <MediaHeader
           type="playlist"
           title="Liked Songs"
           creator="You"
+          onBack={() => navigate(-1)}
           stats={{
             songCount: likedSongs.length,
             duration: '7 min 01 sec',

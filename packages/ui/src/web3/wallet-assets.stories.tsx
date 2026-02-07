@@ -26,7 +26,7 @@ export default meta
 type Story = StoryObj<typeof WalletAssets>
 
 const EthereumIcon = () => (
-  <svg viewBox="0 0 32 32" class="w-12 h-12">
+  <svg viewBox="0 0 32 32" class="w-full h-full">
     <g fill="none" fill-rule="evenodd">
       <circle cx="16" cy="16" r="16" fill="#627EEA"/>
       <g fill="#FFF" fill-rule="nonzero">
@@ -42,7 +42,7 @@ const EthereumIcon = () => (
 )
 
 const MegaETHIcon = () => (
-  <svg viewBox="0 0 100 100" class="w-12 h-12">
+  <svg viewBox="0 0 100 100" class="w-full h-full">
     <circle cx="50" cy="50" r="50" fill="#000"/>
     <circle cx="50" cy="50" r="45" fill="transparent" stroke="#fff" stroke-width="3"/>
     <text x="50" y="65" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#fff" text-anchor="middle">M</text>
@@ -52,15 +52,15 @@ const MegaETHIcon = () => (
 )
 
 const USDFCIcon = () => (
-  <img src="/images/usdfc.png" alt="USDFC" class="w-12 h-12 object-contain" />
+  <img src="/images/usdfc.png" alt="USDFC" class="w-full h-full object-contain" />
 )
 
 const USDMIcon = () => (
-  <img src="/images/usdm.png" alt="USDM" class="w-12 h-12 object-contain" />
+  <img src="/images/usdm.png" alt="USDM" class="w-full h-full object-contain" />
 )
 
 const FilecoinIcon = () => (
-  <img src="/images/filecoin.png" alt="Filecoin" class="w-12 h-12 object-contain" />
+  <img src="/images/filecoin.png" alt="Filecoin" class="w-full h-full object-contain" />
 )
 
 /** Passkey user — no tabs, single wallet view */

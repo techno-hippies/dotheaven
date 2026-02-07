@@ -1,4 +1,5 @@
 import type { Component } from 'solid-js'
+import { useNavigate } from '@solidjs/router'
 import {
   MediaHeader,
   TrackList,
@@ -57,9 +58,11 @@ const freeWeeklyTracks: Track[] = [
 ]
 
 export const FreeWeeklyPage: Component = () => {
+  const navigate = useNavigate()
   return (
     <div class="h-full overflow-y-auto bg-gradient-to-b from-[#2d6a4f] via-[#1a3d2e] to-[var(--bg-page)] rounded-t-lg">
         <MediaHeader
+          onBack={() => navigate(-1)}
           type="playlist"
           title="Free Weekly"
           creator="technohippies"

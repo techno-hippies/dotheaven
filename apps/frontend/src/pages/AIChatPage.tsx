@@ -19,6 +19,7 @@ import {
   Avatar,
   useIsMobile,
 } from '@heaven/ui'
+import { CHAT } from '@heaven/core'
 import { useAuth } from '../providers'
 import { useVoice, type VoiceState } from '../lib/voice'
 import { getWorkerToken } from '../lib/workerAuth'
@@ -32,7 +33,7 @@ const AI_PERSONALITIES: Record<string, { id: string; name: string; avatarUrl: st
   scarlett: {
     id: 'scarlett',
     name: 'Scarlett',
-    avatarUrl: 'https://picsum.photos/seed/scarlett/200/200',
+    avatarUrl: '/scarlett-avatar.png',
   },
 }
 
@@ -54,12 +55,6 @@ interface Message {
 const PhoneIcon = () => (
   <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
     <path d="M222.37,158.46l-47.11-21.11-.13-.06a16,16,0,0,0-15.17,1.4,8.12,8.12,0,0,0-.75.56L134.87,160c-15.42-7.49-31.34-23.29-38.83-38.51l20.78-24.71c.2-.25.39-.5.57-.77a16,16,0,0,0,1.32-15.06l0-.12L97.54,33.64a16,16,0,0,0-16.62-9.52A56.26,56.26,0,0,0,32,80c0,79.4,64.6,144,144,144a56.26,56.26,0,0,0,55.88-48.92A16,16,0,0,0,222.37,158.46Z" />
-  </svg>
-)
-
-const SparkleIcon = () => (
-  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 256 256">
-    <path d="M208,144a15.78,15.78,0,0,1-10.42,14.94l-51.65,19-19,51.65a15.92,15.92,0,0,1-29.88,0L78,178l-51.62-19a15.92,15.92,0,0,1,0-29.88l51.65-19,19-51.65a15.92,15.92,0,0,1,29.88,0l19,51.65,51.65,19A15.78,15.78,0,0,1,208,144ZM152,48h16V64a8,8,0,0,0,16,0V48h16a8,8,0,0,0,0-16H184V16a8,8,0,0,0-16,0V32H152a8,8,0,0,0,0,16Zm88,32h-8V72a8,8,0,0,0-16,0v8h-8a8,8,0,0,0,0,16h8v8a8,8,0,0,0,16,0V96h8a8,8,0,0,0,0-16Z" />
   </svg>
 )
 
@@ -98,7 +93,7 @@ const formatDuration = (seconds: number): string => {
 // =============================================================================
 
 export const AIChatPage: Component = () => {
-  const params = useParams<{ personalityId: string }>()
+  const params = useParams<{ personality: string }>()
   const [searchParams, setSearchParams] = useSearchParams<{ call?: string }>()
   const auth = useAuth()
   const navigate = useNavigate()
@@ -117,7 +112,7 @@ export const AIChatPage: Component = () => {
 
   // Get personality info
   const personality = createMemo(() => {
-    const id = params.personalityId
+    const id = params.personality
     return AI_PERSONALITIES[id] || null
   })
 
@@ -179,7 +174,7 @@ export const AIChatPage: Component = () => {
 
   // Load messages from localStorage on mount
   createEffect(() => {
-    const id = params.personalityId
+    const id = params.personality
     if (id) {
       const stored = localStorage.getItem(`ai-chat-${id}`)
       if (stored) {
@@ -200,7 +195,7 @@ export const AIChatPage: Component = () => {
 
   // Save messages to localStorage when they change
   createEffect(() => {
-    const id = params.personalityId
+    const id = params.personality
     const msgs = messages()
     if (id && msgs.length > 0) {
       localStorage.setItem(`ai-chat-${id}`, JSON.stringify(msgs))
@@ -328,7 +323,7 @@ export const AIChatPage: Component = () => {
                   variant="ghost"
                   size="md"
                   aria-label="Back to messages"
-                  onClick={() => navigate('/chat')}
+                  onClick={() => navigate(CHAT)}
                 >
                   <ChevronLeftIcon />
                 </IconButton>
@@ -341,9 +336,6 @@ export const AIChatPage: Component = () => {
                     classList={{ 'animate-pulse': isBotSpeaking() }}
                   />
                 </Show>
-                <div class="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-[var(--accent-purple)] flex items-center justify-center">
-                  <SparkleIcon />
-                </div>
               </div>
               <div>
                 <h2 class="text-lg font-semibold text-[var(--text-primary)]">{p.name}</h2>

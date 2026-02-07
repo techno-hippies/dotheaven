@@ -56,7 +56,7 @@ export const ChatListItem: Component<ChatListItemProps> = (props) => {
     <button
       type="button"
       class={cn(
-        'flex items-center w-full px-4 py-3 text-left cursor-pointer transition-colors',
+        'flex items-center w-full px-4 py-2 text-left cursor-pointer transition-colors',
         props.active
           ? 'bg-[var(--bg-highlight)]'
           : 'hover:bg-[var(--bg-highlight-hover)]',

@@ -1,6 +1,6 @@
 import { Show, For, type Component, createMemo } from 'solid-js'
 import { cn } from '../../lib/utils'
-import { Avatar, Button } from '../../primitives'
+import { Avatar } from '../../primitives'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -17,7 +17,6 @@ export interface BookingData {
 export interface UpcomingSessionsProps {
   bookings: BookingData[]
   onBookingClick?: (booking: BookingData) => void
-  onSetAvailability?: () => void
   class?: string
 }
 
@@ -145,16 +144,6 @@ export const UpcomingSessions: Component<UpcomingSessionsProps> = (props) => {
 
   return (
     <div class={cn('flex flex-col gap-4', props.class)}>
-      {/* Header with Set Availability button */}
-      <div class="flex items-center justify-between">
-        <h2 class="text-lg font-semibold text-[var(--text-primary)]">My Schedule</h2>
-        <Show when={props.onSetAvailability}>
-          <Button onClick={props.onSetAvailability} variant="secondary" size="sm">
-            Set Availability
-          </Button>
-        </Show>
-      </div>
-
       {/* Sessions grouped by day */}
       <Show when={groupedByDay().length > 0} fallback={
         <div class="py-8 text-center text-[var(--text-muted)]">

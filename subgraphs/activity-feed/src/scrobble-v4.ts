@@ -23,15 +23,17 @@ export function handleTrackRegisteredV4(event: TrackRegisteredEvent): void {
   track.blockNumber = event.block.number;
   track.transactionHash = event.transaction.hash;
 
-  // Read title/artist from contract state
+  // Read title/artist/album from contract state
   let contract = ScrobbleV4.bind(event.address);
   let result = contract.try_getTrack(event.params.trackId);
   if (result.reverted) {
     track.title = "";
     track.artist = "";
+    track.album = "";
   } else {
     track.title = result.value.value0;
     track.artist = result.value.value1;
+    track.album = result.value.value2;
   }
 
   track.save();
@@ -67,12 +69,13 @@ export function handleTrackUpdatedV4(event: TrackUpdatedEvent): void {
   let track = Track.load(id);
   if (!track) return;
 
-  // Re-read title/artist from contract after metadata update
+  // Re-read title/artist/album from contract after metadata update
   let contract = ScrobbleV4.bind(event.address);
   let result = contract.try_getTrack(event.params.trackId);
   if (!result.reverted) {
     track.title = result.value.value0;
     track.artist = result.value.value1;
+    track.album = result.value.value2;
     track.metaHash = event.params.metaHash;
     track.save();
   }

@@ -13,13 +13,11 @@ import type { ProfileInput } from '@heaven/ui'
 
 import { createPublicClient, http, parseAbi, keccak256 } from 'viem'
 import { packTagIds, unpackTagIds, packLanguages, unpackLanguages } from '@heaven/ui'
+import { PROFILE_V2 } from '@heaven/core'
 import { megaTestnetV2 } from '../chains'
 import { getLitClient } from '../lit/client'
 import { HEAVEN_SET_PROFILE_CID } from '../lit/action-cids'
 import type { PKPAuthContext } from '../lit/types'
-
-// ProfileV2 contract address (to be updated after deployment)
-const PROFILE_V2 = '0xa31545D33f6d656E62De67fd020A26608d4601E5' as const
 
 const profileAbi = parseAbi([
   'function nonces(address user) external view returns (uint256)',

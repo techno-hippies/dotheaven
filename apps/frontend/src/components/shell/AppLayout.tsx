@@ -11,7 +11,9 @@
 import type { ParentComponent } from 'solid-js'
 import { Show, createMemo, createEffect } from 'solid-js'
 import { useLocation, useNavigate } from '@solidjs/router'
-import { useIsMobile } from '@heaven/ui'
+import {
+  HOME, WALLET, SCHEDULE, CHAT, SEARCH, MUSIC, ONBOARDING, SETTINGS,
+} from '@heaven/core'
 import { useAuth } from '../../providers'
 import { useOnboardingStatus } from '../../hooks/useOnboardingStatus'
 import {
@@ -20,9 +22,10 @@ import {
   MobileFooter,
   MiniPlayer,
   SidePlayer,
+  SideMenuDrawer,
 } from '@heaven/ui'
 import type { MobileFooterTab } from '@heaven/ui'
-import { Header } from './header'
+import type { ProfileInput } from '@heaven/ui'
 
 // Mobile footer icons (Phosphor, 256x256 viewBox)
 const HomeIcon = () => (
@@ -35,14 +38,14 @@ const HomeFillIcon = () => (
     <path d="M224,115.55V208a16,16,0,0,1-16,16H168a16,16,0,0,1-16-16V168a8,8,0,0,0-8-8H112a8,8,0,0,0-8,8v40a16,16,0,0,1-16,16H48a16,16,0,0,1-16-16V115.55a16,16,0,0,1,5.17-11.78l80-75.48a16,16,0,0,1,21.66,0l80,75.48A16,16,0,0,1,224,115.55Z" />
   </svg>
 )
-const LibraryIcon = () => (
+const SearchIcon = () => (
   <svg class="w-6 h-6" viewBox="0 0 256 256" fill="currentColor">
-    <path d="M212.92,17.69a8,8,0,0,0-6.86-1.45l-128,32A8,8,0,0,0,72,56V166.08A36,36,0,1,0,88,196V62.25l112-28V134.08A36,36,0,1,0,216,164V24A8,8,0,0,0,212.92,17.69ZM52,216a20,20,0,1,1,20-20A20,20,0,0,1,52,216Zm128-32a20,20,0,1,1,20-20A20,20,0,0,1,180,184Z" />
+    <path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z" />
   </svg>
 )
-const LibraryFillIcon = () => (
+const SearchFillIcon = () => (
   <svg class="w-6 h-6" viewBox="0 0 256 256" fill="currentColor">
-    <path d="M212.92,17.69a8,8,0,0,0-6.86-1.45l-128,32A8,8,0,0,0,72,56V166.08A36,36,0,1,0,88,196V98.75l112-28v69.33A36,36,0,1,0,216,164V24A8,8,0,0,0,212.92,17.69Z" />
+    <path d="M168,112a56,56,0,1,1-56-56A56.06,56.06,0,0,1,168,112Zm61.66,117.66a8,8,0,0,1-11.32,0l-50.07-50.07a88.11,88.11,0,1,1,11.31-11.31l50.08,50.06A8,8,0,0,1,229.66,229.66ZM112,184a72,72,0,1,0-72-72A72.08,72.08,0,0,0,112,184Z" />
   </svg>
 )
 const ChatIcon = () => (
@@ -55,14 +58,14 @@ const ChatFillIcon = () => (
     <path d="M232,128A104,104,0,0,1,79.12,219.82L45.07,231.17a16,16,0,0,1-20.24-20.24l11.35-34.05A104,104,0,1,1,232,128Z" />
   </svg>
 )
-const ProfileIcon = () => (
+const CalendarIcon = () => (
   <svg class="w-6 h-6" viewBox="0 0 256 256" fill="currentColor">
-    <path d="M230.92,212c-15.23-26.33-38.7-45.21-66.09-54.16a72,72,0,1,0-73.66,0C63.78,166.78,40.31,185.66,25.08,212a8,8,0,1,0,13.85,8c18.84-32.56,52.14-52,89.07-52s70.23,19.44,89.07,52a8,8,0,1,0,13.85-8ZM72,96a56,56,0,1,1,56,56A56.06,56.06,0,0,1,72,96Z" />
+    <path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM72,48v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24V80H48V48ZM208,208H48V96H208V208Z" />
   </svg>
 )
-const ProfileFillIcon = () => (
+const CalendarFillIcon = () => (
   <svg class="w-6 h-6" viewBox="0 0 256 256" fill="currentColor">
-    <path d="M230.92,212c-15.23-26.33-38.7-45.21-66.09-54.16a72,72,0,1,0-73.66,0C63.78,166.78,40.31,185.66,25.08,212a8,8,0,1,0,13.85,8c18.84-32.56,52.14-52,89.07-52s70.23,19.44,89.07,52a8,8,0,1,0,13.85-8ZM72,96a56,56,0,1,1,56,56A56.06,56.06,0,0,1,72,96Z" />
+    <path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32Zm0,48H48V48H72v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24Z" />
   </svg>
 )
 const WalletIcon = () => (
@@ -75,18 +78,20 @@ const WalletFillIcon = () => (
     <path d="M216,64H56a8,8,0,0,1,0-16H192a8,8,0,0,0,0-16H56A24,24,0,0,0,32,56V184a24,24,0,0,0,24,24H216a16,16,0,0,0,16-16V80A16,16,0,0,0,216,64Zm-36,80a12,12,0,1,1,12-12A12,12,0,0,1,180,144Z" />
   </svg>
 )
-const CalendarIcon = () => (
+const MusicIcon = () => (
   <svg class="w-6 h-6" viewBox="0 0 256 256" fill="currentColor">
-    <path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM72,48v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24V80H48V48ZM208,208H48V96H208V208Z" />
+    <path d="M212.92,17.69a8,8,0,0,0-6.86-1.45l-128,32A8,8,0,0,0,72,56V166.08A36,36,0,1,0,88,196V62.25l112-28V134.08A36,36,0,1,0,216,164V24A8,8,0,0,0,212.92,17.69ZM52,216a20,20,0,1,1,20-20A20,20,0,0,1,52,216Zm128-32a20,20,0,1,1,20-20A20,20,0,0,1,180,184Z" />
   </svg>
 )
-const CalendarFillIcon = () => (
+const MusicFillIcon = () => (
   <svg class="w-6 h-6" viewBox="0 0 256 256" fill="currentColor">
-    <path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32Zm0,48H48V48H72v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24Z" />
+    <path d="M212.92,17.69a8,8,0,0,0-6.86-1.45l-128,32A8,8,0,0,0,72,56V166.08A36,36,0,1,0,88,196V98.75l112-28v69.33A36,36,0,1,0,216,164V24A8,8,0,0,0,212.92,17.69Z" />
   </svg>
 )
-import { AppSidebar, HeaderActions, AuthDialog } from '.'
+import { useQueryClient } from '@tanstack/solid-query'
+import { AppSidebar, AuthDialog } from '.'
 import { authDialogOpen, setAuthDialogOpen } from '../../lib/auth-dialog'
+import { userMenuOpen, setUserMenuOpen } from '../../lib/user-menu'
 import { Toaster } from '../Toaster'
 import { UploadQueue } from '../UploadQueue'
 import { AddToPlaylistDialog } from '../AddToPlaylistDialog'
@@ -98,16 +103,27 @@ export const AppLayout: ParentComponent = (props) => {
   const player = usePlayer()
   const location = useLocation()
   const navigate = useNavigate()
-  const isMobile = useIsMobile()
-  const isChat = createMemo(() => location.pathname.startsWith('/chat'))
+  const isChatRoute = createMemo(() => location.pathname.startsWith('/chat'))
   const isActiveChat = createMemo(() => location.pathname !== '/chat' && location.pathname.startsWith('/chat'))
   const isPost = createMemo(() => location.pathname.startsWith('/post/'))
   const isPublicProfile = createMemo(() => location.pathname.startsWith('/u/'))
+  const isPlaylist = createMemo(() => location.pathname.startsWith('/playlist/'))
+  const isArtist = createMemo(() => location.pathname.startsWith('/artist/'))
+  const isAlbum = createMemo(() => location.pathname.startsWith('/album/'))
+  const isLikedSongs = createMemo(() => location.pathname === '/liked-songs')
+  const isFreeWeekly = createMemo(() => location.pathname === '/free-weekly')
+  // /music/:tab sub-pages (e.g. /music/shared, /music/local) — but not /music itself
+  const isMusicSubPage = createMemo(() => {
+    const p = location.pathname
+    return p.startsWith('/music/') && p !== '/music'
+  })
 
-  // Mobile footer only on main nav pages (home, music, wallet, schedule, own profile, chat list)
-  // Hidden on: active chats, posts, public profiles (/u/...)
+  // Mobile footer only on main nav pages (home, music, wallet, schedule, chat list)
+  // Hidden on: sub-pages that have their own back navigation
   const showMobileNav = createMemo(() =>
-    !isActiveChat() && !isPost() && !isPublicProfile()
+    !isActiveChat() && !isPost() && !isPublicProfile() &&
+    !isPlaylist() && !isArtist() && !isAlbum() && !isMusicSubPage() &&
+    !isLikedSongs() && !isFreeWeekly()
   )
 
   // Onboarding gate: redirect authenticated users with incomplete onboarding
@@ -118,7 +134,7 @@ export const AppLayout: ParentComponent = (props) => {
     if (!auth.isAuthenticated()) return // public access OK
     if (onboarding.status() === 'loading') return // wait for check
     if (onboarding.status() === 'needs-onboarding') {
-      navigate('/onboarding', { replace: true })
+      navigate(ONBOARDING, { replace: true })
     }
   })
 
@@ -126,40 +142,70 @@ export const AppLayout: ParentComponent = (props) => {
   const plDialog = usePlaylistDialog()
   const sidePlayerMenu = buildMenuActions(plDialog)
   const goToArtist = useArtistNavigation()
-  // Never show global header on mobile - pages have their own headers or use the mobile footer for nav
-  const showGlobalHeader = createMemo(() => !isMobile())
+  const queryClient = useQueryClient()
+
+  // Mobile user menu drawer (shared signal so homepage can trigger it)
+
+  // Derive avatar URL from cached profile query (zero-cost — no extra network requests)
+  const cachedAvatarUrl = createMemo(() => {
+    const addr = auth.pkpAddress()
+    if (!addr) return undefined
+    // TanStack query cache stores profile data under ['profile', address, node]
+    // We use findAll to match any query starting with ['profile', address]
+    const queries = queryClient.getQueriesData<ProfileInput>({ queryKey: ['profile', addr] })
+    for (const [, data] of queries) {
+      if (data?.avatar) return data.avatar
+    }
+    return undefined
+  })
+
+  const mobileDisplayName = () => {
+    const hn = localStorage.getItem('heaven:username')
+    if (hn) return hn
+    const addr = auth.pkpAddress()
+    if (addr) return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+    return 'My Profile'
+  }
+
+  const mobileUsername = () => {
+    const hn = localStorage.getItem('heaven:username')
+    if (hn) return `${hn}.heaven`
+    const addr = auth.pkpAddress()
+    if (addr) return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+    return ''
+  }
 
   // Mobile footer tabs
   const mobileFooterTabs: MobileFooterTab[] = [
     { id: 'home', icon: <HomeIcon />, activeIcon: <HomeFillIcon />, label: 'Home' },
-    { id: 'music', icon: <LibraryIcon />, activeIcon: <LibraryFillIcon />, label: 'Music' },
+    { id: 'search', icon: <SearchIcon />, activeIcon: <SearchFillIcon />, label: 'Search' },
+    { id: 'music', icon: <MusicIcon />, activeIcon: <MusicFillIcon />, label: 'Music' },
     { id: 'chat', icon: <ChatIcon />, activeIcon: <ChatFillIcon />, label: 'Chat' },
-    { id: 'wallet', icon: <WalletIcon />, activeIcon: <WalletFillIcon />, label: 'Wallet' },
     { id: 'schedule', icon: <CalendarIcon />, activeIcon: <CalendarFillIcon />, label: 'Schedule' },
-    { id: 'profile', icon: <ProfileIcon />, activeIcon: <ProfileFillIcon />, label: 'Profile' },
+    { id: 'wallet', icon: <WalletIcon />, activeIcon: <WalletFillIcon />, label: 'Wallet' },
   ]
 
   // Determine active tab from current route
   const activeTab = createMemo(() => {
     const path = location.pathname
     if (path === '/') return 'home'
+    if (path.startsWith('/search')) return 'search'
     if (path.startsWith('/music')) return 'music'
     if (path.startsWith('/chat')) return 'chat'
     if (path.startsWith('/wallet')) return 'wallet'
     if (path.startsWith('/schedule')) return 'schedule'
-    if (path.startsWith('/profile') || path.startsWith('/u/')) return 'profile'
     return 'home'
   })
 
   // Handle mobile tab navigation
   const handleTabPress = (tabId: string) => {
     switch (tabId) {
-      case 'home': navigate('/'); break
-      case 'music': navigate('/music'); break
-      case 'chat': navigate('/chat'); break
-      case 'wallet': navigate('/wallet'); break
-      case 'schedule': navigate('/schedule'); break
-      case 'profile': navigate('/profile'); break
+      case 'home': navigate(HOME); break
+      case 'search': navigate(SEARCH); break
+      case 'music': navigate(MUSIC); break
+      case 'chat': navigate(CHAT); break
+      case 'wallet': navigate(WALLET); break
+      case 'schedule': navigate(SCHEDULE); break
     }
   }
 
@@ -173,9 +219,8 @@ export const AppLayout: ParentComponent = (props) => {
       }
     >
         <AppShell
-          header={showGlobalHeader() ? <Header rightSlot={<HeaderActions />} /> : undefined}
-          sidebar={<AppSidebar />}
-          rightPanel={isChat() ? undefined :
+          sidebar={<AppSidebar compact={isChatRoute()} />}
+          rightPanel={
             <RightPanel>
               <SidePlayer
                 title={player.currentTrack()?.title}
@@ -237,6 +282,22 @@ export const AppLayout: ParentComponent = (props) => {
           />
           {/* Auth dialog - always mounted at app root level */}
           <AuthDialog open={authDialogOpen()} onOpenChange={setAuthDialogOpen} />
+          {/* Mobile side menu drawer */}
+          <SideMenuDrawer
+            open={userMenuOpen()}
+            onOpenChange={setUserMenuOpen}
+            isAuthenticated={auth.isAuthenticated()}
+            avatarUrl={cachedAvatarUrl()}
+            displayName={mobileDisplayName()}
+            username={mobileUsername()}
+            logoSrc={`${import.meta.env.BASE_URL}images/heaven.png`}
+            onSettings={() => navigate(SETTINGS)}
+            onWallet={() => navigate(WALLET)}
+            onLogout={async () => {
+              await auth.logout()
+              navigate(HOME)
+            }}
+          />
         </AppShell>
     </Show>
   )

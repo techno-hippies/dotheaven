@@ -37,7 +37,7 @@ const CHAIN_ID = 6343;
 // Deployed contracts
 const ENTRYPOINT = "0x0000000071727De22E5E9d8BAf0edAc6f37da032" as Address;
 const FACTORY = "0xB66BF4066F40b36Da0da34916799a069CBc79408" as Address;
-const SCROBBLE_V4 = "0xD41a8991aDF67a1c4CCcb5f7Da6A01a601eC3F37" as Address;
+const SCROBBLE_V4 = "0xBcD4EbBb964182ffC5EA03FF70761770a326Ccf1" as Address;
 
 // Test user — use a fresh throwaway key
 // In production this is the user's PKP. For testing, just a random EOA.

@@ -82,17 +82,14 @@ export const AuthProvider: ParentComponent = (props) => {
                 accessToken: auth.accessToken || '',
               }
               setAuthData(restoredAuthData)
-              console.log('[Auth] Restored authData keys:', Object.keys(restoredAuthData))
               // Restore persisted EOA address if present
               if ((auth as any).eoaAddress) {
                 setStoredEoaAddress((auth as any).eoaAddress as `0x${string}`)
-                console.log('[Auth] Restored EOA address:', (auth as any).eoaAddress)
               }
             }
-            console.log('[Auth] Restored from Tauri storage:', auth.pkpAddress)
           }
         } catch (err) {
-          console.log('[Auth] Failed to restore from Tauri:', err)
+          console.error('[Auth] Failed to restore from Tauri:', err)
         }
       } else {
         // Web: restore from localStorage
@@ -105,12 +102,10 @@ export const AuthProvider: ParentComponent = (props) => {
             if (session.authData?.authMethodType) setLastAuthMethodType(session.authData.authMethodType)
             if (session.eoaAddress) {
               setStoredEoaAddress(session.eoaAddress as `0x${string}`)
-              console.log('[Auth] Restored EOA address:', session.eoaAddress)
             }
-            console.log('[Auth] Restored from localStorage:', session.pkpInfo.ethAddress)
           }
         } catch (err) {
-          console.log('[Auth] Failed to restore from localStorage:', err)
+          console.error('[Auth] Failed to restore from localStorage:', err)
         }
       }
     } finally {
@@ -131,14 +126,12 @@ export const AuthProvider: ParentComponent = (props) => {
         const { invoke } = await import('@tauri-apps/api/core')
 
         unlistenComplete = await listen<AuthResult>('auth-complete', async (event) => {
-          console.log('[Auth] auth-complete:', event.payload)
           const payload = event.payload
 
           if (payload.pkpAddress && payload.pkpPublicKey) {
             // Save to Tauri storage
             try {
               await invoke('save_auth', { authResult: payload })
-              console.log('[Auth] Saved to Tauri storage')
             } catch (saveErr) {
               console.error('[Auth] Failed to save:', saveErr)
             }
@@ -156,10 +149,7 @@ export const AuthProvider: ParentComponent = (props) => {
             }
             setAuthData(eventAuthData)
             setLastAuthMethodType(eventAuthData.authMethodType)
-            console.log('[Auth] Event authData keys:', Object.keys(eventAuthData))
-            console.log('[Auth] Event authData full:', eventAuthData)
             setIsAuthenticating(false)
-            console.log('[Auth] Login complete:', payload.pkpAddress)
           }
         })
 
@@ -168,10 +158,8 @@ export const AuthProvider: ParentComponent = (props) => {
           setAuthError(event.payload.error || 'Authentication failed')
           setIsAuthenticating(false)
         })
-
-        console.log('[Auth] Tauri event listeners ready')
       } catch (err) {
-        console.log('[Auth] Tauri event listeners not available')
+        console.error('[Auth] Failed to setup Tauri listeners:', err)
       }
     }
 
@@ -209,7 +197,6 @@ export const AuthProvider: ParentComponent = (props) => {
         // Tauri: open browser, result comes via event
         const { invoke } = await import('@tauri-apps/api/core')
         await invoke('start_passkey_auth')
-        console.log('[Auth] Opened browser for passkey auth')
       } else {
         // Web: call Lit SDK directly
         const { authenticateWithWebAuthn } = await import('../lib/lit')
@@ -220,7 +207,6 @@ export const AuthProvider: ParentComponent = (props) => {
         setLastAuthMethodType(result.authData.authMethodType)
         saveWebSession(result.pkpInfo, result.authData)
         setIsAuthenticating(false)
-        console.log('[Auth] Web login complete:', result.pkpInfo.ethAddress)
       }
     } catch (error) {
       console.error('[Auth] Login failed:', error)
@@ -240,7 +226,6 @@ export const AuthProvider: ParentComponent = (props) => {
         // Tauri: open browser, result comes via event
         const { invoke } = await import('@tauri-apps/api/core')
         await invoke('start_passkey_auth')
-        console.log('[Auth] Opened browser for passkey registration')
       } else {
         // Web: mint PKP and authenticate immediately
         const { registerWithWebAuthn } = await import('../lib/lit')
@@ -251,7 +236,6 @@ export const AuthProvider: ParentComponent = (props) => {
         setLastAuthMethodType(result.authData.authMethodType)
         saveWebSession(result.pkpInfo, result.authData)
         setIsAuthenticating(false)
-        console.log('[Auth] PKP minted:', result.pkpInfo.ethAddress)
       }
     } catch (error) {
       console.error('[Auth] Registration failed:', error)
@@ -272,7 +256,6 @@ export const AuthProvider: ParentComponent = (props) => {
       if (platform.isTauri) {
         const { connectWalletConnect } = await import('../lib/walletconnect')
         walletClientForEoa = await connectWalletConnect()
-        console.log('[Auth] WalletConnect connected in Tauri webview')
       } else {
         // Web: clear any existing session first
         const { clearAuthContext } = await import('../lib/lit')
@@ -283,7 +266,6 @@ export const AuthProvider: ParentComponent = (props) => {
       // Helper to persist EOA auth result
       const persistEoaResult = async (result: { pkpInfo: PKPInfo; authData: AuthData; eoaAddress: `0x${string}` }) => {
         const eoa = result.eoaAddress
-        console.log('[Auth] EOA address from auth:', eoa)
         setPkpInfo(result.pkpInfo)
         setAuthData(result.authData)
         setLastAuthMethodType(1) // EOA
@@ -301,7 +283,7 @@ export const AuthProvider: ParentComponent = (props) => {
               eoaAddress: eoa,
             }})
           } catch (e) {
-            console.log('[Auth] Failed to save to Tauri storage:', e)
+            console.error('[Auth] Failed to save to Tauri storage:', e)
           }
         } else {
           saveWebSession(result.pkpInfo, result.authData, eoa)
@@ -316,12 +298,7 @@ export const AuthProvider: ParentComponent = (props) => {
             const { createPKPAuthContext } = await import('../lib/lit')
             const ctx = await createPKPAuthContext(result.pkpInfo, result.authData)
             const { linkEoa } = await import('../lib/content-service')
-            const linkResult = await linkEoa(ctx, result.pkpInfo.publicKey, result.eoaAddress)
-            if (linkResult?.alreadyLinked) {
-              console.log('[Auth] EOA already linked to PKP on ContentAccessMirror')
-            } else if (linkResult?.txHash) {
-              console.log('[Auth] Linked EOA to PKP on ContentAccessMirror:', linkResult.txHash)
-            }
+            await linkEoa(ctx, result.pkpInfo.publicKey, result.eoaAddress)
           } catch (e) {
             console.warn('[Auth] Background linkEoa failed (non-fatal):', e)
           }
@@ -334,16 +311,13 @@ export const AuthProvider: ParentComponent = (props) => {
         const result = await authenticateWithEOA(walletClientForEoa)
         await persistEoaResult(result)
         setIsAuthenticating(false)
-        console.log('[Auth] Wallet login complete:', result.pkpInfo.ethAddress, 'EOA:', result.eoaAddress)
         backgroundLinkEoa(result)
       } catch (authErr) {
         if (authErr instanceof Error && authErr.message.includes('No PKP found')) {
-          console.log('[Auth] No PKP for wallet, auto-registering...')
           const { registerWithEOA } = await import('../lib/lit')
           const result = await registerWithEOA(walletClientForEoa)
           await persistEoaResult(result)
           setIsAuthenticating(false)
-          console.log('[Auth] Wallet PKP minted:', result.pkpInfo.ethAddress, 'EOA:', result.eoaAddress)
           backgroundLinkEoa(result)
         } else {
           throw authErr
@@ -375,9 +349,8 @@ export const AuthProvider: ParentComponent = (props) => {
         if (key && key.startsWith('lit-auth:')) keysToRemove.push(key)
       }
       for (const key of keysToRemove) localStorage.removeItem(key)
-      console.log('[Auth] Cleared Lit auth caches')
     } catch (e) {
-      console.log('[Auth] Failed to clear Lit caches:', e)
+      console.error('[Auth] Failed to clear Lit caches:', e)
     }
 
     // Disconnect WalletConnect if active
@@ -393,13 +366,11 @@ export const AuthProvider: ParentComponent = (props) => {
       try {
         const { invoke } = await import('@tauri-apps/api/core')
         await invoke('sign_out')
-        console.log('[Auth] Signed out (Tauri)')
       } catch (err) {
-        console.log('[Auth] sign_out not available')
+        console.error('[Auth] Failed to sign out:', err)
       }
     } else {
       localStorage.removeItem(WEB_SESSION_KEY)
-      console.log('[Auth] Signed out (web)')
     }
   }
 
@@ -425,7 +396,6 @@ export const AuthProvider: ParentComponent = (props) => {
     if (!currentAuthData) {
       if (lastAuthMethodType() === 1) {
         // EOA: re-auth. Tauri uses WalletConnect, web uses injected wallet.
-        console.log('[Auth] EOA session needs (re)authentication...')
         let walletClientForReauth: any = undefined
         if (platform.isTauri) {
           const { connectWalletConnect } = await import('../lib/walletconnect')

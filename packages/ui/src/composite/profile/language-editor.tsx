@@ -1,6 +1,6 @@
 import { Show, For, type Component, createSignal } from 'solid-js'
 import { cn } from '../../lib/utils'
-import { FlagIcon } from '../../primitives/flag-icon'
+import { LanguageChip } from '../../primitives/language-chip'
 import { Select, type SelectOption } from '../../primitives/select'
 import { IconButton } from '../../primitives/icon-button'
 import { X, Plus } from '../../icons'
@@ -8,9 +8,9 @@ import { LEARNING_LANGUAGE_OPTIONS } from '../../constants/profile-options'
 import {
   type LanguageEntry,
   PROFICIENCY_OPTIONS,
-  LANG_TO_FLAG,
   proficiencyLabel,
   PROFICIENCY,
+  getLanguageName,
 } from '../../data/languages'
 
 export interface LanguageEditorProps {
@@ -32,14 +32,6 @@ const MAX_DEFAULT = 8
 function langLabel(code: string): string {
   const opt = LEARNING_LANGUAGE_OPTIONS.find((o) => o.value === code)
   return opt?.label ?? code.toUpperCase()
-}
-
-/** Proficiency pill color class based on level */
-function profColorClass(prof: number): string {
-  if (prof === PROFICIENCY.NATIVE) return 'bg-[var(--accent-coral)]/15 text-[var(--accent-coral)]'
-  if (prof >= 5) return 'bg-[var(--accent-purple)]/15 text-[var(--accent-purple)]'
-  if (prof >= 3) return 'bg-[var(--accent-blue)]/15 text-[var(--accent-blue)]'
-  return 'bg-[var(--bg-highlight)] text-[var(--text-muted)]'
 }
 
 /**
@@ -91,24 +83,19 @@ export const LanguageEditor: Component<LanguageEditorProps> = (props) => {
     }
 
     return (
-      <div class="flex flex-col gap-1">
+      <div class="flex flex-col gap-1.5">
         <span class="text-base text-[var(--text-secondary)] mb-1">Languages</span>
-        <For each={props.languages}>
-          {(entry) => (
-            <div class="flex items-center gap-2.5 py-1.5">
-              <FlagIcon code={LANG_TO_FLAG[entry.code] ?? entry.code.toUpperCase()} class="w-5 h-5 flex-shrink-0" />
-              <span class="text-base text-[var(--text-primary)]">{langLabel(entry.code)}</span>
-              <span
-                class={cn(
-                  'px-2 py-0.5 rounded-md text-xs font-semibold',
-                  profColorClass(entry.proficiency),
-                )}
-              >
-                {proficiencyLabel(entry.proficiency)}
-              </span>
-            </div>
-          )}
-        </For>
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <For each={props.languages}>
+            {(entry) => (
+              <LanguageChip
+                language={getLanguageName(entry.code)}
+                proficiency={entry.proficiency}
+                size="md"
+              />
+            )}
+          </For>
+        </div>
       </div>
     )
   }
@@ -121,7 +108,6 @@ export const LanguageEditor: Component<LanguageEditorProps> = (props) => {
       <For each={props.languages}>
         {(entry, index) => (
           <div class="flex items-center gap-2">
-            <FlagIcon code={LANG_TO_FLAG[entry.code] ?? entry.code.toUpperCase()} class="w-5 h-5 flex-shrink-0" />
             <span class="text-sm text-[var(--text-primary)] min-w-[100px]">
               {langLabel(entry.code)}
             </span>

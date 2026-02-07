@@ -1,0 +1,107 @@
+name = "heaven-api"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Rules for bundling WASM modules
+[[rules]]
+type = "CompiledWasm"
+globs = ["**/*.wasm"]
+
+# Rules for font files (binary data)
+[[rules]]
+type = "Data"
+globs = ["**/*.ttf", "**/*.otf", "**/*.woff", "**/*.woff2"]
+
+# KV namespace for resolver cache (MBID lookups, ISRC results, AcoustID, search)
+# [[kv_namespaces]]
+# binding = "RESOLVER_KV"
+# id = "TODO_CREATE_KV_NAMESPACE"
+# preview_id = "TODO_CREATE_KV_NAMESPACE"
+
+[vars]
+ENVIRONMENT = "development"
+BASE_SEPOLIA_RPC = "https://sepolia.base.org"
+
+# Scrobble resolver config
+MB_USER_AGENT = "Heaven/1.0 (heaven.computer)"
+ACOUSTID_CLIENT_KEY = ""
+ENABLE_MB_FALLBACK_SEARCH = "false"
+# DNS_SHARED_SECRET = "your-secret-here"  # Set via wrangler secret for production
+# CLAIM_START_SECRET = "your-secret-here" # Required in production to call /api/claim/start
+# FAL_KEY = "your-fal-key"  # Set via wrangler secret
+# BASE_SEPOLIA_RELAY_PK = "..."  # Set via wrangler secret for EAS attestations
+# FILEBASE_KEY = "ACCESS_KEY:SECRET_KEY:BUCKET"  # Set via wrangler secret for IPFS pinning
+
+# Self.xyz verification
+SELF_SCOPE = "heaven"
+SELF_ENDPOINT = "https://heaven-api.deletion-backup782.workers.dev/api/self/verify"
+SELF_MOCK_PASSPORT = "true"  # Set to "false" for production
+
+[[d1_databases]]
+binding = "DB"
+database_name = "heaven-api"
+database_id = "6c7c6c73-29c5-4886-b511-3bf4332bca09"
+
+# R2 buckets for photo pipeline (using same buckets for dev/prod for now)
+[[r2_buckets]]
+binding = "R2_RAW"
+bucket_name = "heaven-raw"
+preview_bucket_name = "heaven-raw"
+
+[[r2_buckets]]
+binding = "R2_ORIG"
+bucket_name = "heaven-orig"
+preview_bucket_name = "heaven-orig"
+
+[[r2_buckets]]
+binding = "R2_ANIME"
+bucket_name = "heaven-anime"
+preview_bucket_name = "heaven-anime"
+
+[[r2_buckets]]
+binding = "R2_REVEAL"
+bucket_name = "heaven-reveal"
+preview_bucket_name = "heaven-reveal"
+
+[[r2_buckets]]
+binding = "R2_WM"
+bucket_name = "heaven-wm"
+preview_bucket_name = "heaven-wm"
+
+# Images binding for transforms (EXIF strip, trim, resize, watermark)
+[images]
+binding = "IMAGES"
+
+[env.production]
+vars = { ENVIRONMENT = "production", SELF_MOCK_PASSPORT = "false", SELF_SCOPE = "heaven", SELF_ENDPOINT = "https://heaven-api.deletion-backup782.workers.dev/api/self/verify" }
+
+# Production uses same database (single environment for now)
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "heaven-api"
+database_id = "6c7c6c73-29c5-4886-b511-3bf4332bca09"
+
+# Production R2 buckets
+[[env.production.r2_buckets]]
+binding = "R2_RAW"
+bucket_name = "heaven-raw"
+
+[[env.production.r2_buckets]]
+binding = "R2_ORIG"
+bucket_name = "heaven-orig"
+
+[[env.production.r2_buckets]]
+binding = "R2_ANIME"
+bucket_name = "heaven-anime"
+
+[[env.production.r2_buckets]]
+binding = "R2_REVEAL"
+bucket_name = "heaven-reveal"
+
+[[env.production.r2_buckets]]
+binding = "R2_WM"
+bucket_name = "heaven-wm"
+
+[env.production.images]
+binding = "IMAGES"

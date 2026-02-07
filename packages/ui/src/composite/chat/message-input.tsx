@@ -88,7 +88,7 @@ export const MessageInput: Component<MessageInputProps> = (props) => {
       />
       <IconButton
         variant="send"
-        size="lg"
+        size="xl"
         aria-label="Send message"
         disabled={!currentValue().trim() || local.disabled}
         onClick={handleSubmit}

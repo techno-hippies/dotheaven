@@ -81,6 +81,15 @@ export {
 } from './artist'
 
 export {
+  fetchAlbumInfo,
+  fetchAlbumPageData,
+  fetchRecordingReleaseGroup,
+  albumTracksToTracks,
+  type AlbumInfo,
+  type AlbumPageData,
+} from './album'
+
+export {
   fetchCommunityMembers,
   fetchUserLocationCityId,
   type CommunityMember,

@@ -242,6 +242,19 @@ export class Track extends Entity {
     this.set("artist", Value.fromString(value));
   }
 
+  get album(): string {
+    let value = this.get("album");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set album(value: string) {
+    this.set("album", Value.fromString(value));
+  }
+
   get kind(): i32 {
     let value = this.get("kind");
     if (!value || value.kind == ValueKind.NULL) {

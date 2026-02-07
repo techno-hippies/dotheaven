@@ -85,6 +85,10 @@
 
 /* “Heavenly cloudy” WITHOUT mix-blend-mode (prevents purple casts) */
 @layer base {
+  html {
+    font-size: 106.25%; /* 17px base (vs default 16px) — matches X/Twitter readability */
+  }
+
   html, body {
     background-color: var(--background) !important;
     color: var(--foreground);

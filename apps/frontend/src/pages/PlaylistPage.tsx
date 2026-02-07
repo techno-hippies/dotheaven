@@ -1,8 +1,9 @@
 import { type Component, createSignal, Show } from 'solid-js'
-import { useParams } from '@solidjs/router'
+import { useParams, useNavigate } from '@solidjs/router'
 import { createQuery } from '@tanstack/solid-query'
 import {
   MediaHeader,
+  type MediaHeaderMenuItem,
   TrackList,
   Dialog,
   DialogContent,
@@ -21,6 +22,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from '@heaven/ui'
+import { publicProfile } from '@heaven/core'
 import { fetchPlaylistWithTracks } from '../lib/heaven/playlists'
 import { getPrimaryName } from '../lib/heaven'
 import { useTrackPlayback, usePlaylistDialog, buildMenuActions } from '../hooks/useTrackListActions'
@@ -28,6 +30,7 @@ import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 
 export const PlaylistPage: Component = () => {
   const params = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const [editOpen, setEditOpen] = createSignal(false)
   const [deleteOpen, setDeleteOpen] = createSignal(false)
   const [editTitle, setEditTitle] = createSignal('')
@@ -75,9 +78,9 @@ export const PlaylistPage: Component = () => {
 
   const creatorHref = () => {
     const primary = creatorQuery.data
-    if (primary?.label) return `#/u/${primary.label}.heaven`
+    if (primary?.label) return `#${publicProfile(`${primary.label}.heaven`)}`
     const addr = ownerAddress()
-    if (addr) return `#/u/${addr}`
+    if (addr) return `#${publicProfile(addr)}`
     return undefined
   }
 
@@ -108,6 +111,22 @@ export const PlaylistPage: Component = () => {
 
   const handlePlay = () => {
     playback.playFirst(tracks())
+  }
+
+  const totalDuration = () => {
+    const trackList = tracks()
+    if (trackList.length === 0) return '0 min'
+    // Parse duration strings (e.g., "3:42") back to seconds
+    const totalSec = trackList.reduce((sum, t) => {
+      if (!t.duration || t.duration === '--:--') return sum
+      const [m, s] = t.duration.split(':').map(Number)
+      return sum + (m * 60 + s)
+    }, 0)
+    if (totalSec === 0) return '0 min'
+    const hours = Math.floor(totalSec / 3600)
+    const mins = Math.floor((totalSec % 3600) / 60)
+    if (hours > 0) return `${hours} hr ${mins} min`
+    return `${mins} min`
   }
 
   const handleAddCollaborator = () => {
@@ -146,8 +165,29 @@ export const PlaylistPage: Component = () => {
                 coverSrc={coverUrl()}
                 stats={{
                   songCount: p().trackCount,
-                  duration: '0 min',
+                  duration: totalDuration(),
                 }}
+                onBack={() => navigate(-1)}
+                mobileMenuItems={[
+                  {
+                    label: 'Request Access',
+                    icon: (
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+                      </svg>
+                    ),
+                    onSelect: () => console.log('Request Access'),
+                  } satisfies MediaHeaderMenuItem,
+                  {
+                    label: 'Mint NFT',
+                    icon: (
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+                      </svg>
+                    ),
+                    onSelect: () => console.log('Mint NFT'),
+                  } satisfies MediaHeaderMenuItem,
+                ]}
                 onTitleClick={openEditDialog}
                 onCoverClick={openEditDialog}
                 actionsSlot={

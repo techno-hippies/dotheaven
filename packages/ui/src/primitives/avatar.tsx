@@ -29,8 +29,8 @@ const avatarVariants = cva(
   }
 )
 
-/** Flag badge dimensions keyed by avatar size */
-const flagSizeClass: Record<string, string> = {
+/** Badge dimensions keyed by avatar size */
+const badgeSizeClass: Record<string, string> = {
   xs: 'w-2.5 h-2.5',
   sm: 'w-3 h-3',
   md: 'w-3.5 h-3.5',
@@ -48,6 +48,8 @@ export interface AvatarProps extends VariantProps<typeof avatarVariants> {
   fallback?: JSX.Element
   /** ISO 3166-1 alpha-2 country code (e.g. "US"). Shows a flag badge on the avatar. */
   nationalityCode?: string
+  /** Custom badge element (e.g. chain icon). Takes precedence over nationalityCode. */
+  badge?: JSX.Element
 }
 
 /**
@@ -78,16 +80,21 @@ export const Avatar: Component<AvatarProps> = (props) => {
           )
         )}
       </div>
-      <Show when={props.nationalityCode}>
-        <img
-          src={`/flags/${props.nationalityCode!.toUpperCase()}.svg`}
-          alt={props.nationalityCode!.toUpperCase()}
-          class={cn(
-            'absolute -bottom-0.5 -right-0.5 rounded-full',
-            'ring-2 ring-[var(--bg-surface)]',
-            flagSizeClass[size()] ?? flagSizeClass.md,
-          )}
-        />
+      <Show when={props.badge || props.nationalityCode}>
+        <div class={cn(
+          'absolute -bottom-0.5 -right-0.5 rounded-full overflow-hidden',
+          'ring-2 ring-[var(--bg-surface)]',
+          badgeSizeClass[size()] ?? badgeSizeClass.md,
+        )}>
+          {props.badge
+            ? <div class="w-full h-full flex items-center justify-center">{props.badge}</div>
+            : <img
+                src={`/flags/${props.nationalityCode!.toUpperCase()}.svg`}
+                alt={props.nationalityCode!.toUpperCase()}
+                class="w-full h-full rounded-full"
+              />
+          }
+        </div>
       </Show>
     </div>
   )

@@ -90,6 +90,10 @@
     @apply border-border;
   }
 
+  html {
+    font-size: 106.25%; /* 17px base (vs default 16px) — matches X/Twitter readability */
+  }
+
   html,
   body {
     @apply bg-background text-foreground antialiased;

@@ -2,8 +2,9 @@
  * heaven-resolver — MusicBrainz API proxy with KV caching.
  *
  * Endpoints:
- *   GET  /recording/:mbid              → artist info from a recording MBID
+ *   GET  /recording/:mbid              → artist + release-group info from a recording MBID
  *   GET  /artist/:mbid                 → artist metadata (name, genres, bio, image)
+ *   GET  /release-group/:mbid          → album metadata (title, artists, date, cover art, genres)
  *   GET  /search/artist?q=             → search artists by name
  *   POST /resolve/batch                → batch resolve {artist, title} → MBIDs via MB search
  *   GET  /resolve/spotify-artist/:id   → Spotify artist ID → MB artist MBID via URL relation
@@ -16,11 +17,13 @@ interface Env {
   CACHE: KVNamespace
   MB_USER_AGENT: string
   ENVIRONMENT: string
+  FILEBASE_API_KEY?: string
 }
 
 // ── Cache TTLs ───────────────────────────────────────────────────────
 const CACHE_TTL_POSITIVE = 60 * 60 * 24 * 30 // 30 days
 const CACHE_TTL_NEGATIVE = 60 * 60            // 1 hour
+const CACHE_TTL_IMAGE = 60 * 60 * 24 * 365    // 1 year (images are immutable once rehosted)
 
 // ── Rate limiter (per-isolate, best-effort) ──────────────────────────
 let lastMbRequest = 0
@@ -69,10 +72,12 @@ async function handleRecording(mbid: string, env: Env): Promise<Response> {
   if (cached) {
     // Follow cached redirects instead of returning raw {redirect: ...}
     if (typeof cached.redirect === 'string') return handleRecording(cached.redirect, env)
-    return jsonResponse(cached)
+    // Serve from cache only if it has releaseGroup field (v2 format) or is an error
+    if (cached.error || 'releaseGroup' in cached) return jsonResponse(cached)
+    // Stale v1 cache entry without releaseGroup — fall through to re-fetch
   }
 
-  const url = `https://musicbrainz.org/ws/2/recording/${mbid}?inc=artists&fmt=json`
+  const url = `https://musicbrainz.org/ws/2/recording/${mbid}?inc=artists+releases+release-groups&fmt=json`
   const res = await mbFetch(url, env)
 
   if (res.status === 404) {
@@ -104,7 +109,15 @@ async function handleRecording(mbid: string, env: Env): Promise<Response> {
     'artist-credit'?: Array<{
       artist: { id: string; name: string; 'sort-name': string }
     }>
+    releases?: Array<{
+      id: string
+      title: string
+      'release-group'?: { id: string; title: string; 'primary-type'?: string }
+    }>
   }
+
+  // Pick the first release-group (album) from the releases
+  const releaseGroup = data.releases?.find((r) => r['release-group'])?.['release-group'] ?? null
 
   const result = {
     recording: { mbid: data.id, title: data.title },
@@ -113,6 +126,11 @@ async function handleRecording(mbid: string, env: Env): Promise<Response> {
       name: ac.artist.name,
       sortName: ac.artist['sort-name'],
     })),
+    releaseGroup: releaseGroup ? {
+      mbid: releaseGroup.id,
+      title: releaseGroup.title,
+      type: releaseGroup['primary-type'] ?? null,
+    } : null,
   }
 
   await env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: CACHE_TTL_POSITIVE })
@@ -122,13 +140,16 @@ async function handleRecording(mbid: string, env: Env): Promise<Response> {
 /**
  * GET /artist/:mbid
  * Returns artist metadata: name, genres, type, area, disambiguation, links.
+ *
+ * Background rehosting: If the artist has a Wikimedia image URL, queue a background
+ * job to rehost it to IPFS. First visitor gets Wikipedia URL, second visitor gets IPFS.
  */
-async function handleArtist(mbid: string, env: Env): Promise<Response> {
+async function handleArtist(mbid: string, env: Env, ctx?: ExecutionContext): Promise<Response> {
   const cacheKey = `artist:${mbid}`
   const cached = await env.CACHE.get(cacheKey, 'json') as Record<string, unknown> | null
   if (cached) {
     // Follow cached redirects instead of returning raw {redirect: ...}
-    if (typeof cached.redirect === 'string') return handleArtist(cached.redirect, env)
+    if (typeof cached.redirect === 'string') return handleArtist(cached.redirect, env, ctx)
     return jsonResponse(cached)
   }
 
@@ -216,7 +237,14 @@ async function handleArtist(mbid: string, env: Env): Promise<Response> {
     links,
   }
 
+  // Cache artist metadata with Wikipedia URL (returned immediately)
   await env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: CACHE_TTL_POSITIVE })
+
+  // Background job: rehost Wikimedia image to IPFS (doesn't block response)
+  if (ctx && links.image?.startsWith('https://')) {
+    ctx.waitUntil(rehostArtistImageBackground(mbid, links.image, env))
+  }
+
   return jsonResponse(result)
 }
 
@@ -437,6 +465,120 @@ async function handleResolveBatch(request: Request, env: Env): Promise<Response>
   return jsonResponse({ results })
 }
 
+// ── Release-group (album) metadata ──────────────────────────────────
+
+/**
+ * GET /release-group/:mbid
+ * Returns album metadata: title, artist-credit, date, genres, cover art, links.
+ */
+async function handleReleaseGroup(mbid: string, env: Env, ctx?: ExecutionContext): Promise<Response> {
+  const cacheKey = `release-group:${mbid}`
+  const cached = await env.CACHE.get(cacheKey, 'json') as Record<string, unknown> | null
+  if (cached) {
+    if (typeof cached.redirect === 'string') return handleReleaseGroup(cached.redirect, env, ctx)
+    return jsonResponse(cached)
+  }
+
+  const url = `https://musicbrainz.org/ws/2/release-group/${mbid}?inc=artists+genres+url-rels+releases&fmt=json`
+  const res = await mbFetch(url, env)
+
+  if (res.status === 404) {
+    const neg = { error: 'not_found', mbid }
+    await env.CACHE.put(cacheKey, JSON.stringify(neg), { expirationTtl: CACHE_TTL_NEGATIVE })
+    return jsonResponse(neg, 404)
+  }
+
+  if (res.status >= 300 && res.status < 400) {
+    const location = res.headers.get('Location')
+    if (location) {
+      const newMbid = location.match(/release-group\/([a-f0-9-]{36})/)?.[1]
+      if (newMbid) {
+        await env.CACHE.put(cacheKey, JSON.stringify({ redirect: newMbid }), { expirationTtl: CACHE_TTL_POSITIVE })
+        return handleReleaseGroup(newMbid, env)
+      }
+    }
+  }
+
+  if (!res.ok) {
+    return jsonResponse({ error: 'upstream_error', status: res.status }, 502)
+  }
+
+  const data = await res.json() as {
+    id: string
+    title: string
+    'primary-type'?: string
+    'secondary-types'?: string[]
+    'first-release-date'?: string
+    disambiguation?: string
+    'artist-credit'?: Array<{
+      artist: { id: string; name: string; 'sort-name': string }
+      joinphrase?: string
+    }>
+    genres?: Array<{ name: string; count: number }>
+    releases?: Array<{
+      id: string
+      title: string
+      date?: string
+      status?: string
+      'track-count'?: number
+    }>
+    relations?: Array<{
+      type: string
+      url?: { resource: string }
+    }>
+  }
+
+  // Extract links (same pattern as artist)
+  const links: Record<string, string> = {}
+  for (const rel of data.relations ?? []) {
+    if (rel.url?.resource) {
+      if (rel.type === 'wikidata') links.wikidata = rel.url.resource
+      else if (rel.type === 'discogs') links.discogs = rel.url.resource
+      else if (rel.type === 'streaming music' || rel.type === 'free streaming') {
+        const u = rel.url.resource
+        if (u.includes('spotify.com')) links.spotify = u
+      }
+    }
+  }
+
+  // Pick the earliest official release for track count
+  const officialRelease = (data.releases ?? [])
+    .filter((r) => r.status === 'Official')
+    .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''))[0]
+
+  const coverArtUrl = `https://coverartarchive.org/release-group/${data.id}/front-250`
+
+  const result = {
+    mbid: data.id,
+    title: data.title,
+    type: data['primary-type'] ?? null,
+    secondaryTypes: data['secondary-types'] ?? [],
+    releaseDate: data['first-release-date'] ?? null,
+    disambiguation: data.disambiguation ?? null,
+    artists: (data['artist-credit'] ?? []).map((ac) => ({
+      mbid: ac.artist.id,
+      name: ac.artist.name,
+      joinphrase: ac.joinphrase ?? '',
+    })),
+    genres: (data.genres ?? [])
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10)
+      .map((g) => g.name),
+    coverArtUrl,
+    trackCount: officialRelease?.['track-count'] ?? null,
+    links,
+  }
+
+  await env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: CACHE_TTL_POSITIVE })
+
+  // Background job: rehost cover art to IPFS
+  if (ctx && coverArtUrl) {
+    ctx.waitUntil(rehostReleaseGroupCoverBackground(mbid, coverArtUrl, env))
+  }
+
+  return jsonResponse(result)
+}
+
 // ── Spotify artist → MB artist MBID ──────────────────────────────────
 
 /**
@@ -498,6 +640,316 @@ function luceneEscape(s: string): string {
   return s.replace(/([+\-&|!(){}[\]^"~*?:\\/])/g, '\\$1')
 }
 
+// ── Filebase S3 Upload ──────────────────────────────────────────────
+
+async function sha256Hex(message: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(message))
+  const hashArray = new Uint8Array(hashBuffer)
+  return Array.from(hashArray)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+async function uploadToFilebase(
+  imageData: Uint8Array,
+  contentType: string,
+  filename: string,
+  env: Env
+): Promise<string> {
+  if (!env.FILEBASE_API_KEY) {
+    throw new Error('FILEBASE_API_KEY not configured')
+  }
+
+  const decoded = atob(env.FILEBASE_API_KEY)
+  const [accessKey, secretKey, bucket] = decoded.split(':')
+  if (!accessKey || !secretKey || !bucket) {
+    throw new Error('Invalid FILEBASE_API_KEY format (expected base64(accessKey:secretKey:bucket))')
+  }
+
+  const endpoint = 's3.filebase.com'
+  const region = 'us-east-1'
+  const service = 's3'
+
+  const date = new Date()
+  const amzDate = date.toISOString().replace(/[:-]|\.\d{3}/g, '')
+  const dateStamp = amzDate.slice(0, 8)
+
+  const canonicalUri = `/${bucket}/${filename}`
+
+  // Compute payload hash
+  const payloadHashBuffer = await crypto.subtle.digest('SHA-256', imageData)
+  const payloadHash = bytesToHex(new Uint8Array(payloadHashBuffer))
+
+  const canonicalHeaders =
+    `host:${endpoint}\n` +
+    `x-amz-content-sha256:${payloadHash}\n` +
+    `x-amz-date:${amzDate}\n`
+  const signedHeaders = 'host;x-amz-content-sha256;x-amz-date'
+
+  const canonicalRequest = [
+    'PUT',
+    canonicalUri,
+    '',
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash,
+  ].join('\n')
+
+  const algorithm = 'AWS4-HMAC-SHA256'
+  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`
+  const canonicalRequestHash = await sha256Hex(canonicalRequest)
+  const stringToSign = [algorithm, amzDate, credentialScope, canonicalRequestHash].join('\n')
+
+  // Compute signing key
+  const kDate = await hmacSha256(new TextEncoder().encode(`AWS4${secretKey}`), dateStamp)
+  const kRegion = await hmacSha256(kDate, region)
+  const kService = await hmacSha256(kRegion, service)
+  const kSigning = await hmacSha256(kService, 'aws4_request')
+
+  const signature = await hmacHex(kSigning, stringToSign)
+
+  const authHeader = [
+    `${algorithm} Credential=${accessKey}/${credentialScope}`,
+    `SignedHeaders=${signedHeaders}`,
+    `Signature=${signature}`,
+  ].join(', ')
+
+  const response = await fetch(`https://${endpoint}${canonicalUri}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: authHeader,
+      'x-amz-content-sha256': payloadHash,
+      'x-amz-date': amzDate,
+      'Content-Type': contentType,
+    },
+    body: imageData,
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`Filebase upload failed: ${response.status} ${text}`)
+  }
+
+  const cid = response.headers.get('x-amz-meta-cid')
+  if (!cid) {
+    throw new Error('No CID returned from Filebase')
+  }
+
+  return cid
+}
+
+async function hmacSha256(key: Uint8Array, message: string): Promise<Uint8Array> {
+  const encoder = new TextEncoder()
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    key,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+  const sig = await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(message))
+  return new Uint8Array(sig)
+}
+
+async function hmacHex(key: Uint8Array, message: string): Promise<string> {
+  const sig = await hmacSha256(key, message)
+  return bytesToHex(sig)
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+// ── Image Rehosting ─────────────────────────────────────────────────
+
+interface RehostRequest {
+  urls: string[]
+}
+
+interface RehostResult {
+  url: string
+  ipfsUrl: string | null
+  cid: string | null
+  error: string | null
+  cached: boolean
+}
+
+/**
+ * POST /rehost/image
+ * Batch rehost external images to Filebase IPFS.
+ * Input:  { urls: ["https://..."] }
+ * Output: { results: [{ url, ipfsUrl, cid, error, cached }] }
+ */
+async function handleRehostImage(request: Request, env: Env): Promise<Response> {
+  if (!env.FILEBASE_API_KEY) {
+    return jsonResponse({ error: 'FILEBASE_API_KEY not configured' }, 500)
+  }
+
+  let body: RehostRequest
+  try {
+    body = (await request.json()) as RehostRequest
+  } catch {
+    return jsonResponse({ error: 'invalid JSON body' }, 400)
+  }
+
+  if (!Array.isArray(body.urls) || body.urls.length === 0) {
+    return jsonResponse({ error: 'urls array required' }, 400)
+  }
+
+  if (body.urls.length > 50) {
+    return jsonResponse({ error: 'max 50 URLs per batch' }, 400)
+  }
+
+  // Validate URLs
+  for (const url of body.urls) {
+    if (typeof url !== 'string' || !url.startsWith('https://')) {
+      return jsonResponse({ error: 'all URLs must be HTTPS strings' }, 400)
+    }
+  }
+
+  const results: RehostResult[] = []
+
+  for (const url of body.urls) {
+    try {
+      const result = await rehostSingleImage(url, env)
+      results.push(result)
+    } catch (err) {
+      results.push({
+        url,
+        ipfsUrl: null,
+        cid: null,
+        error: err instanceof Error ? err.message : String(err),
+        cached: false,
+      })
+    }
+  }
+
+  return jsonResponse({ results })
+}
+
+async function rehostSingleImage(url: string, env: Env): Promise<RehostResult> {
+  // Compute URL hash for cache key
+  const urlHash = await sha256Hex(url)
+  const cacheKey = `rehost:${urlHash}`
+
+  // Check cache
+  const cached = await env.CACHE.get(cacheKey)
+  if (cached) {
+    return {
+      url,
+      ipfsUrl: `ipfs://${cached}`,
+      cid: cached,
+      error: null,
+      cached: true,
+    }
+  }
+
+  // Fetch external image
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': env.MB_USER_AGENT,
+    },
+    signal: AbortSignal.timeout(15000), // 15s timeout
+  })
+
+  if (!response.ok) {
+    throw new Error(`Fetch failed: ${response.status}`)
+  }
+
+  const contentType = response.headers.get('content-type') || 'image/jpeg'
+  const buffer = await response.arrayBuffer()
+  const imageData = new Uint8Array(buffer)
+
+  if (imageData.byteLength > 10 * 1024 * 1024) {
+    throw new Error('Image too large (max 10MB)')
+  }
+
+  // Generate unique filename
+  const ext = contentType.split('/')[1]?.split(';')[0] || 'jpg'
+  const filename = `${urlHash.slice(0, 16)}.${ext}`
+
+  // Upload to Filebase
+  const cid = await uploadToFilebase(imageData, contentType, filename, env)
+
+  // Cache CID (1 year TTL)
+  await env.CACHE.put(cacheKey, cid, { expirationTtl: CACHE_TTL_IMAGE })
+
+  return {
+    url,
+    ipfsUrl: `ipfs://${cid}`,
+    cid,
+    error: null,
+    cached: false,
+  }
+}
+
+/**
+ * Background job: rehost artist image to IPFS and update cached artist metadata.
+ * Runs after returning the initial response (doesn't block user).
+ */
+async function rehostArtistImageBackground(
+  mbid: string,
+  imageUrl: string,
+  env: Env
+): Promise<void> {
+  try {
+    // Rehost the image
+    const result = await rehostSingleImage(imageUrl, env)
+    if (!result.ipfsUrl) {
+      console.warn(`[Artist] Rehost failed for ${mbid}:`, result.error)
+      return
+    }
+
+    // Update cached artist metadata with IPFS URL
+    const cacheKey = `artist:${mbid}`
+    const cached = await env.CACHE.get(cacheKey, 'json') as Record<string, unknown> | null
+    if (cached && typeof cached === 'object' && 'links' in cached) {
+      const updated = {
+        ...cached,
+        links: {
+          ...(cached.links as Record<string, unknown>),
+          image: result.ipfsUrl,
+        },
+      }
+      await env.CACHE.put(cacheKey, JSON.stringify(updated), { expirationTtl: CACHE_TTL_POSITIVE })
+      console.log(`[Artist] Rehosted ${mbid} image: ${result.cid}`)
+    }
+  } catch (err) {
+    console.error(`[Artist] Background rehost failed for ${mbid}:`, err)
+  }
+}
+
+/**
+ * Background job: rehost release-group cover art to IPFS and update cached metadata.
+ */
+async function rehostReleaseGroupCoverBackground(
+  mbid: string,
+  coverArtUrl: string,
+  env: Env
+): Promise<void> {
+  try {
+    const result = await rehostSingleImage(coverArtUrl, env)
+    if (!result.ipfsUrl) {
+      console.warn(`[ReleaseGroup] Rehost failed for ${mbid}:`, result.error)
+      return
+    }
+
+    // Update cached release-group metadata
+    const cacheKey = `release-group:${mbid}`
+    const cached = await env.CACHE.get(cacheKey, 'json') as Record<string, unknown> | null
+    if (cached && typeof cached === 'object') {
+      const updated = { ...cached, coverArtUrl: result.ipfsUrl }
+      await env.CACHE.put(cacheKey, JSON.stringify(updated), { expirationTtl: CACHE_TTL_POSITIVE })
+      console.log(`[ReleaseGroup] Rehosted ${mbid} cover: ${result.cid}`)
+    }
+  } catch (err) {
+    console.error(`[ReleaseGroup] Background rehost failed for ${mbid}:`, err)
+  }
+}
+
 /**
  * Resolve a Wikimedia Commons file page URL to an actual image URL.
  * Input: https://commons.wikimedia.org/wiki/File:The_Fabs.JPG
@@ -552,7 +1004,7 @@ const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/
 const SPOTIFY_ID_RE = /^[a-zA-Z0-9]{22}$/
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders() })
     }
@@ -564,6 +1016,9 @@ export default {
     if (request.method === 'POST') {
       if (path === '/resolve/batch') {
         return handleResolveBatch(request, env)
+      }
+      if (path === '/rehost/image') {
+        return handleRehostImage(request, env)
       }
       return jsonResponse({ error: 'not found' }, 404)
     }
@@ -586,7 +1041,15 @@ export default {
     if (artistMatch) {
       const mbid = artistMatch[1]
       if (!UUID_RE.test(mbid)) return jsonResponse({ error: 'invalid mbid' }, 400)
-      return handleArtist(mbid, env)
+      return handleArtist(mbid, env, ctx)
+    }
+
+    // GET /release-group/:mbid
+    const releaseGroupMatch = path.match(/^\/release-group\/([a-f0-9-]{36})$/)
+    if (releaseGroupMatch) {
+      const mbid = releaseGroupMatch[1]
+      if (!UUID_RE.test(mbid)) return jsonResponse({ error: 'invalid mbid' }, 400)
+      return handleReleaseGroup(mbid, env, ctx)
     }
 
     // GET /search/artist?q=...

@@ -1,7 +1,7 @@
 import type { Component } from 'solid-js'
 import { Tabs, type TabItem } from '@heaven/ui'
 
-export type ProfileTab = 'about' | 'activity' | 'music' | 'schedule'
+export type ProfileTab = 'posts' | 'about' | 'music' | 'wallet' | 'schedule'
 
 export interface ProfileTabsProps {
   class?: string
@@ -10,15 +10,15 @@ export interface ProfileTabsProps {
 }
 
 // Phosphor icon components
-const ActivityIcon = () => (
-  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
-    <path d="M200,40H56A16,16,0,0,0,40,56V200a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V56A16,16,0,0,0,200,40Zm0,160H56V56H200V200ZM96,128a8,8,0,0,1,8-8h16V104a8,8,0,0,1,16,0v16h16a8,8,0,0,1,0,16H136v16a8,8,0,0,1-16,0V136H104A8,8,0,0,1,96,128Z" />
-  </svg>
-)
-
 const MusicIcon = () => (
   <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
     <path d="M212.92,25.69a8,8,0,0,0-6.86-1.45l-128,32A8,8,0,0,0,72,64V174.08A36,36,0,1,0,88,204V70.25l112-28v99.83A36,36,0,1,0,216,172V32A8,8,0,0,0,212.92,25.69ZM52,224a20,20,0,1,1,20-20A20,20,0,0,1,52,224Zm128-32a20,20,0,1,1,20-20A20,20,0,0,1,180,192Z" />
+  </svg>
+)
+
+const WalletIcon = () => (
+  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
+    <path d="M216,64H56A8,8,0,0,1,56,48H192a8,8,0,0,0,0-16H56A24,24,0,0,0,32,56V184a24,24,0,0,0,24,24H216a16,16,0,0,0,16-16V80A16,16,0,0,0,216,64Zm0,128H56a8,8,0,0,1-8-8V78.63A23.84,23.84,0,0,0,56,80H216Zm-36-60a12,12,0,1,1,12-12A12,12,0,0,1,180,132Z" />
   </svg>
 )
 
@@ -34,21 +34,32 @@ const AboutIcon = () => (
   </svg>
 )
 
+const PostsIcon = () => (
+  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
+    <path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,160H40V56H216V200ZM184,96a8,8,0,0,1-8,8H80a8,8,0,0,1,0-16h96A8,8,0,0,1,184,96Zm0,32a8,8,0,0,1-8,8H80a8,8,0,0,1,0-16h96A8,8,0,0,1,184,128Zm0,32a8,8,0,0,1-8,8H80a8,8,0,0,1,0-16h96A8,8,0,0,1,184,160Z" />
+  </svg>
+)
+
 const tabs: TabItem[] = [
+  {
+    id: 'posts',
+    label: 'Posts',
+    icon: <PostsIcon />,
+  },
   {
     id: 'about',
     label: 'About',
     icon: <AboutIcon />,
   },
   {
-    id: 'activity',
-    label: 'Activity',
-    icon: <ActivityIcon />,
-  },
-  {
     id: 'music',
     label: 'Music',
     icon: <MusicIcon />,
+  },
+  {
+    id: 'wallet',
+    label: 'Wallet',
+    icon: <WalletIcon />,
   },
   {
     id: 'schedule',

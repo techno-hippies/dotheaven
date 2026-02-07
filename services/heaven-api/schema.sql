@@ -1,0 +1,160 @@
+-- Heaven V0 API Schema
+-- D1 database for candidates, likes, and matches
+
+-- Claimed users (PKP addresses)
+CREATE TABLE IF NOT EXISTS users (
+  address TEXT PRIMARY KEY,
+  created_at INTEGER NOT NULL,
+  last_active_at INTEGER,
+  directory_tier TEXT DEFAULT 'claimed' CHECK(directory_tier IN ('handoff', 'claimed', 'verified'))
+);
+
+-- Seeded scraped profiles (shadow = no PKP yet)
+CREATE TABLE IF NOT EXISTS shadow_profiles (
+  id TEXT PRIMARY KEY,
+  source TEXT NOT NULL,                  -- 'dateme', 'acx', 'cuties'
+  source_url TEXT,
+  display_name TEXT,
+  bio TEXT,
+  age_bucket INTEGER,                    -- 1=18-24, 2=25-29, 3=30-34, 4=35-39, 5=40-49, 6=50+
+  gender_identity INTEGER,               -- 1=man, 2=woman, 3=trans_man, 4=trans_woman, 5=non_binary
+  location TEXT,
+  photos_json TEXT,                      -- JSON array of photo URLs/CIDs
+  anime_cid TEXT,                        -- IPFS CID of generated anime avatar
+  survey_cid TEXT,                       -- IPFS CID of survey responses
+  featured_rank INTEGER DEFAULT 0,       -- lower = more featured (0 = not featured)
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+
+  -- Claim linkage (null until claimed)
+  claimed_address TEXT REFERENCES users(address),
+  claimed_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_shadow_featured ON shadow_profiles(featured_rank) WHERE featured_rank > 0 AND claimed_address IS NULL;
+CREATE INDEX IF NOT EXISTS idx_shadow_claimed ON shadow_profiles(claimed_address) WHERE claimed_address IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_shadow_source ON shadow_profiles(source);
+
+-- Claim tokens for profile handoff
+CREATE TABLE IF NOT EXISTS claim_tokens (
+  id TEXT PRIMARY KEY,                   -- attemptId (cryptographically random, >= 128 bits)
+  shadow_profile_id TEXT NOT NULL REFERENCES shadow_profiles(id),
+  token_hash TEXT,                       -- sha256(token) for link redemption (/c/<token>)
+  human_code_hash TEXT,                  -- hmac(secret, code) for manual entry (NEO-XXXXXX)
+  method TEXT NOT NULL CHECK(method IN ('dm', 'bio_edit', 'reply_nonce')),
+  pre_html_hash TEXT,                    -- for bio_edit: sha256 of profile HTML at creation
+  pre_scraped_at INTEGER,                -- for bio_edit: when we pre-scraped
+  issued_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,           -- 7 days from issued_at
+  verify_window_started_at INTEGER,      -- for bio_edit: 15 min window
+  used INTEGER DEFAULT 0,
+  used_at INTEGER,
+  used_by_address TEXT REFERENCES users(address)
+);
+
+CREATE INDEX IF NOT EXISTS idx_claim_shadow ON claim_tokens(shadow_profile_id);
+CREATE INDEX IF NOT EXISTS idx_claim_token_hash ON claim_tokens(token_hash) WHERE used = 0;
+CREATE INDEX IF NOT EXISTS idx_claim_code_hash ON claim_tokens(human_code_hash) WHERE used = 0;
+
+-- Likes (can target user address or shadow profile)
+CREATE TABLE IF NOT EXISTS likes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  liker_address TEXT NOT NULL,           -- PKP address of person who liked
+  target_type TEXT NOT NULL CHECK(target_type IN ('user', 'shadow')),
+  target_id TEXT NOT NULL,               -- address if 'user', shadow_profiles.id if 'shadow'
+  created_at INTEGER NOT NULL,
+  UNIQUE(liker_address, target_type, target_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_likes_liker ON likes(liker_address);
+CREATE INDEX IF NOT EXISTS idx_likes_target ON likes(target_type, target_id);
+
+-- Matches (only between claimed users with PKP addresses)
+-- user1 < user2 (lexicographically sorted) to ensure uniqueness
+CREATE TABLE IF NOT EXISTS matches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user1 TEXT NOT NULL,                   -- lower address
+  user2 TEXT NOT NULL,                   -- higher address
+  created_at INTEGER NOT NULL,
+  UNIQUE(user1, user2)
+);
+
+CREATE INDEX IF NOT EXISTS idx_matches_user1 ON matches(user1);
+CREATE INDEX IF NOT EXISTS idx_matches_user2 ON matches(user2);
+
+-- Rate limiting for claim attempts (abuse prevention)
+CREATE TABLE IF NOT EXISTS claim_rate_limits (
+  id TEXT PRIMARY KEY,
+  shadow_profile_id TEXT NOT NULL REFERENCES shadow_profiles(id),
+  ip_hash TEXT NOT NULL,                 -- sha256(ip) - no raw IPs
+  attempt_count INTEGER DEFAULT 0,
+  last_attempt_at INTEGER,
+  locked_until INTEGER,                  -- null = not locked
+  created_at INTEGER NOT NULL,
+  UNIQUE(shadow_profile_id, ip_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rate_limits_locked ON claim_rate_limits(locked_until) WHERE locked_until IS NOT NULL;
+
+-- ============================================================================
+-- Heaven Names Registry (.heaven off-chain SLD registry)
+-- ============================================================================
+
+-- Core registry: label -> owner mapping
+CREATE TABLE IF NOT EXISTS heaven_names (
+  label TEXT PRIMARY KEY,                -- normalized lowercase (e.g., "alex")
+  label_display TEXT,                    -- original case for UI (e.g., "Alex")
+  pkp_address TEXT NOT NULL,             -- owner's PKP address (normalized lowercase 0x...)
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK(status IN ('active', 'expired')),
+  registered_at INTEGER NOT NULL,        -- Unix timestamp
+  expires_at INTEGER NOT NULL,           -- Unix timestamp (registered_at + 1 year)
+  grace_ends_at INTEGER NOT NULL,        -- expires_at + 30 days
+  profile_cid TEXT,                      -- Optional IPFS CID for extended profile
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+-- Reverse lookup: PKP -> name (for onboarding check)
+CREATE INDEX IF NOT EXISTS idx_heaven_names_pkp ON heaven_names(pkp_address);
+-- For expiry cron jobs
+CREATE INDEX IF NOT EXISTS idx_heaven_names_expires ON heaven_names(expires_at);
+-- For status queries
+CREATE INDEX IF NOT EXISTS idx_heaven_names_status ON heaven_names(status);
+
+-- Policy-reserved names (premium, profanity, trademark)
+-- System-reserved names are hardcoded in the Worker
+CREATE TABLE IF NOT EXISTS heaven_reserved (
+  label TEXT PRIMARY KEY,                -- normalized lowercase
+  reason TEXT,                           -- 'premium', 'profanity', 'trademark', 'brand'
+  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+-- Anti-replay nonces for registration signatures
+CREATE TABLE IF NOT EXISTS heaven_nonces (
+  nonce TEXT PRIMARY KEY,
+  pkp_address TEXT NOT NULL,             -- Who generated this nonce
+  used_at INTEGER,                       -- NULL if unused, timestamp if used
+  expires_at INTEGER NOT NULL,           -- Nonces expire after 5 minutes
+  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE INDEX IF NOT EXISTS idx_heaven_nonces_expires ON heaven_nonces(expires_at);
+CREATE INDEX IF NOT EXISTS idx_heaven_nonces_pkp ON heaven_nonces(pkp_address);
+
+-- ============================================================================
+-- Scrobble Batches (music listening history pinned to IPFS)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS scrobble_batches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_pkp TEXT NOT NULL,              -- PKP address of the user
+  cid TEXT NOT NULL,                   -- IPFS CID of the batch JSON
+  track_count INTEGER NOT NULL,        -- Number of tracks in batch
+  start_ts INTEGER NOT NULL,           -- Earliest playedAt timestamp
+  end_ts INTEGER NOT NULL,             -- Latest playedAt timestamp
+  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE INDEX IF NOT EXISTS idx_scrobble_batches_user ON scrobble_batches(user_pkp);
+CREATE INDEX IF NOT EXISTS idx_scrobble_batches_created ON scrobble_batches(created_at);

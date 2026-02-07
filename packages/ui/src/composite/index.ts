@@ -1,8 +1,17 @@
 // Chat - Messaging components
 export * from './chat'
 
+// Claim - Shadow profile claim flow
+export * from './claim'
+
 // Community - Member discovery
 export * from './community'
+
+// Download - Platform download dialog
+export * from './download-dialog'
+
+// Feed - Social feed posts
+export * from './feed'
 
 // Media - Music/audio playback
 export * from './media'
@@ -19,8 +28,17 @@ export * from './scheduler'
 // Scheduling - Dashboard & management (host-side)
 export * from './scheduling'
 
+// Settings - Settings menu list
+export * from './settings-menu'
+
+// Side Menu - Mobile side drawer navigation
+export * from './side-menu-drawer'
+
 // Shared - Generic reusable components
 export * from './shared'
+
+// User Menu - Mobile bottom-sheet drawer
+export * from './user-menu-drawer'
 
 // Data exports (re-exported for convenience)
 export {
@@ -31,7 +49,7 @@ export {
 } from '../data/tags'
 export {
   type LanguageEntry, type ProficiencyLevel,
-  PROFICIENCY, PROFICIENCY_LEVELS, PROFICIENCY_OPTIONS, LANG_TO_FLAG,
+  PROFICIENCY, PROFICIENCY_LEVELS, PROFICIENCY_OPTIONS, LANG_TO_FLAG, LANGUAGE_NAMES,
   proficiencyLabel, packLanguages, packLanguagesHex, unpackLanguages,
-  getNativeLanguages, getLearningLanguages,
+  getNativeLanguages, getLearningLanguages, getLanguageName,
 } from '../data/languages'

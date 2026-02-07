@@ -1,4 +1,4 @@
-import type { ReadyScrobble } from '@heaven/core'
+import { type ReadyScrobble, MEGAETH_RPC as MEGAETH_RPC_DEFAULT, SCROBBLE_V4 as SCROBBLE_V4_ADDR } from '@heaven/core'
 import { createPublicClient, http, type Hex } from 'viem'
 import type { PKPAuthContext, PKPInfo } from './lit'
 import { getLitClient } from './lit/client'
@@ -30,9 +30,8 @@ const FILEBASE_COVERS_ENCRYPTED_KEY: EncryptedKey | null = {
 
 type CoverImage = { base64: string; contentType: string }
 
-const DEFAULT_RPC = 'https://carrot.megaeth.com/rpc'
-const MEGAETH_RPC = import.meta.env.VITE_AA_RPC_URL ?? DEFAULT_RPC
-const SCROBBLE_V4 = '0x1D23Ad1c20ce54224fEffe8c2E112296C321451E'
+const MEGAETH_RPC = import.meta.env.VITE_AA_RPC_URL ?? MEGAETH_RPC_DEFAULT
+const SCROBBLE_V4 = SCROBBLE_V4_ADDR
 
 const scrobbleAbi = [{
   name: 'getTrack',
@@ -87,6 +86,7 @@ export async function submitTrackCoverViaLit(
     mbid: scrobble.mbid,
     ipId: scrobble.ipId,
     playedAtSec: scrobble.playedAtSec,
+    duration: scrobble.durationMs ? Math.round(scrobble.durationMs / 1000) : 0,
   }
   const trackId = computeTrackIdForScrobble(track)
   const trackIdKey = trackId.toLowerCase()

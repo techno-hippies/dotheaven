@@ -6,10 +6,8 @@ import {
   CommunityFeed,
   CommunityFilterDialog,
   countActiveFilters,
-  Avatar,
-  IconButton,
+  Button,
   Sliders,
-  PageHeader,
   type CommunityFilters,
 } from '@heaven/ui'
 import type { CommunityCardProps } from '@heaven/ui'
@@ -59,19 +57,6 @@ export const App: Component = () => {
       }))
   }
 
-  // Own avatar for header (only when authenticated)
-  const ownAvatarQuery = createQuery(() => ({
-    queryKey: ['community', 'ownAvatar', userAddress()],
-    queryFn: async () => {
-      const all = membersQuery.data ?? []
-      const self = userAddress()
-      const me = all.find((m) => m.address.toLowerCase() === self)
-      return me?.avatarUrl ?? undefined
-    },
-    get enabled() { return !!userAddress() && !!membersQuery.data },
-    staleTime: 5 * 60_000,
-  }))
-
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId)
   }
@@ -80,36 +65,23 @@ export const App: Component = () => {
 
   return (
     <div class="h-full overflow-y-auto">
-      <PageHeader
-        title="Community"
-        leftSlot={
-          <Show when={auth.isAuthenticated()}>
-            <div class="cursor-pointer" onClick={() => navigate('/profile')}>
-              <Avatar
-                src={ownAvatarQuery.data}
-                size="sm"
-              />
-            </div>
+      <div class="flex justify-end px-4 pt-3">
+        <div class="relative">
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Sliders />}
+            onClick={() => setFilterOpen(true)}
+          >
+            Filter
+          </Button>
+          <Show when={activeFilterCount() > 0}>
+            <span class="absolute -top-0.5 -right-1.5 w-4 h-4 bg-[var(--accent-coral)] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+              {activeFilterCount()}
+            </span>
           </Show>
-        }
-        rightSlot={
-          <div class="relative">
-            <IconButton
-              size="sm"
-              variant="ghost"
-              aria-label="Filter"
-              onClick={() => setFilterOpen(true)}
-            >
-              <Sliders class="w-5 h-5" />
-            </IconButton>
-            <Show when={activeFilterCount() > 0}>
-              <span class="absolute -top-1 -right-1 w-4 h-4 bg-[var(--accent-coral)] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                {activeFilterCount()}
-              </span>
-            </Show>
-          </div>
-        }
-      />
+        </div>
+      </div>
       <CommunityFeed
         members={members()}
         activeTab={activeTab()}

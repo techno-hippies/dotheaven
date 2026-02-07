@@ -61,8 +61,8 @@ export const Tabs: Component<TabsProps> = (props) => {
                 </span>
               )}
 
-              {/* Label - hide on mobile, show on md+ */}
-              <span class="hidden md:inline">{tab.label}</span>
+              {/* Label - hide on mobile when icon present, always show otherwise */}
+              <span class={tab.icon ? 'hidden md:inline' : undefined}>{tab.label}</span>
 
               {/* Active indicator - bottom border */}
               {isActive() && (

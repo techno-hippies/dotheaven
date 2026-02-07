@@ -1,7 +1,7 @@
-import { type Component, Show, For, createMemo } from 'solid-js'
+import { type Component, Show, For, createMemo, createSignal, createEffect, createResource } from 'solid-js'
 import { useParams } from '@solidjs/router'
 import { createQuery } from '@tanstack/solid-query'
-import { MediaHeader, TrackList, IconButton } from '@heaven/ui'
+import { TrackList, IconButton } from '@heaven/ui'
 import {
   Globe,
   Database,
@@ -15,6 +15,7 @@ import { fetchArtistPageData, artistTracksToTracks, normalizeArtistVariants } fr
 import { useTrackPlayback, usePlaylistDialog, buildMenuActions } from '../hooks/useTrackListActions'
 import { usePlayer } from '../providers'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
+import { resolveImageUrl } from '../lib/image-cache'
 
 export const ArtistPage: Component = () => {
   const params = useParams<{ mbid: string }>()
@@ -40,10 +41,12 @@ export const ArtistPage: Component = () => {
     queryKey: ['artist', params.mbid],
     queryFn: () => fetchArtistPageData(params.mbid),
     enabled: !!params.mbid,
-    staleTime: 5 * 60_000, // artist data is fairly stable
+    staleTime: 30_000,
+    refetchInterval: 30_000, // live updates every 30s
   }))
 
   const info = () => query.data?.info ?? null
+  const [heroImageIndex, setHeroImageIndex] = createSignal(0)
   const localCoverMap = createMemo(() => {
     const map = new Map<string, string>()
     let total = 0
@@ -110,21 +113,49 @@ export const ArtistPage: Component = () => {
       return localCover ? { ...t, albumCover: localCover } : t
     })
   }
-  const totalScrobbles = () => query.data?.totalScrobbles ?? 0
   const uniqueListeners = () => query.data?.uniqueListeners ?? 0
 
   const imageUrl = () => {
     const i = info()
     if (!i) return undefined
     // Use Wikimedia Commons image if available from MusicBrainz links
-    if (i.links.image) return i.links.image
+    if (i.links.image) return promoteWikimediaThumb(i.links.image, 1600)
     return undefined
   }
 
+  // Rehost external images to IPFS automatically
+  const [rehostedImageUrl] = createResource(imageUrl, resolveImageUrl)
+
+  const heroImageCandidates = createMemo(() => {
+    // Use rehosted IPFS URL if available, otherwise fallback to original
+    const resolved = rehostedImageUrl()
+    return resolved ? buildWikimediaImageCandidates(resolved) : buildWikimediaImageCandidates(imageUrl())
+  })
+
+  const heroImageSrc = () => heroImageCandidates()[heroImageIndex()]
+
+  createEffect(() => {
+    heroImageCandidates()
+    setHeroImageIndex(0)
+  })
+
   return (
     <Show when={!query.isLoading} fallback={
-      <div class="h-full flex items-center justify-center">
-        <p class="text-[var(--text-muted)]">Loading...</p>
+      <div class="h-full overflow-y-auto">
+        {/* Skeleton loader */}
+        <div class="px-4 md:px-8 pt-4 md:pt-6 pb-4">
+          {/* Hero skeleton */}
+          <div class="relative overflow-hidden rounded-2xl border border-[var(--bg-highlight)] h-[280px] md:h-[420px] bg-[var(--bg-elevated)] animate-pulse" />
+        </div>
+        {/* Track list skeleton */}
+        <div class="px-4 md:px-8 pb-2">
+          <div class="h-7 w-24 bg-[var(--bg-elevated)] rounded-md animate-pulse mb-2" />
+        </div>
+        <div class="px-4 md:px-8 space-y-2">
+          {Array.from({ length: 8 }).map(() => (
+            <div class="h-12 bg-[var(--bg-elevated)] rounded-md animate-pulse" />
+          ))}
+        </div>
       </div>
     }>
       <Show when={info()} fallback={
@@ -143,59 +174,66 @@ export const ArtistPage: Component = () => {
         </div>
       }>
         {(artist) => {
+          const artistInfo = () => artist()
           // External links slot for MediaHeader
-          const linksSlot = (
-            <Show when={Object.keys(artist().links).length > 0}>
-              <div class="flex flex-wrap gap-2 mt-3">
-                <For each={Object.entries(artist().links)}>
-                  {([key, url]) => {
-                    const Icon = getLinkIcon(key)
-                    if (!Icon) return null
-                    return (
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={linkLabel(key)}
-                      >
-                        <IconButton variant="ghost" size="lg" aria-label={linkLabel(key)}>
-                          <Icon class="w-6 h-6" />
-                        </IconButton>
-                      </a>
-                    )
-                  }}
-                </For>
-              </div>
-            </Show>
-          )
-
+          // Filter to only entries that have a known icon (excludes 'image' key etc.)
+          const linkEntries = () => Object.entries(artistInfo().links).filter(([key]) => getLinkIcon(key))
           return (
             <div class="h-full overflow-y-auto">
-              <MediaHeader
-                type="artist"
-                title={artist().name}
-                coverSrc={imageUrl()}
-                description={linksSlot}
-              />
-
-              {/* Stats */}
-              <div class="px-4 md:px-8 pb-6">
-                {/* Stats boxes */}
-              <div class="grid grid-cols-2 gap-4 max-w-md">
-                <div class="bg-[var(--bg-elevated)] rounded-md p-4 text-center">
-                  <div class="text-sm text-[var(--text-muted)] mb-1">Listeners</div>
-                  <div class="text-2xl font-bold text-[var(--text-primary)]">
-                    {uniqueListeners().toLocaleString()}
-                  </div>
-                </div>
-                <div class="bg-[var(--bg-elevated)] rounded-md p-4 text-center">
-                  <div class="text-sm text-[var(--text-muted)] mb-1">Scrobbles</div>
-                  <div class="text-2xl font-bold text-[var(--text-primary)]">
-                    {totalScrobbles().toLocaleString()}
+              <div class="px-4 md:px-8 pt-4 md:pt-6 pb-4">
+                <div class="relative overflow-hidden rounded-2xl border border-[var(--bg-highlight)] h-[280px] md:h-[420px]">
+                  {/* Show skeleton while rehosting, then show image */}
+                  <Show when={!rehostedImageUrl.loading && heroImageSrc()} fallback={
+                    <div class="absolute inset-0 bg-[var(--bg-elevated)] animate-pulse" />
+                  }>
+                    {(src) => (
+                      <img
+                        src={src()}
+                        alt={artist().name}
+                        class="absolute inset-0 w-full h-full object-cover"
+                        referrerpolicy="no-referrer"
+                        crossorigin="anonymous"
+                        onError={() => {
+                          const next = heroImageIndex() + 1
+                          if (next < heroImageCandidates().length) setHeroImageIndex(next)
+                        }}
+                      />
+                    )}
+                  </Show>
+                  <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/20" />
+                  <div class="absolute inset-x-0 bottom-0 p-4 md:p-8">
+                    <h1 class="text-4xl md:text-7xl font-black text-white leading-none tracking-tight">
+                      {artist().name}
+                    </h1>
+                    <div class="mt-3 md:mt-4 flex items-end justify-between gap-3 flex-wrap">
+                      <div class="text-sm md:text-base text-white/95">
+                        {uniqueListeners().toLocaleString()} listeners
+                      </div>
+                      <Show when={linkEntries().length > 0}>
+                        <div class="flex flex-wrap gap-1">
+                          <For each={linkEntries()}>
+                            {([key, url]) => {
+                              const Icon = getLinkIcon(key)!
+                              return (
+                                <a
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title={linkLabel(key)}
+                                >
+                                  <IconButton variant="ghost" size="md" aria-label={linkLabel(key)}>
+                                    <Icon class="w-5 h-5" />
+                                  </IconButton>
+                                </a>
+                              )
+                            }}
+                          </For>
+                        </div>
+                      </Show>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
               {/* Track list */}
             <Show when={tracks().length > 0} fallback={
@@ -207,8 +245,8 @@ export const ArtistPage: Component = () => {
               </div>
             }>
               <div class="px-4 md:px-8 pb-2">
-                <h2 class="text-lg font-semibold text-[var(--text-primary)] mb-2">
-                  Popular tracks
+                <h2 class="text-lg font-semibold text-[var(--text-primary)] mb-0">
+                  Popular
                 </h2>
               </div>
               <TrackList
@@ -219,8 +257,9 @@ export const ArtistPage: Component = () => {
                 onTrackPlay={(track) => playback.play(track)}
                 showScrobbleCount={true}
                 showScrobbleStatus={false}
+                showArtist={false}
                 showDateAdded={false}
-                showDuration={false}
+                showDuration={true}
                 menuActions={menuActions}
               />
               </Show>
@@ -235,6 +274,36 @@ export const ArtistPage: Component = () => {
       />
     </Show>
   )
+}
+
+function promoteWikimediaThumb(url: string, width = 1600): string {
+  if (!url.includes('/wikipedia/commons/thumb/')) return url
+  return url.replace(/\/\d+px-/, `/${width}px-`)
+}
+
+function buildWikimediaImageCandidates(url?: string): string[] {
+  if (!url) return []
+
+  const out = new Set<string>()
+  out.add(url)
+
+  if (url.includes('/wikipedia/commons/thumb/')) {
+    out.add(promoteWikimediaThumb(url, 1600))
+    out.add(promoteWikimediaThumb(url, 1200))
+
+    const original = url
+      .replace('/wikipedia/commons/thumb/', '/wikipedia/commons/')
+      .replace(/\/\d+px-[^/]+$/, '')
+    out.add(original)
+
+    const filename = original.split('/').pop()
+    if (filename) {
+      out.add(`https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(filename)}?width=1600`)
+      out.add(`https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(filename)}?width=1200`)
+    }
+  }
+
+  return Array.from(out)
 }
 
 function linkLabel(key: string): string {

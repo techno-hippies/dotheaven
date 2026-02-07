@@ -5,7 +5,7 @@ import { cn } from '../../lib/utils'
 import { useIsMobile } from '../../lib/use-media-query'
 import { AlbumCover } from './album-cover'
 import { IconButton } from '../../primitives/icon-button'
-import { Play, DotsThreeVertical } from '../../icons'
+import { Play, DotsThree, HashStraight } from '../../icons'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -47,6 +47,8 @@ export interface Track {
   coverPath?: string
   /** IPFS CID for cover art */
   coverCid?: string
+  /** Who shared this track (heaven name or address) */
+  sharedBy?: string
 }
 
 export interface TrackMenuActions {
@@ -70,10 +72,13 @@ export interface SortState {
 export interface TrackListProps {
   class?: string
   tracks: Track[]
+  showArtist?: boolean
+  showAlbum?: boolean
   showDateAdded?: boolean
   showDuration?: boolean
   showScrobbleCount?: boolean
   showScrobbleStatus?: boolean
+  showSharedBy?: boolean
   activeTrackId?: string
   activeTrackPlaying?: boolean
   selectedTrackId?: string
@@ -93,7 +98,7 @@ export interface TrackListProps {
 }
 
 const ROW_HEIGHT = 56
-const COMPACT_ROW_HEIGHT = 64
+const COMPACT_ROW_HEIGHT = 72
 
 /** Check if a track has a playback source (can be dragged to playlist) */
 const isTrackDraggable = (track: Track): boolean =>
@@ -130,29 +135,34 @@ const handleDragStart = (e: DragEvent, track: Track) => {
 /**
  * TrackList - Virtualized track listing with sticky sortable headers.
  *
- * Desktop: # | Title | Artist | Album | Date added (opt) | Duration | Status (opt) | Menu
+ * Desktop: # | Title | Artist | Album (opt) | Date added (opt) | Scrobbles (opt) | Duration | Status (opt) | Menu
  * Mobile (compact): Album cover | Title + Artist | Duration | Menu
  */
 export const TrackList: Component<TrackListProps> = (props) => {
   const isMobile = useIsMobile()
   const isCompact = () => props.forceCompact || isMobile()
 
+  const showArtist = () => props.showArtist !== false && !isCompact()
+  const showAlbum = () => props.showAlbum !== false && !isCompact()
   const showDate = () => props.showDateAdded === true && !isCompact()
   const showDuration = () => props.showDuration !== false && !isCompact()
   const showScrobbles = () => props.showScrobbleCount === true && !isCompact()
   const showStatus = () => props.showScrobbleStatus === true && !isCompact()
+  const showSharedBy = () => props.showSharedBy === true && !isCompact()
 
   const rowHeight = () => isCompact() ? COMPACT_ROW_HEIGHT : ROW_HEIGHT
 
   // Build grid-template-columns as inline style (NOT dynamic Tailwind — JIT can't detect runtime strings)
   const gridTemplate = () => {
     if (isCompact()) {
-      // Compact: [cover + title/artist] [duration] [menu]
-      return '1fr auto 40px'
+      // Compact (flex layout, grid template not used)
+      return '1fr 40px'
     }
     const cols: string[] = ['48px'] // #
     cols.push('minmax(200px,3fr)')   // Title
-    cols.push('minmax(150px,2fr)')   // Artist
+    if (showArtist()) cols.push('minmax(120px,2fr)') // Artist
+    if (showAlbum()) cols.push('minmax(120px,2fr)') // Album
+    if (showSharedBy()) cols.push('minmax(120px,1.5fr)') // Shared by
     if (showDate()) cols.push('minmax(120px,1fr)') // Date added
     if (showScrobbles()) cols.push('100px') // Scrobble count
     if (showDuration()) cols.push('72px') // Duration
@@ -208,7 +218,7 @@ export const TrackList: Component<TrackListProps> = (props) => {
         )}
         onClick={(e: MouseEvent) => e.stopPropagation()}
       >
-        <DotsThreeVertical class="w-5 h-5" />
+        <DotsThree class="w-5 h-5" />
       </DropdownMenuTrigger>
       <DropdownMenuContent>
         <Show when={props.menuActions?.onAddToPlaylist}>
@@ -309,11 +319,6 @@ export const TrackList: Component<TrackListProps> = (props) => {
           </div>
         </div>
 
-        {/* Duration */}
-        <div class="text-base text-[var(--text-muted)] flex-shrink-0">
-          {rowProps.track.duration}
-        </div>
-
         {/* Menu */}
         <div class="flex items-center justify-center flex-shrink-0">
           <TrackMenu
@@ -383,30 +388,67 @@ export const TrackList: Component<TrackListProps> = (props) => {
         </div>
 
         {/* Artist */}
-        <div class="flex items-center text-base truncate">
-          <Show
-            when={props.menuActions?.onGoToArtist}
-            fallback={
-              <span class={rowProps.isActive ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)]"}>
-                {rowProps.track.artist}
-              </span>
-            }
-          >
-            <button
-              type="button"
-              class={cn(
-                "truncate hover:underline cursor-pointer transition-colors",
-                rowProps.isActive ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              )}
-              onClick={(e) => {
-                e.stopPropagation()
-                props.menuActions?.onGoToArtist?.(rowProps.track)
-              }}
+        <Show when={showArtist()}>
+          <div class="flex items-center text-base truncate">
+            <Show
+              when={props.menuActions?.onGoToArtist}
+              fallback={
+                <span class={rowProps.isActive ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)]"}>
+                  {rowProps.track.artist}
+                </span>
+              }
             >
-              {rowProps.track.artist}
-            </button>
-          </Show>
-        </div>
+              <button
+                type="button"
+                class={cn(
+                  "truncate hover:underline cursor-pointer transition-colors",
+                  rowProps.isActive ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                )}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  props.menuActions?.onGoToArtist?.(rowProps.track)
+                }}
+              >
+                {rowProps.track.artist}
+              </button>
+            </Show>
+          </div>
+        </Show>
+
+        {/* Album */}
+        <Show when={showAlbum()}>
+          <div class="flex items-center text-base truncate">
+            <Show
+              when={props.menuActions?.onGoToAlbum && rowProps.track.album}
+              fallback={
+                <span class={rowProps.isActive ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)]"}>
+                  {rowProps.track.album}
+                </span>
+              }
+            >
+              <button
+                type="button"
+                class={cn(
+                  "truncate hover:underline cursor-pointer transition-colors",
+                  rowProps.isActive ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                )}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  props.menuActions?.onGoToAlbum?.(rowProps.track)
+                }}
+              >
+                {rowProps.track.album}
+              </button>
+            </Show>
+          </div>
+        </Show>
+
+        {/* Shared by */}
+        <Show when={showSharedBy()}>
+          <div class="flex items-center text-base text-[var(--text-secondary)] truncate">
+            {rowProps.track.sharedBy}
+          </div>
+        </Show>
 
         {/* Date Added */}
         <Show when={showDate()}>
@@ -484,10 +526,23 @@ export const TrackList: Component<TrackListProps> = (props) => {
             Title
             <Show when={sortIcon('title')}>{(icon) => <span class="text-[var(--text-secondary)] text-xs">{icon()}</span>}</Show>
           </div>
-          <div class={headerClass} onClick={() => handleHeaderClick('artist')}>
-            Artist
-            <Show when={sortIcon('artist')}>{(icon) => <span class="text-[var(--text-secondary)] text-xs">{icon()}</span>}</Show>
-          </div>
+          <Show when={showArtist()}>
+            <div class={headerClass} onClick={() => handleHeaderClick('artist')}>
+              Artist
+              <Show when={sortIcon('artist')}>{(icon) => <span class="text-[var(--text-secondary)] text-xs">{icon()}</span>}</Show>
+            </div>
+          </Show>
+          <Show when={showAlbum()}>
+            <div class={headerClass} onClick={() => handleHeaderClick('album')}>
+              Album
+              <Show when={sortIcon('album')}>{(icon) => <span class="text-[var(--text-secondary)] text-xs">{icon()}</span>}</Show>
+            </div>
+          </Show>
+          <Show when={showSharedBy()}>
+            <div class="flex items-center gap-1 select-none text-[var(--text-muted)]">
+              Shared by
+            </div>
+          </Show>
           <Show when={showDate()}>
             <div class={headerClass} onClick={() => handleHeaderClick('dateAdded')}>
               Date added
@@ -496,7 +551,7 @@ export const TrackList: Component<TrackListProps> = (props) => {
           </Show>
           <Show when={showScrobbles()}>
             <div class={cn(headerClass, 'justify-center')}>
-              Scrobbles
+              <HashStraight class="w-4 h-4" />
             </div>
           </Show>
           <Show when={showDuration()}>

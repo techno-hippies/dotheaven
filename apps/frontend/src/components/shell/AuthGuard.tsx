@@ -8,6 +8,7 @@
 import type { ParentComponent } from 'solid-js'
 import { Show, createEffect } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
+import { HOME } from '@heaven/core'
 import { useAuth } from '../../providers'
 
 export const AuthGuard: ParentComponent = (props) => {
@@ -17,7 +18,7 @@ export const AuthGuard: ParentComponent = (props) => {
   createEffect(() => {
     if (auth.isSessionRestoring()) return
     if (!auth.isAuthenticated()) {
-      navigate('/', { replace: true })
+      navigate(HOME, { replace: true })
     }
   })
 

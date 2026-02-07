@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { Button } from './button'
+import { Sliders, CalendarBlank, Plus, Download, Sparkle, LockSimple } from '../icons'
 
 const meta: Meta<typeof Button> = {
   title: 'Primitives/Button',
@@ -87,5 +88,61 @@ export const LoadingSecondary: Story = {
     loading: true,
     variant: 'secondary',
     children: 'Authenticating',
+  },
+}
+
+// ── Icon + Text variants ──────────────────────────────────────────
+
+export const WithIconDefault: Story = {
+  name: 'Icon + Text (Default)',
+  args: {
+    icon: <Plus />,
+    children: 'Create',
+  },
+}
+
+export const WithIconSecondary: Story = {
+  name: 'Icon + Text (Secondary)',
+  args: {
+    variant: 'secondary',
+    icon: <Download />,
+    children: 'Download',
+  },
+}
+
+export const WithIconOutline: Story = {
+  name: 'Icon + Text (Outline)',
+  args: {
+    variant: 'outline',
+    icon: <LockSimple />,
+    children: 'Request Access',
+  },
+}
+
+export const WithIconGhost: Story = {
+  name: 'Icon + Text (Ghost)',
+  args: {
+    variant: 'ghost',
+    icon: <Sliders />,
+    children: 'Filter',
+  },
+}
+
+export const WithIconGhostSmall: Story = {
+  name: 'Icon + Text (Ghost Small)',
+  args: {
+    variant: 'ghost',
+    size: 'sm',
+    icon: <CalendarBlank />,
+    children: 'Availability',
+  },
+}
+
+export const WithIconDestructive: Story = {
+  name: 'Icon + Text (Destructive)',
+  args: {
+    variant: 'destructive',
+    icon: <Sparkle />,
+    children: 'Mint NFT',
   },
 }

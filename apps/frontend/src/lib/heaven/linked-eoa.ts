@@ -6,9 +6,10 @@
 
 import { createPublicClient, http, zeroAddress } from 'viem'
 import { baseSepolia } from 'viem/chains'
+import { CONTENT_ACCESS_MIRROR } from '@heaven/core'
 
-/** ContentAccessMirror address on Base Sepolia */
-export const CONTENT_ACCESS_MIRROR = '0xd4D3baB38a11D72e36F49a73D50Dbdc3c1Aa4e9A'
+// Re-export for backward compatibility
+export { CONTENT_ACCESS_MIRROR }
 
 const baseSepoliaClient = createPublicClient({
   chain: baseSepolia,

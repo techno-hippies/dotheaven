@@ -14,7 +14,7 @@ export const config = {
   paymaster: (process.env.HEAVEN_PAYMASTER ??
     "0xEb3C4c145AE16d7cC044657D1632ef08d6B2D5d9") as Address,
   scrobbleV4: (process.env.SCROBBLE_V4 ??
-    "0xD41a8991aDF67a1c4CCcb5f7Da6A01a601eC3F37") as Address,
+    "0xBcD4EbBb964182ffC5EA03FF70761770a326Ccf1") as Address,
   accountImplementation: (process.env.ACCOUNT_IMPLEMENTATION ??
     "0xA17Fd81A1fFEC9f5694343dd4BFe29847B0eb9E7") as Address,
 
@@ -47,6 +47,6 @@ export const config = {
 export const targetAllowlist: Record<Address, Set<Hex>> = {
   [config.scrobbleV4]: new Set([
     "0xe5e0042c", // scrobbleBatch(address,bytes32[],uint64[])
-    "0xebce6686", // registerAndScrobbleBatch(address,uint8[],bytes32[],string[],string[],string[],bytes32[],uint64[])
+    "0xcc891ece", // registerAndScrobbleBatch(address,uint8[],bytes32[],string[],string[],string[],uint32[],bytes32[],uint64[])
   ]),
 };

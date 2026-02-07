@@ -80,7 +80,6 @@ export const Default: Story = {
   args: {
     bookings: mockBookings,
     onBookingClick: (booking) => alert(`Clicked: ${booking.guestName}`),
-    onSetAvailability: () => alert('Opening Schedule Dashboard...'),
   },
 }
 
@@ -112,7 +111,6 @@ export const SingleSession: Story = {
 export const Empty: Story = {
   args: {
     bookings: [],
-    onSetAvailability: () => alert('Opening Schedule Dashboard...'),
   },
 }
 

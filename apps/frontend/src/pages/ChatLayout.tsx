@@ -23,6 +23,7 @@ import {
   useIsMobile,
   PageHeader,
 } from '@heaven/ui'
+import { CHAT, peerChat, aiChat } from '@heaven/core'
 import { useXMTP, type ChatListItem as XMTPChatItem } from '../providers'
 import { usePeerName } from '../lib/hooks/usePeerName'
 
@@ -134,13 +135,13 @@ export const ChatLayout: ParentComponent = (props) => {
     if (!addr) return
     setNewChatOpen(false)
     setNewChatAddress('')
-    navigate(`/chat/${encodeURIComponent(addr)}`)
+    navigate(peerChat(addr))
   }
 
   const conversations = () => xmtp.conversations()
 
   // Check if we're on a specific chat (not just /chat index)
-  const hasActiveChat = () => location.pathname !== '/chat'
+  const hasActiveChat = () => location.pathname !== CHAT
 
   // Mobile: show list OR conversation, not both
   // Desktop: show both side by side
@@ -164,12 +165,11 @@ export const ChatLayout: ParentComponent = (props) => {
             {/* AI Chat pinned at top */}
             <ChatListItem
               name="Scarlett"
-              avatarUrl="https://picsum.photos/seed/scarlett/200/200"
+              avatarUrl="/scarlett-avatar.png"
               lastMessage={scarlettLastMessage()}
               timestamp=""
-              online
-              active={location.pathname === '/chat/ai/scarlett'}
-              onClick={() => navigate('/chat/ai/scarlett')}
+              active={location.pathname === aiChat('scarlett')}
+              onClick={() => navigate(aiChat('scarlett'))}
             />
 
             {/* Real XMTP conversations */}
@@ -177,8 +177,8 @@ export const ChatLayout: ParentComponent = (props) => {
               {(chat) => (
                 <ConversationItem
                   chat={chat}
-                  active={location.pathname === `/chat/${encodeURIComponent(chat.peerAddress)}`}
-                  onClick={() => navigate(`/chat/${encodeURIComponent(chat.peerAddress)}`)}
+                  active={location.pathname === peerChat(chat.peerAddress)}
+                  onClick={() => navigate(peerChat(chat.peerAddress))}
                 />
               )}
             </For>

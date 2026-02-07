@@ -1,0 +1,3 @@
+# Filebase S3 API credentials (base64 encoded: accessKey:secretKey:bucket)
+# Get from https://console.filebase.com/keys
+FILEBASE_API_KEY=base64(accessKey:secretKey:bucket)

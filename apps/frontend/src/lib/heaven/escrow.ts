@@ -1,11 +1,12 @@
 import { createPublicClient, http, parseAbi, formatEther, parseEther, encodeFunctionData, type Address, type Hex } from 'viem'
+import { SESSION_ESCROW_V1, MEGAETH_CHAIN_ID } from '@heaven/core'
 import { megaTestnetV2 } from '../chains'
 
-// SessionEscrowV1 — deployed on MegaETH Testnet (chainId 6343)
-export const SESSION_ESCROW_V1 = '0x132212B78C4a7A3F19DE1BF63f119848c765c1d2' as const
+// Re-export for backward compatibility
+export { SESSION_ESCROW_V1 }
 
 // Chain ID for channel naming
-const CHAIN_ID = 6343
+const CHAIN_ID = MEGAETH_CHAIN_ID
 
 // ── Enums (mirror Solidity) ────────────────────────────────────────
 
@@ -91,10 +92,32 @@ export async function getHostBasePrice(host: Address): Promise<string> {
 }
 
 export async function getHostOpenSlots(host: Address): Promise<SessionSlot[]> {
-  // TODO: When contract is deployed, iterate slots or use subgraph
-  // For now return empty array
-  void host
-  return []
+  const nextId = await getNextSlotId()
+  if (nextId <= 1) return []
+
+  const now = Math.floor(Date.now() / 1000)
+  const hostLower = host.toLowerCase()
+  const BATCH = 50
+  const results: SessionSlot[] = []
+
+  // Scan all slots in batches to avoid RPC rate limits
+  for (let start = 1; start < nextId; start += BATCH) {
+    const end = Math.min(start + BATCH, nextId)
+    const ids = Array.from({ length: end - start }, (_, i) => start + i)
+    const batch = await Promise.all(
+      ids.map(id => getSlot(id).catch(() => null))
+    )
+    for (const slot of batch) {
+      if (!slot) continue
+      if (slot.host.toLowerCase() !== hostLower) continue
+      if (slot.status !== SlotStatus.Open && slot.status !== SlotStatus.Booked) continue
+      if (slot.startTime < now) continue
+      results.push(slot)
+    }
+  }
+
+  results.sort((a, b) => a.startTime - b.startTime)
+  return results
 }
 
 export async function getSlot(slotId: number): Promise<SessionSlot> {
@@ -260,12 +283,14 @@ export async function getUserBookings(
 const writeAbi = parseAbi([
   'function setHostBasePrice(uint256 priceWei) external',
   'function createSlot(uint48 startTime, uint32 durationMins, uint32 graceMins, uint32 minOverlapMins, uint32 cancelCutoffMins) external returns (uint256)',
+  'function createSlots((uint48,uint32,uint32,uint32,uint32)[]) external returns (uint256)',
   'function cancelSlot(uint256 slotId) external',
   'function book(uint256 slotId) external payable returns (uint256)',
   'function cancelBookingAsGuest(uint256 bookingId) external',
   'function cancelBookingAsHost(uint256 bookingId) external',
   'function challenge(uint256 bookingId) external payable',
   'function finalize(uint256 bookingId) external',
+  'function createRequest(address hostTarget, uint48 windowStart, uint48 windowEnd, uint32 durationMins, uint48 expiry) external payable returns (uint256)',
 ])
 
 export interface SlotInput {
@@ -294,6 +319,41 @@ export function encodeCreateSlot(input: SlotInput): Hex {
       input.graceMins ?? 5,
       input.minOverlapMins ?? Math.floor(input.durationMins / 2),
       input.cancelCutoffMins ?? 60,
+    ],
+  })
+}
+
+export function encodeCreateSlots(inputs: SlotInput[]): Hex {
+  const tuples = inputs.map(input => [
+    BigInt(input.startTime),
+    input.durationMins,
+    input.graceMins ?? 5,
+    input.minOverlapMins ?? Math.floor(input.durationMins / 2),
+    input.cancelCutoffMins ?? 60,
+  ] as const)
+  return encodeFunctionData({
+    abi: writeAbi,
+    functionName: 'createSlots',
+    args: [tuples as any],
+  })
+}
+
+export function encodeCreateRequest(params: {
+  hostTarget: Address
+  windowStart: number
+  windowEnd: number
+  durationMins: number
+  expiry: number
+}): Hex {
+  return encodeFunctionData({
+    abi: writeAbi,
+    functionName: 'createRequest',
+    args: [
+      params.hostTarget,
+      BigInt(params.windowStart) as unknown as number,
+      BigInt(params.windowEnd) as unknown as number,
+      params.durationMins,
+      BigInt(params.expiry) as unknown as number,
     ],
   })
 }

@@ -6,12 +6,11 @@
  */
 
 import { createPublicClient, http, parseAbi } from 'viem'
+import { RECORDS_V1 } from '@heaven/core'
 import { megaTestnetV2 } from '../chains'
 import { getLitClient } from '../lit/client'
 import { HEAVEN_SET_RECORDS_CID } from '../lit/action-cids'
 import type { PKPAuthContext } from '../lit/types'
-
-const RECORDS_V1 = '0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3' as const
 
 const recordsAbi = parseAbi([
   'function nonces(bytes32 node) external view returns (uint256)',

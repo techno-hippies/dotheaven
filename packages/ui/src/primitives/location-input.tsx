@@ -43,6 +43,33 @@ const ALLOWED_TYPES = new Set([
   'neighbourhood',
 ])
 
+// US state abbreviations
+const US_STATE_ABBR: Record<string, string> = {
+  'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA',
+  'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE', 'Florida': 'FL', 'Georgia': 'GA',
+  'Hawaii': 'HI', 'Idaho': 'ID', 'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA',
+  'Kansas': 'KS', 'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
+  'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS', 'Missouri': 'MO',
+  'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ',
+  'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH',
+  'Oklahoma': 'OK', 'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
+  'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT', 'Vermont': 'VT',
+  'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY',
+  'District of Columbia': 'DC'
+}
+
+// Common country abbreviations (ISO 3166-1 alpha-2)
+const COUNTRY_ABBR: Record<string, string> = {
+  'United States': 'US', 'United States of America': 'US',
+  'United Kingdom': 'UK', 'Great Britain': 'UK',
+  'Canada': 'CA', 'Australia': 'AU', 'New Zealand': 'NZ',
+  'Germany': 'DE', 'France': 'FR', 'Spain': 'ES', 'Italy': 'IT',
+  'Netherlands': 'NL', 'Belgium': 'BE', 'Switzerland': 'CH', 'Austria': 'AT',
+  'Sweden': 'SE', 'Norway': 'NO', 'Denmark': 'DK', 'Finland': 'FI',
+  'Poland': 'PL', 'Ireland': 'IE', 'Portugal': 'PT', 'Greece': 'GR',
+  'Japan': 'JP', 'China': 'CN', 'India': 'IN', 'Brazil': 'BR', 'Mexico': 'MX'
+}
+
 async function searchPhoton(
   query: string,
   signal: AbortSignal
@@ -91,11 +118,22 @@ async function searchPhoton(
 
     const [lng, lat] = feature.geometry?.coordinates || [0, 0]
 
-    // Build display label (deduplicate if name == state)
+    // Build display label with abbreviations (city, ST, CC format)
     const parts: string[] = []
     if (props.name) parts.push(props.name)
-    if (props.state && props.state !== props.name) parts.push(props.state)
-    if (props.country) parts.push(props.country)
+
+    // Abbreviate state for US locations
+    if (props.state && props.state !== props.name) {
+      const stateAbbr = US_STATE_ABBR[props.state]
+      parts.push(stateAbbr || props.state)
+    }
+
+    // Abbreviate country
+    if (props.country) {
+      const countryAbbr = COUNTRY_ABBR[props.country]
+      parts.push(countryAbbr || props.country)
+    }
+
     const label = parts.join(', ')
 
     if (!label || !lat || !lng) continue

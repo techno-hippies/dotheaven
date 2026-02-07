@@ -20,7 +20,7 @@ const CHAIN_ID = 6343;
 const RPC_URL = "https://carrot.megaeth.com/rpc";
 
 // ScrobbleV4 contract (MegaETH Testnet)
-const SCROBBLE_V4 = "0xD41a8991aDF67a1c4CCcb5f7Da6A01a601eC3F37";
+const SCROBBLE_V4 = "0xBcD4EbBb964182ffC5EA03FF70761770a326Ccf1";
 
 // Sponsor PKP (operator)
 const SPONSOR_PKP_PUBLIC_KEY =

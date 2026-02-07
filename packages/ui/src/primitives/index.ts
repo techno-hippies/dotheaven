@@ -59,3 +59,4 @@ export {
   DropdownMenuItemDescription,
 } from './dropdown-menu'
 export { Tabs, type TabsProps, type TabItem } from './tabs'
+export { LanguageChip, type LanguageChipProps } from './language-chip'

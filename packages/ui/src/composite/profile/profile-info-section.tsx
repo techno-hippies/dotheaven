@@ -4,8 +4,6 @@ import { EditableInfoCard, EditableInfoCardSection, EditableInfoCardRow } from '
 import { OnboardingNameStep } from '../onboarding/onboarding-name-step'
 import { LanguageEditor } from './language-editor'
 import {
-  GENDER_OPTIONS,
-  NATIONALITY_OPTIONS,
   RELOCATE_OPTIONS,
   DEGREE_OPTIONS,
   FIELD_OPTIONS,
@@ -24,11 +22,9 @@ import {
   RELIGION_OPTIONS,
   PETS_OPTIONS,
   DIET_OPTIONS,
-  alpha3ToAlpha2,
 } from '../../constants/profile-options'
 import { HOBBY_TAGS, SKILL_TAGS, tagsToOptions } from '../../data/tags'
 import type { LanguageEntry } from '../../data/languages'
-import { VerificationBadge } from './verification-badge'
 
 const HOBBY_OPTIONS = tagsToOptions(HOBBY_TAGS)
 const SKILL_OPTIONS = tagsToOptions(SKILL_TAGS)
@@ -131,13 +127,6 @@ export const ProfileInfoSection: Component<ProfileInfoSectionProps> = (props) =>
 
   // Verification: derived state for locked fields
   const isVerified = () => !!props.verification?.verified
-  const verifiedNationalityAlpha2 = () => {
-    const nat = props.verification?.nationality
-    if (!nat) return undefined
-    // If already alpha-2 (2 chars), use directly; otherwise convert from alpha-3
-    return nat.length === 2 ? nat.toUpperCase() : alpha3ToAlpha2(nat)
-  }
-  const verifiedBadge = () => <VerificationBadge state="verified" size="sm" />
 
   createEffect(() => {
     const profile = props.profile
@@ -420,43 +409,10 @@ export const ProfileInfoSection: Component<ProfileInfoSectionProps> = (props) =>
       </EditableInfoCard>
       </Show>
 
-      {/* Basics */}
+      {/* Languages */}
       <EditableInfoCard>
-        <EditableInfoCardSection title="Basics" isEditing={props.isEditing}>
-          <EditableInfoCardRow
-            label="Age"
-            value={formData().age?.toString()}
-            isEditing={props.isEditing}
-            isOwnProfile={props.isOwnProfile}
-            placeholder="Enter your age"
-            onValueChange={(v: string | string[]) => updateField('age', typeof v === 'string' && v ? Number(v) : undefined)}
-          />
-          <EditableInfoCardRow label="Gender" value={formData().gender} isEditing={props.isEditing} isOwnProfile={props.isOwnProfile} type="select" options={GENDER_OPTIONS} onValueChange={(v: string | string[]) => updateField('gender', typeof v === 'string' ? v : undefined)} />
-          <EditableInfoCardRow
-            label="Nationality"
-            value={isVerified() && verifiedNationalityAlpha2() ? verifiedNationalityAlpha2()! : formData().nationality}
-            isEditing={props.isEditing}
-            isOwnProfile={props.isOwnProfile}
-            type="select"
-            options={NATIONALITY_OPTIONS}
-            locked={isVerified() && !!verifiedNationalityAlpha2()}
-            suffix={isVerified() && verifiedNationalityAlpha2() ? verifiedBadge() : undefined}
-            onValueChange={(v: string | string[]) => updateField('nationality', typeof v === 'string' ? v : undefined)}
-          />
-          <LanguageEditor
-            languages={formData().languages || []}
-            onChange={(langs) => updateField('languages', langs)}
-            isEditing={props.isEditing}
-            isOwnProfile={props.isOwnProfile}
-          />
-        </EditableInfoCardSection>
-      </EditableInfoCard>
-
-      {/* Location */}
-      <EditableInfoCard>
-        <EditableInfoCardSection title="Location" isEditing={props.isEditing}>
-          <EditableInfoCardRow label="Location" value={formData().locationCityId} isEditing={props.isEditing} isOwnProfile={props.isOwnProfile} type="location" placeholder="Search for a city" onLocationChange={(loc) => updateField('locationCityId', loc.label)} />
-          <EditableInfoCardRow label="Flexibility" value={formData().relocate} isEditing={props.isEditing} isOwnProfile={props.isOwnProfile} type="select" options={RELOCATE_OPTIONS} onValueChange={(v: string | string[]) => updateField('relocate', typeof v === 'string' ? v : undefined)} />
+        <EditableInfoCardSection title="Languages" isEditing={props.isEditing}>
+          <LanguageEditor languages={formData().languages || []} isEditing={props.isEditing} isOwnProfile={props.isOwnProfile} onChange={(langs) => updateField('languages', langs)} />
         </EditableInfoCardSection>
       </EditableInfoCard>
 
@@ -476,6 +432,7 @@ export const ProfileInfoSection: Component<ProfileInfoSectionProps> = (props) =>
         <EditableInfoCardSection title="Dating" isEditing={props.isEditing}>
           <EditableInfoCardRow label="Relationship status" value={formData().relationshipStatus} isEditing={props.isEditing} isOwnProfile={props.isOwnProfile} type="select" options={RELATIONSHIP_OPTIONS} onValueChange={(v: string | string[]) => updateField('relationshipStatus', typeof v === 'string' ? v : undefined)} />
           <EditableInfoCardRow label="Height (cm)" value={formData().heightCm?.toString()} isEditing={props.isEditing} isOwnProfile={props.isOwnProfile} placeholder="e.g. 170" onValueChange={(v: string | string[]) => updateField('heightCm', typeof v === 'string' && v ? Number(v) : undefined)} />
+          <EditableInfoCardRow label="Flexibility" value={formData().relocate} isEditing={props.isEditing} isOwnProfile={props.isOwnProfile} type="select" options={RELOCATE_OPTIONS} onValueChange={(v: string | string[]) => updateField('relocate', typeof v === 'string' ? v : undefined)} />
           <EditableInfoCardRow label="Looking for" value={formData().lookingFor} isEditing={props.isEditing} isOwnProfile={props.isOwnProfile} type="select" options={LOOKING_FOR_OPTIONS} onValueChange={(v: string | string[]) => updateField('lookingFor', typeof v === 'string' ? v : undefined)} />
           <EditableInfoCardRow label="Sexuality" value={formData().sexuality} isEditing={props.isEditing} isOwnProfile={props.isOwnProfile} type="select" options={SEXUALITY_OPTIONS} onValueChange={(v: string | string[]) => updateField('sexuality', typeof v === 'string' ? v : undefined)} />
           <EditableInfoCardRow label="Ethnicity" value={formData().ethnicity} isEditing={props.isEditing} isOwnProfile={props.isOwnProfile} type="select" options={ETHNICITY_OPTIONS} onValueChange={(v: string | string[]) => updateField('ethnicity', typeof v === 'string' ? v : undefined)} />

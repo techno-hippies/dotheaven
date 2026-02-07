@@ -27,9 +27,11 @@ export function handleTrackRegistered(event: TrackRegisteredEvent): void {
   if (result.reverted) {
     track.title = "";
     track.artist = "";
+    track.album = "";
   } else {
     track.title = result.value.value0;
     track.artist = result.value.value1;
+    track.album = result.value.value2;
   }
 
   track.save();

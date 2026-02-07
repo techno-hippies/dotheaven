@@ -88,7 +88,7 @@ async function submitScrobble(
     mbid: scrobble.mbid,
     ipId: scrobble.ipId,
     playedAtSec: scrobble.playedAtSec,
-    duration: scrobble.trackMeta?.duration ?? 0,
+    duration: scrobble.durationMs ? Math.round(scrobble.durationMs / 1000) : 0,
   }
 
   console.log('[Scrobble] Submitting via AA (ScrobbleV4)...')
@@ -110,11 +110,20 @@ async function submitScrobble(
       console.warn('[Cover] Submit failed:', err)
     })
 
-  // Invalidate scrobbles query so profile page shows the scrobble
-  try {
-    const { queryClient } = await import('../main')
-    queryClient.invalidateQueries({ queryKey: ['scrobbles'] })
-  } catch {
-    // Not fatal — user can refresh manually
+  // Invalidate queries after subgraph indexes (staggered to catch indexing delay)
+  invalidateAfterScrobble().catch(() => {})
+}
+
+const INVALIDATE_KEYS = [['scrobbles'], ['artist']]
+
+async function invalidateAfterScrobble(): Promise<void> {
+  const { queryClient } = await import('../main')
+  // Staggered invalidations: 3s, 6s, 12s to account for subgraph indexing lag
+  for (const delayMs of [3_000, 6_000, 12_000]) {
+    setTimeout(() => {
+      for (const key of INVALIDATE_KEYS) {
+        queryClient.invalidateQueries({ queryKey: key })
+      }
+    }, delayMs)
   }
 }

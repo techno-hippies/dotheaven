@@ -185,6 +185,41 @@ export const WithBackButton: Story = {
   render: () => <DrawerWithBackDemo />,
 }
 
+// Side drawer (left)
+const SideDrawerDemo = () => {
+  const [open, setOpen] = createSignal(false)
+
+  return (
+    <div class="p-8">
+      <Button onClick={() => setOpen(true)}>
+        Open Side Drawer
+      </Button>
+      <Drawer open={open()} onOpenChange={setOpen} side="left">
+        <DrawerContent side="left">
+          <DrawerHeader class="text-left">
+            <DrawerTitle>Menu</DrawerTitle>
+          </DrawerHeader>
+          <div class="py-4 flex flex-col gap-2">
+            <button class="flex items-center gap-3 px-2 py-3 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-highlight-hover)] transition-colors cursor-pointer text-left">
+              Settings
+            </button>
+            <button class="flex items-center gap-3 px-2 py-3 rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-highlight-hover)] transition-colors cursor-pointer text-left">
+              Wallet
+            </button>
+            <button class="flex items-center gap-3 px-2 py-3 rounded-md text-red-400 hover:bg-[var(--bg-highlight-hover)] transition-colors cursor-pointer text-left">
+              Log Out
+            </button>
+          </div>
+        </DrawerContent>
+      </Drawer>
+    </div>
+  )
+}
+
+export const SideLeft: Story = {
+  render: () => <SideDrawerDemo />,
+}
+
 // Using DrawerTrigger
 const TriggerDrawerDemo = () => {
   return (

@@ -127,14 +127,14 @@ export const SidePlayer: Component<SidePlayerProps> = (props) => {
         <Show
           when={props.onArtistClick}
           fallback={
-            <p class="text-sm text-[var(--text-secondary)] truncate">
+            <p class="text-base text-[var(--text-secondary)] truncate">
               {props.artist || 'Unknown artist'}
             </p>
           }
         >
           <button
             type="button"
-            class="text-sm text-[var(--text-secondary)] truncate hover:text-[var(--accent-blue)] hover:underline transition-colors text-left w-full"
+            class="text-base text-[var(--text-secondary)] truncate hover:text-[var(--accent-blue)] hover:underline cursor-pointer transition-colors text-left w-full"
             onClick={props.onArtistClick}
           >
             {props.artist || 'Unknown artist'}

@@ -13,6 +13,7 @@ import {
   MessageInput,
   useIsMobile,
 } from '@heaven/ui'
+import { CHAT } from '@heaven/core'
 import { useAuth, useXMTP, type XMTPMessage } from '../providers'
 import { useParams, useNavigate } from '@solidjs/router'
 
@@ -33,7 +34,7 @@ const ChevronLeftIcon = () => (
 export const ChatPage: Component = () => {
   const auth = useAuth()
   const xmtp = useXMTP()
-  const params = useParams<{ username: string }>()
+  const params = useParams<{ peer: string }>()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
 
@@ -45,7 +46,7 @@ export const ChatPage: Component = () => {
   let messagesContainer: HTMLDivElement | undefined
 
   // Get peer address or conversation ID from URL
-  const peerAddressOrId = () => decodeURIComponent(params.username || '')
+  const peerAddressOrId = () => decodeURIComponent(params.peer || '')
 
   // Format address for display
   const formatAddress = (addr: string) => {
@@ -128,7 +129,7 @@ export const ChatPage: Component = () => {
                     variant="ghost"
                     size="md"
                     aria-label="Back to messages"
-                    onClick={() => navigate('/chat')}
+                    onClick={() => navigate(CHAT)}
                   >
                     <ChevronLeftIcon />
                   </IconButton>

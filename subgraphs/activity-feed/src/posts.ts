@@ -38,6 +38,9 @@ export function handlePostCreated(event: PostCreatedEvent): void {
   post.contentType = event.params.contentType;
   post.metadataUri = event.params.metadataUri;
   post.isAdult = event.params.isAdult;
+  post.likeCount = 0;
+  post.commentCount = 0;
+  post.flagCount = 0;
   post.blockNumber = event.block.number;
   post.blockTimestamp = event.block.timestamp;
   post.transactionHash = event.transaction.hash;

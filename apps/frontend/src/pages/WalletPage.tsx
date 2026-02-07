@@ -1,60 +1,21 @@
-import type { Component, JSX } from 'solid-js'
+import type { Component } from 'solid-js'
 import { createMemo, createEffect, createSignal, onMount, Show } from 'solid-js'
 import { createStore } from 'solid-js/store'
 import { createQuery } from '@tanstack/solid-query'
-import { WalletAssets, type ConnectedWallet, Button, PageHeader } from '@heaven/ui'
+import { WalletAssets, type ConnectedWallet, Button } from '@heaven/ui'
 import { useAuth } from '../providers'
 import { getEnsProfile } from '../lib/heaven/avatar-resolver'
 import {
   CHAINS,
   getNativeBalance,
   getErc20Balance,
-  type ChainKey,
 } from '../lib/web3'
 import {
   getStorageStatus,
   depositAndApprove,
   type StorageStatus,
 } from '../lib/storage-service'
-
-// ============ Icons ============
-const EthereumIcon = () => (
-  <svg viewBox="0 0 32 32" class="w-12 h-12">
-    <g fill="none" fill-rule="evenodd">
-      <circle cx="16" cy="16" r="16" fill="#627EEA"/>
-      <g fill="#FFF" fill-rule="nonzero">
-        <path fill-opacity=".602" d="M16.498 4v8.87l7.497 3.35z"/>
-        <path d="M16.498 4L9 16.22l7.498-3.35z"/>
-        <path fill-opacity=".602" d="M16.498 21.968v6.027L24 17.616z"/>
-        <path d="M16.498 27.995v-6.028L9 17.616z"/>
-        <path fill-opacity=".2" d="M16.498 20.573l7.497-4.353-7.497-3.348z"/>
-        <path fill-opacity=".602" d="M9 16.22l7.498 4.353v-7.701z"/>
-      </g>
-    </g>
-  </svg>
-)
-
-const MegaETHIcon = () => (
-  <svg viewBox="0 0 100 100" class="w-12 h-12">
-    <circle cx="50" cy="50" r="50" fill="#000"/>
-    <circle cx="50" cy="50" r="45" fill="transparent" stroke="#fff" stroke-width="3"/>
-    <text x="50" y="65" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#fff" text-anchor="middle">M</text>
-    <circle cx="40" cy="75" r="3" fill="#fff"/>
-    <circle cx="60" cy="75" r="3" fill="#fff"/>
-  </svg>
-)
-
-const USDFCIcon = () => (
-  <img src={`${import.meta.env.BASE_URL}images/usdfc.png`} alt="USDFC" class="w-12 h-12 object-contain" />
-)
-
-const USDMIcon = () => (
-  <img src={`${import.meta.env.BASE_URL}images/usdm.png`} alt="USDM" class="w-12 h-12 object-contain" />
-)
-
-const FilecoinIcon = () => (
-  <img src={`${import.meta.env.BASE_URL}images/filecoin.png`} alt="Filecoin" class="w-12 h-12 object-contain" />
-)
+import { ASSET_CONFIGS, type AssetConfig } from '../lib/wallet-assets'
 
 // ============ Types ============
 type AssetStatus = 'idle' | 'refreshing' | 'error'
@@ -65,20 +26,6 @@ interface AssetState {
   updatedAt?: number
   status: AssetStatus
   error?: string
-}
-
-interface AssetConfig {
-  id: string
-  key: string
-  name: string
-  symbol: string
-  chainKey: ChainKey
-  icon: () => JSX.Element
-  chainBadge: () => JSX.Element
-  isNative: boolean
-  tokenAddress?: string
-  unitSymbol: string
-  priceUsd: number // For testnets, mock prices
 }
 
 // ============ Cache Helpers ============
@@ -116,72 +63,6 @@ function isStale(updatedAt?: number) {
   if (!updatedAt) return true
   return Date.now() - updatedAt > STALE_TIME_MS
 }
-
-// ============ Asset Definitions ============
-const ASSET_CONFIGS: AssetConfig[] = [
-  {
-    id: 'fil-mainnet',
-    key: 'fil:native',
-    name: 'FIL',
-    symbol: 'Filecoin',
-    chainKey: 'fil',
-    icon: FilecoinIcon,
-    chainBadge: FilecoinIcon,
-    isNative: true,
-    unitSymbol: 'FIL',
-    priceUsd: 5,
-  },
-  {
-    id: 'usdfc-filecoin',
-    key: 'fil:erc20:0x80B98d3aa09ffff255c3ba4A241111Ff1262F045',
-    name: 'USDFC',
-    symbol: 'Filecoin',
-    chainKey: 'fil',
-    icon: USDFCIcon,
-    chainBadge: FilecoinIcon,
-    isNative: false,
-    tokenAddress: '0x80B98d3aa09ffff255c3ba4A241111Ff1262F045',
-    unitSymbol: 'USDFC',
-    priceUsd: 1,
-  },
-  {
-    id: 'eth-sepolia',
-    key: 'sepolia:native',
-    name: 'ETH',
-    symbol: 'Ethereum',
-    chainKey: 'sepolia',
-    icon: EthereumIcon,
-    chainBadge: EthereumIcon,
-    isNative: true,
-    unitSymbol: 'ETH',
-    priceUsd: 3090,
-  },
-  {
-    id: 'eth-megaeth',
-    key: 'mega:native',
-    name: 'ETH',
-    symbol: 'MegaETH',
-    chainKey: 'mega',
-    icon: EthereumIcon,
-    chainBadge: MegaETHIcon,
-    isNative: true,
-    unitSymbol: 'ETH',
-    priceUsd: 3090,
-  },
-  {
-    id: 'usdm-megaeth',
-    key: 'megaMainnet:erc20:0xFAfDdbb3FC7688494971a79cc65DCa3EF82079E7',
-    name: 'USDM',
-    symbol: 'MegaETH',
-    chainKey: 'megaMainnet',
-    icon: USDMIcon,
-    chainBadge: MegaETHIcon,
-    isNative: false,
-    tokenAddress: '0xFAfDdbb3FC7688494971a79cc65DCa3EF82079E7',
-    unitSymbol: 'USDM',
-    priceUsd: 1,
-  },
-]
 
 // ============ Component ============
 export const WalletPage: Component = () => {
@@ -492,7 +373,6 @@ export const WalletPage: Component = () => {
 
   return (
     <div class="h-full overflow-y-auto">
-      <PageHeader title="Wallet" />
       <WalletAssets
         address={auth.pkpAddress() || '0x0000000000000000000000000000000000000000'}
         totalBalance={auth.isAuthenticated() ? totalBalanceUSD() : '$0.00'}
@@ -504,7 +384,7 @@ export const WalletPage: Component = () => {
 
       {/* Storage Section — only shown when authenticated */}
       <Show when={auth.isAuthenticated()}>
-        <div class="w-full max-w-4xl mx-auto px-8 pb-12">
+        <div class="w-full max-w-4xl mx-auto px-4 pb-12">
           <h2 class="text-2xl font-bold text-[var(--text-primary)] mb-4 mt-8">Storage</h2>
           <div class="rounded-md bg-[var(--bg-elevated)] p-6">
             <Show when={storageLoading() && !storageStatus()} fallback={null}>

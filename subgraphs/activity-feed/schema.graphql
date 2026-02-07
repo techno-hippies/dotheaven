@@ -1,6 +1,6 @@
 # ── PostsV1 — Post existence + metadata pointer ───────────────────
 
-type Post @entity(immutable: true) {
+type Post @entity(immutable: false) {
   id: ID!                      # postId (bytes32 hex) — unique per post
   creator: Bytes!              # wallet address
   contentType: Int!            # 0=text, 1=photo
@@ -8,6 +8,38 @@ type Post @entity(immutable: true) {
   ipfsHash: String             # IPFS CID extracted from metadataUri
   contentId: Bytes             # keccak256("heaven:content:" + ipfsHash) for clustering
   isAdult: Boolean!            # 18+ content flag
+  likeCount: Int!              # total likes (incremented/decremented by EngagementV2)
+  commentCount: Int!           # total comments
+  flagCount: Int!              # total flags
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+  translations: [Translation!]! @derivedFrom(field: "post")
+  comments: [Comment!]! @derivedFrom(field: "post")
+}
+
+# ── EngagementV2 — Translations ─────────────────────────────────────
+
+type Translation @entity(immutable: true) {
+  id: ID!                      # "{postId}-{langCode}" — one translation per language per post
+  post: Post!                  # link to post
+  postId: Bytes!               # bytes32 post key
+  langCode: String!            # ISO 639-1 code, e.g. "ja", "es"
+  translator: Bytes!           # address that triggered the translation
+  text: String!                # translated text
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+# ── EngagementV2 — Comments ─────────────────────────────────────────
+
+type Comment @entity(immutable: true) {
+  id: ID!                      # commentId (uint256)
+  post: Post!                  # link to post
+  postId: Bytes!               # bytes32 post key
+  author: Bytes!               # comment author address
+  text: String!                # comment text
   blockNumber: BigInt!
   blockTimestamp: BigInt!
   transactionHash: Bytes!
@@ -19,6 +51,7 @@ type Track @entity(immutable: false) {
   id: ID!                      # trackId (bytes32 hex)
   title: String!               # display title (from contract state)
   artist: String!              # display artist (from contract state)
+  album: String!               # display album (from contract state)
   kind: Int!                   # 1=MBID, 2=ipId, 3=meta
   payload: Bytes!              # raw derivation input
   metaHash: Bytes!             # keccak256(abi.encode(title, artist, album))

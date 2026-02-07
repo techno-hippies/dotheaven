@@ -24,6 +24,8 @@ export interface CommunityFeedProps {
   featuredMember?: CommunityCardProps
   /** Empty state content */
   emptySlot?: JSX.Element
+  /** Loading state - shows spinner instead of empty state */
+  isLoading?: boolean
 }
 
 const defaultTabs: CommunityTab[] = [
@@ -98,11 +100,20 @@ export const CommunityFeed: Component<CommunityFeedProps> = (props) => {
         <Show
           when={props.members.length > 0 || props.featuredMember}
           fallback={
-            props.emptySlot ?? (
+            <Show
+              when={props.isLoading}
+              fallback={
+                props.emptySlot ?? (
+                  <div class="flex items-center justify-center py-16 text-[var(--text-muted)]">
+                    No members found
+                  </div>
+                )
+              }
+            >
               <div class="flex items-center justify-center py-16 text-[var(--text-muted)]">
-                No members found
+                <div class="w-6 h-6 border-2 border-[var(--text-muted)] border-t-transparent rounded-full animate-spin" />
               </div>
-            )
+            </Show>
           }
         >
           <div class="flex flex-col gap-2 p-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:p-4">

@@ -37,6 +37,10 @@
 import { getLitClient } from './lit/client'
 import type { PKPAuthContext } from './lit'
 import { keccak256, encodeAbiParameters, type Hex } from 'viem'
+import { CONTENT_REGISTRY, CONTENT_ACCESS_MIRROR } from '@heaven/core'
+
+// Re-export for backward compatibility
+export { CONTENT_REGISTRY, CONTENT_ACCESS_MIRROR }
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -48,12 +52,6 @@ const IV_BYTES = 12
 
 /** AES key size in bytes */
 const KEY_BYTES = 32
-
-/** ContentRegistry address on MegaETH testnet */
-export const CONTENT_REGISTRY = '0x9ca08C2D2170A43ecfA12AB35e06F2E1cEEB4Ef2'
-
-/** ContentAccessMirror address on Base Sepolia (Lit access condition target) */
-export const CONTENT_ACCESS_MIRROR = '0xd4D3baB38a11D72e36F49a73D50Dbdc3c1Aa4e9A'
 
 /** Lit chain identifier for Base Sepolia */
 const LIT_CHAIN = 'baseSepolia'

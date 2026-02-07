@@ -85,7 +85,7 @@ export const UserIdentity: Component<UserIdentityProps> = (props) => {
   }
 
   const AvatarWrapper = () => (
-    <div class="relative flex-shrink-0">
+    <div class="relative flex-shrink-0 my-auto">
       <Avatar
         src={props.avatarUrl}
         size={avatarSizes[size()]}
@@ -101,7 +101,8 @@ export const UserIdentity: Component<UserIdentityProps> = (props) => {
   return (
     <div
       class={cn(
-        'flex items-center gap-3',
+        'flex gap-2',
+        props.secondaryLine ? 'items-stretch' : 'items-center',
         props.onClick && 'cursor-pointer',
         props.class
       )}
@@ -167,7 +168,7 @@ export const UserIdentity: Component<UserIdentityProps> = (props) => {
 
         {/* Secondary line */}
         <Show when={props.secondaryLine}>
-          <div class="mt-0.5">
+          <div class="-mt-0.5">
             {props.secondaryLine}
           </div>
         </Show>

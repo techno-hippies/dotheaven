@@ -7,15 +7,11 @@
  */
 
 import { createPublicClient, http, parseAbi, keccak256, encodePacked, toBytes, type Address } from 'viem'
+import { REGISTRY_V1, RECORDS_V1, HEAVEN_NODE } from '@heaven/core'
 import { megaTestnetV2 } from '../chains'
 import { getLitClient } from '../lit/client'
 import { HEAVEN_CLAIM_NAME_CID } from '../lit/action-cids'
 import type { PKPAuthContext } from '../lit/types'
-
-// Contract addresses (MegaETH Testnet)
-const REGISTRY_V1 = '0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2' as const
-const RECORDS_V1 = '0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3' as const
-const HEAVEN_NODE = '0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27' as const
 
 const registryAbi = parseAbi([
   'function available(bytes32 parentNode, string calldata label) external view returns (bool)',
@@ -32,11 +28,18 @@ const recordsAbi = parseAbi([
   'function addr(bytes32 node) external view returns (address)',
 ])
 
+// Singleton client for connection reuse
+let _client: ReturnType<typeof createPublicClient> | null = null
+
 function getClient() {
-  return createPublicClient({
-    chain: megaTestnetV2,
-    transport: http(megaTestnetV2.rpcUrls.default.http[0]),
-  })
+  if (!_client) {
+    _client = createPublicClient({
+      chain: megaTestnetV2,
+      transport: http(megaTestnetV2.rpcUrls.default.http[0]),
+      batch: { multicall: true },
+    })
+  }
+  return _client
 }
 
 /**
@@ -201,6 +204,93 @@ export async function getPrimaryName(address: `0x${string}`): Promise<{ node: `0
   const labelHash = keccak256(toBytes(label))
   const node = keccak256(encodePacked(['bytes32', 'bytes32'], [parentNode, labelHash]))
   return { node, label }
+}
+
+// ── Batched functions for community queries ─────────────────────────
+
+export interface PrimaryNameResult {
+  address: `0x${string}`
+  label: string | null
+  node: `0x${string}` | null
+}
+
+/**
+ * Batch lookup: addresses → primary names.
+ * Uses multicall to fetch all in ~1 RPC request.
+ */
+export async function getPrimaryNamesBatch(addresses: `0x${string}`[]): Promise<PrimaryNameResult[]> {
+  if (addresses.length === 0) return []
+
+  const client = getClient()
+
+  // Use multicall for batched reads
+  const contracts = addresses.map((addr) => ({
+    address: REGISTRY_V1 as `0x${string}`,
+    abi: registryAbi,
+    functionName: 'primaryName' as const,
+    args: [addr] as const,
+  }))
+
+  const results = await client.multicall({
+    contracts,
+    allowFailure: true,
+  })
+
+  return results.map((result, i) => {
+    const addr = addresses[i]
+    if (result.status === 'failure' || !result.result) {
+      return { address: addr, label: null, node: null }
+    }
+
+    const [label, parentNode] = result.result as [string, `0x${string}`]
+    if (!label) {
+      return { address: addr, label: null, node: null }
+    }
+
+    // Derive node from parentNode + label
+    const labelHash = keccak256(toBytes(label))
+    const node = keccak256(encodePacked(['bytes32', 'bytes32'], [parentNode, labelHash]))
+    return { address: addr, label, node }
+  })
+}
+
+export interface TextRecordRequest {
+  node: `0x${string}`
+  key: string
+}
+
+export interface TextRecordResult {
+  node: `0x${string}`
+  key: string
+  value: string
+}
+
+/**
+ * Batch lookup: (node, key) pairs → text records.
+ * Uses multicall to fetch all in ~1 RPC request.
+ */
+export async function getTextRecordsBatch(requests: TextRecordRequest[]): Promise<TextRecordResult[]> {
+  if (requests.length === 0) return []
+
+  const client = getClient()
+
+  const contracts = requests.map((req) => ({
+    address: RECORDS_V1 as `0x${string}`,
+    abi: recordsAbi,
+    functionName: 'text' as const,
+    args: [req.node, req.key] as const,
+  }))
+
+  const results = await client.multicall({
+    contracts,
+    allowFailure: true,
+  })
+
+  return results.map((result, i) => {
+    const req = requests[i]
+    const value = result.status === 'success' ? (result.result as string) : ''
+    return { node: req.node, key: req.key, value }
+  })
 }
 
 export { REGISTRY_V1, RECORDS_V1, HEAVEN_NODE }

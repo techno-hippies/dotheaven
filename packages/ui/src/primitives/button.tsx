@@ -34,10 +34,12 @@ export interface ButtonProps
   extends JSX.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   loading?: boolean
+  /** Leading icon element — automatically sized and spaced */
+  icon?: JSX.Element
 }
 
 export const Button: Component<ButtonProps> = (props) => {
-  const [local, others] = splitProps(props, ['class', 'variant', 'size', 'children', 'loading', 'disabled'])
+  const [local, others] = splitProps(props, ['class', 'variant', 'size', 'children', 'loading', 'disabled', 'icon'])
 
   return (
     <button
@@ -47,6 +49,9 @@ export const Button: Component<ButtonProps> = (props) => {
     >
       <Show when={local.loading}>
         <Spinner size="sm" class="mr-2" />
+      </Show>
+      <Show when={local.icon}>
+        <span class="mr-1.5 inline-flex items-center [&>svg]:w-4 [&>svg]:h-4">{local.icon}</span>
       </Show>
       {local.children}
     </button>

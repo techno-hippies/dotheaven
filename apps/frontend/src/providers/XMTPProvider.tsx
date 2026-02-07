@@ -16,6 +16,12 @@ import {
 import { useAuth } from './AuthContext'
 
 const IS_DEV = import.meta.env.DEV
+const IS_TAURI_PLATFORM = import.meta.env.VITE_PLATFORM === 'tauri'
+const XMTP_ENV = (import.meta.env.VITE_XMTP_ENV || (IS_DEV ? 'dev' : 'production')) as
+  | 'dev'
+  | 'production'
+const CONNECT_RETRY_COOLDOWN_MS = 30_000
+const INSTALLATION_RECOVERY_TIMEOUT_MS = 30_000
 
 // ---------------------------------------------------------------------------
 // localStorage-backed read state
@@ -108,6 +114,175 @@ function toLocalMessage(msg: XmtpWireMessage, myInboxId: string): XMTPMessage {
   }
 }
 
+function hexToBytes(hex: string): Uint8Array {
+  const clean = hex.startsWith('0x') ? hex.slice(2) : hex
+  const bytes = new Uint8Array(clean.length / 2)
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16)
+  }
+  return bytes
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  if (!ms || ms <= 0) return promise
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`[XMTPProvider] ${label} timed out after ${ms}ms`))
+    }, ms)
+  })
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId)
+  })
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  return String(error)
+}
+
+function isInstallationLimitError(error: unknown): boolean {
+  const message = getErrorMessage(error)
+  return /10\/10\s+installations/i.test(message)
+}
+
+function extractInboxId(message: string): string | null {
+  const match =
+    message.match(/InboxID\s+([a-f0-9]{64})/i) ??
+    message.match(/inbox(?:\s*id)?[:\s]+([a-f0-9]{64})/i)
+  return match?.[1]?.toLowerCase() ?? null
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') return null
+  return value as Record<string, unknown>
+}
+
+function parseHexBytes(value: string): Uint8Array | null {
+  const clean = value.startsWith('0x') ? value.slice(2) : value
+  if (clean.length === 0 || clean.length % 2 !== 0) return null
+  if (!/^[0-9a-f]+$/i.test(clean)) return null
+  return hexToBytes(clean)
+}
+
+function toUint8Array(value: unknown): Uint8Array | null {
+  if (value instanceof Uint8Array) return value
+
+  if (Array.isArray(value) && value.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) {
+    return new Uint8Array(value)
+  }
+
+  if (typeof value === 'string') {
+    return parseHexBytes(value)
+  }
+
+  return null
+}
+
+function getInstallationBytes(installations: unknown[]): Uint8Array[] {
+  const bytes: Uint8Array[] = []
+  for (const installation of installations) {
+    const direct = toUint8Array(installation)
+    if (direct) {
+      bytes.push(direct)
+      continue
+    }
+
+    const record = asRecord(installation)
+    if (!record) continue
+
+    const candidate = toUint8Array(record.bytes) ?? toUint8Array(record.id) ?? toUint8Array(record.installationId)
+    if (candidate) {
+      bytes.push(candidate)
+    }
+  }
+  return bytes
+}
+
+async function recoverFromInstallationLimit(
+  address: string,
+  signMessage: (message: string) => Promise<string>,
+  error: unknown,
+): Promise<boolean> {
+  if (!IS_TAURI_PLATFORM || !isInstallationLimitError(error)) return false
+
+  const message = getErrorMessage(error)
+  const inboxId = extractInboxId(message)
+  if (!inboxId) {
+    console.error('[XMTPProvider] Installation limit reached but inboxId was not found in error:', message)
+    return false
+  }
+
+  console.warn(`[XMTPProvider] Installation limit reached for inbox ${inboxId}, attempting static revocation`)
+
+  try {
+    const { Client, IdentifierKind } = await import('@xmtp/browser-sdk')
+
+    const signer = {
+      type: 'EOA',
+      getIdentifier: () => ({
+        identifier: address,
+        identifierKind: IdentifierKind.Ethereum,
+      }),
+      signMessage: async (text: string) => {
+        const signature = await signMessage(text)
+        return hexToBytes(signature)
+      },
+    } as const
+
+    const fetchInboxStates = Client.fetchInboxStates.bind(Client) as (...args: unknown[]) => Promise<unknown[]>
+    const revokeInstallations = Client.revokeInstallations.bind(Client) as (...args: unknown[]) => Promise<void>
+
+    let inboxStates: unknown[]
+    try {
+      inboxStates = await withTimeout(
+        fetchInboxStates([inboxId], XMTP_ENV),
+        INSTALLATION_RECOVERY_TIMEOUT_MS,
+        'Client.fetchInboxStates'
+      )
+    } catch (fetchError) {
+      if (IS_DEV) {
+        console.warn('[XMTPProvider] fetchInboxStates with env failed, retrying without env:', fetchError)
+      }
+      inboxStates = await withTimeout(
+        fetchInboxStates([inboxId]),
+        INSTALLATION_RECOVERY_TIMEOUT_MS,
+        'Client.fetchInboxStates (no env)'
+      )
+    }
+
+    const state = asRecord(inboxStates[0])
+    const installations = Array.isArray(state?.installations) ? state.installations : []
+    const installationBytes = getInstallationBytes(installations)
+    if (installationBytes.length === 0) {
+      throw new Error('Inbox state did not include any revocable installations')
+    }
+
+    try {
+      await withTimeout(
+        revokeInstallations(signer, inboxId, installationBytes, XMTP_ENV),
+        INSTALLATION_RECOVERY_TIMEOUT_MS,
+        'Client.revokeInstallations'
+      )
+    } catch (revokeError) {
+      if (IS_DEV) {
+        console.warn('[XMTPProvider] revokeInstallations with env failed, retrying without env:', revokeError)
+      }
+      await withTimeout(
+        revokeInstallations(signer, inboxId, installationBytes),
+        INSTALLATION_RECOVERY_TIMEOUT_MS,
+        'Client.revokeInstallations (no env)'
+      )
+    }
+
+    console.warn(`[XMTPProvider] Revoked ${installationBytes.length} installations for inbox ${inboxId}`)
+    return true
+  } catch (recoveryError) {
+    console.error('[XMTPProvider] Failed installation-limit recovery:', recoveryError)
+    return false
+  }
+}
+
 export const XMTPProvider: ParentComponent = (props) => {
   const auth = useAuth()
   const [isConnected, setIsConnected] = createSignal(false)
@@ -122,6 +297,8 @@ export const XMTPProvider: ParentComponent = (props) => {
   let transport: XmtpTransport | null = null
   const streamCleanups = new Map<string, () => void>()
   let globalStreamCleanup: (() => void) | null = null
+  let lastConnectFailureAt = 0
+  let lastConnectFailureAddress: string | null = null
 
   onCleanup(() => {
     streamCleanups.forEach((cleanup) => cleanup())
@@ -133,7 +310,6 @@ export const XMTPProvider: ParentComponent = (props) => {
   // Auto-disconnect when auth logs out
   createEffect(() => {
     if (!auth.isAuthenticated() && isConnected()) {
-      if (IS_DEV) console.log('[XMTPProvider] Auth logged out, disconnecting XMTP')
       disconnect()
     }
   })
@@ -143,29 +319,63 @@ export const XMTPProvider: ParentComponent = (props) => {
     if (!address) {
       throw new Error('Not authenticated - please sign in first')
     }
+    const normalizedAddress = address.toLowerCase()
 
     if (isConnected() || isConnecting()) return
+
+    const msSinceFailure = Date.now() - lastConnectFailureAt
+    if (
+      lastConnectFailureAddress === normalizedAddress &&
+      lastConnectFailureAt > 0 &&
+      msSinceFailure < CONNECT_RETRY_COOLDOWN_MS
+    ) {
+      if (IS_DEV) {
+        const remainingSeconds = Math.ceil((CONNECT_RETRY_COOLDOWN_MS - msSinceFailure) / 1000)
+        console.warn(`[XMTPProvider] Skipping reconnect for ${remainingSeconds}s after previous failure`)
+      }
+      return
+    }
 
     setIsConnecting(true)
 
     try {
-      if (IS_DEV) console.log('[XMTPProvider] Connecting XMTP for:', address)
-
       transport = await createTransport()
       await transport.init(address, auth.signMessage)
 
       setInboxId(transport.getInboxId())
       setIsConnected(true)
-
-      if (IS_DEV) console.log('[XMTPProvider] Connected, inbox:', transport.getInboxId())
+      lastConnectFailureAt = 0
+      lastConnectFailureAddress = null
 
       await refreshConversations()
 
       // Start global message stream for unread tracking
       startGlobalStream()
     } catch (error) {
-      console.error('[XMTPProvider] Failed to connect:', error)
-      throw error
+      let connectError: unknown = error
+
+      if (await recoverFromInstallationLimit(address, auth.signMessage, connectError)) {
+        try {
+          if (!transport) transport = await createTransport()
+          await transport.init(address, auth.signMessage)
+
+          setInboxId(transport.getInboxId())
+          setIsConnected(true)
+          lastConnectFailureAt = 0
+          lastConnectFailureAddress = null
+
+          await refreshConversations()
+          startGlobalStream()
+          return
+        } catch (retryError) {
+          connectError = retryError
+        }
+      }
+
+      lastConnectFailureAt = Date.now()
+      lastConnectFailureAddress = normalizedAddress
+      console.error('[XMTPProvider] Failed to connect:', connectError)
+      throw connectError
     } finally {
       setIsConnecting(false)
     }
@@ -187,14 +397,13 @@ export const XMTPProvider: ParentComponent = (props) => {
     transport = null
     setIsConnected(false)
     setInboxId(null)
-
-    if (IS_DEV) console.log('[XMTPProvider] Disconnected')
+    lastConnectFailureAt = 0
+    lastConnectFailureAddress = null
   }
 
   const formatAddress = (address: string): string => {
     // Skip non-address strings (e.g. XMTP conversation IDs like "dm:abc123...")
     if (!address.startsWith('0x')) {
-      console.log('[XMTPProvider] formatAddress: non-0x address, returning as-is:', address)
       return address.length > 20 ? `${address.slice(0, 8)}...${address.slice(-4)}` : address
     }
     return `${address.slice(0, 6)}...${address.slice(-4)}`
@@ -217,17 +426,10 @@ export const XMTPProvider: ParentComponent = (props) => {
 
         // Find which peerAddress this conversation belongs to
         const peerKey = conversationPeerCache.get(msg.conversationId)
-        if (!peerKey) {
-          if (IS_DEV) console.log('[XMTPProvider] Global stream: unknown conversationId', msg.conversationId)
-          return
-        }
+        if (!peerKey) return
 
         const currentActive = activeChat()
         const isViewing = currentActive === peerKey
-
-        if (IS_DEV) {
-          console.log('[XMTPProvider] Global stream msg from', peerKey, '| viewing:', isViewing)
-        }
 
         // Update conversation list: lastMessage, timestamp, and unread state
         setConversations((prev) => {
@@ -268,8 +470,6 @@ export const XMTPProvider: ParentComponent = (props) => {
     if (!transport || !isConnected()) return
 
     try {
-      if (IS_DEV) console.log('[XMTPProvider] Refreshing conversations...')
-
       const convos = await transport.listConversations()
 
       const myId = inboxId()
@@ -283,8 +483,6 @@ export const XMTPProvider: ParentComponent = (props) => {
         const msgAt = c.lastMessageAt ?? 0
         const isFromPeer = c.lastMessageSender ? c.lastMessageSender !== myId : false
         const hasUnread = isFromPeer && msgAt > lastReadAt
-
-        console.log('[XMTPProvider] convo:', c.id, 'peerAddress:', c.peerAddress, 'lastMessage:', c.lastMessage)
 
         return {
           id: c.id,
@@ -304,7 +502,6 @@ export const XMTPProvider: ParentComponent = (props) => {
       })
 
       setConversations(chatList)
-      if (IS_DEV) console.log('[XMTPProvider] Loaded', chatList.length, 'conversations')
     } catch (error) {
       console.error('[XMTPProvider] Failed to refresh conversations:', error)
     }

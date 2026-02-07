@@ -11,7 +11,7 @@ const RESOLVER_URL =
   import.meta.env.VITE_RESOLVER_URL || 'https://heaven-resolver-production.deletion-backup782.workers.dev'
 
 const GOLDSKY_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/9.0.0/gn'
+  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/12.0.0/gn'
 
 const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
 
@@ -43,6 +43,7 @@ export interface ArtistTrack {
   coverCid: string
   kind: number
   payload: string
+  durationSec: number
   scrobbleCount: number
   lastPlayed: number // unix seconds
 }
@@ -52,6 +53,8 @@ export interface ArtistPageData {
   tracks: ArtistTrack[]
   totalScrobbles: number
   uniqueListeners: number
+  ranking: number       // 1-based rank among all artists by scrobble count
+  totalArtists: number  // total number of artists with scrobbles
 }
 
 // ── MBID codec ──────────────────────────────────────────────────────
@@ -129,10 +132,79 @@ export async function fetchArtistTracks(
 export async function fetchArtistPageData(mbid: string): Promise<ArtistPageData> {
   const info = await fetchArtistInfo(mbid)
 
-  // Fetch tracks from subgraph using the canonical artist name
-  const { tracks, totalScrobbles, uniqueListeners } = await fetchArtistTracks(info.name)
+  // Fetch artist tracks + ranking in parallel
+  const [trackResult, rankResult] = await Promise.all([
+    fetchArtistTracks(info.name),
+    fetchArtistRanking(info.name),
+  ])
 
-  return { info, tracks, totalScrobbles, uniqueListeners }
+  return {
+    info,
+    tracks: trackResult.tracks,
+    totalScrobbles: trackResult.totalScrobbles,
+    uniqueListeners: trackResult.uniqueListeners,
+    ranking: rankResult.ranking,
+    totalArtists: rankResult.totalArtists,
+  }
+}
+
+/**
+ * Compute the artist's ranking by total scrobble count among all artists.
+ * Fetches all tracks with scrobbles and groups by primary artist name.
+ */
+async function fetchArtistRanking(artistName: string): Promise<{ ranking: number; totalArtists: number }> {
+  // Paginate through all tracks that have at least 1 scrobble
+  const allTracks: Array<{ artist: string; scrobbleCount: number }> = []
+  let skip = 0
+  const pageSize = 1000
+
+  while (true) {
+    const query = `{
+      tracks(first: ${pageSize}, skip: ${skip}, orderBy: registeredAt, orderDirection: desc) {
+        artist
+        scrobbles { id }
+      }
+    }`
+    const res = await fetch(GOLDSKY_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    })
+    if (!res.ok) break
+    const json = await res.json()
+    const tracks = json.data?.tracks ?? []
+    if (tracks.length === 0) break
+    for (const t of tracks) {
+      if (t.scrobbles.length > 0) {
+        allTracks.push({ artist: t.artist, scrobbleCount: t.scrobbles.length })
+      }
+    }
+    if (tracks.length < pageSize) break
+    skip += pageSize
+  }
+
+  // Group scrobbles by primary artist name (first part before feat/ft etc.)
+  const artistScrobbles = new Map<string, number>()
+  for (const t of allTracks) {
+    const parts = splitArtistNames(t.artist)
+    const primary = parts[0] || normalizeArtistName(t.artist)
+    artistScrobbles.set(primary, (artistScrobbles.get(primary) ?? 0) + t.scrobbleCount)
+  }
+
+  // Sort descending by scrobble count
+  const sorted = [...artistScrobbles.entries()].sort((a, b) => b[1] - a[1])
+
+  // Find our artist's rank
+  const targetVariants = normalizeArtistVariants(artistName)
+  let ranking = 0
+  for (let i = 0; i < sorted.length; i++) {
+    if (targetVariants.has(sorted[i][0])) {
+      ranking = i + 1
+      break
+    }
+  }
+
+  return { ranking: ranking || sorted.length + 1, totalArtists: sorted.length }
 }
 
 /**
@@ -152,9 +224,16 @@ export function artistTracksToTracks(artistTracks: ArtistTrack[]): Track[] {
       : undefined,
     scrobbleCount: t.scrobbleCount,
     dateAdded: t.scrobbleCount > 0 ? `${t.scrobbleCount} plays` : '',
-    duration: '--:--',
+    duration: formatDuration(t.durationSec),
     scrobbleStatus: 'verified' as const,
   }))
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds === 0) return '--:--'
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -169,9 +248,11 @@ type RawArtistTrack = {
   id: string
   title: string
   artist: string
+  album: string
   kind: number
   payload: string
   coverCid: string | null
+  durationSec: number | null
   scrobbles: Array<{ id: string; user: string; timestamp: string }>
 }
 
@@ -186,9 +267,11 @@ async function queryArtistTracks(params: { where: string; limit: number }): Prom
       id
       title
       artist
+      album
       kind
       payload
       coverCid
+      durationSec
       scrobbles(first: 1000) {
         id
         user
@@ -223,10 +306,11 @@ function mapArtistTracks(rawTracks: RawArtistTrack[]): { tracks: ArtistTrack[]; 
       trackId: t.id,
       title: t.title,
       artist: t.artist,
-      album: '', // subgraph doesn't index album separately
+      album: t.album ?? '',
       coverCid: t.coverCid ?? '',
       kind: t.kind,
       payload: t.payload ?? '',
+      durationSec: t.durationSec ?? 0,
       scrobbleCount: t.scrobbles.length,
       lastPlayed,
     }
@@ -244,7 +328,7 @@ export function normalizeArtistName(name: string): string {
     .toLowerCase()
     .replace(/\$/g, 's')
     .replace(/&/g, ' and ')
-    .replace(/feat\.?|ft\.?|featuring/g, ' feat ')
+    .replace(/\bfeat\.?\b|\bft\.?\b|\bfeaturing\b/g, ' feat ')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
     .replace(/\s+/g, ' ')
@@ -253,7 +337,7 @@ export function normalizeArtistName(name: string): string {
 export function splitArtistNames(name: string): string[] {
   const unified = name
     .toLowerCase()
-    .replace(/feat\.?|ft\.?|featuring/g, '|')
+    .replace(/\bfeat\.?\b|\bft\.?\b|\bfeaturing\b/g, '|')
     .replace(/\bstarring\b/g, '|')
     .replace(/&/g, '|')
     .replace(/\+/g, '|')

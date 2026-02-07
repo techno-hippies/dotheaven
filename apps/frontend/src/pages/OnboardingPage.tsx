@@ -22,6 +22,7 @@ import {
   Stepper,
 } from '@heaven/ui'
 import type { OnboardingBasicsData, OnboardingMusicData, OnboardingArtist } from '@heaven/ui'
+import { HOME } from '@heaven/core'
 import { useAuth } from '../providers'
 import { useOnboardingStatus } from '../hooks/useOnboardingStatus'
 import {
@@ -76,14 +77,14 @@ export const OnboardingPage: Component = () => {
   createEffect(() => {
     if (auth.isSessionRestoring()) return
     if (!auth.isAuthenticated()) {
-      navigate('/', { replace: true })
+      navigate(HOME, { replace: true })
     }
   })
 
   // Redirect if already complete
   createEffect(() => {
     if (onboarding.status() === 'complete') {
-      navigate('/', { replace: true })
+      navigate(HOME, { replace: true })
     }
   })
 
@@ -334,7 +335,7 @@ export const OnboardingPage: Component = () => {
 
       setStep('complete')
       // Redirect after brief confirmation
-      setTimeout(() => navigate('/', { replace: true }), 1200)
+      setTimeout(() => navigate(HOME, { replace: true }), 1200)
     } catch (err) {
       console.error('[Onboarding] Avatar upload error:', err)
       const msg = err instanceof Error ? err.message : String(err)
@@ -373,7 +374,7 @@ export const OnboardingPage: Component = () => {
       } catch { /* ignore */ }
 
       setStep('complete')
-      setTimeout(() => navigate('/', { replace: true }), 1200)
+      setTimeout(() => navigate(HOME, { replace: true }), 1200)
     } catch (err) {
       console.error('[Onboarding] Avatar import error:', err)
       setAvatarError(err instanceof Error ? err.message : 'Failed to set avatar. Please try again.')

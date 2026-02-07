@@ -9,9 +9,10 @@
 import { createSignal } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import type { Track } from '@heaven/ui'
+import { artist, album } from '@heaven/core'
 import { usePlayer } from '../providers'
 import type { TrackMenuActions } from '@heaven/ui'
-import { fetchRecordingArtists, payloadToMbid } from '../lib/heaven'
+import { fetchRecordingArtists, fetchRecordingReleaseGroup, payloadToMbid } from '../lib/heaven'
 
 // ── AddToPlaylistDialog state ─────────────────────────────────────
 
@@ -109,7 +110,7 @@ export function useArtistNavigation() {
   return async (track: Track) => {
     // 1. Check for artistMbid on extended track types (e.g. LocalTrack)
     if (track.artistMbid) {
-      navigate(`/artist/${track.artistMbid}`)
+      navigate(artist(track.artistMbid))
       return
     }
 
@@ -118,7 +119,7 @@ export function useArtistNavigation() {
       try {
         const result = await fetchRecordingArtists(track.mbid)
         if (result.artists.length > 0) {
-          navigate(`/artist/${result.artists[0].mbid}`)
+          navigate(artist(result.artists[0].mbid))
           return
         }
       } catch { /* fall through */ }
@@ -131,7 +132,7 @@ export function useArtistNavigation() {
         try {
           const result = await fetchRecordingArtists(recordingMbid)
           if (result.artists.length > 0) {
-            navigate(`/artist/${result.artists[0].mbid}`)
+            navigate(artist(result.artists[0].mbid))
             return
           }
         } catch { /* fall through */ }
@@ -142,18 +143,55 @@ export function useArtistNavigation() {
   }
 }
 
-// ── Standard menu actions (AddToPlaylist + AddToQueue + GoToArtist) ─
+// ── Album navigation helper ──────────────────────────────────────
+
+/**
+ * Resolves a track to its release-group (album) MBID and navigates to the album page.
+ * Uses the recording resolver which now returns releaseGroup info.
+ */
+export function useAlbumNavigation() {
+  const navigate = useNavigate()
+
+  return async (track: Track) => {
+    console.log('[AlbumNav] clicked', { title: track.title, artist: track.artist, album: track.album, mbid: track.mbid, kind: track.kind, payload: track.payload })
+
+    // 1. For on-chain scrobbles with kind=1 (MBID), resolve via recording
+    const recordingMbid = track.mbid ?? (track.kind === 1 && track.payload ? payloadToMbid(track.payload) : null)
+    console.log('[AlbumNav] recordingMbid:', recordingMbid)
+
+    if (recordingMbid) {
+      try {
+        console.log('[AlbumNav] fetching release-group for recording:', recordingMbid)
+        const rg = await fetchRecordingReleaseGroup(recordingMbid)
+        console.log('[AlbumNav] release-group result:', rg)
+        if (rg) {
+          console.log('[AlbumNav] navigating to album:', rg.mbid)
+          navigate(album(rg.mbid))
+          return
+        }
+      } catch (err) {
+        console.error('[AlbumNav] error:', err)
+      }
+    }
+
+    console.log('[AlbumNav] no release-group found, cannot navigate')
+  }
+}
+
+// ── Standard menu actions (AddToPlaylist + AddToQueue + GoToArtist + GoToAlbum) ─
 
 export function buildMenuActions(
   playlistDialog: ReturnType<typeof usePlaylistDialog>,
   extra?: Partial<TrackMenuActions>,
 ): TrackMenuActions {
   const goToArtist = useArtistNavigation()
+  const goToAlbum = useAlbumNavigation()
 
   return {
     onAddToPlaylist: playlistDialog.trigger,
     onAddToQueue: (track) => console.log('Add to queue:', track),
     onGoToArtist: goToArtist,
+    onGoToAlbum: goToAlbum,
     ...extra,
   }
 }
