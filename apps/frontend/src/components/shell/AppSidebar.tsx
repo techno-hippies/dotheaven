@@ -14,9 +14,10 @@ import {
   DialogDescription,
   DialogCloseButton,
   DownloadDialog,
+  CreateDialog,
 } from '@heaven/ui'
 import {
-  HOME, PROFILE, WALLET, SCHEDULE, SEARCH, CHAT, SETTINGS,
+  HOME, PROFILE, WALLET, SCHEDULE, COMMUNITY, CHAT, SETTINGS,
   musicTab, playlist,
 } from '@heaven/core'
 import { AppLogo } from './header'
@@ -206,7 +207,7 @@ interface NavItemProps {
 const NavItem: Component<NavItemProps> = (props) => (
   <button
     type="button"
-    class={`flex items-center gap-3 rounded-md cursor-pointer transition-colors hover:bg-[var(--bg-highlight-hover)] ${props.active ? 'bg-[var(--bg-highlight)]' : ''} ${props.compact ? 'w-11 h-12 justify-center p-0' : 'w-full px-3 py-3'}`}
+    class={`flex items-center gap-3 rounded-md cursor-pointer transition-colors hover:bg-[var(--bg-highlight-hover)] ${props.active ? 'bg-[var(--bg-highlight)]' : ''} ${props.compact ? 'w-11 h-11 justify-center p-0' : 'w-full px-3 py-3'}`}
     onClick={props.onClick}
     title={props.label}
   >
@@ -233,6 +234,7 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
   const player = usePlayer()
   const queryClient = useQueryClient()
   const [downloadOpen, setDownloadOpen] = createSignal(false)
+  const [createOpen, setCreateOpen] = createSignal(false)
   const [createPlaylistOpen, setCreatePlaylistOpen] = createSignal(false)
   const [newPlaylistName, setNewPlaylistName] = createSignal('')
   const [creatingPlaylist, setCreatingPlaylist] = createSignal(false)
@@ -467,9 +469,9 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
         </div>
 
         {/* Main navigation */}
-        <nav class="flex flex-col gap-1">
+        <nav class={`flex flex-col gap-1 ${props.compact ? 'items-center' : ''}`}>
           <NavItem icon={HomeIcon} label="Home" path={HOME} active={isActive(HOME)} onClick={() => navigate(HOME)} compact={props.compact} />
-          <NavItem icon={SearchIcon} label="Search" path={SEARCH} active={isActive(SEARCH)} onClick={() => navigate(SEARCH)} compact={props.compact} />
+          <NavItem icon={SearchIcon} label="Community" path={COMMUNITY} active={isActive(COMMUNITY)} onClick={() => navigate(COMMUNITY)} compact={props.compact} />
           <NavItem icon={ChatCircleIcon} label="Messages" path={CHAT} active={location.pathname.startsWith(CHAT)} onClick={() => navigate(CHAT)} badge={unreadMessageCount()} compact={props.compact} />
           <NavItem icon={WalletIcon} label="Wallet" path={WALLET} active={isActive(WALLET)} onClick={() => navigate(WALLET)} compact={props.compact} />
           <NavItem icon={CalendarIcon} label="Schedule" path={SCHEDULE} active={isActive(SCHEDULE)} onClick={() => navigate(SCHEDULE)} compact={props.compact} />
@@ -477,17 +479,22 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
         </nav>
 
         {/* Music section - unified library + playlists */}
-        <div class="mt-6 -mx-3 px-3 border-t border-[var(--bg-highlight)] pt-4">
+        <div class="mt-6 -mx-3 px-3 border-t border-[var(--border-subtle)] pt-4">
           <div class="flex items-center justify-between px-3 mb-2 min-h-10">
             <Show when={!props.compact}>
               <span class="text-base text-[var(--text-muted)] font-medium whitespace-nowrap">Music</span>
-              <IconButton variant="soft" size="md" aria-label="Create playlist" onClick={() => auth.isAuthenticated() ? setCreatePlaylistOpen(true) : openAuthDialog()}>
+              <IconButton
+                variant="soft"
+                size="md"
+                aria-label="Create"
+                onClick={() => auth.isAuthenticated() ? setCreateOpen(true) : openAuthDialog()}
+              >
                 <PlusIcon />
               </IconButton>
             </Show>
           </div>
 
-          <div class={`flex flex-col ${props.compact ? 'gap-1.5' : 'gap-0.5'}`}>
+          <div class={`flex flex-col ${props.compact ? 'gap-1.5 items-center' : 'gap-0.5'}`}>
             {/* System collections (Local, Cloud, Shared) */}
             <Show when={platform.isTauri}>
               <Show when={props.compact} fallback={
@@ -582,7 +589,7 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
         </div>
 
         {/* Download + Settings - bottom sidebar actions */}
-        <div class="mt-auto pt-3 flex flex-col gap-1">
+        <div class={`mt-auto pt-3 flex flex-col gap-1 ${props.compact ? 'items-center' : ''}`}>
           <NavItem
             icon={DownloadIcon}
             label="Download"
@@ -604,6 +611,14 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
 
       {/* Download Dialog */}
       <DownloadDialog open={downloadOpen()} onOpenChange={setDownloadOpen} />
+
+      {/* Create Dialog (New Playlist / Publish Song) */}
+      <CreateDialog
+        open={createOpen()}
+        onOpenChange={setCreateOpen}
+        onNewPlaylist={() => setCreatePlaylistOpen(true)}
+        onPublishSong={() => navigate(musicTab('publish'))}
+      />
 
       {/* Create Playlist Dialog */}
       <Dialog open={createPlaylistOpen()} onOpenChange={setCreatePlaylistOpen}>

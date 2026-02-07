@@ -34,6 +34,7 @@
  * - filebasePlaintextKey: Dev override
  * - openrouterEncryptedKey: Lit-encrypted OpenRouter key (for text safety check)
  * - openrouterPlaintextKey: Dev override for OpenRouter key
+ * - signature: Pre-signed EIP-191 signature (skips in-action PKP signing if provided)
  * - dryRun: boolean (default false) — skip Story broadcast
  * - skipStoryRegistration: boolean — skip Story Protocol (auto-true for text posts)
  * - attribution: { ownership, sourceUrl, sourcePlatform, sourceHandle } — for shared content
@@ -240,17 +241,17 @@ async function uploadToFilebase(filebaseApiKey, content, contentType, fileName) 
 // ============================================================
 
 /**
- * Classifies text content for 18+ status.
+ * Classifies text content for 18+ status and detects language.
  * @param openRouterKey - OpenRouter API key
  * @param text - Text content to classify
- * @returns { safe: boolean, isAdult: boolean, reason?: string }
+ * @returns { safe: boolean, isAdult: boolean, lang: string, reason?: string }
  */
 async function textSafetyCheck(openRouterKey, text) {
   if (!text || text.trim().length === 0) {
-    return { safe: true, isAdult: false };
+    return { safe: true, isAdult: false, lang: "en" };
   }
 
-  const promptText = `Classify this text for content safety. Respond with ONLY a JSON object, no markdown.
+  const promptText = `Classify this text for content safety and detect its language. Respond with ONLY a JSON object, no markdown.
 
 RULES:
 - safe=false: illegal content, CSAM references, graphic violence instructions, hate speech inciting violence
@@ -260,14 +261,15 @@ RULES:
   • Drug use references or glorification
   • Sexually charged comments, innuendo, flirting
   • Graphic violence descriptions
+- lang: ISO 639-1 language code of the text (e.g. "en", "ja", "es", "fr", "de", "zh", "ko")
 - reason: brief explanation (required if safe=false)
 
 EXAMPLES:
-"beautiful sunset today" → {"safe":true,"isAdult":false}
-"damn this party is wild af 🔥" → {"safe":true,"isAdult":true}
-"fuck yeah let's go!" → {"safe":true,"isAdult":true}
-"you look hot 😏" → {"safe":true,"isAdult":true}
-"great job on the project" → {"safe":true,"isAdult":false}
+"beautiful sunset today" → {"safe":true,"isAdult":false,"lang":"en"}
+"damn this party is wild af 🔥" → {"safe":true,"isAdult":true,"lang":"en"}
+"今日はいい天気ですね" → {"safe":true,"isAdult":false,"lang":"ja"}
+"putain c'est génial" → {"safe":true,"isAdult":true,"lang":"fr"}
+"great job on the project" → {"safe":true,"isAdult":false,"lang":"en"}
 
 TEXT TO CLASSIFY: "${text.slice(0, 2000)}"`;
 
@@ -296,10 +298,15 @@ TEXT TO CLASSIFY: "${text.slice(0, 2000)}"`;
   try {
     const jsonMatch = answer.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON in response");
-    return JSON.parse(jsonMatch[0]);
+    const parsed = JSON.parse(jsonMatch[0]);
+    // Ensure lang is a valid 2-char code, default to "en"
+    if (!parsed.lang || typeof parsed.lang !== "string" || parsed.lang.length !== 2) {
+      parsed.lang = "en";
+    }
+    return parsed;
   } catch {
     // Conservative fallback: mark as adult if we can't parse
-    return { safe: true, isAdult: true, reason: "Could not classify" };
+    return { safe: true, isAdult: true, lang: "en", reason: "Could not classify" };
   }
 }
 
@@ -357,6 +364,7 @@ const main = async () => {
       dryRun = false,
       skipStoryRegistration,             // Now undefined by default (auto-detected)
       attribution,
+      signature: preSignedSig,           // Pre-signed EIP-191 (skips in-action PKP signing)
     } = jsParams || {};
 
     must(userPkpPublicKey, "userPkpPublicKey");
@@ -411,29 +419,38 @@ const main = async () => {
       ? ethers.utils.keccak256(ethers.utils.toUtf8Bytes(text)).slice(0, 18) // first 8 bytes as hex
       : imageCid;
     const message = `heaven:post:${contentIdentifier}:${timestamp}:${nonce}`;
-    const msgHash = ethers.utils.hashMessage(message);
-    let sigResult;
-    try {
-      sigResult = await Lit.Actions.signAndCombineEcdsa({
-        toSign: Array.from(ethers.utils.arrayify(msgHash)),
-        publicKey: userPkpPublicKey,
-        sigName: "user_post_sig",
-      });
-    } catch (sigErr) {
-      throw new Error(`User PKP signing failed: ${sigErr?.message || sigErr}`);
-    }
-    const sigStr = String(sigResult || "").trim();
-    if (sigStr.startsWith("[ERROR]") || sigStr.includes("[ERROR]"))
-      throw new Error(`User PKP signing failed: ${sigStr.slice(0, 200)}`);
 
-    const sigObj = JSON.parse(sigStr);
-    let userV = Number(sigObj.recid ?? sigObj.recoveryId ?? sigObj.v);
-    if (userV === 0 || userV === 1) userV += 27;
-    const signature = ethers.utils.joinSignature({
-      r: `0x${strip0x(sigObj.r)}`,
-      s: `0x${strip0x(sigObj.s)}`,
-      v: userV,
-    });
+    let signature;
+
+    if (preSignedSig) {
+      // Use pre-signed signature (e.g. from frontend PKP signing or test harness)
+      signature = preSignedSig;
+    } else {
+      // Sign within Lit Action using user's PKP
+      const msgHash = ethers.utils.hashMessage(message);
+      let sigResult;
+      try {
+        sigResult = await Lit.Actions.signAndCombineEcdsa({
+          toSign: Array.from(ethers.utils.arrayify(msgHash)),
+          publicKey: userPkpPublicKey,
+          sigName: "user_post_sig",
+        });
+      } catch (sigErr) {
+        throw new Error(`User PKP signing failed: ${sigErr?.message || sigErr}`);
+      }
+      const sigStr = String(sigResult || "").trim();
+      if (sigStr.startsWith("[ERROR]") || sigStr.includes("[ERROR]"))
+        throw new Error(`User PKP signing failed: ${sigStr.slice(0, 200)}`);
+
+      const sigObj = JSON.parse(sigStr);
+      let userV = Number(sigObj.recid ?? sigObj.recoveryId ?? sigObj.v);
+      if (userV === 0 || userV === 1) userV += 27;
+      signature = ethers.utils.joinSignature({
+        r: `0x${strip0x(sigObj.r)}`,
+        s: `0x${strip0x(sigObj.s)}`,
+        v: userV,
+      });
+    }
 
     const recovered = ethers.utils.verifyMessage(message, signature);
     if (recovered.toLowerCase() !== userAddress.toLowerCase())
@@ -460,6 +477,7 @@ const main = async () => {
     // STEP 3.5: Text safety check (text posts only)
     // ========================================
     let isAdult = isAdultOverride || false;
+    let detectedLang = null; // ISO 639-1 code from safety check
 
     if (isTextPost && !isAdultOverride) {
       // Decrypt OpenRouter key and run safety check
@@ -483,6 +501,7 @@ const main = async () => {
       }
 
       isAdult = !!safety.isAdult;
+      detectedLang = safety.lang || null;
     }
 
     // ========================================
@@ -512,6 +531,8 @@ const main = async () => {
         : { mediaUrl: `${IPFS_GATEWAY}/${imageCid}`, mediaType: contentType }
       ),
       isAdult,
+      // Language detected by AI safety check (ISO 639-1, text posts only)
+      ...(detectedLang ? { language: detectedLang } : {}),
       rightsMode: rm,
       parentIpId: parentIpId || undefined,
       appId: "heaven",
@@ -897,6 +918,7 @@ const main = async () => {
     } catch (megaErr) {
       // MegaETH mirror is best-effort — don't fail the whole post
       // Story registration already succeeded
+      console.log("MegaETH mirror error (best-effort):", megaErr?.message || String(megaErr));
     }
 
     Lit.Actions.setResponse({

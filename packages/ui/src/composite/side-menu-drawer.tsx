@@ -65,7 +65,7 @@ export const SideMenuDrawer: Component<SideMenuDrawerProps> = (props) => {
         }
       >
         {/* Header: Logo */}
-        <div class="flex items-center gap-3 pb-4 border-b border-[var(--bg-highlight)]">
+        <div class="flex items-center gap-3 pb-4 border-b border-[var(--border-subtle)]">
           <Show
             when={props.logoSrc}
             fallback={
@@ -83,7 +83,7 @@ export const SideMenuDrawer: Component<SideMenuDrawerProps> = (props) => {
 
         {/* User info (authenticated only) */}
         <Show when={props.isAuthenticated && props.displayName}>
-          <div class="flex items-center gap-3 py-4 border-b border-[var(--bg-highlight)]">
+          <div class="flex items-center gap-3 py-4 border-b border-[var(--border-subtle)]">
             <Avatar
               src={props.avatarUrl}
               alt={props.displayName ?? ''}

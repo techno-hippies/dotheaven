@@ -40,9 +40,9 @@ export const PostDetailView: Component<PostDetailViewProps> = (props) => {
   return (
     <div class={cn('flex flex-col h-full', props.class)}>
       {/* Sticky header */}
-      <div class="flex items-center gap-3 px-4 h-14 border-b border-[var(--bg-highlight)] bg-[var(--bg-surface)] flex-shrink-0">
+      <div class="flex items-center gap-3 px-4 h-14 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] flex-shrink-0">
         <IconButton
-          variant="ghost"
+          variant="soft"
           size="md"
           aria-label="Back"
           onClick={props.onBack}
@@ -57,7 +57,7 @@ export const PostDetailView: Component<PostDetailViewProps> = (props) => {
         <FeedPost {...props.post} />
 
         {/* Divider */}
-        <div class="border-t border-[var(--bg-highlight)]" />
+        <div class="border-t border-[var(--border-subtle)]" />
 
         {/* Comments */}
         <div class="p-4">
@@ -88,18 +88,18 @@ export const PostDetailView: Component<PostDetailViewProps> = (props) => {
 
       {/* Sticky bottom comment input */}
       <Show when={props.onSubmitComment}>
-        <div class="flex items-center gap-2 p-3 border-t border-[var(--bg-highlight)] bg-[var(--bg-surface)] flex-shrink-0">
+        <div class="flex items-center gap-3 p-4 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] flex-shrink-0">
           <input
             type="text"
             placeholder="Add a comment..."
             value={commentText()}
             onInput={(e) => setCommentText(e.currentTarget.value)}
             onKeyDown={handleKeyDown}
-            class="flex-1 bg-[var(--bg-elevated)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] px-3 py-2.5 rounded-md border-none outline-none focus:ring-2 focus:ring-[var(--accent-blue)]/50"
+            class="flex-1 bg-[var(--bg-elevated)] text-base text-[var(--text-primary)] placeholder:text-[var(--text-muted)] px-4 py-3 rounded-full border-none outline-none focus:ring-2 focus:ring-[var(--accent-blue)]/50"
           />
           <IconButton
             variant="send"
-            size="md"
+            size="xl"
             aria-label="Send comment"
             disabled={!commentText().trim()}
             onClick={handleSubmit}

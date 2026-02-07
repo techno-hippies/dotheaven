@@ -82,7 +82,7 @@ bun check            # Type check all packages
 - **AA client** (`apps/frontend/src/lib/aa-client.ts`): Builds ERC-4337 UserOps targeting ScrobbleV4. PKP signs `userOpHash`, gateway adds paymaster signature, bundler (Alto) submits to EntryPoint
 - **ScrobbleV4 contract**: `0xBcD4EbBb964182ffC5EA03FF70761770a326Ccf1` on MegaETH (chain 6343). AA-enabled — `onlyAccountOf(user)` gating via factory-derived SimpleAccount. Stores `uint32 durationSec` per track.
 - **ScrobbleV3 contract**: `0x144c450cd5B641404EEB5D5eD523399dD94049E0` on MegaETH (chain 6343). Legacy sponsor-gated version — still deployed, used by playlists Lit Action for track registration
-- **Subgraph**: Goldsky `dotheaven-activity/11.0.0` indexes `TrackRegistered` + `TrackCoverSet` + `Scrobbled` + `PostCreated` + `ContentRegistered` events from both ScrobbleV3 and ScrobbleV4
+- **Subgraph**: Goldsky `dotheaven-activity/12.0.0` indexes `TrackRegistered` + `TrackCoverSet` + `Scrobbled` + `PostCreated` + `ContentRegistered` + `TranslationAdded` + `Liked` + `Unliked` + `CommentAdded` + `Flagged` events from ScrobbleV3, ScrobbleV4, PostsV1, and EngagementV2
 - **Frontend**: `ScrobblesPage` fetches from subgraph, displays verified/unidentified status with cover art
 - **Cover art pipeline** (Tauri): Rust extracts cover from audio tags → Tauri reads bytes → base64 sent via AA → cached in local SQLite → displayed via `heaven.myfilebase.com` dedicated gateway with image optimization params
 - **Auto-refresh**: After scrobble, `queryClient.invalidateQueries(['scrobbles'])` refreshes profile. Waits for cover TX confirmation before invalidating.
@@ -182,8 +182,30 @@ bun check            # Type check all packages
   - `packages/ui/src/data/tags.ts` — tag dictionary + pack/unpack helpers
   - `subgraphs/profiles/` — subgraph definition (schema, mapping, ABI)
 
+### Social Feed (Posts + Translation)
+- **PostsV1 contract**: `0xFe674F421c2bBB6D664c7F5bc0D5A0204EE0bFA6` on MegaETH (chain 6343)
+- **EngagementV2 contract**: `0xAF769d204e51b64D282083Eb0493F6f37cd93138` on MegaETH (chain 6343)
+- **Lit Actions**: `post-register-v1.js` (create posts), `post-translate-v1.js` (translate posts)
+- **Post creation pipeline**:
+  1. Text safety check via OpenRouter LLM — returns `{ safe, isAdult, lang }` (ISO 639-1 language code)
+  2. Metadata uploaded to IPFS (Filebase) with `language` field
+  3. Sponsor PKP broadcasts `PostsV1.postFor()` on MegaETH
+  4. Photo posts also register on Story Protocol (text posts skip Story)
+- **Language detection**: LLM safety check doubles as language detector. Language stored in IPFS metadata, used by frontend to show/hide "Translate" button (`postLang !== userLang`)
+- **Translation pipeline**: User signs EIP-191, Lit Action calls LLM for translation, sponsor PKP broadcasts `EngagementV2.translateFor()`. Translations stored as events (no storage cost)
+- **Data source**: `dotheaven-activity/12.0.0` subgraph indexes `PostCreated` + `TranslationAdded` events
+- **Feed resolution**: Each post resolves author name/avatar via heaven name lookup + RecordsV1, fetches text/photos from IPFS metadata
+- **Compose**: `ComposeBox` (desktop inline) / `ComposeDrawer` (mobile FAB) — currently stubbed (`console.log`), not yet wired to Lit Action
+- **Key files**:
+  - `apps/frontend/src/pages/FeedPage.tsx` — feed with TanStack Query, translation support
+  - `apps/frontend/src/pages/PostPage.tsx` — single post detail view
+  - `apps/frontend/src/lib/heaven/posts.ts` — subgraph queries, IPFS metadata fetch, translation via Lit Action
+  - `packages/ui/src/composite/feed/feed-post.tsx` — FeedPost component with `postLang` / `needsTranslation()` logic
+  - `lit-actions/features/social/post-register-v1.js` — post creation action
+  - `lit-actions/features/social/post-translate-v1.js` — translation action
+
 ### Community Homepage
-- **Homepage** (`App.tsx`): Community member discovery page using `CommunityFeed` component
+- **Community page** (`App.tsx`): Community member discovery using `CommunityFeed` component
 - **Data source**: `dotheaven-profiles` subgraph indexes ProfileV2 events, denormalizes all enums for filtering
 - **Tabs**: All (everyone) / Nearby (same `locationCityId`)
 - **Resolution**: Each profile card resolves heaven name + avatar + bio via RPC (getPrimaryName, getTextRecord, resolveAvatarUri)
@@ -197,7 +219,7 @@ Three Goldsky subgraphs on MegaETH testnet (3-slot limit):
 
 | Subgraph | Version | Indexes | Source Dir |
 |----------|---------|---------|------------|
-| `dotheaven-activity` | 11.0.0 | ScrobbleV3 + ScrobbleV4 + PostsV1 + ContentRegistry | `subgraphs/activity-feed/` |
+| `dotheaven-activity` | 12.0.0 | ScrobbleV3 + ScrobbleV4 + PostsV1 + ContentRegistry + EngagementV2 | `subgraphs/activity-feed/` |
 | `dotheaven-profiles` | 1.0.0 | ProfileV2 | `subgraphs/profiles/` |
 | `dotheaven-playlists` | 1.0.0 | PlaylistV1 | `subgraphs/playlist-feed/` |
 
@@ -205,7 +227,7 @@ API base: `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/
 
 Deploy: `cd subgraphs/<dir> && npx graph codegen && npx graph build && goldsky subgraph deploy <name>/<version>`
 
-**Note**: `dotheaven-content` was merged into `dotheaven-activity` v7.0.0. ScrobbleV4 was added in v11.0.0.
+**Note**: `dotheaven-content` was merged into `dotheaven-activity` v7.0.0. ScrobbleV4 was added in v11.0.0. EngagementV2 (translations, likes, comments, flags) was added in v12.0.0.
 
 ### Local Music Library (Tauri-only)
 - **Rust SQLite backend** (`src-tauri/src/music_db.rs`): rusqlite + lofty + walkdir
@@ -230,14 +252,14 @@ Deploy: `cd subgraphs/<dir> && npx graph codegen && npx graph build && goldsky s
 
 ## Key Routes
 ```
-/                      # Home (community member discovery)
+/                      # Home (social feed — posts with translation)
 /chat/ai/:personalityId  # AI chat (Scarlett) - has voice call
 /chat/:username        # XMTP peer-to-peer chat
 /wallet                # Wallet page
 /music                 # Music library (local/cloud/shared tabs)
 /music/:tab            # Music library specific tab
 /playlist/:id          # Playlist page
-/post/:id              # Single post view (legacy deep-link compat)
+/post/:id              # Single post detail view
 /u/:id                 # Public profile (address, heaven name, ENS, or HNS)
 /profile               # Own profile (edit mode)
 /settings              # Settings page
@@ -298,17 +320,30 @@ VITE_RESOLVER_URL        # Heaven Resolver (MusicBrainz proxy + image rehosting)
 ## Design Guidelines
 
 ### Border Radius System
-**Simple rule: Use `rounded-md` (6px) for everything, except perfect circles which use `rounded-full`**
 
-- Buttons, inputs, search bars, cards, dropdowns: `rounded-md`
-- List items, menu items, hover states: `rounded-md`
-- Dialogs, modals, content containers: `rounded-md`
-- Album covers (square images): `rounded-md`
-- Avatars (circle), play buttons, send buttons: `rounded-full`
+| Element Type | Radius | Notes |
+|---|---|---|
+| **IconButton** (all variants) | `rounded-full` | Circular |
+| **Button** (text buttons) | `rounded-full` | Pill/capsule shape |
+| **Chips/pills** | `rounded-full` | PillGroup, LanguageChip, MultiSelect chips |
+| **Input fields** | `rounded-full` | TextField, Select, LocationInput, MessageInput |
+| **Textarea fields** | `rounded-2xl` | TextArea, multiline inputs |
+| **Dropdown containers** | `rounded-md` | DropdownMenuContent, SelectContent |
+| **Cards/dialogs/modals** | `rounded-md` | Subtle 6px corners |
+| **Sidebar/tabs** | None | Flat, no radius |
+| **Avatars (people)** | `rounded-full` | Circular |
+| **Album covers** | `rounded-md` | Subtle 6px corners |
+| **Drawers** | `rounded-t-xl` | Top corners only |
 
-**Never use**: `rounded-sm`, `rounded-lg`, `rounded-xl`, `rounded-2xl`, or `rounded-full` for non-circular elements!
+**Rule of thumb**: Interactive elements (buttons, chips, input fields, selects) are `rounded-full`. Textareas are `rounded-2xl`. Containers (cards, dialogs, dropdowns) are `rounded-md`.
 
-**Rationale**: The 6px radius provides a subtle, modern look that works better for small UI elements (icon buttons, menu items, list rows) while avoiding the overly-rounded bubble appearance of larger radii.
+### IconButton Standard
+- **Always use `IconButton`** for icon-only buttons — never raw `<button>` with inline icon
+- **Default variant**: `soft` (hover bg + color change). Use for all standard icon buttons
+- **`ghost` variant**: Reserved for stories/demos only. Production code should use `soft`
+- **Sizes**: `sm` (28px), `md` (36px, standard), `lg` (44px), `xl` (48px, send buttons)
+- **Icon sizes**: `sm` → `w-3.5 h-3.5`, `md` → `w-5 h-5`, `lg` → `w-6 h-6`
+- **Engagement bar exception**: Uses raw buttons with per-action semantic hover colors (blue/green/red) — these match `md` sizing via `p-2` + `w-5 h-5`
 
 ### Component Reuse (IMPORTANT)
 **Always use existing reusable components from `@heaven/ui` before creating new ones.**

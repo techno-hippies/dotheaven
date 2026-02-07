@@ -315,12 +315,12 @@ export const AIChatPage: Component = () => {
   return (
     <div class="h-full flex flex-col">
       {/* Chat header */}
-      <div class="flex items-center justify-between px-4 py-3 border-b border-[var(--border-default)]">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)]">
             <div class="flex items-center gap-3">
               {/* Back button on mobile */}
               <Show when={isMobile()}>
                 <IconButton
-                  variant="ghost"
+                  variant="soft"
                   size="md"
                   aria-label="Back to messages"
                   onClick={() => navigate(CHAT)}

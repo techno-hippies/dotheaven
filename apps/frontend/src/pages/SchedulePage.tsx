@@ -4,12 +4,17 @@ import {
   BookingDetail,
   UpcomingSessions,
   Button,
+  IconButton,
+  Switch,
+  ChevronLeft,
   CalendarBlank,
   type BookingDetailData,
   type BookingData,
   type SessionSlotData,
 } from '@heaven/ui'
 import { createQuery } from '@tanstack/solid-query'
+import { useNavigate } from '@solidjs/router'
+import { SCHEDULE_AVAILABILITY } from '@heaven/core'
 import { useAuth } from '../providers/AuthContext'
 import {
   getUserBookings,
@@ -85,6 +90,7 @@ interface BookingWithMeta {
 
 export const SchedulePage: Component = () => {
   const auth = useAuth()
+  const navigate = useNavigate()
 
   // Initialize session service for direct PKP transactions
   onMount(() => {
@@ -111,39 +117,12 @@ export const SchedulePage: Component = () => {
     onError: (error) => console.error('[SchedulePage] Voice error:', error),
   })
 
-  const [view, setView] = createSignal<'upcoming' | 'availability' | 'detail'>('upcoming')
+  const [view, setView] = createSignal<'upcoming' | 'detail'>('upcoming')
   const [selectedBookingId, setSelectedBookingId] = createSignal<number | null>(null)
   const [_isLoading, setIsLoading] = createSignal(false)
   const [txError, setTxError] = createSignal<string | null>(null)
 
-  const address = () => auth.pkpAddress()
-
-  // ── TanStack queries ──────────────────────────────────────────
-
-  const basePriceQuery = createQuery(() => ({
-    queryKey: ['hostBasePrice', address()],
-    queryFn: () => getHostBasePrice(address()! as Address),
-    get enabled() { return !!address() },
-    staleTime: 1000 * 60 * 5,
-  }))
-
-  const slotsQuery = createQuery(() => ({
-    queryKey: ['hostSlots', address()],
-    queryFn: async () => {
-      const slots = await getHostOpenSlots(address()! as Address)
-      return slots.map((s): SessionSlotData => ({
-        id: s.id,
-        startTime: s.startTime,
-        durationMins: s.durationMins,
-        priceEth: s.priceEth,
-        status: s.status === SlotStatus.Open ? 'open' : s.status === SlotStatus.Booked ? 'booked' : s.status === SlotStatus.Cancelled ? 'cancelled' : 'settled',
-      }))
-    },
-    get enabled() { return !!address() },
-    staleTime: 1000 * 60 * 2,
-  }))
-
-  // Fetch user's bookings (to merge guest names into slot data for the dashboard)
+  // Fetch user's bookings
   const [bookingsData, { refetch: refetchBookings }] = createResource(
     () => auth.pkpAddress(),
     async (addr) => {
@@ -177,32 +156,6 @@ export const SchedulePage: Component = () => {
     }
   )
 
-  // ── Schedule accepting toggle (UI-only for now) ───────────────
-  const [scheduleAccepting, setScheduleAccepting] = createSignal(
-    localStorage.getItem('heaven:schedule:accepting') === 'true'
-  )
-  const handleToggleAccepting = (accepting: boolean) => {
-    setScheduleAccepting(accepting)
-    localStorage.setItem('heaven:schedule:accepting', String(accepting))
-  }
-
-  // ── Merge bookings into slot data for dashboard display ───────
-  const dashboardSlots = (): SessionSlotData[] => {
-    const contractSlots = slotsQuery.data || []
-    const bookingItems = bookingsData() || []
-
-    // Enrich slots with guest names from bookings
-    return contractSlots.map(slot => {
-      const bookingItem = bookingItems.find(
-        b => b.slot.id === slot.id && b.isHost && b.booking.status === BookingStatus.Booked
-      )
-      if (bookingItem) {
-        return { ...slot, guestName: bookingItem.counterpartyName }
-      }
-      return slot
-    })
-  }
-
   // ── Upcoming bookings for the UpcomingSessions view ──────────
   const upcomingBookings = (): BookingData[] => {
     const items = bookingsData() || []
@@ -227,56 +180,6 @@ export const SchedulePage: Component = () => {
         }
       })
       .sort((a, b) => a.startTime - b.startTime)
-  }
-
-  // ── Dashboard handlers ────────────────────────────────────────
-
-  const handleSetBasePrice = async (priceEth: string) => {
-    setTxError(null)
-    setIsLoading(true)
-    try {
-      await setBasePrice(priceEth)
-      basePriceQuery.refetch()
-    } catch (err: any) {
-      console.error('[SchedulePage] setBasePrice failed:', err)
-      setTxError(err?.message || 'Failed to set base price')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleCreateSlot = async (startTime: number, durationMins: number) => {
-    setTxError(null)
-    try {
-      await createSlot({ startTime, durationMins })
-      slotsQuery.refetch()
-    } catch (err: any) {
-      console.error('[SchedulePage] createSlot failed:', err)
-      setTxError(err?.message || 'Failed to create slot')
-    }
-  }
-
-  const handleRemoveSlot = async (slotId: number) => {
-    setTxError(null)
-    try {
-      await cancelSlot(slotId)
-      slotsQuery.refetch()
-    } catch (err: any) {
-      console.error('[SchedulePage] cancelSlot failed:', err)
-      setTxError(err?.message || 'Failed to cancel slot')
-    }
-  }
-
-  const handleSlotClick = (slot: SessionSlotData) => {
-    if (slot.status === 'booked') {
-      // Find the booking for this slot
-      const bookingItems = bookingsData() || []
-      const match = bookingItems.find(b => b.slot.id === slot.id)
-      if (match) {
-        setSelectedBookingId(match.booking.id)
-        setView('detail')
-      }
-    }
   }
 
   const handleBookingClick = (booking: BookingData) => {
@@ -341,7 +244,6 @@ export const SchedulePage: Component = () => {
       await cancelBooking(item.booking.id, item.isHost)
       setSelectedBookingId(null)
       refetchBookings()
-      slotsQuery.refetch()
     } catch (err: any) {
       console.error('Failed to cancel booking:', err)
       setTxError(err?.message || 'Failed to cancel booking')
@@ -354,7 +256,7 @@ export const SchedulePage: Component = () => {
     await p2pVoice.leaveCall()
   }
 
-  const loading = () => slotsQuery.isLoading || bookingsData.loading
+  const loading = () => bookingsData.loading
 
   return (
     <div class="h-full overflow-y-auto">
@@ -364,7 +266,7 @@ export const SchedulePage: Component = () => {
             variant="ghost"
             size="sm"
             icon={<CalendarBlank />}
-            onClick={() => setView('availability')}
+            onClick={() => navigate(SCHEDULE_AVAILABILITY)}
           >
             Availability
           </Button>
@@ -397,32 +299,6 @@ export const SchedulePage: Component = () => {
               onBookingClick={handleBookingClick}
             />
           </Show>
-        </Show>
-
-        {/* View: Set Availability (ScheduleDashboard) */}
-        <Show when={view() === 'availability'}>
-          <div class="mb-4">
-            <button
-              onClick={() => setView('upcoming')}
-              class="flex items-center gap-1 text-sm text-[--text-muted] hover:text-[--text-primary] transition-colors"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-              Back to Schedule
-            </button>
-          </div>
-          <ScheduleDashboard
-            basePrice={basePriceQuery.data}
-            acceptingBookings={scheduleAccepting()}
-            onSetBasePrice={handleSetBasePrice}
-            onToggleAccepting={handleToggleAccepting}
-            slots={dashboardSlots()}
-            slotsLoading={slotsQuery.isLoading}
-            onCreateSlot={handleCreateSlot}
-            onRemoveSlot={handleRemoveSlot}
-            onSlotClick={handleSlotClick}
-          />
         </Show>
 
         {/* View: Booking Detail */}
@@ -466,6 +342,182 @@ export const SchedulePage: Component = () => {
           )}
         </Show>
       </div>
+    </div>
+  )
+}
+
+// ── Availability Page (separate route with header) ────────────────
+
+export const ScheduleAvailabilityPage: Component = () => {
+  const auth = useAuth()
+  const navigate = useNavigate()
+
+  onMount(() => {
+    initSessionService({
+      getAuthContext: () => auth.getAuthContext(),
+      getPkp: () => auth.pkpInfo(),
+    })
+  })
+
+  const [_isLoading, setIsLoading] = createSignal(false)
+  const [txError, setTxError] = createSignal<string | null>(null)
+
+  const address = () => auth.pkpAddress()
+
+  const basePriceQuery = createQuery(() => ({
+    queryKey: ['hostBasePrice', address()],
+    queryFn: () => getHostBasePrice(address()! as Address),
+    get enabled() { return !!address() },
+    staleTime: 1000 * 60 * 5,
+  }))
+
+  const slotsQuery = createQuery(() => ({
+    queryKey: ['hostSlots', address()],
+    queryFn: async () => {
+      const slots = await getHostOpenSlots(address()! as Address)
+      return slots.map((s): SessionSlotData => ({
+        id: s.id,
+        startTime: s.startTime,
+        durationMins: s.durationMins,
+        priceEth: s.priceEth,
+        status: s.status === SlotStatus.Open ? 'open' : s.status === SlotStatus.Booked ? 'booked' : s.status === SlotStatus.Cancelled ? 'cancelled' : 'settled',
+      }))
+    },
+    get enabled() { return !!address() },
+    staleTime: 1000 * 60 * 2,
+  }))
+
+  // Fetch bookings to enrich slots with guest names
+  const [bookingsData] = createResource(
+    () => auth.pkpAddress(),
+    async (addr) => {
+      if (!addr) return []
+      const results = await getUserBookings(addr as Address, { limit: 20 })
+
+      const enriched: BookingWithMeta[] = await Promise.all(
+        results.map(async ({ booking, slot, isHost }) => {
+          const counterparty = isHost ? booking.guest : slot.host
+          let counterpartyName: string | undefined
+
+          try {
+            const primaryName = await getPrimaryName(counterparty)
+            if (primaryName?.label) {
+              counterpartyName = `${primaryName.label}.heaven`
+            }
+          } catch {
+            // Name resolution failed
+          }
+
+          return { booking, slot, isHost, counterpartyName }
+        })
+      )
+
+      return enriched
+    }
+  )
+
+  const [scheduleAccepting, setScheduleAccepting] = createSignal(
+    localStorage.getItem('heaven:schedule:accepting') === 'true'
+  )
+  const handleToggleAccepting = (accepting: boolean) => {
+    setScheduleAccepting(accepting)
+    localStorage.setItem('heaven:schedule:accepting', String(accepting))
+  }
+
+  const dashboardSlots = (): SessionSlotData[] => {
+    const contractSlots = slotsQuery.data || []
+    const bookingItems = bookingsData() || []
+
+    return contractSlots.map(slot => {
+      const bookingItem = bookingItems.find(
+        b => b.slot.id === slot.id && b.isHost && b.booking.status === BookingStatus.Booked
+      )
+      if (bookingItem) {
+        return { ...slot, guestName: bookingItem.counterpartyName }
+      }
+      return slot
+    })
+  }
+
+  const handleSetBasePrice = async (priceEth: string) => {
+    setTxError(null)
+    setIsLoading(true)
+    try {
+      await setBasePrice(priceEth)
+      basePriceQuery.refetch()
+    } catch (err: any) {
+      console.error('[ScheduleAvailability] setBasePrice failed:', err)
+      setTxError(err?.message || 'Failed to set base price')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleCreateSlot = async (startTime: number, durationMins: number) => {
+    setTxError(null)
+    try {
+      await createSlot({ startTime, durationMins })
+      slotsQuery.refetch()
+    } catch (err: any) {
+      console.error('[ScheduleAvailability] createSlot failed:', err)
+      setTxError(err?.message || 'Failed to create slot')
+    }
+  }
+
+  const handleRemoveSlot = async (slotId: number) => {
+    setTxError(null)
+    try {
+      await cancelSlot(slotId)
+      slotsQuery.refetch()
+    } catch (err: any) {
+      console.error('[ScheduleAvailability] cancelSlot failed:', err)
+      setTxError(err?.message || 'Failed to cancel slot')
+    }
+  }
+
+  return (
+    <div class="flex flex-col h-full">
+      {/* Header with back chevron + accepting toggle */}
+      <div class="flex items-center gap-3 px-4 h-14 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] flex-shrink-0">
+        <IconButton
+          variant="soft"
+          size="md"
+          aria-label="Back"
+          onClick={() => navigate(-1)}
+        >
+          <ChevronLeft class="w-5 h-5" />
+        </IconButton>
+        <span class="flex-1 text-base font-semibold text-[var(--text-primary)]">Availability</span>
+        <Switch
+          checked={scheduleAccepting()}
+          onChange={handleToggleAccepting}
+        />
+      </div>
+
+      <div class={`flex-1 overflow-y-auto transition-opacity ${!scheduleAccepting() ? 'opacity-50 pointer-events-none' : ''}`}>
+        <div class="w-full max-w-4xl mx-auto px-4 py-6">
+          <ScheduleDashboard
+            basePrice={basePriceQuery.data}
+            acceptingBookings={scheduleAccepting()}
+            onSetBasePrice={handleSetBasePrice}
+            onToggleAccepting={handleToggleAccepting}
+            slots={dashboardSlots()}
+            slotsLoading={slotsQuery.isLoading}
+            onCreateSlot={handleCreateSlot}
+            onRemoveSlot={handleRemoveSlot}
+          />
+        </div>
+      </div>
+
+      {/* Bottom-right error toast */}
+      <Show when={txError()}>
+        <div class="fixed bottom-4 right-4 z-50 px-4 py-3 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-3 shadow-lg backdrop-blur-sm max-w-sm">
+          <span class="flex-1">{txError()}</span>
+          <button onClick={() => setTxError(null)} class="text-red-300 hover:text-red-200 flex-shrink-0">
+            Dismiss
+          </button>
+        </div>
+      </Show>
     </div>
   )
 }

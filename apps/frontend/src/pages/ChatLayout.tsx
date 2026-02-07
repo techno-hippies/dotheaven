@@ -22,16 +22,11 @@ import {
   Button,
   useIsMobile,
   PageHeader,
+  PencilSimple,
 } from '@heaven/ui'
 import { CHAT, peerChat, aiChat } from '@heaven/core'
 import { useXMTP, type ChatListItem as XMTPChatItem } from '../providers'
 import { usePeerName } from '../lib/hooks/usePeerName'
-
-const PenIcon = () => (
-  <svg class="w-5 h-5" viewBox="0 0 256 256" fill="currentColor">
-    <path d="M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM92.69,208H48V163.31l88-88L180.69,120ZM192,108.68,147.31,64l24-24L216,84.68Z" />
-  </svg>
-)
 
 const formatAddress = (addr: string) => {
   if (!addr) return ''
@@ -149,13 +144,13 @@ export const ChatLayout: ParentComponent = (props) => {
     <div class="flex h-full">
       {/* Left: Conversation list - hidden on mobile when viewing a chat */}
       <Show when={!isMobile() || !hasActiveChat()}>
-        <div class={`${isMobile() ? 'w-full' : 'w-[360px]'} flex-shrink-0 border-r border-[var(--bg-highlight)] flex flex-col h-full overflow-hidden`}>
+        <div class={`${isMobile() ? 'w-full' : 'w-[360px]'} flex-shrink-0 border-r border-[var(--border-subtle)] flex flex-col h-full overflow-hidden`}>
           {/* Header */}
           <PageHeader
             title="Messages"
             rightSlot={
-              <IconButton onClick={() => setNewChatOpen(true)} aria-label="New message" variant="ghost">
-                <PenIcon />
+              <IconButton onClick={() => setNewChatOpen(true)} aria-label="New message" variant="soft">
+                <PencilSimple class="w-5 h-5" />
               </IconButton>
             }
           />
@@ -212,7 +207,7 @@ export const ChatLayout: ParentComponent = (props) => {
               onInput={(e) => setNewChatAddress(e.currentTarget.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleStartChat() }}
               placeholder="0x... or name.eth"
-              class="w-full px-4 py-2.5 rounded-md bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
+              class="w-full px-4 py-2.5 rounded-full bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
               autofocus
             />
           </DialogBody>

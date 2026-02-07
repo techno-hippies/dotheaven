@@ -31,7 +31,7 @@ export const Tabs: Component<TabsProps> = (props) => {
   return (
     <div
       class={cn(
-        'flex items-center border-b border-[var(--bg-highlight)] overflow-x-auto scrollbar-hide',
+        'flex items-center border-b border-[var(--border-subtle)] overflow-x-auto scrollbar-hide',
         props.padded && 'md:px-8',
         props.class
       )}

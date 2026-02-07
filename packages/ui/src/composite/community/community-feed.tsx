@@ -56,7 +56,7 @@ export const CommunityFeed: Component<CommunityFeedProps> = (props) => {
   return (
     <div class={cn('flex flex-col h-full', props.class)}>
       {/* Tab bar */}
-      <div class="flex items-center border-b border-[var(--bg-highlight)] overflow-x-auto scrollbar-hide">
+      <div class="flex items-center border-b border-[var(--border-subtle)] overflow-x-auto scrollbar-hide">
         <For each={tabs()}>
           {(tab) => {
             const isActive = () => activeTab() === tab.id

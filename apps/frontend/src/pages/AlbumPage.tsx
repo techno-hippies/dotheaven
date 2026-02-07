@@ -143,7 +143,7 @@ export const AlbumPage: Component = () => {
                           rel="noopener noreferrer"
                           title={linkLabel(key)}
                         >
-                          <IconButton variant="ghost" size="md" aria-label={linkLabel(key)}>
+                          <IconButton variant="soft" size="md" aria-label={linkLabel(key)}>
                             <Icon class="w-5 h-5" />
                           </IconButton>
                         </a>

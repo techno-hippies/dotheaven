@@ -210,7 +210,7 @@ export const TrackList: Component<TrackListProps> = (props) => {
   const TrackMenu: Component<{ track: Track; menuOpen: boolean; setMenuOpen: (v: boolean) => void; alwaysVisible?: boolean }> = (menuProps) => (
     <DropdownMenu onOpenChange={menuProps.setMenuOpen}>
       <DropdownMenuTrigger
-        as={(triggerProps: any) => <IconButton {...triggerProps} variant="ghost" size="md" />}
+        as={(triggerProps: any) => <IconButton {...triggerProps} variant="soft" size="md" />}
         aria-label="More options"
         class={cn(
           "transition-opacity",
@@ -518,7 +518,7 @@ export const TrackList: Component<TrackListProps> = (props) => {
       {/* Sticky Header - only show on desktop */}
       <Show when={!isCompact()}>
         <div
-          class="sticky top-0 z-10 grid gap-4 px-4 py-2 border-b border-[var(--bg-highlight)] text-base text-[var(--text-muted)] font-medium bg-[var(--bg-page)]"
+          class="sticky top-0 z-10 grid gap-4 px-4 py-2 border-b border-[var(--border-subtle)] text-base text-[var(--text-muted)] font-medium bg-[var(--bg-page)]"
           style={{ 'grid-template-columns': gridTemplate() }}
         >
           <div class="text-center">#</div>

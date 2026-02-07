@@ -1,141 +1,82 @@
 import type { Component } from 'solid-js'
 import { createSignal, createMemo, For, Show } from 'solid-js'
-import { FeedPost, type FeedPostProps, Avatar, Tabs, ComposeBox, ComposeFab, ComposeDrawer, useIsMobile, type ProfileInput } from '@heaven/ui'
-import { useQueryClient } from '@tanstack/solid-query'
+import { createQuery, useQueryClient } from '@tanstack/solid-query'
+import { FeedPost, type FeedPostProps, type FeedPostMedia, Avatar, Tabs, ComposeBox, ComposeFab, ComposeDrawer, useIsMobile, type ProfileInput, ShareViaChatDialog, type ShareRecipient } from '@heaven/ui'
 import { useNavigate } from '@solidjs/router'
 import { post } from '@heaven/core'
-import { useAuth } from '../providers'
+import { useAuth, useXMTP } from '../providers'
 import { openUserMenu } from '../lib/user-menu'
-
-const noop = () => {}
-
-export const feedPosts: FeedPostProps[] = [
-  {
-    authorName: 'Yuki',
-    authorHandle: 'yuki.heaven',
-    authorAvatarUrl: 'https://placewaifu.com/image/100',
-    authorNationalityCode: 'JP',
-    timestamp: '2h ago',
-    text: 'Just discovered this amazing album. The production quality is insane, every track flows into the next perfectly. Highly recommend giving it a full listen with headphones.',
-    likes: 42,
-    comments: 7,
-    reposts: 3,
-    onLike: noop, onComment: noop, onRepost: noop, onQuote: noop, onShare: noop,
-  },
-  {
-    authorName: 'Miku',
-    authorHandle: 'miku.heaven',
-    authorAvatarUrl: 'https://placewaifu.com/image/101',
-    authorNationalityCode: 'JP',
-    timestamp: '4h ago',
-    text: 'Sunset vibes from the rooftop',
-    media: { type: 'photo', items: [{ url: 'https://placewaifu.com/image/800/450', aspect: 'landscape' }] },
-    likes: 234,
-    comments: 18,
-    reposts: 13,
-    onLike: noop, onComment: noop, onRepost: noop, onQuote: noop, onShare: noop,
-  },
-  {
-    authorName: 'Rei',
-    authorHandle: 'rei.heaven',
-    authorAvatarUrl: 'https://placewaifu.com/image/102',
-    authorNationalityCode: 'JP',
-    timestamp: '6h ago',
-    text: 'New album art is incredible',
-    media: { type: 'photo', items: [{ url: 'https://placewaifu.com/image/500', aspect: 'square' }] },
-    likes: 28,
-    comments: 3,
-    reposts: 1,
-    isLiked: true,
-    onLike: noop, onComment: noop, onRepost: noop, onQuote: noop, onShare: noop,
-  },
-  {
-    authorName: 'Asuka',
-    authorHandle: 'asuka.eth',
-    authorAvatarUrl: 'https://placewaifu.com/image/103',
-    authorNationalityCode: 'DE',
-    timestamp: '8h ago',
-    text: 'Concert was incredible last night',
-    media: { type: 'photo', items: [
-      { url: 'https://placewaifu.com/image/400/400' },
-      { url: 'https://placewaifu.com/image/401/401' },
-    ]},
-    likes: 312,
-    comments: 45,
-    reposts: 21,
-    onLike: noop, onComment: noop, onRepost: noop, onQuote: noop, onShare: noop,
-  },
-  {
-    authorName: 'Sakura',
-    authorHandle: 'sakura.heaven',
-    authorAvatarUrl: 'https://placewaifu.com/image/104',
-    authorNationalityCode: 'JP',
-    timestamp: '12h ago',
-    text: 'POV: discovering a new genre',
-    media: { type: 'video', src: '', thumbnailUrl: 'https://placewaifu.com/image/270/480', aspect: 'portrait' },
-    likes: 5400,
-    comments: 312,
-    reposts: 89,
-    onLike: noop, onComment: noop, onRepost: noop, onQuote: noop, onShare: noop,
-  },
-  {
-    authorName: 'Misato',
-    authorHandle: 'misato.heaven',
-    authorAvatarUrl: 'https://placewaifu.com/image/105',
-    authorNationalityCode: 'JP',
-    timestamp: '1d ago',
-    text: 'Festival photo dump',
-    media: { type: 'photo', items: [
-      { url: 'https://placewaifu.com/image/400/400' },
-      { url: 'https://placewaifu.com/image/401/401' },
-      { url: 'https://placewaifu.com/image/402/402' },
-      { url: 'https://placewaifu.com/image/403/403' },
-      { url: 'https://placewaifu.com/image/404/404' },
-    ]},
-    likes: 891,
-    comments: 67,
-    reposts: 34,
-    onLike: noop, onComment: noop, onRepost: noop, onQuote: noop, onShare: noop,
-  },
-  {
-    authorName: 'Shinji',
-    authorHandle: 'shinji.eth',
-    authorAvatarUrl: 'https://placewaifu.com/image/106',
-    authorNationalityCode: 'JP',
-    timestamp: '1d ago',
-    text: 'Found this hidden gem on a random playlist. No idea who this artist is but the vocals are haunting. Anyone know them?',
-    likes: 14,
-    comments: 2,
-    reposts: 0,
-    onLike: noop, onComment: noop, onRepost: noop, onQuote: noop, onShare: noop,
-  },
-  {
-    authorName: 'Kaworu',
-    authorHandle: 'kaworu.heaven',
-    authorAvatarUrl: 'https://placewaifu.com/image/107',
-    authorNationalityCode: 'JP',
-    timestamp: '2d ago',
-    text: 'New music video just dropped',
-    media: { type: 'video', src: '', thumbnailUrl: 'https://placewaifu.com/image/800/450', aspect: 'landscape' },
-    likes: 1200,
-    comments: 89,
-    reposts: 56,
-    onLike: noop, onComment: noop, onRepost: noop, onQuote: noop, onShare: noop,
-  },
-]
+import { fetchFeedPosts, translatePost, getUserLang, type FeedPostData } from '../lib/heaven/posts'
 
 const feedTabs = [
   { id: 'foryou', label: 'For you' },
   { id: 'following', label: 'Following' },
 ]
 
+function timeAgo(ts: number): string {
+  const diff = Math.floor(Date.now() / 1000) - ts
+  if (diff < 60) return 'just now'
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`
+  return new Date(ts * 1000).toLocaleDateString()
+}
+
+function postDataToProps(
+  p: FeedPostData,
+  userLang: string,
+  onTranslate: (postId: string, text: string, targetLang: string) => void,
+  translatingPostId: string | null,
+): FeedPostProps {
+  const media: FeedPostMedia | undefined = p.photoUrls?.length
+    ? { type: 'photo', items: p.photoUrls.map((url) => ({ url })) }
+    : undefined
+
+  return {
+    authorName: p.authorName,
+    authorHandle: p.authorHandle,
+    authorAvatarUrl: p.authorAvatarUrl,
+    timestamp: timeAgo(p.blockTimestamp),
+    text: p.text,
+    media,
+    likes: p.likeCount,
+    comments: p.commentCount,
+    translations: p.translations,
+    userLang,
+    postLang: p.language,
+    onTranslate: p.text ? (targetLang: string) => onTranslate(p.postId, p.text!, targetLang) : undefined,
+    isTranslating: translatingPostId === p.postId,
+    provenance: {
+      postId: p.postId,
+      txHash: p.transactionHash,
+      ipfsHash: p.ipfsHash ?? undefined,
+      chainId: 6343,
+    },
+  }
+}
+
 export const FeedPage: Component = () => {
   const isMobile = useIsMobile()
   const auth = useAuth()
+  const xmtp = useXMTP()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [composeOpen, setComposeOpen] = createSignal(false)
   const [feedTab, setFeedTab] = createSignal('foryou')
+  const [translatingPostId, setTranslatingPostId] = createSignal<string | null>(null)
+  const [shareDialogOpen, setShareDialogOpen] = createSignal(false)
+  const [sharePostId, setSharePostId] = createSignal<string | null>(null)
+  const [isSending, setIsSending] = createSignal(false)
+
+  const userLang = getUserLang()
+
+  // Fetch posts from subgraph
+  const postsQuery = createQuery(() => ({
+    queryKey: ['feed-posts'],
+    queryFn: () => fetchFeedPosts({ first: 50 }),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  }))
 
   // Derive avatar URL from cached profile query (same pattern as AppLayout)
   const cachedAvatarUrl = createMemo(() => {
@@ -152,6 +93,81 @@ export const FeedPage: Component = () => {
     console.log('Post:', text)
     // TODO: wire to Lit Action post pipeline
   }
+
+  const handleTranslate = async (postId: string, text: string, targetLang: string) => {
+    const addr = auth.pkpAddress()
+    const pkpInfo = auth.pkpInfo()
+    if (!addr || !pkpInfo) return
+
+    setTranslatingPostId(postId)
+    try {
+      const authContext = await auth.getAuthContext()
+      const result = await translatePost(
+        postId,
+        text,
+        targetLang,
+        (msg) => auth.signMessage(msg),
+        authContext,
+        pkpInfo.publicKey,
+      )
+      if (result.success && result.translatedText) {
+        // Optimistically update the cache with the new translation
+        queryClient.setQueryData<FeedPostData[]>(['feed-posts'], (old) => {
+          if (!old) return old
+          return old.map((p) => {
+            if (p.postId !== postId) return p
+            return {
+              ...p,
+              translations: { ...p.translations, [targetLang]: result.translatedText! },
+            }
+          })
+        })
+      }
+    } catch (err) {
+      console.error('Translation failed:', err)
+    } finally {
+      setTranslatingPostId(null)
+    }
+  }
+
+  // Map XMTP conversations to share recipients
+  const shareRecipients = createMemo<ShareRecipient[]>(() =>
+    xmtp.conversations().map((c) => ({
+      id: c.peerAddress,
+      name: c.name,
+      handle: `${c.peerAddress.slice(0, 6)}...${c.peerAddress.slice(-4)}`,
+    }))
+  )
+
+  const handleCopyLink = (postId: string) => {
+    const url = `${window.location.origin}${window.location.pathname}#${post(postId)}`
+    navigator.clipboard.writeText(url)
+  }
+
+  const handleOpenShareDialog = (postId: string) => {
+    setSharePostId(postId)
+    setShareDialogOpen(true)
+  }
+
+  const handleShareSend = async (recipientIds: string[]) => {
+    const postId = sharePostId()
+    if (!postId) return
+
+    setIsSending(true)
+    try {
+      const url = `${window.location.origin}${window.location.pathname}#${post(postId)}`
+      for (const peerAddress of recipientIds) {
+        await xmtp.sendMessage(peerAddress, url)
+      }
+      setShareDialogOpen(false)
+    } catch (err) {
+      console.error('Failed to share via chat:', err)
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  const posts = () => postsQuery.data ?? []
 
   return (
     <div class="h-full overflow-y-auto">
@@ -183,11 +199,36 @@ export const FeedPage: Component = () => {
         <ComposeBox onPost={handlePost} />
       </Show>
 
-      <div class="divide-y divide-[var(--bg-highlight)]">
-        <For each={feedPosts}>
-          {(p, i) => <FeedPost {...p} onPostClick={() => navigate(post(String(i())))} />}
-        </For>
-      </div>
+      <Show
+        when={!postsQuery.isLoading}
+        fallback={
+          <div class="flex items-center justify-center py-12 text-[var(--text-muted)]">
+            Loading posts...
+          </div>
+        }
+      >
+        <Show
+          when={posts().length > 0}
+          fallback={
+            <div class="flex items-center justify-center py-12 text-[var(--text-muted)]">
+              No posts yet. Be the first to post!
+            </div>
+          }
+        >
+          <div class="divide-y divide-[var(--border-subtle)]">
+            <For each={posts()}>
+              {(p) => (
+                <FeedPost
+                  {...postDataToProps(p, userLang, handleTranslate, translatingPostId())}
+                  onPostClick={() => navigate(post(p.postId))}
+                  onCopyLink={() => handleCopyLink(p.postId)}
+                  onSendViaChat={() => handleOpenShareDialog(p.postId)}
+                />
+              )}
+            </For>
+          </div>
+        </Show>
+      </Show>
 
       {/* Mobile: FAB + compose drawer */}
       <Show when={isMobile()}>
@@ -198,6 +239,15 @@ export const FeedPage: Component = () => {
           onPost={handlePost}
         />
       </Show>
+
+      {/* Share via chat dialog */}
+      <ShareViaChatDialog
+        open={shareDialogOpen()}
+        onOpenChange={setShareDialogOpen}
+        recipients={shareRecipients()}
+        onSend={handleShareSend}
+        isSending={isSending()}
+      />
     </div>
   )
 }

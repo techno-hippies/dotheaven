@@ -35,6 +35,8 @@ const mockBookings: BookingData[] = [
     durationMins: 20,
     guestAddress: '0x1234567890abcdef1234567890abcdef12345678',
     guestName: 'Alice',
+    guestHeavenName: 'alice.heaven',
+    guestNationalityCode: 'US',
     status: 'upcoming',
   },
   {
@@ -43,7 +45,9 @@ const mockBookings: BookingData[] = [
     durationMins: 20,
     guestAddress: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
     guestName: 'Bob',
+    guestHeavenName: 'bob.heaven',
     guestAvatar: 'https://i.pravatar.cc/150?u=bob',
+    guestNationalityCode: 'GB',
     status: 'upcoming',
   },
   {
@@ -52,7 +56,9 @@ const mockBookings: BookingData[] = [
     durationMins: 20,
     guestAddress: '0x9876543210fedcba9876543210fedcba98765432',
     guestName: 'Charlie',
+    guestHeavenName: 'charlie.heaven',
     guestAvatar: 'https://i.pravatar.cc/150?u=charlie',
+    guestNationalityCode: 'JP',
     status: 'upcoming',
   },
   {
@@ -61,6 +67,8 @@ const mockBookings: BookingData[] = [
     durationMins: 20,
     guestAddress: '0xfedcba9876543210fedcba9876543210fedcba98',
     guestName: 'Diana',
+    guestHeavenName: 'diana.heaven',
+    guestNationalityCode: 'BR',
     status: 'upcoming',
   },
   {
@@ -69,7 +77,9 @@ const mockBookings: BookingData[] = [
     durationMins: 20,
     guestAddress: '0x1111222233334444555566667777888899990000',
     guestName: 'Eve',
+    guestHeavenName: 'eve.heaven',
     guestAvatar: 'https://i.pravatar.cc/150?u=eve',
+    guestNationalityCode: 'KR',
     status: 'upcoming',
   },
 ]
@@ -92,7 +102,9 @@ export const WithLiveSession: Story = {
         durationMins: 20,
         guestAddress: '0x1234567890abcdef1234567890abcdef12345678',
         guestName: 'Alice',
+        guestHeavenName: 'alice.heaven',
         guestAvatar: 'https://i.pravatar.cc/150?u=alice',
+        guestNationalityCode: 'US',
         status: 'live',
       },
       ...mockBookings.slice(1),
@@ -124,6 +136,8 @@ export const ManyBookings: Story = {
         durationMins: 20,
         guestAddress: '0xaaaa1111bbbb2222cccc3333dddd4444eeee5555',
         guestName: 'Frank',
+        guestHeavenName: 'frank.heaven',
+        guestNationalityCode: 'DE',
         status: 'upcoming',
       },
       {
@@ -132,7 +146,9 @@ export const ManyBookings: Story = {
         durationMins: 20,
         guestAddress: '0xbbbb2222cccc3333dddd4444eeee5555ffff6666',
         guestName: 'Grace',
+        guestHeavenName: 'grace.heaven',
         guestAvatar: 'https://i.pravatar.cc/150?u=grace',
+        guestNationalityCode: 'FR',
         status: 'upcoming',
       },
       {
@@ -140,7 +156,7 @@ export const ManyBookings: Story = {
         startTime: daysFromNow(6, 10, 30),
         durationMins: 20,
         guestAddress: '0xcccc3333dddd4444eeee5555ffff6666aaaa7777',
-        status: 'upcoming', // No name, shows address
+        status: 'upcoming', // No name or heaven name, shows truncated address
       },
     ],
     onBookingClick: (booking) => alert(`Clicked: ${booking.guestName || booking.guestAddress}`),

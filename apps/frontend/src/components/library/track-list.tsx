@@ -46,7 +46,7 @@ export const TrackList: Component<TrackListProps> = (props) => {
   return (
     <div class={cn('px-8 pb-8', props.class)}>
       {/* Table Header */}
-      <div class="grid grid-cols-[48px_minmax(200px,4fr)_minmax(120px,2fr)_minmax(120px,1fr)_80px_48px] gap-4 px-4 py-2 border-b border-[var(--bg-highlight)] text-sm text-[var(--text-muted)] font-medium">
+      <div class="grid grid-cols-[48px_minmax(200px,4fr)_minmax(120px,2fr)_minmax(120px,1fr)_80px_48px] gap-4 px-4 py-2 border-b border-[var(--border-subtle)] text-sm text-[var(--text-muted)] font-medium">
         <div class="text-center">#</div>
         <div>Title</div>
         <div>Album</div>
@@ -121,7 +121,7 @@ export const TrackList: Component<TrackListProps> = (props) => {
               <div class="flex items-center justify-center">
                 <DropdownMenu onOpenChange={setMenuOpen}>
                   <DropdownMenuTrigger
-                    as={(props: any) => <IconButton {...props} variant="ghost" size="md" />}
+                    as={(props: any) => <IconButton {...props} variant="soft" size="md" />}
                     aria-label="More options"
                     class={cn(
                       "transition-opacity",

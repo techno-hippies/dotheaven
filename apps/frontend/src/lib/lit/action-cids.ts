@@ -31,10 +31,13 @@ export const CONTENT_ACCESS_V1_CID = 'QmXnhhG1aykZGZoPXTKihi4jRbygD2rvn5DZwTBz89
 export const LINK_EOA_V1_CID = 'QmYPeQEpUhb8eMULPmW7RM5k5yNMTWMmRDa8p3Gw4d966C'
 
 /** Post Register v1 — unified text + photo registration (image uploaded by Media Worker or text inline) */
-export const POST_REGISTER_V1_CID = 'QmeVChS445FVH3PLp6GjKQ52f77XJWLWfTw3EUWUsAuiVv'
+export const POST_REGISTER_V1_CID = 'QmQ3sz9g1znyoKPyNUQetnfijwqNQNU7ir7YuQXtU7f4C3'
 
 /** Track Cover v4 — upload cover art + set on ScrobbleV4 (operator-only) */
 export const TRACK_COVER_V4_CID = 'QmSVssbAxCr1xp7mKX1VfcJFNJewQfhCZGiPuhyEjGvUC2'
+
+/** Post Translate v1 — LLM translation → EngagementV2.translateFor() on MegaETH */
+export const POST_TRANSLATE_V1_CID = 'QmWAGjKKmnpmiN2BjVe5YUtXjkKApGyCwdLoszAjTRDFiY'
 
 // Content decrypt is handled client-side via litClient.decrypt() — no Lit Action needed.
 // The Lit BLS nodes enforce canAccess() on Base ContentAccessMirror during threshold decryption.

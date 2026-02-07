@@ -42,7 +42,7 @@ export const NowPlaying: Component<NowPlayingProps> = (props) => {
         <span class="text-sm font-medium text-[var(--text-primary)]">Now Playing</span>
         <Show when={local.onShare}>
           <IconButton
-            variant="ghost"
+            variant="soft"
             size="md"
             aria-label="Share track"
             onClick={local.onShare}

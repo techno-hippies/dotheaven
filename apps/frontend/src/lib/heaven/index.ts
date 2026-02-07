@@ -96,6 +96,16 @@ export {
 } from './community'
 
 export {
+  fetchFeedPosts,
+  fetchPost,
+  fetchPostComments,
+  translatePost,
+  getUserLang,
+  type FeedPostData,
+  type TranslateResult,
+} from './posts'
+
+export {
   getHostBasePrice,
   getHostOpenSlots,
   getSlot,

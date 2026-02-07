@@ -31,7 +31,8 @@ export const Default: Story = {
     onRepost: noop,
     onQuote: noop,
     onLike: noop,
-    onShare: noop,
+    onCopyLink: noop,
+    onSendViaChat: noop,
   },
 }
 
@@ -47,7 +48,8 @@ export const Liked: Story = {
     onRepost: noop,
     onQuote: noop,
     onLike: noop,
-    onShare: noop,
+    onCopyLink: noop,
+    onSendViaChat: noop,
   },
 }
 
@@ -63,7 +65,8 @@ export const Reposted: Story = {
     onRepost: noop,
     onQuote: noop,
     onLike: noop,
-    onShare: noop,
+    onCopyLink: noop,
+    onSendViaChat: noop,
   },
 }
 
@@ -78,7 +81,8 @@ export const LargeCounts: Story = {
     onRepost: noop,
     onQuote: noop,
     onLike: noop,
-    onShare: noop,
+    onCopyLink: noop,
+    onSendViaChat: noop,
   },
 }
 
@@ -93,7 +97,8 @@ export const ZeroCounts: Story = {
     onRepost: noop,
     onQuote: noop,
     onLike: noop,
-    onShare: noop,
+    onCopyLink: noop,
+    onSendViaChat: noop,
   },
 }
 
@@ -109,7 +114,8 @@ export const Compact: Story = {
     onRepost: noop,
     onQuote: noop,
     onLike: noop,
-    onShare: noop,
+    onCopyLink: noop,
+    onSendViaChat: noop,
   },
 }
 
@@ -139,7 +145,8 @@ export const Interactive: StoryObj = {
           setLiked(!liked())
           setLikes(l => liked() ? l + 1 : l - 1)
         }}
-        onShare={() => console.log('share')}
+        onCopyLink={() => console.log('copy link')}
+        onSendViaChat={() => console.log('send via chat')}
       />
     )
   },

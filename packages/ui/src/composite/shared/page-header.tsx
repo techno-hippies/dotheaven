@@ -30,7 +30,7 @@ export const PageHeader: Component<PageHeaderProps> = (props) => {
   return (
     <header
       class={cn(
-        'flex items-center justify-between px-4 md:px-6 py-4 border-b border-[var(--bg-highlight)]',
+        'flex items-center justify-between px-4 md:px-6 py-4 border-b border-[var(--border-subtle)]',
         props.class
       )}
     >

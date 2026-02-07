@@ -10,7 +10,11 @@ export interface BookingData {
   durationMins: number
   guestAddress: string
   guestName?: string
+  /** Heaven name (e.g. "alice.heaven") */
+  guestHeavenName?: string
   guestAvatar?: string
+  /** ISO 3166-1 alpha-2 country code (e.g. "US") */
+  guestNationalityCode?: string
   status: 'upcoming' | 'live' | 'completed' | 'cancelled'
 }
 
@@ -81,30 +85,29 @@ const SessionCard: Component<SessionCardProps> = (props) => {
       )}
       onClick={props.onClick}
     >
-      {/* Color bar */}
-      <div class={cn(
-        'w-1 h-10 rounded-full flex-shrink-0',
-        isLive() ? 'bg-green-500' : 'bg-[oklch(0.65_0.12_240)]'
-      )} />
-
-      {/* Avatar + name */}
       <Avatar
         src={props.booking.guestAvatar}
         alt={displayName()}
-        size="sm"
+        size="lg"
+        nationalityCode={props.booking.guestNationalityCode}
       />
       <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-2">
-          <span class="text-base font-medium text-[var(--text-primary)] truncate">
+        <div class="flex items-center gap-1.5">
+          <span class="text-base font-semibold text-[var(--text-primary)] truncate">
             {displayName()}
           </span>
+          <Show when={props.booking.guestHeavenName}>
+            <span class="text-base text-[var(--text-muted)] truncate">
+              {props.booking.guestHeavenName}
+            </span>
+          </Show>
           <Show when={isLive()}>
-            <span class="px-1.5 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-400">
+            <span class="px-1.5 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-400 flex-shrink-0">
               LIVE
             </span>
           </Show>
         </div>
-        <div class="text-sm text-[var(--text-muted)]">
+        <div class="text-base text-[var(--text-muted)]">
           {formatTime(props.booking.startTime)}
         </div>
       </div>

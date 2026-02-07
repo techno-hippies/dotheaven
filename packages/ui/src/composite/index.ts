@@ -7,6 +7,9 @@ export * from './claim'
 // Community - Member discovery
 export * from './community'
 
+// Create - New playlist / publish song dialog
+export * from './create-dialog'
+
 // Download - Platform download dialog
 export * from './download-dialog'
 
@@ -22,6 +25,9 @@ export * from './onboarding'
 // Profile - User profile editing
 export * from './profile'
 
+// Publish - Song publishing flow
+export * from './publish'
+
 // Scheduler - Booking calendar (external-facing)
 export * from './scheduler'
 
@@ -30,6 +36,9 @@ export * from './scheduling'
 
 // Settings - Settings menu list
 export * from './settings-menu'
+
+// Share - Share via chat dialog
+export * from './share-via-chat-dialog'
 
 // Side Menu - Mobile side drawer navigation
 export * from './side-menu-drawer'

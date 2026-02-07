@@ -316,7 +316,7 @@ export const PlaylistPage: Component = () => {
                           value={editTitle()}
                           onInput={(e) => setEditTitle(e.currentTarget.value)}
                           placeholder="Playlist name"
-                          class="w-full px-4 py-3 rounded-md bg-[var(--bg-highlight)] text-[var(--text-primary)] text-lg placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
+                          class="w-full px-4 py-3 rounded-full bg-[var(--bg-highlight)] text-[var(--text-primary)] text-lg placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
                           autofocus
                         />
                         <textarea
@@ -324,7 +324,7 @@ export const PlaylistPage: Component = () => {
                           onInput={(e) => setEditDescription(e.currentTarget.value)}
                           placeholder="Add a description (optional)"
                           rows={4}
-                          class="w-full px-4 py-3 rounded-md bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors resize-none flex-1"
+                          class="w-full px-4 py-3 rounded-2xl bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors resize-none flex-1"
                         />
                       </div>
                     </div>

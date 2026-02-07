@@ -1,6 +1,6 @@
 import { Show, For, type Component, createSignal, createMemo, onMount, onCleanup } from 'solid-js'
 import { cn } from '../../lib/utils'
-import { Switch, Button, IconButton, TextField } from '../../primitives'
+import { Button, IconButton, TextField } from '../../primitives'
 import type { SessionSlotData, SessionRequestData } from './schedule-tab'
 
 // ── Types ────────────────────────────────────────────────────────
@@ -347,26 +347,7 @@ export const ScheduleDashboard: Component<ScheduleDashboardProps> = (props) => {
 
   return (
     <div class={cn('flex flex-col gap-4', props.class)}>
-      {/* Header */}
-      <div class="flex items-center justify-between flex-wrap gap-2">
-        <h1 class="text-xl font-semibold text-[var(--text-primary)]">My Schedule</h1>
-        <div class="flex items-center gap-3">
-          <Switch
-            checked={props.acceptingBookings}
-            onChange={(checked) => props.onToggleAccepting?.(checked)}
-            label={props.acceptingBookings ? 'Accepting' : 'Paused'}
-          />
-        </div>
-      </div>
-
-      {/* Paused banner */}
-      <Show when={paused()}>
-        <div class="px-4 py-2.5 rounded-md bg-[oklch(0.65_0.18_15)]/10 border border-[oklch(0.65_0.18_15)]/20 text-base text-[oklch(0.75_0.18_15)]">
-          Bookings paused — your schedule is not visible to others.
-        </div>
-      </Show>
-
-      {/* Pricing (moved to top for visibility) */}
+      {/* Pricing */}
       <div class="flex items-center gap-3 bg-[var(--bg-surface)] rounded-md px-4 py-3">
         <span class="text-base font-medium text-[var(--text-secondary)]">Base price</span>
         <TextField value={priceInput()} onChange={setPriceInput} placeholder="0.01" inputClass="w-20" />

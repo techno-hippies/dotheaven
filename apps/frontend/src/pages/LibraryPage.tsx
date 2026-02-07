@@ -7,6 +7,9 @@ import {
   Button,
   PlayButton,
   DownloadAppCta,
+  SongPublishForm,
+  type SongFormData,
+  type PublishStep,
   type Track,
   type SortField,
   type SortState,
@@ -24,7 +27,7 @@ import { enqueueUpload, jobs } from '../lib/upload-manager'
 import { initFilecoinUploadService } from '../lib/filecoin-upload-service'
 import { fetchUploadedContent, fetchSharedContent, type UploadedContentEntry, type SharedContentEntry } from '../lib/heaven/scrobbles'
 
-type LibraryTab = 'local' | 'cloud' | 'shared'
+type LibraryTab = 'local' | 'cloud' | 'shared' | 'publish'
 
 export const LibraryPage: Component = () => {
   const platform = usePlatform()
@@ -48,9 +51,72 @@ export const LibraryPage: Component = () => {
     if (t === 'local' && platform.isTauri) return 'local'
     if (t === 'cloud') return 'cloud'
     if (t === 'shared') return 'shared'
+    if (t === 'publish') return 'publish'
     // Default: redirect to appropriate default tab
     return platform.isTauri ? 'local' : 'cloud'
   })
+
+  // ── Publish form state ──────────────────────────────────────────
+  const defaultFormData: SongFormData = {
+    title: '',
+    artist: '',
+    album: '',
+    genre: '',
+    primaryLanguage: '',
+    secondaryLanguage: '',
+    lyrics: '',
+    coverFile: null,
+    audioFile: null,
+    previewStart: 0,
+    previewEnd: 30,
+    license: 'non-commercial',
+    revShare: 10,
+    mintingFee: '0',
+    attestation: false,
+  }
+
+  const [publishStep, setPublishStep] = createSignal<PublishStep>('upload')
+  const [publishForm, setPublishForm] = createSignal<SongFormData>({ ...defaultFormData })
+  const [publishProgress, setPublishProgress] = createSignal(0)
+  const [publishError, setPublishError] = createSignal<string | undefined>()
+
+  const publishSteps: PublishStep[] = ['upload', 'details', 'lyrics', 'license', 'review']
+
+  const handlePublishNext = () => {
+    const idx = publishSteps.indexOf(publishStep())
+    if (idx < publishSteps.length - 1) setPublishStep(publishSteps[idx + 1])
+  }
+
+  const handlePublishBack = () => {
+    if (publishStep() === 'error') { setPublishStep('review'); return }
+    const idx = publishSteps.indexOf(publishStep())
+    if (idx > 0) setPublishStep(publishSteps[idx - 1])
+  }
+
+  const handlePublish = () => {
+    setPublishStep('publishing')
+    setPublishProgress(0)
+    // TODO: Wire to Lit Action song-publish-v1 + story-register-sponsor-v1
+    // For now, simulate progress
+    const stages = [10, 25, 40, 55, 70, 85, 95, 100]
+    let i = 0
+    const tick = setInterval(() => {
+      setPublishProgress(stages[i])
+      i++
+      if (i >= stages.length) {
+        clearInterval(tick)
+        setTimeout(() => setPublishStep('success'), 500)
+      }
+    }, 800)
+  }
+
+  const handlePublishDone = () => {
+    setPublishStep('upload')
+    setPublishForm({ ...defaultFormData })
+    setPublishProgress(0)
+    setPublishError(undefined)
+    navigate(musicTab('cloud'))
+  }
 
   // Redirect /music to /music/local on Tauri (desktop app has local files as default)
   createEffect(() => {
@@ -297,6 +363,7 @@ export const LibraryPage: Component = () => {
       onScroll={handleScroll}
       class="h-full overflow-y-auto"
     >
+      <Show when={tab() !== 'publish'}>
       <MediaHeader
         type="playlist"
         title={tab() === 'local' ? 'Local Files' : tab() === 'cloud' ? 'Cloud Library' : 'Shared with Me'}
@@ -423,6 +490,24 @@ export const LibraryPage: Component = () => {
           </>
         }
       />
+      </Show>
+
+      {/* Publish tab */}
+      <Show when={tab() === 'publish'}>
+        <div class="max-w-2xl mx-auto py-8 px-4">
+          <SongPublishForm
+            step={publishStep()}
+            formData={publishForm()}
+            onFormChange={(partial) => setPublishForm((prev) => ({ ...prev, ...partial }))}
+            onNext={handlePublishNext}
+            onBack={handlePublishBack}
+            onPublish={handlePublish}
+            onDone={handlePublishDone}
+            progress={publishProgress()}
+            error={publishError()}
+          />
+        </div>
+      </Show>
 
       {/* Local Files tab */}
       <Show when={tab() === 'local'}>

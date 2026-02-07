@@ -4,36 +4,23 @@ import { cn } from '../../lib/utils'
 import { useIsMobile } from '../../lib/use-media-query'
 import { UserIdentity } from '../chat/user-identity'
 import { EngagementBar } from './engagement-bar'
-import { PlayFill, Info, DotsThree, Globe } from '../../icons'
-import { Dialog, DialogTrigger, DialogPortal, DialogOverlay, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogCloseButton } from '../../primitives/dialog'
+import { Avatar } from '../../primitives/avatar'
+import { PlayFill, Info, DotsThree, Globe, Flag, Prohibit } from '../../icons'
+import { IconButton } from '../../primitives/icon-button'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '../../primitives/dropdown-menu'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '../../primitives/dialog'
+import { Drawer, DrawerContent } from '../../primitives/drawer'
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-/** Full provenance/metadata for displayed posts */
+/** On-chain metadata for a post */
 export interface PostProvenance {
-  // Ownership
-  ownership: 'mine' | 'not-mine' | null
-  // Source attribution
-  source?: {
-    url: string
-    platform?: string
-    handle?: string
-  }
-  audioSource?: {
-    url: string
-    platform?: string
-  }
-  // On-chain IDs
   postId?: string
-  contentId?: string
-  ipId?: string | null
   ipfsHash?: string
-  contentHash?: string
   txHash?: string
-  megaTxHash?: string
-  // Timestamps
-  registeredAt?: string
   chainId?: number
+  /** Story Protocol IP Asset ID (photo posts only, when registered) */
+  ipId?: string | null
 }
 
 export type MediaItem = {
@@ -69,11 +56,14 @@ export interface FeedPostProps {
   onComment?: () => void
   onRepost?: () => void
   onQuote?: () => void
-  onShare?: () => void
+  onCopyLink?: () => void
+  onSendViaChat?: () => void
   hideAuthor?: boolean
   // Menu
   menuSlot?: JSX.Element
   onMenuClick?: () => void
+  onReportPost?: () => void
+  onBlockUser?: () => void
   // Provenance metadata (shown in info dialog)
   provenance?: PostProvenance
   onPostClick?: () => void
@@ -82,6 +72,8 @@ export interface FeedPostProps {
   translations?: Record<string, string>
   /** User's locale ISO 639-1 code for auto-showing translations */
   userLang?: string
+  /** ISO 639-1 language code of the original post (detected at creation) */
+  postLang?: string
   /** Called when user clicks "Translate" — should trigger Lit Action */
   onTranslate?: (targetLang: string) => void
   /** Whether a translation is currently in progress */
@@ -263,106 +255,88 @@ const ProvenanceRow: Component<{ label: string; value?: string; href?: string; m
 // ── Provenance Dialog Content ───────────────────────────────────────────
 
 const ProvenanceDialogContent: Component<{ provenance: PostProvenance }> = (props) => {
-  const ownershipLabel = () => {
-    if (props.provenance.ownership === 'mine') return 'Original'
-    if (props.provenance.ownership === 'not-mine') return 'Shared'
-    return 'Not specified'
-  }
-
   const chainName = () => {
-    if (props.provenance.chainId === 6343) return 'MegaETH'
+    if (props.provenance.chainId === 6343) return 'MegaETH Testnet'
     if (props.provenance.chainId === 1513) return 'Story Protocol'
     return props.provenance.chainId ? `Chain ${props.provenance.chainId}` : undefined
   }
 
+  const truncHash = (hash: string) =>
+    `${hash.slice(0, 10)}...${hash.slice(-8)}`
+
   return (
-    <div class="flex flex-col gap-6">
-      {/* Badges row */}
-      <div class="flex items-center gap-3">
-        <span class={cn(
-          'px-3 py-1.5 rounded-md text-base font-medium',
-          props.provenance.ownership === 'mine' && 'bg-green-500/20 text-green-400',
-          props.provenance.ownership === 'not-mine' && 'bg-blue-500/20 text-blue-400',
-          !props.provenance.ownership && 'bg-[var(--bg-highlight)] text-[var(--text-muted)]',
-        )}>
-          {ownershipLabel()}
-        </span>
-        <Show when={chainName()}>
-          <span class="px-3 py-1.5 rounded-md text-base font-medium bg-[var(--bg-highlight)] text-[var(--text-secondary)]">
-            {chainName()}
-          </span>
-        </Show>
-      </div>
-
-      {/* Attribution section */}
-      <Show when={props.provenance.source || props.provenance.audioSource}>
-        <div class="flex flex-col gap-4 p-4 rounded-md bg-[var(--bg-elevated)]">
-          <span class="text-base font-semibold text-[var(--text-secondary)] uppercase tracking-wide">Attribution</span>
+    <div class="flex flex-col gap-4 p-4 rounded-md bg-[var(--bg-elevated)]">
+      <ProvenanceRow label="Post ID" value={props.provenance.postId} mono />
+        <ProvenanceRow
+          label="IPFS"
+          value={props.provenance.ipfsHash}
+          href={props.provenance.ipfsHash ? `https://heaven.myfilebase.com/ipfs/${props.provenance.ipfsHash}` : undefined}
+          mono
+        />
+        <Show when={props.provenance.txHash}>
           <ProvenanceRow
-            label="Original source"
-            value={props.provenance.source?.platform
-              ? `${props.provenance.source.platform}${props.provenance.source.handle ? ` · @${props.provenance.source.handle}` : ''}`
-              : props.provenance.source?.url}
-            href={props.provenance.source?.url}
-          />
-          <ProvenanceRow
-            label="Audio source"
-            value={props.provenance.audioSource?.platform || props.provenance.audioSource?.url}
-            href={props.provenance.audioSource?.url}
-          />
-        </div>
-      </Show>
-
-      {/* On-chain section */}
-      <Show when={props.provenance.postId || props.provenance.ipId || props.provenance.ipfsHash || props.provenance.contentHash}>
-        <div class="flex flex-col gap-4 p-4 rounded-md bg-[var(--bg-elevated)]">
-          <span class="text-base font-semibold text-[var(--text-secondary)] uppercase tracking-wide">On-chain</span>
-          <ProvenanceRow label="Post ID" value={props.provenance.postId} mono />
-          <ProvenanceRow label="Content ID" value={props.provenance.contentId} mono />
-          {/* Story Protocol IP — only shown if registered */}
-          <Show when={props.provenance.ipId}>
-            <ProvenanceRow
-              label="Story Protocol IP"
-              value={props.provenance.ipId!}
-              href={`https://explorer.story.foundation/ipa/${props.provenance.ipId}`}
-              mono
-            />
-          </Show>
-          <ProvenanceRow
-            label="IPFS CID"
-            value={props.provenance.ipfsHash}
-            href={props.provenance.ipfsHash ? `https://heaven.myfilebase.com/ipfs/${props.provenance.ipfsHash}` : undefined}
+            label="Transaction"
+            value={truncHash(props.provenance.txHash!)}
+            href={`https://megaeth-testnet-v2.blockscout.com/tx/${props.provenance.txHash}`}
             mono
           />
-          <ProvenanceRow label="Content hash" value={props.provenance.contentHash} mono />
-          {/* Story Protocol transaction */}
-          <Show when={props.provenance.txHash}>
-            <ProvenanceRow
-              label="Story TX"
-              value={`${props.provenance.txHash!.slice(0, 10)}...${props.provenance.txHash!.slice(-8)}`}
-              href={`https://explorer.story.foundation/tx/${props.provenance.txHash}`}
-              mono
-            />
-          </Show>
-          {/* MegaETH mirror transaction */}
-          <Show when={props.provenance.megaTxHash}>
-            <ProvenanceRow
-              label="MegaETH TX"
-              value={`${props.provenance.megaTxHash!.slice(0, 10)}...${props.provenance.megaTxHash!.slice(-8)}`}
-              href={`https://megaeth-testnet-v2.blockscout.com/tx/${props.provenance.megaTxHash}`}
-              mono
-            />
-          </Show>
-        </div>
-      </Show>
-
-      {/* Timestamp */}
-      <Show when={props.provenance.registeredAt}>
-        <div class="text-base text-[var(--text-muted)]">
-          Registered {new Date(props.provenance.registeredAt!).toLocaleString()}
-        </div>
-      </Show>
+        </Show>
+        <Show when={props.provenance.ipId}>
+          <ProvenanceRow
+            label="Story Protocol IP"
+            value={props.provenance.ipId!}
+            href={`https://explorer.story.foundation/ipa/${props.provenance.ipId}`}
+            mono
+          />
+        </Show>
+        <Show when={chainName()}>
+          <ProvenanceRow
+            label="Chain"
+            value={`${chainName()} (${props.provenance.chainId})`}
+          />
+        </Show>
     </div>
+  )
+}
+
+// ── Provenance Modal (responsive: Dialog on desktop, Drawer on mobile) ──
+
+interface ProvenanceModalProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  provenance: PostProvenance
+}
+
+const ProvenanceModal: Component<ProvenanceModalProps> = (props) => {
+  const isMobile = useIsMobile()
+
+  return (
+    <Show
+      when={isMobile()}
+      fallback={
+        <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+          <DialogContent class="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Provenance</DialogTitle>
+            </DialogHeader>
+            <DialogBody>
+              <ProvenanceDialogContent provenance={props.provenance} />
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
+      }
+    >
+      <Drawer open={props.open} onOpenChange={props.onOpenChange}>
+        <DrawerContent showHandle class="pb-8 max-h-[85vh]">
+          <div class="pt-4 pb-2">
+            <h2 class="text-lg font-semibold text-[var(--text-primary)] text-center">Provenance</h2>
+          </div>
+          <div class="px-4 overflow-y-auto">
+            <ProvenanceDialogContent provenance={props.provenance} />
+          </div>
+        </DrawerContent>
+      </Drawer>
+    </Show>
   )
 }
 
@@ -373,8 +347,6 @@ const PostContent: Component<{
   media?: FeedPostMedia
   translations?: Record<string, string>
   userLang?: string
-  onTranslate?: (targetLang: string) => void
-  isTranslating?: boolean
 }> = (props) => {
   const [showOriginal, setShowOriginal] = createSignal(false)
 
@@ -390,13 +362,13 @@ const PostContent: Component<{
   }
 
   return (
-    <div class="text-left w-full">
+    <>
       <Show when={props.text}>
-        <p class="text-base font-medium text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap">{displayText()}</p>
+        <div class="text-base font-medium text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap">{displayText()}</div>
 
-        {/* Translation controls */}
-        <div class="flex items-center gap-2 mt-1.5">
-          <Show when={hasTranslation()}>
+        {/* Show original / Show translation toggle (only when translation exists) */}
+        <Show when={hasTranslation()}>
+          <div class="flex items-center gap-2 mt-1.5">
             <button
               type="button"
               class="flex items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--accent-blue)] cursor-pointer transition-colors"
@@ -406,43 +378,24 @@ const PostContent: Component<{
               <Globe class="w-3.5 h-3.5" />
               <span>{showOriginal() ? 'Show translation' : 'Show original'}</span>
             </button>
-          </Show>
-
-          <Show when={!hasTranslation() && props.onTranslate && props.userLang}>
-            <button
-              type="button"
-              class={cn(
-                'flex items-center gap-1 text-sm cursor-pointer transition-colors',
-                props.isTranslating
-                  ? 'text-[var(--accent-blue)] opacity-70'
-                  : 'text-[var(--text-muted)] hover:text-[var(--accent-blue)]'
-              )}
-              data-no-post-click
-              disabled={props.isTranslating}
-              onClick={() => props.onTranslate?.(props.userLang!)}
-            >
-              <Globe class={cn('w-3.5 h-3.5', props.isTranslating && 'animate-spin')} />
-              <span>{props.isTranslating ? 'Translating...' : 'Translate'}</span>
-            </button>
-          </Show>
-        </div>
-      </Show>
-      <Show when={props.text && props.media}>
-        <div class="h-3" />
+          </div>
+        </Show>
       </Show>
       <Show when={props.media}>
         {(media) => (
-          <Switch>
-            <Match when={media().type === 'photo' && media() as Extract<FeedPostMedia, { type: 'photo' }>}>
-              {(m) => <PhotoGrid items={m().items} />}
-            </Match>
-            <Match when={media().type === 'video' && media() as Extract<FeedPostMedia, { type: 'video' }>}>
-              {(m) => <VideoEmbed src={m().src} thumbnailUrl={m().thumbnailUrl} aspect={m().aspect} />}
-            </Match>
-          </Switch>
+          <div class="mt-2">
+            <Switch>
+              <Match when={media().type === 'photo' && media() as Extract<FeedPostMedia, { type: 'photo' }>}>
+                {(m) => <PhotoGrid items={m().items} />}
+              </Match>
+              <Match when={media().type === 'video' && media() as Extract<FeedPostMedia, { type: 'video' }>}>
+                {(m) => <VideoEmbed src={m().src} thumbnailUrl={m().thumbnailUrl} aspect={m().aspect} />}
+              </Match>
+            </Switch>
+          </div>
         )}
       </Show>
-    </div>
+    </>
   )
 }
 
@@ -450,102 +403,140 @@ const PostContent: Component<{
 
 export const FeedPost: Component<FeedPostProps> = (props) => {
   const isMobile = useIsMobile()
+  const [showProvenance, setShowProvenance] = createSignal(false)
 
-  // 3-dot menu + provenance info in the top-right
+  // 3-dot menu dropdown in the top-right
   const headerRightSlot = () => (
-    <div class="flex items-center gap-1">
-      <Show when={props.provenance}>
-        <Dialog>
-          <DialogTrigger
-            as="button"
-            type="button"
-            class="flex items-center p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-highlight)] cursor-pointer transition-colors"
-          >
-            <Info class="w-4 h-4" />
-          </DialogTrigger>
-          <DialogPortal>
-            <DialogOverlay />
-            <DialogContent class="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Provenance</DialogTitle>
-                <DialogCloseButton />
-              </DialogHeader>
-              <DialogBody>
-                <ProvenanceDialogContent provenance={props.provenance!} />
-              </DialogBody>
-            </DialogContent>
-          </DialogPortal>
-        </Dialog>
-      </Show>
+    <div class="flex items-center -mr-2" data-no-post-click>
       {props.menuSlot ?? (
-        <button
-          type="button"
-          class="flex items-center p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-highlight)] cursor-pointer transition-colors"
-          onClick={(e) => {
-            e.stopPropagation()
-            props.onMenuClick?.()
-          }}
-        >
-          <DotsThree class="w-5 h-5" />
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            as={(triggerProps: Record<string, unknown>) => (
+              <IconButton {...triggerProps} variant="soft" size="md" aria-label="Post options">
+                <DotsThree class="w-5 h-5" />
+              </IconButton>
+            )}
+          />
+          <DropdownMenuContent class="min-w-[180px]">
+            <Show when={props.provenance}>
+              <DropdownMenuItem onSelect={() => setShowProvenance(true)}>
+                <Info class="w-4 h-4" />
+                View metadata
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </Show>
+            <DropdownMenuItem onSelect={() => props.onReportPost?.()}>
+              <Flag class="w-4 h-4" />
+              Report post
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => props.onBlockUser?.()}>
+              <Prohibit class="w-4 h-4" />
+              Block user
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
+
+      {/* Provenance modal (dialog on desktop, drawer on mobile) */}
+      <Show when={props.provenance}>
+        <ProvenanceModal
+          open={showProvenance()}
+          onOpenChange={setShowProvenance}
+          provenance={props.provenance!}
+        />
+      </Show>
     </div>
   )
 
   return (
     <div
-      class={cn('flex flex-col gap-3', isMobile() ? 'p-4' : 'p-5', props.onPostClick && 'cursor-pointer', props.class)}
+      class={cn('flex gap-3', isMobile() ? 'px-4 py-3' : 'px-5 py-3.5', props.onPostClick && 'cursor-pointer', props.class)}
       onClick={(e) => {
         // Don't navigate if clicking interactive elements (buttons, links, dialogs)
         const target = e.target as HTMLElement
         if (target.closest('button, a, [role="dialog"], [data-no-post-click]')) return
+        // Don't navigate if provenance modal was just opened (dropdown portal click)
+        if (showProvenance()) return
         props.onPostClick?.()
       }}
     >
-      {/* Header: avatar + name + timestamp + menu */}
+      {/* Left column: avatar */}
       <Show when={!props.hideAuthor}>
-        <UserIdentity
-          name={props.authorHandle || props.authorName}
-          avatarUrl={props.authorAvatarUrl}
-          nationalityCode={props.authorNationalityCode}
-          timestamp={props.timestamp}
-          showDot
-          size={isMobile() ? 'md' : 'lg'}
-          onAvatarClick={props.onAuthorClick}
-          onClick={props.onAuthorClick}
-          rightSlot={headerRightSlot()}
-        />
+        <div class="flex-shrink-0">
+          <Show
+            when={props.onAuthorClick}
+            fallback={
+              <Avatar
+                src={props.authorAvatarUrl}
+                size="md"
+                shape="circle"
+                nationalityCode={props.authorNationalityCode}
+              />
+            }
+          >
+            <button type="button" class="cursor-pointer" onClick={(e) => { e.stopPropagation(); props.onAuthorClick?.() }}>
+              <Avatar
+                src={props.authorAvatarUrl}
+                size="md"
+                shape="circle"
+                nationalityCode={props.authorNationalityCode}
+              />
+            </button>
+          </Show>
+        </div>
       </Show>
 
-      {/* Content: custom slot or default text+media */}
-      {props.contentSlot ? (
-        props.contentSlot
-      ) : (
-        <PostContent
-          text={props.text}
-          media={props.media}
-          translations={props.translations}
-          userLang={props.userLang}
-          onTranslate={props.onTranslate}
-          isTranslating={props.isTranslating}
-        />
-      )}
+      {/* Right column: name + content + engagement */}
+      <div class="flex-1 min-w-0 flex flex-col gap-0.5">
+        {/* Header: name + timestamp + menu */}
+        <Show when={!props.hideAuthor}>
+          <div class="flex items-center gap-1.5">
+            <span
+              class={cn('text-base font-semibold truncate text-[var(--text-primary)]', props.onAuthorClick && 'cursor-pointer')}
+              onClick={(e) => { e.stopPropagation(); props.onAuthorClick?.() }}
+            >
+              {props.authorHandle || props.authorName}
+            </span>
+            <span class="text-base text-[var(--text-muted)]">·</span>
+            <span class="text-base flex-shrink-0 text-[var(--text-muted)]">{props.timestamp}</span>
+            <div class="flex-1" />
+            {headerRightSlot()}
+          </div>
+        </Show>
 
-      {/* Engagement bar */}
-      <EngagementBar
-        comments={props.comments}
-        onComment={props.onComment}
-        reposts={props.reposts}
-        isReposted={props.isReposted}
-        onRepost={props.onRepost}
-        onQuote={props.onQuote}
-        likes={props.likes}
-        isLiked={props.isLiked}
-        onLike={props.onLike}
-        onShare={props.onShare}
-        compact={isMobile()}
-        class="pt-2"
-      />
+        {/* Content: custom slot or default text+media */}
+        {props.contentSlot ? (
+          props.contentSlot
+        ) : (
+          <PostContent
+            text={props.text}
+            media={props.media}
+            translations={props.translations}
+            userLang={props.userLang}
+          />
+        )}
+
+        {/* Engagement bar */}
+        <EngagementBar
+          comments={props.comments}
+          onComment={props.onComment}
+          reposts={props.reposts}
+          isReposted={props.isReposted}
+          onRepost={props.onRepost}
+          onQuote={props.onQuote}
+          likes={props.likes}
+          isLiked={props.isLiked}
+          onLike={props.onLike}
+          onCopyLink={props.onCopyLink}
+          onSendViaChat={props.onSendViaChat}
+          hasTranslation={!!(props.translations && props.userLang && props.translations[props.userLang])}
+          onTranslate={props.onTranslate && props.userLang ? () => props.onTranslate!(props.userLang!) : undefined}
+          isTranslating={props.isTranslating}
+          needsTranslation={props.postLang && props.userLang ? props.postLang !== props.userLang : true}
+          compact={isMobile()}
+          class="-mb-1"
+        />
+      </div>
     </div>
   )
 }

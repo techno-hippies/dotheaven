@@ -23,7 +23,7 @@ export const LanguageChip: Component<LanguageChipProps> = (props) => {
   return (
     <div
       class={cn(
-        'inline-flex items-center px-2 py-1 rounded-md',
+        'inline-flex items-center px-2 py-1 rounded-full',
         'bg-[var(--bg-elevated)] text-[var(--text-secondary)]',
         props.size === 'sm' ? 'text-xs' : 'text-sm',
         props.class,

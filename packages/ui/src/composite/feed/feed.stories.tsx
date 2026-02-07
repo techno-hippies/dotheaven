@@ -16,7 +16,8 @@ const handlers = {
   onComment: noop,
   onRepost: noop,
   onQuote: noop,
-  onShare: noop,
+  onCopyLink: noop,
+  onSendViaChat: noop,
 }
 
 const feedPosts = (

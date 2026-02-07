@@ -84,7 +84,7 @@ export const MessageInput: Component<MessageInputProps> = (props) => {
         onInput={(e) => setValue(e.currentTarget.value)}
         onKeyDown={handleKeyDown}
         disabled={local.disabled}
-        class="flex-1 bg-[var(--bg-elevated)] text-base text-[var(--text-primary)] placeholder:text-[var(--text-muted)] px-4 py-3 rounded-md border-none outline-none focus:ring-2 focus:ring-[var(--accent-blue)]/50"
+        class="flex-1 bg-[var(--bg-elevated)] text-base text-[var(--text-primary)] placeholder:text-[var(--text-muted)] px-4 py-3 rounded-full border-none outline-none focus:ring-2 focus:ring-[var(--accent-blue)]/50"
       />
       <IconButton
         variant="send"

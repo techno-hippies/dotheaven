@@ -49,6 +49,15 @@ export const Completed: Story = {
   },
 }
 
+export const CompactDots: Story = {
+  name: 'Compact (No Labels)',
+  args: {
+    steps: 5,
+    currentStep: 2,
+    showLabels: false,
+  },
+}
+
 export const Interactive: Story = {
   name: 'Interactive Demo',
   render: () => {

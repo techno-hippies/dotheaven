@@ -19,6 +19,8 @@ export interface BookingDetailData {
   host: string
   hostName?: string         // e.g. "alice.heaven", "bob.eth"
   hostAvatar?: string
+  /** ISO 3166-1 alpha-2 country code */
+  hostNationalityCode?: string
   startTime: number         // unix seconds
   durationMins: number
   priceEth: string
@@ -29,6 +31,8 @@ export interface BookingDetailData {
   guest: string
   guestName?: string
   guestAvatar?: string
+  /** ISO 3166-1 alpha-2 country code */
+  guestNationalityCode?: string
   amountEth: string
   bookingStatus: BookingStatus
   outcome: Outcome
@@ -173,8 +177,8 @@ export const BookingDetail: Component<BookingDetailProps> = (props) => {
   const status = () => FRIENDLY_STATUS_MAP[friendlyStatus()]
   const endTime = () => b().startTime + b().durationMins * 60
   const counterparty = () => b().isHost
-    ? { name: b().guestName, address: b().guest, avatar: b().guestAvatar }
-    : { name: b().hostName, address: b().host, avatar: b().hostAvatar }
+    ? { name: b().guestName, address: b().guest, avatar: b().guestAvatar, nationalityCode: b().guestNationalityCode }
+    : { name: b().hostName, address: b().host, avatar: b().hostAvatar, nationalityCode: b().hostNationalityCode }
   const counterpartyDisplay = () => counterparty().name || truncateAddress(counterparty().address)
   const outcomeDesc = () => getOutcomeDescription(b().outcome, b().isHost)
 
@@ -253,7 +257,7 @@ export const BookingDetail: Component<BookingDetailProps> = (props) => {
       {/* Session info card */}
       <div class="rounded-md bg-[var(--bg-surface)] p-5 flex flex-col gap-4">
         <div class="flex items-center gap-3">
-          <Avatar alt={counterpartyDisplay()} src={counterparty().avatar} size="md" />
+          <Avatar alt={counterpartyDisplay()} src={counterparty().avatar} size="md" nationalityCode={counterparty().nationalityCode} />
           <div class="flex-1 min-w-0">
             <div class="font-medium text-[var(--text-primary)] truncate">
               {counterpartyDisplay()}

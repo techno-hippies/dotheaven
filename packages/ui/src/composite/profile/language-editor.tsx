@@ -121,7 +121,7 @@ export const LanguageEditor: Component<LanguageEditorProps> = (props) => {
             </div>
             <IconButton
               size="sm"
-              variant="ghost"
+              variant="soft"
               aria-label="Remove language"
               onClick={() => handleRemove(index())}
             >
@@ -159,7 +159,7 @@ export const LanguageEditor: Component<LanguageEditorProps> = (props) => {
             </div>
             <IconButton
               size="sm"
-              variant="ghost"
+              variant="soft"
               aria-label="Cancel"
               onClick={() => setAddingLang(false)}
             >

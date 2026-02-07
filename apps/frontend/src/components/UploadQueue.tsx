@@ -125,14 +125,14 @@ export const UploadQueuePanel: Component<UploadQueuePanelProps> = (props) => {
               const progress = stepProgress(job.step)
 
               return (
-                <div class="px-3 py-2 border-t border-[var(--bg-highlight)]">
+                <div class="px-3 py-2 border-t border-[var(--border-subtle)]">
                   <div class="flex items-center justify-between">
                     <div class="truncate flex-1 mr-2 text-[var(--text-primary)]">{job.title}</div>
                     <div class="flex items-center gap-1 text-[var(--text-muted)] tabular-nums shrink-0">
                       {formatElapsed(job.startedAt, job.completedAt, now())}
                       <Show when={isDone || isError}>
                         <IconButton
-                          variant="ghost"
+                          variant="soft"
                           size="sm"
                           aria-label="Remove"
                           onClick={() => props.onRemoveJob?.(job.id)}

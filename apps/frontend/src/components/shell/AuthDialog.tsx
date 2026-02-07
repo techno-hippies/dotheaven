@@ -11,12 +11,17 @@
 import type { Component, JSX } from 'solid-js'
 import { createSignal, createEffect, Show } from 'solid-js'
 import {
+  Button,
+  IconButton,
   Dialog,
   DialogContent,
   DialogBody,
   DialogCloseButton,
   Drawer,
   DrawerContent,
+  Spinner,
+  Wallet,
+  X,
   useIsMobile,
 } from '@heaven/ui'
 import { useAuth } from '../../providers'
@@ -103,7 +108,7 @@ export const AuthDialog: Component<AuthDialogProps> = (props) => {
         when={!isLoading()}
         fallback={
           <div class="flex flex-col items-center gap-3 py-4">
-            <div class="w-6 h-6 border-2 border-[var(--text-muted)] border-t-transparent rounded-full animate-spin" />
+            <Spinner size="md" />
             <p class="text-sm text-[var(--text-secondary)] text-center">
               {authMethod() === 'eoa'
                 ? 'Confirm in your wallet'
@@ -115,34 +120,35 @@ export const AuthDialog: Component<AuthDialogProps> = (props) => {
         }
       >
         <div class="flex gap-3">
-          <button
-            type="button"
-            class="flex-1 px-4 py-3 rounded-md font-semibold text-base bg-[var(--bg-highlight-hover)] text-[var(--text-primary)] hover:brightness-110 transition-all cursor-pointer"
+          <Button
+            variant="secondary"
+            size="lg"
+            class="flex-1"
             onClick={hasError() ? handleRetry : handleSignIn}
           >
             {hasError() ? 'Try Again' : 'Sign In'}
-          </button>
-          <button
-            type="button"
-            class="flex-1 px-4 py-3 rounded-md font-semibold text-base bg-[var(--accent-blue)] text-white hover:bg-[var(--accent-blue-hover)] transition-colors cursor-pointer"
+          </Button>
+          <Button
+            variant="default"
+            size="lg"
+            class="flex-1"
             onClick={handleRegister}
           >
             New Account
-          </button>
+          </Button>
         </div>
 
         <p class="text-center text-[var(--text-muted)] text-sm">or</p>
 
-        <button
-          type="button"
-          class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-md font-semibold text-base bg-[var(--bg-highlight-hover)] text-[var(--accent-blue)] hover:brightness-110 transition-all cursor-pointer"
+        <Button
+          variant="secondary"
+          size="lg"
+          class="w-full"
+          icon={<Wallet class="w-5 h-5" />}
           onClick={handleConnectWallet}
         >
-          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
-            <path d="M216,64H56A8,8,0,0,1,56,48H192a8,8,0,0,0,0-16H56A24,24,0,0,0,32,56V184a24,24,0,0,0,24,24H216a16,16,0,0,0,16-16V80A16,16,0,0,0,216,64Zm0,128H56a8,8,0,0,1-8-8V78.63A23.84,23.84,0,0,0,56,80H216Zm-36-60a12,12,0,1,1,12-12A12,12,0,0,1,180,132Z" />
-          </svg>
           Connect Wallet
-        </button>
+        </Button>
       </Show>
     </div>
   )
@@ -156,11 +162,13 @@ export const AuthDialog: Component<AuthDialogProps> = (props) => {
           <DialogContent class="max-w-sm">
             {/* Custom header with centered content and absolute close button */}
             <div class="relative p-6 pb-4">
-              <DialogCloseButton class="absolute top-4 right-4 p-2 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-highlight)] transition-colors cursor-pointer">
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
-                  <path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z" />
-                </svg>
-              </DialogCloseButton>
+              <DialogCloseButton
+                as={(closeProps: any) => (
+                  <IconButton {...closeProps} variant="soft" size="md" aria-label="Close" class="absolute top-4 right-4">
+                    <X class="w-5 h-5" />
+                  </IconButton>
+                )}
+              />
               {headerContent()}
             </div>
             <DialogBody>{bodyContent()}</DialogBody>

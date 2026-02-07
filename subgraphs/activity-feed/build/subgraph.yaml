@@ -104,3 +104,33 @@ dataSources:
         - event: ContentDeactivated(indexed bytes32)
           handler: handleContentDeactivated
       file: ContentRegistry/ContentRegistry.wasm
+  - kind: ethereum
+    name: EngagementV2
+    network: megaeth-testnet-v2
+    source:
+      address: "0xAF769d204e51b64D282083Eb0493F6f37cd93138"
+      abi: EngagementV2
+      startBlock: 10347129
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Post
+        - Translation
+        - Comment
+      abis:
+        - name: EngagementV2
+          file: EngagementV2/EngagementV2.json
+      eventHandlers:
+        - event: TranslationAdded(indexed bytes32,indexed bytes2,indexed address,string)
+          handler: handleTranslationAdded
+        - event: Liked(indexed bytes32,indexed address)
+          handler: handleLiked
+        - event: Unliked(indexed bytes32,indexed address)
+          handler: handleUnliked
+        - event: CommentAdded(indexed bytes32,indexed address,indexed uint256,string)
+          handler: handleCommentAdded
+        - event: Flagged(indexed bytes32,indexed address,uint8)
+          handler: handleFlagged
+      file: EngagementV2/EngagementV2.wasm

@@ -1,4 +1,5 @@
 import { type Component, createSignal, createEffect, Show, createMemo, onCleanup, onMount } from 'solid-js'
+import { Button } from '@heaven/ui'
 import { useNavigate, useParams } from '@solidjs/router'
 import { createQuery } from '@tanstack/solid-query'
 import { ProfilePage, type ProfileTab, type ProfileScrobble } from '../components/profile'
@@ -713,13 +714,9 @@ export const MyProfilePage: Component = () => {
             <div class="text-center">
               <h2 class="text-2xl font-bold text-[var(--text-primary)] mb-2">Your Profile</h2>
               <p class="text-base text-[var(--text-secondary)] mb-6">Sign up to create your profile and connect with others.</p>
-              <button
-                type="button"
-                class="px-6 py-3 rounded-md font-semibold text-base bg-[var(--accent-blue)] text-white hover:bg-[var(--accent-blue-hover)] transition-colors cursor-pointer"
-                onClick={() => openAuthDialog()}
-              >
+              <Button size="lg" onClick={() => openAuthDialog()}>
                 Sign Up
-              </button>
+              </Button>
             </div>
           </div>
         }
@@ -798,7 +795,7 @@ const ProfileSkeleton: Component = () => (
       </div>
     </div>
     {/* Tabs */}
-    <div class="flex gap-6 px-8 border-b border-[var(--bg-highlight)]">
+    <div class="flex gap-6 px-8 border-b border-[var(--border-subtle)]">
       <div class="h-10 w-20 bg-[var(--bg-elevated)] rounded-md" />
       <div class="h-10 w-20 bg-[var(--bg-elevated)] rounded-md" />
       <div class="h-10 w-20 bg-[var(--bg-elevated)] rounded-md" />

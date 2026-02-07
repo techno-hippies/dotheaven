@@ -63,7 +63,7 @@ export const SidePlayer: Component<SidePlayerProps> = (props) => {
         <div class="flex items-center justify-end px-4 pt-3 pb-0">
           <DropdownMenu>
             <DropdownMenuTrigger
-              as={(triggerProps: any) => <IconButton {...triggerProps} variant="ghost" size="md" />}
+              as={(triggerProps: any) => <IconButton {...triggerProps} variant="soft" size="md" />}
               aria-label="More options"
             >
               <DotsThree class="w-5 h-5" />
@@ -158,10 +158,10 @@ export const SidePlayer: Component<SidePlayerProps> = (props) => {
 
       {/* Playback Controls */}
       <div class="px-4 pt-4 flex items-center justify-center gap-4">
-        <IconButton variant="ghost" size="md" aria-label="Shuffle" onClick={props.onShuffle}>
+        <IconButton variant="soft" size="md" aria-label="Shuffle" onClick={props.onShuffle}>
           <ShuffleIcon />
         </IconButton>
-        <IconButton variant="ghost" size="md" aria-label="Previous" onClick={props.onPrev}>
+        <IconButton variant="soft" size="md" aria-label="Previous" onClick={props.onPrev}>
           <PrevIcon />
         </IconButton>
         <PlayButton
@@ -170,10 +170,10 @@ export const SidePlayer: Component<SidePlayerProps> = (props) => {
           isPlaying={props.isPlaying}
           onClick={props.onPlayPause}
         />
-        <IconButton variant="ghost" size="md" aria-label="Next" onClick={props.onNext}>
+        <IconButton variant="soft" size="md" aria-label="Next" onClick={props.onNext}>
           <NextIcon />
         </IconButton>
-        <IconButton variant="ghost" size="md" aria-label="Repeat" onClick={props.onRepeat}>
+        <IconButton variant="soft" size="md" aria-label="Repeat" onClick={props.onRepeat}>
           <RepeatIcon />
         </IconButton>
       </div>

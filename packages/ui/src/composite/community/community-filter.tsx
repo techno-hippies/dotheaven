@@ -189,7 +189,7 @@ export const CommunityFilterDialog: Component<CommunityFilterProps> = (props) =>
         <Dialog open={props.open} onOpenChange={handleOpenChange}>
           <DialogContent class="max-w-sm">
             <div class="relative p-6 pb-4">
-              <DialogCloseButton class="absolute top-4 right-4 p-2 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-highlight)] transition-colors cursor-pointer">
+              <DialogCloseButton class="absolute top-4 right-4 p-2 rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-highlight)] transition-colors cursor-pointer">
                 <X class="w-5 h-5" />
               </DialogCloseButton>
               <h2 class="text-lg font-semibold text-[var(--text-primary)]">

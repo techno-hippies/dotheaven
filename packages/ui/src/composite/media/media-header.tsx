@@ -81,7 +81,7 @@ export const MediaHeader: Component<MediaHeaderProps> = (props) => {
         <div class="flex items-center justify-between px-2 py-2">
           <Show when={props.onBack} fallback={<div class="w-10" />}>
             <IconButton
-              variant="ghost"
+              variant="soft"
               size="md"
               onClick={props.onBack}
               aria-label="Go back"
@@ -92,7 +92,7 @@ export const MediaHeader: Component<MediaHeaderProps> = (props) => {
 
           <Show when={props.mobileMenuItems && props.mobileMenuItems.length > 0} fallback={<div class="w-10" />}>
             <IconButton
-              variant="ghost"
+              variant="soft"
               size="md"
               onClick={() => setDrawerOpen(true)}
               aria-label="More options"

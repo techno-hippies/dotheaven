@@ -34,7 +34,7 @@ export const MobileFooter: Component<MobileFooterProps> = (props) => {
   return (
     <nav
       class={cn(
-        'h-16 bg-[var(--bg-surface)] border-t border-[var(--bg-highlight)] flex items-center justify-around px-2',
+        'h-16 bg-[var(--bg-surface)] border-t border-[var(--border-subtle)] flex items-center justify-around px-2',
         props.class
       )}
     >

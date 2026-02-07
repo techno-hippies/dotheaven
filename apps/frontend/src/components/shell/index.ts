@@ -1,4 +1,3 @@
-export { AppShell, type AppShellProps } from './AppShell'
 export { Header, SearchInput, AppLogo, type HeaderProps, type SearchInputProps, type AppLogoProps } from './header'
 export { HeaderActions } from './HeaderActions'
 export { AuthDialog, type AuthDialogProps } from './AuthDialog'

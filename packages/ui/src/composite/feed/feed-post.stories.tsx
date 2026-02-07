@@ -36,8 +36,16 @@ const engagement = {
   onComment: () => console.log('comment'),
   onRepost: () => console.log('repost'),
   onQuote: () => console.log('quote'),
-  onShare: () => console.log('share'),
-  onMenuClick: () => console.log('menu'),
+  onCopyLink: () => console.log('copy link'),
+  onSendViaChat: () => console.log('send via chat'),
+  onReportPost: () => console.log('report post'),
+  onBlockUser: () => console.log('block user'),
+  provenance: {
+    postId: '0x396123e3de35472a918dd3aebf51eeab4aa21a580f1ab290a528c56229795c04',
+    ipfsHash: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
+    txHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+    chainId: 6343,
+  },
 }
 
 // ── Text Only ──────────────────────────────────────────────────────────
@@ -282,7 +290,8 @@ export const Interactive: StoryObj = {
         }}
         onQuote={() => console.log('open quote dialog')}
         onComment={() => console.log('comment')}
-        onShare={() => console.log('share')}
+        onCopyLink={() => console.log('copy link')}
+        onSendViaChat={() => console.log('send via chat')}
         onMenuClick={() => console.log('menu')}
       />
     )
@@ -311,7 +320,8 @@ export const FeedScroll: StoryObj = {
         onComment={() => {}}
         onRepost={() => {}}
         onQuote={() => {}}
-        onShare={() => {}}
+        onCopyLink={() => {}}
+        onSendViaChat={() => {}}
       />
       <FeedPost
         authorName="Miku"
@@ -328,7 +338,8 @@ export const FeedScroll: StoryObj = {
         onComment={() => {}}
         onRepost={() => {}}
         onQuote={() => {}}
-        onShare={() => {}}
+        onCopyLink={() => {}}
+        onSendViaChat={() => {}}
       />
       <FeedPost
         authorName="Rei"
@@ -346,7 +357,8 @@ export const FeedScroll: StoryObj = {
         onComment={() => {}}
         onRepost={() => {}}
         onQuote={() => {}}
-        onShare={() => {}}
+        onCopyLink={() => {}}
+        onSendViaChat={() => {}}
       />
       <FeedPost
         authorName="Asuka"
@@ -363,7 +375,8 @@ export const FeedScroll: StoryObj = {
         onComment={() => {}}
         onRepost={() => {}}
         onQuote={() => {}}
-        onShare={() => {}}
+        onCopyLink={() => {}}
+        onSendViaChat={() => {}}
       />
       <FeedPost
         authorName="Sakura"
@@ -384,16 +397,34 @@ export const FeedScroll: StoryObj = {
         onComment={() => {}}
         onRepost={() => {}}
         onQuote={() => {}}
-        onShare={() => {}}
+        onCopyLink={() => {}}
+        onSendViaChat={() => {}}
       />
     </div>
   ),
 }
 
-// ── Provenance: Original Content ────────────────────────────────────────
+// ── Metadata: Text Post ──────────────────────────────────────────────────
 
-export const ProvenanceOriginal: Story = {
-  name: 'Provenance: Original',
+export const MetadataTextPost: Story = {
+  name: 'Metadata: Text Post',
+  args: {
+    ...author,
+    ...engagement,
+    text: 'Just discovered this amazing album. The production quality is insane.',
+    provenance: {
+      postId: '0x396123e3de35472a918dd3aebf51eeab4aa21a580f1ab290a528c56229795c04',
+      ipfsHash: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
+      txHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+      chainId: 6343,
+    },
+  },
+}
+
+// ── Metadata: Photo Post with Story Protocol IP ─────────────────────────
+
+export const MetadataPhotoWithIP: Story = {
+  name: 'Metadata: Photo + Story IP',
   args: {
     ...author,
     ...engagement,
@@ -404,117 +435,12 @@ export const ProvenanceOriginal: Story = {
     },
     likes: 234,
     comments: 18,
-    reposts: 7,
     provenance: {
-      ownership: 'mine',
-      postId: '42',
-      ipfsHash: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
-      contentHash: '0x8a5b1c7d3e2f4a6b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b',
-      txHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
-      chainId: 6343,
-      registeredAt: '2024-01-15T14:30:00Z',
-    },
-  },
-}
-
-// ── Provenance: Shared Content with Source ──────────────────────────────
-
-export const ProvenanceShared: Story = {
-  name: 'Provenance: Shared with Source',
-  args: {
-    ...author,
-    ...engagement,
-    text: 'This is incredible work, had to share',
-    media: {
-      type: 'photo',
-      items: [{ url: 'https://placewaifu.com/image/800/450', aspect: 'landscape' }],
-    },
-    likes: 89,
-    comments: 5,
-    reposts: 2,
-    provenance: {
-      ownership: 'not-mine',
-      source: {
-        url: 'https://x.com/artist/status/123456789',
-        platform: 'Twitter',
-        handle: 'artist',
-      },
-      postId: '43',
-      ipfsHash: 'QmXnYzT2w5VaC8K9R1pqZ3f4D7gH8jK2mN5sW6xY9zA3bC',
-      chainId: 6343,
-    },
-  },
-}
-
-// ── Provenance: Video with Audio Source ─────────────────────────────────
-
-export const ProvenanceVideoWithAudio: Story = {
-  name: 'Provenance: Video with Audio',
-  args: {
-    ...author,
-    ...engagement,
-    text: 'Made this edit with my favorite track',
-    media: {
-      type: 'video',
-      src: '',
-      thumbnailUrl: 'https://placewaifu.com/image/270/480',
-      aspect: 'portrait',
-    },
-    likes: 1200,
-    comments: 67,
-    reposts: 45,
-    provenance: {
-      ownership: 'mine',
-      audioSource: {
-        url: 'https://open.spotify.com/track/abc123',
-        platform: 'Spotify',
-      },
-      postId: '44',
-      ipId: '0x1234567890abcdef1234567890abcdef12345678',
+      postId: '0xa1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2',
       ipfsHash: 'QmT5NvUtoM5nWFfrQdVrFtvGfKFmG7AHE8P34isapyhCxX',
-      contentHash: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
       txHash: '0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321',
       chainId: 6343,
-      registeredAt: '2024-01-16T09:15:00Z',
-    },
-  },
-}
-
-// ── Provenance: Full Attribution ──────────────────────────────────────────
-
-export const ProvenanceFull: Story = {
-  name: 'Provenance: Full (Shared Video)',
-  args: {
-    ...author,
-    ...engagement,
-    text: 'Found this gem on TikTok',
-    media: {
-      type: 'video',
-      src: '',
-      thumbnailUrl: 'https://placewaifu.com/image/270/480',
-      aspect: 'portrait',
-    },
-    likes: 3400,
-    comments: 156,
-    reposts: 78,
-    provenance: {
-      ownership: 'not-mine',
-      source: {
-        url: 'https://tiktok.com/@creator/video/12345',
-        platform: 'TikTok',
-        handle: 'creator',
-      },
-      audioSource: {
-        url: 'https://open.spotify.com/track/xyz789',
-        platform: 'Spotify',
-      },
-      postId: '45',
-      ipId: '0xabcdef1234567890abcdef1234567890abcdef12',
-      ipfsHash: 'QmZ8K7pNqR2wX5vB3cD4eF6gH9jK1mN2sW4xY7zA8bC0dE',
-      contentHash: '0x1234abcd5678efgh1234abcd5678efgh1234abcd5678efgh1234abcd5678efgh',
-      txHash: '0xabcd1234efgh5678abcd1234efgh5678abcd1234efgh5678abcd1234efgh5678',
-      chainId: 6343,
-      registeredAt: '2024-01-17T18:45:00Z',
+      ipId: '0x1234567890abcdef1234567890abcdef12345678',
     },
   },
 }

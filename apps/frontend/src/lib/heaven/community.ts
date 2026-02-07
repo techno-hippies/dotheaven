@@ -16,7 +16,7 @@ const PROFILES_ENDPOINT =
   'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-profiles/1.0.0/gn'
 
 const ACTIVITY_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/9.0.0/gn'
+  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/12.0.0/gn'
 
 const MEGAETH_RPC = 'https://carrot.megaeth.com/rpc'
 const VERIFICATION_MIRROR = (import.meta.env.VITE_VERIFICATION_MIRROR_MEGAETH ?? '') as string

@@ -16,7 +16,7 @@ export const Sidebar: Component<SidebarProps> = (props) => {
   return (
     <aside
       class={cn(
-        'h-full border-r border-[var(--bg-highlight)] flex flex-col overflow-y-auto overflow-x-hidden transition-[width] duration-200 ease-linear',
+        'h-full border-r border-[var(--border-subtle)] flex flex-col overflow-y-auto overflow-x-hidden transition-[width] duration-200 ease-linear',
         props.compact ? 'w-[68px] p-3' : 'w-[280px] p-3',
         props.class
       )}

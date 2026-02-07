@@ -30,6 +30,9 @@ export const WALLET = '/wallet'
 /** Schedule / booking page */
 export const SCHEDULE = '/schedule'
 
+/** Schedule availability editor */
+export const SCHEDULE_AVAILABILITY = '/schedule/availability'
+
 /** Liked songs collection */
 export const LIKED_SONGS = '/liked-songs'
 
@@ -42,8 +45,8 @@ export const MUSIC = '/music'
 /** Chat hub (shows conversation list) */
 export const CHAT = '/chat'
 
-/** Search / community discovery */
-export const SEARCH = '/search'
+/** Community discovery */
+export const COMMUNITY = '/community'
 
 /** Settings page */
 export const SETTINGS = '/settings'
@@ -79,9 +82,9 @@ export const album = (mbid: string) => `/album/${mbid}`
 
 /**
  * Music library with specific tab.
- * @param tab - 'local' | 'cloud' | 'shared'
+ * @param tab - 'local' | 'cloud' | 'shared' | 'publish'
  */
-export const musicTab = (tab: 'local' | 'cloud' | 'shared') => `/music/${tab}`
+export const musicTab = (tab: 'local' | 'cloud' | 'shared' | 'publish') => `/music/${tab}`
 
 /**
  * Peer-to-peer chat (XMTP).

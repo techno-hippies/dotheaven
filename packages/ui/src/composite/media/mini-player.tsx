@@ -54,7 +54,7 @@ export const MiniPlayer: Component<MiniPlayerProps> = (props) => {
   return (
     <div
       class={cn(
-        'h-16 bg-[var(--bg-surface)] border-t border-[var(--bg-highlight)] relative',
+        'h-16 bg-[var(--bg-surface)] border-t border-[var(--border-subtle)] relative',
         props.class
       )}
     >
@@ -90,7 +90,7 @@ export const MiniPlayer: Component<MiniPlayerProps> = (props) => {
         <Show when={hasTrack()}>
           <div class="flex items-center gap-0.5">
             <IconButton
-              variant="ghost"
+              variant="soft"
               size="lg"
               aria-label={props.isPlaying ? 'Pause' : 'Play'}
               onClick={(e) => {
@@ -101,7 +101,7 @@ export const MiniPlayer: Component<MiniPlayerProps> = (props) => {
               {props.isPlaying ? <PauseFillIcon /> : <PlayFillIcon />}
             </IconButton>
             <IconButton
-              variant="ghost"
+              variant="soft"
               size="lg"
               aria-label="Next"
               onClick={(e) => {

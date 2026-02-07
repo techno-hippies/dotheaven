@@ -97,7 +97,7 @@ export function Select<T extends SelectOption = SelectOption>(props: SelectProps
       <div class={cn('relative', local.class)}>
         <KobalteSelect.Trigger
           class={cn(
-            'flex items-center justify-between gap-2 w-full h-11 px-3 rounded-md',
+            'flex items-center justify-between gap-2 w-full h-11 px-4 rounded-full',
             'bg-[var(--bg-highlight)] text-base',
             'border-2 transition-colors',
             'focus:outline-none',

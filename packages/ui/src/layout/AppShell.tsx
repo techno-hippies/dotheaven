@@ -53,7 +53,7 @@ export const AppShell: Component<AppShellProps> = (props) => {
         {/* Main Content */}
         <main class={cn(
           "flex-1 overflow-hidden",
-          !isMobile() && "border-t border-[var(--bg-highlight)]"
+          !isMobile() && "border-t border-[var(--border-subtle)]"
         )}>
           {props.children}
         </main>
@@ -68,7 +68,7 @@ export const AppShell: Component<AppShellProps> = (props) => {
 
       {/* Desktop Footer / Music Player - hidden on mobile */}
       <Show when={!isMobile() && props.footer}>
-        <div class="border-t border-[var(--bg-highlight)]">
+        <div class="border-t border-[var(--border-subtle)]">
           {props.footer}
         </div>
       </Show>

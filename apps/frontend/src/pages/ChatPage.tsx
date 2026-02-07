@@ -121,12 +121,12 @@ export const ChatPage: Component = () => {
         <div class="h-full overflow-y-auto">
           <div class="h-full flex flex-col">
             {/* Chat Header */}
-            <div class="h-16 flex items-center justify-between px-4 border-b border-[var(--border-default)] flex-shrink-0">
+            <div class="h-16 flex items-center justify-between px-4 border-b border-[var(--border-subtle)] flex-shrink-0">
               <div class="flex items-center gap-3">
                 {/* Back button on mobile */}
                 <Show when={isMobile()}>
                   <IconButton
-                    variant="ghost"
+                    variant="soft"
                     size="md"
                     aria-label="Back to messages"
                     onClick={() => navigate(CHAT)}
@@ -146,7 +146,7 @@ export const ChatPage: Component = () => {
                   </p>
                 </div>
               </div>
-              <IconButton variant="ghost" size="md" aria-label="Open menu">
+              <IconButton variant="soft" size="md" aria-label="Open menu">
                 <MoreIcon />
               </IconButton>
             </div>

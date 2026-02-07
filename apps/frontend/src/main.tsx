@@ -11,7 +11,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/solid-query'
 import { PlatformProvider, platform } from 'virtual:heaven-platform'
 import { AuthProvider, WalletProvider, XMTPProvider, PlayerProvider } from './providers'
 import {
-  HOME, AUTH, ONBOARDING, PROFILE, WALLET, SCHEDULE, SEARCH, SETTINGS,
+  HOME, AUTH, ONBOARDING, PROFILE, WALLET, SCHEDULE, SCHEDULE_AVAILABILITY, COMMUNITY, SETTINGS,
   LIKED_SONGS, FREE_WEEKLY, MUSIC, CHAT, ROUTE_PARAMS,
   publicProfile,
 } from '@heaven/core'
@@ -41,7 +41,7 @@ import { WalletPage } from './pages/WalletPage'
 import { PlaylistPage } from './pages/PlaylistPage'
 import { ArtistPage } from './pages/ArtistPage'
 import { AlbumPage } from './pages/AlbumPage'
-import { SchedulePage } from './pages/SchedulePage'
+import { SchedulePage, ScheduleAvailabilityPage } from './pages/SchedulePage'
 import { ChatLayout } from './pages/ChatLayout'
 import { ClaimPage } from './pages/ClaimPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -96,7 +96,7 @@ render(
                 {/* App routes with shared layout */}
                 <Route path={HOME} component={AppLayout}>
                   <Route path={HOME} component={FeedPage} />
-                  <Route path={SEARCH} component={App} />
+                  <Route path={COMMUNITY} component={App} />
                   <Route path={ROUTE_PARAMS.PUBLIC_PROFILE} component={PublicProfilePage} />
                   <Route path={ROUTE_PARAMS.POST} component={PostPage} />
                   <Route path={ROUTE_PARAMS.PLAYLIST} component={PlaylistPage} />
@@ -114,6 +114,7 @@ render(
                   </Route>
                   <Route path={WALLET} component={WalletPage} />
                   <Route path={SETTINGS} component={SettingsPage} />
+                  <Route path={SCHEDULE_AVAILABILITY} component={ScheduleAvailabilityPage} />
                   <Route path={SCHEDULE} component={SchedulePage} />
                 </Route>
               </HashRouter>

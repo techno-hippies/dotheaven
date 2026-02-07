@@ -2,6 +2,8 @@ import type { Component } from 'solid-js'
 import { createSignal, Show } from 'solid-js'
 import { cn } from '../../lib/utils'
 import { Avatar } from '../../primitives/avatar'
+import { IconButton } from '../../primitives/icon-button'
+import { Button } from '../../primitives/button'
 import { Drawer, DrawerContent } from '../../primitives/drawer'
 import { Image, Plus } from '../../icons'
 
@@ -36,7 +38,7 @@ export const ComposeBox: Component<ComposeBoxProps> = (props) => {
 
   return (
     <div class={cn(
-      'flex gap-3 p-4 border-b border-[var(--bg-highlight)]',
+      'flex gap-3 p-4 border-b border-[var(--border-subtle)]',
       props.class,
     )}>
       <Avatar src={props.avatarUrl} size="md" />
@@ -57,27 +59,23 @@ export const ComposeBox: Component<ComposeBoxProps> = (props) => {
         <Show when={focused() || text()}>
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-1">
-              <button
-                type="button"
-                class="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--accent-blue)] hover:bg-[var(--bg-highlight)] transition-colors cursor-pointer"
+              <IconButton
+                variant="soft"
+                size="md"
+                aria-label="Add media"
                 onClick={() => props.onAddMedia?.()}
               >
                 <Image class="w-5 h-5" />
-              </button>
+              </IconButton>
             </div>
-            <button
-              type="button"
+            <Button
+              variant="default"
+              size="sm"
               disabled={!text().trim()}
-              class={cn(
-                'px-4 py-1.5 rounded-md text-sm font-medium transition-colors cursor-pointer',
-                text().trim()
-                  ? 'bg-[var(--accent-blue)] text-white hover:opacity-90'
-                  : 'bg-[var(--bg-highlight)] text-[var(--text-muted)] cursor-not-allowed',
-              )}
               onClick={handlePost}
             >
               Post
-            </button>
+            </Button>
           </div>
         </Show>
       </div>
@@ -140,26 +138,22 @@ export const ComposeDrawer: Component<ComposeDrawerProps> = (props) => {
         showHandle
         footer={
           <div class="flex items-center justify-between">
-            <button
-              type="button"
-              class="p-2 rounded-md text-[var(--text-muted)] hover:text-[var(--accent-blue)] hover:bg-[var(--bg-highlight)] transition-colors cursor-pointer"
+            <IconButton
+              variant="soft"
+              size="md"
+              aria-label="Add media"
               onClick={() => props.onAddMedia?.()}
             >
               <Image class="w-5 h-5" />
-            </button>
-            <button
-              type="button"
+            </IconButton>
+            <Button
+              variant="default"
+              size="sm"
               disabled={!text().trim()}
-              class={cn(
-                'px-5 py-2 rounded-md text-sm font-semibold transition-colors cursor-pointer',
-                text().trim()
-                  ? 'bg-[var(--accent-blue)] text-white hover:opacity-90'
-                  : 'bg-[var(--bg-highlight)] text-[var(--text-muted)] cursor-not-allowed',
-              )}
               onClick={handlePost}
             >
               Post
-            </button>
+            </Button>
           </div>
         }
       >

@@ -11,7 +11,7 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 - **Content register v1**: Register Filecoin content entry on ContentRegistry + upload cover art. Sponsor PKP pays gas.
 - **Content access v1**: Grant/revoke access on ContentRegistry. Sponsor PKP pays gas.
 - **Link EOA v1**: Link PKP to EOA on ContentAccessMirror for shared content access.
-- **Post register v1**: Unified post registration for text AND photo posts. Text posts: AI safety check + metadata upload + MegaETH mirror (no Story). Photo posts: metadata upload + Story IP + MegaETH mirror. Supports attribution for shared content.
+- **Post register v1**: Unified post registration for text AND photo posts. Text posts: AI safety check (includes language detection) + metadata upload + MegaETH mirror (no Story). Photo posts: metadata upload + Story IP + MegaETH mirror. Supports attribution for shared content. Pre-signed signature support for test/frontend flexibility.
 
 ### Future (not yet wired to frontend)
 - **Song publish**: Upload audio/preview/cover/metadata to IPFS, align lyrics (ElevenLabs), translate lyrics (OpenRouter) — all in one action with 3 encrypted keys
@@ -39,13 +39,13 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 | Content Register v1 | `features/music/content-register-v1.js` | `QmchDhdr...` |
 | Content Access v1 | `features/music/content-access-v1.js` | `QmXnhhG1...` |
 | Link EOA v1 | `features/music/link-eoa-v1.js` | `QmYPeQEp...` |
-| Post Register v1 | `features/social/post-register-v1.js` | `QmeVChS4...` |
+| Post Register v1 | `features/social/post-register-v1.js` | `QmQ3sz9g...` |
+| Post Translate v1 | `features/social/post-translate-v1.js` | `QmWAGjKK...` |
 
 ### Future (in `setup.ts` but not in `action-cids.ts`)
 
 | Action | File | Notes |
 |--------|------|-------|
-| Post Translate v1 | `features/social/post-translate-v1.js` | Translates post text via LLM → EngagementV2.translateFor() on MegaETH |
 | Song Publish | `features/music/song-publish-v1.js` | Not wired to frontend yet |
 | Lyrics Translate | `features/music/lyrics-translate-v1.js` | Not wired to frontend yet |
 | Story Register Sponsor | `features/music/story-register-sponsor-v1.js` | Not wired to frontend yet |
@@ -147,7 +147,7 @@ Client                      Lit Action                  Story Aeneid
 
 | Subgraph | Version | Endpoint |
 |----------|---------|----------|
-| `dotheaven-activity` | 7.0.0 | `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/7.0.0/gn` |
+| `dotheaven-activity` | 12.0.0 | `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/12.0.0/gn` |
 | `dotheaven-profiles` | 1.0.0 | `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-profiles/1.0.0/gn` |
 | `dotheaven-playlists` | 1.0.0 | `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-playlists/1.0.0/gn` |
 
@@ -195,6 +195,7 @@ bun features/music/playlist-v1.test.ts          # Test playlist CRUD
 bun features/profile/heaven-claim-name.test.ts      # Test .heaven name claim
 bun features/profile/heaven-set-profile.test.ts     # Test profile write
 bun features/profile/heaven-set-records.test.ts     # Test records write
+bun features/social/post-register.test.ts            # Test post registration + language detection
 bun features/social/post-translate.test.ts          # Test post translation
 bun features/verification/self-verify-mirror.test.ts # Test verification mirror
 
@@ -233,6 +234,7 @@ lit-actions/
 │   ├── social/                        # Posts and engagement
 │   │   ├── post-register-v1.js        # Unified text + photo post registration
 │   │   ├── post-translate-v1.js       # LLM translation → EngagementV2
+│   │   ├── post-register.test.ts
 │   │   └── post-translate.test.ts
 │   ├── music/                         # Playlists, publishing, content, covers
 │   │   ├── playlist-v1.js             # Event-sourced playlist operations
@@ -289,6 +291,16 @@ lit-actions/
 message = `heaven:publish:${audioHash}:${previewHash}:${coverHash}:${songMetadataHash}:${ipaMetadataHash}:${nftMetadataHash}:${lyricsHash}:${sourceLanguage}:${targetLanguage}:${timestamp}:${nonce}`
 ```
 Action fetches content, re-hashes, verifies signature recovers to user's address. All metadata, lyrics, and language params are authenticated.
+
+### Post Register (EIP-191)
+```
+message = `heaven:post:${contentIdentifier}:${timestamp}:${nonce}`
+```
+`contentIdentifier` = `keccak256(text).slice(0, 18)` for text posts, `imageCid` for photo posts. Supports two modes:
+1. **In-action signing**: User PKP signs binding message inside the Lit Action via `signAndCombineEcdsa`.
+2. **Pre-signed**: Frontend/test pre-signs the message and passes `signature` jsParam (skips in-action signing).
+
+Action also runs an LLM safety check on text posts (via OpenRouter) that returns `{ safe, isAdult, lang }`. The `lang` field (ISO 639-1 code, e.g. "en", "ja") is stored in the IPFS metadata as `language`. Sponsor PKP broadcasts `PostsV1.postFor()` on MegaETH.
 
 ### Post Translate (EIP-191)
 ```

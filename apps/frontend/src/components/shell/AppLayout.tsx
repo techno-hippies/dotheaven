@@ -12,7 +12,7 @@ import type { ParentComponent } from 'solid-js'
 import { Show, createMemo, createEffect } from 'solid-js'
 import { useLocation, useNavigate } from '@solidjs/router'
 import {
-  HOME, WALLET, SCHEDULE, CHAT, SEARCH, MUSIC, ONBOARDING, SETTINGS,
+  HOME, WALLET, SCHEDULE, CHAT, COMMUNITY, MUSIC, ONBOARDING, SETTINGS,
 } from '@heaven/core'
 import { useAuth } from '../../providers'
 import { useOnboardingStatus } from '../../hooks/useOnboardingStatus'
@@ -178,7 +178,7 @@ export const AppLayout: ParentComponent = (props) => {
   // Mobile footer tabs
   const mobileFooterTabs: MobileFooterTab[] = [
     { id: 'home', icon: <HomeIcon />, activeIcon: <HomeFillIcon />, label: 'Home' },
-    { id: 'search', icon: <SearchIcon />, activeIcon: <SearchFillIcon />, label: 'Search' },
+    { id: 'community', icon: <SearchIcon />, activeIcon: <SearchFillIcon />, label: 'Community' },
     { id: 'music', icon: <MusicIcon />, activeIcon: <MusicFillIcon />, label: 'Music' },
     { id: 'chat', icon: <ChatIcon />, activeIcon: <ChatFillIcon />, label: 'Chat' },
     { id: 'schedule', icon: <CalendarIcon />, activeIcon: <CalendarFillIcon />, label: 'Schedule' },
@@ -189,7 +189,7 @@ export const AppLayout: ParentComponent = (props) => {
   const activeTab = createMemo(() => {
     const path = location.pathname
     if (path === '/') return 'home'
-    if (path.startsWith('/search')) return 'search'
+    if (path.startsWith('/community')) return 'community'
     if (path.startsWith('/music')) return 'music'
     if (path.startsWith('/chat')) return 'chat'
     if (path.startsWith('/wallet')) return 'wallet'
@@ -201,7 +201,7 @@ export const AppLayout: ParentComponent = (props) => {
   const handleTabPress = (tabId: string) => {
     switch (tabId) {
       case 'home': navigate(HOME); break
-      case 'search': navigate(SEARCH); break
+      case 'community': navigate(COMMUNITY); break
       case 'music': navigate(MUSIC); break
       case 'chat': navigate(CHAT); break
       case 'wallet': navigate(WALLET); break

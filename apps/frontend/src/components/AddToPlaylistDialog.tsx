@@ -295,7 +295,7 @@ export const AddToPlaylistDialog: Component<AddToPlaylistDialogProps> = (props) 
                 onInput={(e) => setNewName(e.currentTarget.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleCreateAndAdd() }}
                 placeholder="Playlist name"
-                class="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-highlight)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
+                class="w-full px-4 py-2.5 rounded-full bg-[var(--bg-highlight)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
                 autofocus
               />
               <div class="flex gap-2">

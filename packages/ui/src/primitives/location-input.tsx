@@ -307,7 +307,7 @@ export const LocationInput: Component<LocationInputProps> = (props) => {
       >
         <Combobox.Control
           class={cn(
-            'flex items-center gap-3 rounded-md bg-[var(--bg-highlight)] px-3 h-11',
+            'flex items-center gap-3 rounded-full bg-[var(--bg-highlight)] px-4 h-11',
             'border-2 transition-colors',
             props.error
               ? 'border-[var(--accent-coral)]'
