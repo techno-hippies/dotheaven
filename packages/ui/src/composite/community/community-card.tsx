@@ -1,6 +1,6 @@
 import type { Component, JSX } from 'solid-js'
 import { Show, For } from 'solid-js'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 import { Avatar } from '../../primitives/avatar'
 import { type LanguageEntry, getLanguageName } from '../../data/languages'
 import { VerificationBadge, type VerificationState } from '../profile/verification-badge'

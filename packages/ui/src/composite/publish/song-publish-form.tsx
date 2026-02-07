@@ -1,6 +1,6 @@
 import type { Component } from 'solid-js'
 import { Show, For, createMemo } from 'solid-js'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 import { Button } from '../../primitives/button'
 import { TextField, TextArea } from '../../primitives/text-field'
 import { Select, type SelectOption } from '../../primitives/select'

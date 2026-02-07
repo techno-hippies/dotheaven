@@ -17,5 +17,5 @@ export * from './icons'
 export * from './constants/profile-options'
 
 // Utilities
-export { cn } from './lib/utils'
+export { cn } from './lib/classnames'
 export { useMediaQuery, useIsMobile, useIsTablet, useIsDesktop, BREAKPOINTS } from './lib/use-media-query'

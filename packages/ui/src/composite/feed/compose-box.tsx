@@ -1,6 +1,6 @@
 import type { Component } from 'solid-js'
 import { createSignal, Show } from 'solid-js'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 import { Avatar } from '../../primitives/avatar'
 import { IconButton } from '../../primitives/icon-button'
 import { Button } from '../../primitives/button'

@@ -1,5 +1,5 @@
 import { type Component, createSignal, splitProps } from 'solid-js'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 import { IconButton } from '../../primitives/icon-button'
 
 const SendIcon = () => (

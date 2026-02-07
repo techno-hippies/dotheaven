@@ -1,6 +1,6 @@
 import type { Component, JSX } from 'solid-js'
 import { Show } from 'solid-js'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 import { Avatar } from '../../primitives/avatar'
 
 export type UserIdentitySize = 'sm' | 'md' | 'lg'

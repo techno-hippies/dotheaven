@@ -1,5 +1,5 @@
 import { Show, For, type Component, createSignal } from 'solid-js'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 import { LanguageChip } from '../../primitives/language-chip'
 import { Select, type SelectOption } from '../../primitives/select'
 import { IconButton } from '../../primitives/icon-button'

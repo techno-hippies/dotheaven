@@ -1,6 +1,6 @@
 import type { Component } from 'solid-js'
 import { createSignal, createEffect, Show } from 'solid-js'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 import { Button, Spinner } from '../../primitives'
 
 export interface OnboardingNameStepProps {

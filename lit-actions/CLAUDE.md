@@ -51,15 +51,6 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 | Story Register Sponsor | `features/music/story-register-sponsor-v1.js` | Not wired to frontend yet |
 | Self Verify Mirror | `features/verification/self-verify-mirror-v1.js` | Not wired to frontend yet |
 
-### Retired (in `_retired/`, removed from `dev.json` + `setup.ts`)
-
-| Action | File | Reason |
-|--------|------|--------|
-| Scrobble Submit V3 | `_retired/scrobble-submit-v3.js` | Replaced by AA (ScrobbleV4) |
-| Post Create v1 | `_retired/post-create-v1.js` | Superseded by post-register-v1 |
-| Post Text v1 | `_retired/post-text-v1.js` | Merged into post-register-v1 |
-| Photo Reveal v1 | `_retired/photo-reveal-v1.js` | Feature removed |
-| Content Decrypt v1 | `_retired/content-decrypt-v1.js` | Client-side via litClient.decrypt() |
 
 ## TODO
 
@@ -153,7 +144,7 @@ Client                      Lit Action                  Story Aeneid
 
 Network: `megaeth-testnet-v2` (Goldsky identifier)
 
-- `dotheaven-activity` indexes ScrobbleV3 + PostsV1 + ContentRegistry events
+- `dotheaven-activity` indexes ScrobbleV3 + ScrobbleV4 + PostsV1 + ContentRegistry + EngagementV2 events
 - `dotheaven-profiles` indexes ProfileV2 `ProfileUpserted` events
 - `dotheaven-playlists` indexes PlaylistV1 events
 
@@ -256,12 +247,6 @@ lit-actions/
 │   └── verification/                  # Identity verification
 │       ├── self-verify-mirror-v1.js   # Celo → MegaETH verification sync
 │       └── self-verify-mirror.test.ts
-├── _retired/                          # Deprecated actions (kept for reference)
-│   ├── scrobble-submit-v3.js          # Replaced by AA (ScrobbleV4)
-│   ├── post-create-v1.js              # Superseded by post-register-v1
-│   ├── post-text-v1.js                # Merged into post-register-v1
-│   ├── photo-reveal-v1.js             # Feature removed
-│   └── content-decrypt-v1.js          # Client-side via litClient.decrypt()
 ├── data-scripts/                      # Operational scripts (not tests)
 │   ├── seed-profiles.ts               # Seed 20 test profiles on MegaETH
 │   └── ingest-dateme.ts               # Ingest dateme.directory profiles

@@ -12,7 +12,7 @@ import { PlatformProvider, platform } from 'virtual:heaven-platform'
 import { AuthProvider, WalletProvider, XMTPProvider, PlayerProvider } from './providers'
 import {
   HOME, AUTH, ONBOARDING, PROFILE, WALLET, SCHEDULE, SCHEDULE_AVAILABILITY, COMMUNITY, SETTINGS,
-  LIKED_SONGS, FREE_WEEKLY, MUSIC, CHAT, ROUTE_PARAMS,
+  MUSIC, CHAT, ROUTE_PARAMS,
   publicProfile,
 } from '@heaven/core'
 
@@ -33,8 +33,6 @@ import { AuthPage } from './pages/AuthPage'
 import { OnboardingPage } from './pages/OnboardingPage'
 import { MyProfilePage, PublicProfilePage } from './pages/ProfilePage'
 import { LibraryPage } from './pages/LibraryPage'
-import { LikedSongsPage } from './pages/LikedSongsPage'
-import { FreeWeeklyPage } from './pages/FreeWeeklyPage'
 import { ChatPage } from './pages/ChatPage'
 import { AIChatPage } from './pages/AIChatPage'
 import { WalletPage } from './pages/WalletPage'
@@ -88,7 +86,7 @@ render(
           <XMTPProvider>
             <PlayerProvider>
               <HashRouter>
-                {/* Standalone routes (no AppShell) */}
+                {/* Standalone routes (no AppLayout) */}
                 <Route path={AUTH} component={AuthPage} />
                 <Route path={ONBOARDING} component={OnboardingPage} />
                 <Route path={ROUTE_PARAMS.CLAIM} component={ClaimPage} />
@@ -105,8 +103,6 @@ render(
                   <Route path={PROFILE} component={MyProfilePage} />
                   <Route path={MUSIC} component={MusicPage} />
                   <Route path={ROUTE_PARAMS.MUSIC_TAB} component={LibraryPage} />
-                  <Route path={LIKED_SONGS} component={LikedSongsPage} />
-                  <Route path={FREE_WEEKLY} component={FreeWeeklyPage} />
                   <Route path={CHAT} component={ChatLayout}>
                     <Route path={HOME} component={() => null} />
                     <Route path={ROUTE_PARAMS.AI_CHAT} component={AIChatPage} />

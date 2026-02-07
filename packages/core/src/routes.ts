@@ -33,12 +33,6 @@ export const SCHEDULE = '/schedule'
 /** Schedule availability editor */
 export const SCHEDULE_AVAILABILITY = '/schedule/availability'
 
-/** Liked songs collection */
-export const LIKED_SONGS = '/liked-songs'
-
-/** Free weekly curated tracks */
-export const FREE_WEEKLY = '/free-weekly'
-
 /** Music library (redirects to default tab) */
 export const MUSIC = '/music'
 

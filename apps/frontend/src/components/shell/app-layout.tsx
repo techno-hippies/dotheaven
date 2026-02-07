@@ -110,8 +110,6 @@ export const AppLayout: ParentComponent = (props) => {
   const isPlaylist = createMemo(() => location.pathname.startsWith('/playlist/'))
   const isArtist = createMemo(() => location.pathname.startsWith('/artist/'))
   const isAlbum = createMemo(() => location.pathname.startsWith('/album/'))
-  const isLikedSongs = createMemo(() => location.pathname === '/liked-songs')
-  const isFreeWeekly = createMemo(() => location.pathname === '/free-weekly')
   // /music/:tab sub-pages (e.g. /music/shared, /music/local) — but not /music itself
   const isMusicSubPage = createMemo(() => {
     const p = location.pathname
@@ -122,8 +120,7 @@ export const AppLayout: ParentComponent = (props) => {
   // Hidden on: sub-pages that have their own back navigation
   const showMobileNav = createMemo(() =>
     !isActiveChat() && !isPost() && !isPublicProfile() &&
-    !isPlaylist() && !isArtist() && !isAlbum() && !isMusicSubPage() &&
-    !isLikedSongs() && !isFreeWeekly()
+    !isPlaylist() && !isArtist() && !isAlbum() && !isMusicSubPage()
   )
 
   // Onboarding gate: redirect authenticated users with incomplete onboarding

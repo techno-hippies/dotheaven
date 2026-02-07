@@ -50,7 +50,7 @@ User scans QR → Self app → Self Hub (Celo) → SelfProfileVerifier.customVer
 - `olderThan: 18` (minimum age — binary gate, proof fails if under 18)
 - No forbidden countries
 - OFAC disabled
-- No date_of_birth disclosure (privacy: age is self-reported via ProfileV1)
+- No date_of_birth disclosure (privacy: age is self-reported via ProfileV2)
 - `scopeSeed: "heaven-profile-verify"`
 
 **Scope is derived from contract address + scopeSeed.** Redeploying changes the scope — frontend config must be updated.
@@ -113,7 +113,7 @@ VITE_VERIFICATION_MIRROR_MEGAETH=0xb0864603A4d6b62eACB53fbFa32E7665BADCc7Fb
 VITE_SELF_MIRROR_ACTION_CID=           # IPFS CID of self-verify-mirror-v1.js (optional, dev fallback used if empty)
 ```
 
-Frontend reads `verifiedAt(user)` and `nationality(user)` from Celo for badge display and profile override. Verified nationality overrides self-reported ProfileV1 value. Age is always self-reported. Mirror sync to MegaETH is triggered on-demand.
+Frontend reads `verifiedAt(user)` and `nationality(user)` from Celo for badge display and profile override. Verified nationality overrides self-reported ProfileV2 value. Age is always self-reported. Mirror sync to MegaETH is triggered on-demand.
 
 See: `apps/frontend/src/lib/heaven/verification.ts`
 
@@ -143,7 +143,7 @@ contracts/celo/
 Related files in other packages:
 ```
 contracts/megaeth/src/VerificationMirror.sol              # MegaETH mirror contract
-lit-actions/actions/self-verify-mirror-v1.js              # Lit Action for Celo→MegaETH sync
+lit-actions/features/verification/self-verify-mirror-v1.js # Lit Action for Celo→MegaETH sync
 apps/frontend/src/lib/heaven/verification.ts              # Frontend verification helpers
 apps/frontend/src/pages/ProfilePage.tsx                   # Verification dialog + polling wiring
 packages/ui/src/composite/verify-identity-dialog.tsx      # QR code dialog component

@@ -1,6 +1,6 @@
 import { type Component, splitProps } from 'solid-js'
 import { TextField as KobalteTextField } from '@kobalte/core/text-field'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 
 export interface TextFieldProps {
   /** Input name for form submission */

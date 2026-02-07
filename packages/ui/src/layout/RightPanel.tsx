@@ -1,5 +1,5 @@
 import type { Component, JSX } from 'solid-js'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 
 export interface RightPanelProps {
   class?: string

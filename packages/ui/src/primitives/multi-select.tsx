@@ -1,7 +1,7 @@
 import type { Component } from 'solid-js'
 import { For, Show } from 'solid-js'
 import { Select as KobalteSelect } from '@kobalte/core/select'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 
 export interface MultiSelectOption {
   value: string

@@ -9,7 +9,7 @@ import Drawer from '@corvu/drawer'
 import { splitProps, onMount, onCleanup, createSignal, type ParentComponent, type JSX } from 'solid-js'
 import { IconButton } from './icon-button'
 import { X, ChevronLeft } from '../icons'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 
 // Re-export primitives for flexibility
 const DrawerRoot = Drawer

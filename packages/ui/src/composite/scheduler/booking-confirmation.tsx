@@ -1,5 +1,5 @@
 import { Show, type Component } from 'solid-js'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 import { Button } from '../../primitives/button'
 import type { TimeSlot } from './types'
 

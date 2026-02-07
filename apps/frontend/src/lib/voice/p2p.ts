@@ -24,7 +24,7 @@
  * 6. Track participation for oracle attestation
  */
 
-import { clearWorkerAuthCache, getWorkerToken } from '../workerAuth'
+import { clearWorkerAuthCache, getWorkerToken } from '../worker-auth'
 import { getBookingChannel } from '../heaven/escrow'
 
 export interface PKPInfo {

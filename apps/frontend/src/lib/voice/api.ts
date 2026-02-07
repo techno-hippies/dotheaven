@@ -4,7 +4,7 @@
  * Handles authentication and agent lifecycle for Agora CAI voice calls.
  */
 
-import { clearWorkerAuthCache, getWorkerToken } from '../workerAuth'
+import { clearWorkerAuthCache, getWorkerToken } from '../worker-auth'
 
 // PKPInfo type definition
 export interface PKPInfo {

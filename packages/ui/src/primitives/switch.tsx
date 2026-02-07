@@ -1,7 +1,7 @@
 import type { Component, JSX } from 'solid-js'
 import { splitProps } from 'solid-js'
 import { Switch as KSwitch } from '@kobalte/core/switch'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 
 export interface SwitchProps {
   checked?: boolean

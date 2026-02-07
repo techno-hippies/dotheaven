@@ -1,6 +1,6 @@
 import type { Component, JSX } from 'solid-js'
 import { createSignal, For, Show } from 'solid-js'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 import { Avatar } from '../primitives/avatar'
 import { Button } from '../primitives/button'
 import { WalletAddress } from './wallet-address'

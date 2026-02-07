@@ -1,5 +1,5 @@
 import { type Component, type JSX, Show } from 'solid-js'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 import { useIsMobile } from '../lib/use-media-query'
 
 export interface AppShellProps {

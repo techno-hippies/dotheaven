@@ -1,5 +1,5 @@
 import { Show, type Component, createSignal } from 'solid-js'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 import { Button, Avatar, IconButton } from '../../primitives'
 
 // ── Types (mirrors SessionEscrowV1 contract) ─────────────────────

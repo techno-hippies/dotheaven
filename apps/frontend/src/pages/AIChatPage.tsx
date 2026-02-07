@@ -22,7 +22,7 @@ import {
 import { CHAT } from '@heaven/core'
 import { useAuth } from '../providers'
 import { useVoice, type VoiceState } from '../lib/voice'
-import { getWorkerToken } from '../lib/workerAuth'
+import { getWorkerToken } from '../lib/worker-auth'
 
 // Cloudflare Worker URL (Heaven voice worker)
 const CHAT_WORKER_URL =

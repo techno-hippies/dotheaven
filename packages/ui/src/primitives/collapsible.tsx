@@ -1,6 +1,6 @@
 import { type Component, type JSX, splitProps } from 'solid-js'
 import { Collapsible as KCollapsible } from '@kobalte/core/collapsible'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 
 export interface CollapsibleProps {
   /** Controlled open state */

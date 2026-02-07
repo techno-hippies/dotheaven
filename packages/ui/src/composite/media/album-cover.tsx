@@ -1,6 +1,6 @@
 import type { Component } from 'solid-js'
 import { cva, type VariantProps } from 'class-variance-authority'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 
 const albumCoverVariants = cva(
   'relative flex items-center justify-center bg-[var(--bg-elevated)] overflow-hidden rounded-md',

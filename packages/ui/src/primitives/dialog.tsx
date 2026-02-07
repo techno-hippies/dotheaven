@@ -1,7 +1,7 @@
 import type { Component, ComponentProps, JSX } from 'solid-js'
 import { splitProps } from 'solid-js'
 import { Dialog as KobalteDialog } from '@kobalte/core/dialog'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 import { IconButton } from './icon-button'
 
 /**

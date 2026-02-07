@@ -1,6 +1,6 @@
 import type { Component, JSX } from 'solid-js'
 import { Show, Switch, Match } from 'solid-js'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 import { TextField, TextArea, Select, MultiSelect, PillGroup, LocationInput, type SelectOption, type MultiSelectOption, type PillOption, type LocationResult } from '../../primitives'
 
 export interface EditableInfoCardRowProps {

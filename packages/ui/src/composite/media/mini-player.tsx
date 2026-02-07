@@ -1,5 +1,5 @@
 import { type Component, Show } from 'solid-js'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 import { AlbumCover } from './album-cover'
 import { IconButton } from '../../primitives/icon-button'
 

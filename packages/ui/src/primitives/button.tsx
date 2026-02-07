@@ -1,6 +1,6 @@
 import { type Component, type JSX, splitProps, Show } from 'solid-js'
 import { cva, type VariantProps } from 'class-variance-authority'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 import { Spinner } from './spinner'
 
 const buttonVariants = cva(

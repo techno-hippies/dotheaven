@@ -1,7 +1,7 @@
 import type { Component, JSX } from 'solid-js'
 import { Show } from 'solid-js'
 import { cva, type VariantProps } from 'class-variance-authority'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 
 const avatarVariants = cva(
   'relative flex items-center justify-center bg-[var(--bg-elevated)] overflow-hidden',

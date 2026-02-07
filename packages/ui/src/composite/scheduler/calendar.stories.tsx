@@ -1,6 +1,6 @@
 import { createSignal } from 'solid-js'
 import type { Meta, StoryObj } from 'storybook-solidjs-vite'
-import { SchedulerCalendar } from './Calendar'
+import { SchedulerCalendar } from './calendar'
 import type { DayAvailability, TimeSlot } from './types'
 
 const meta: Meta = {

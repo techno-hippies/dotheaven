@@ -1,5 +1,5 @@
 import { type Component, type JSX, splitProps, Show } from 'solid-js'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 import { Avatar } from '../../primitives/avatar'
 
 export interface MessageBubbleProps {

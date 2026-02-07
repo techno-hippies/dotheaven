@@ -1,5 +1,5 @@
 import { Show, For, createSignal, type Component, type JSX } from 'solid-js'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 import { useIsMobile } from '../../lib/use-media-query'
 import { AlbumCover } from './album-cover'
 import { IconButton } from '../../primitives/icon-button'

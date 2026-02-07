@@ -1,9 +1,9 @@
 import { Show, type Component, createSignal, createMemo } from 'solid-js'
-import { cn } from '../../lib/utils'
-import { SchedulerCalendar } from './Calendar'
-import { TimeSlotList } from './TimeSlotList'
-import { TimezoneSelector } from './TimezoneSelector'
-import { BookingConfirmation } from './BookingConfirmation'
+import { cn } from '../../lib/classnames'
+import { SchedulerCalendar } from './calendar'
+import { TimeSlotList } from './time-slot-list'
+import { TimezoneSelector } from './timezone-selector'
+import { BookingConfirmation } from './booking-confirmation'
 import type { SchedulerProps } from './types'
 
 // =============================================================================

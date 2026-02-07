@@ -1,6 +1,6 @@
 import { splitProps } from 'solid-js'
 import { Select as KobalteSelect } from '@kobalte/core/select'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 
 const ChevronDownIcon = () => (
   <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 256 256">

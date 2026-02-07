@@ -1,6 +1,6 @@
 import type { Component } from 'solid-js'
 import { createSignal } from 'solid-js'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 import { IconButton } from '../primitives/icon-button'
 
 export interface WalletAddressProps {

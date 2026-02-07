@@ -119,6 +119,65 @@ export const Compact: Story = {
   },
 }
 
+// ── Translation: Needs Translation ─────────────────────────────────────
+
+export const TranslateAvailable: Story = {
+  name: 'Translate Button Shown',
+  args: {
+    comments: 7,
+    reposts: 3,
+    likes: 42,
+    needsTranslation: true,
+    onTranslate: () => console.log('translate'),
+    onComment: noop,
+    onRepost: noop,
+    onQuote: noop,
+    onLike: noop,
+    onCopyLink: noop,
+    onSendViaChat: noop,
+  },
+}
+
+// ── Translation: In Progress ───────────────────────────────────────────
+
+export const TranslateInProgress: Story = {
+  name: 'Translate In Progress',
+  args: {
+    comments: 7,
+    reposts: 3,
+    likes: 42,
+    needsTranslation: true,
+    isTranslating: true,
+    onTranslate: noop,
+    onComment: noop,
+    onRepost: noop,
+    onQuote: noop,
+    onLike: noop,
+    onCopyLink: noop,
+    onSendViaChat: noop,
+  },
+}
+
+// ── Translation: Already Translated (button hidden) ────────────────────
+
+export const TranslateDone: Story = {
+  name: 'Already Translated (no button)',
+  args: {
+    comments: 7,
+    reposts: 3,
+    likes: 42,
+    hasTranslation: true,
+    needsTranslation: true,
+    onTranslate: noop,
+    onComment: noop,
+    onRepost: noop,
+    onQuote: noop,
+    onLike: noop,
+    onCopyLink: noop,
+    onSendViaChat: noop,
+  },
+}
+
 // ── Interactive ─────────────────────────────────────────────────────────
 
 export const Interactive: StoryObj = {

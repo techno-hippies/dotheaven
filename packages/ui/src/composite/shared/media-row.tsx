@@ -1,7 +1,7 @@
 import type { Component, JSX } from 'solid-js'
 import { Show } from 'solid-js'
 import { Dynamic } from 'solid-js/web'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 
 export interface MediaRowProps {
   title: string

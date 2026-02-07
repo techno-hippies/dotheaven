@@ -25,7 +25,7 @@ dotheaven/
 │   │   └── src-tauri/         # Tauri Rust backend (native libxmtp)
 ├── packages/
 │   ├── ui/                # Shared UI components + Storybook
-│   ├── core/              # Core business logic (playlists, storage)
+│   ├── core/              # Core business logic (playlists, routes)
 │   └── platform/          # Platform-specific utilities
 ├── contracts/             # Smart contracts
 ├── subgraphs/             # Goldsky subgraph definitions
@@ -57,7 +57,7 @@ bun check            # Type check all packages
 - Real-time message streaming
 - **Dual-target architecture**: platform-aware `XmtpTransport` interface
   - **Web**: `BrowserTransport` using `@xmtp/browser-sdk` with OPFS storage
-  - **Tauri**: `RustTransport` using native libxmtp via Tauri commands (`src-tauri/src/xmtp.rs`)
+  - **Tauri**: `TauriTransport` using native libxmtp via Tauri commands (`src-tauri/src/xmtp.rs`)
 - Platform selected at runtime via `VITE_PLATFORM` env var + dynamic imports in `factory.ts`
 - Tauri backend: signature requests emitted as events, frontend signs via PKP, resolves via command
 - **Unread tracking**: Global `streamAllMessages` stream detects incoming peer messages. `activeChat` signal tracks which chat is open. localStorage persists `lastRead` timestamps per peer so unread state survives restarts.
@@ -115,11 +115,11 @@ bun check            # Type check all packages
 - **Key files**:
   - `apps/frontend/src/lib/heaven/verification.ts` — `getVerificationStatus()`, `buildSelfVerifyLink()`, `syncVerificationToMegaEth()`
   - `apps/frontend/src/pages/ProfilePage.tsx` — dialog + polling wiring in `MyProfilePage`
-  - `packages/ui/src/composite/verify-identity-dialog.tsx` — QR code dialog
-  - `packages/ui/src/composite/verification-badge.tsx` — verified/unverified badge
+  - `packages/ui/src/composite/profile/verify-identity-dialog.tsx` — QR code dialog
+  - `packages/ui/src/composite/profile/verification-badge.tsx` — verified/unverified badge
   - `contracts/celo/src/SelfProfileVerifier.sol` — Celo verifier (stores nationality + age)
   - `contracts/megaeth/src/VerificationMirror.sol` — MegaETH mirror
-  - `lit-actions/actions/self-verify-mirror-v1.js` — Celo→MegaETH sync
+  - `lit-actions/features/verification/self-verify-mirror-v1.js` — Celo→MegaETH sync
 
 ### Heaven Names (RegistryV1 — .heaven name NFTs)
 - **RegistryV1 contract**: `0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2` on MegaETH (chain 6343)
@@ -178,7 +178,7 @@ bun check            # Type check all packages
   - `apps/frontend/src/lib/heaven/profile.ts` — buildProfileInput, getProfile, parseTagCsv
   - `apps/frontend/src/lib/heaven/community.ts` — subgraph queries for community page
   - `apps/frontend/src/pages/ProfilePage.tsx` — save/load orchestration
-  - `packages/ui/src/composite/profile-info-section.tsx` — editable profile UI
+  - `packages/ui/src/composite/profile/profile-info-section.tsx` — editable profile UI
   - `packages/ui/src/data/tags.ts` — tag dictionary + pack/unpack helpers
   - `subgraphs/profiles/` — subgraph definition (schema, mapping, ABI)
 
@@ -244,7 +244,7 @@ Deploy: `cd subgraphs/<dir> && npx graph codegen && npx graph build && goldsky s
   - Updates DOM on first page, then every 5th batch, and at end
   - Platform-guarded: early-returns on web, dynamic imports for Tauri event API
   - Scan progress UI shows done/total next to spinner
-- **TrackList virtualization** (`packages/ui/src/composite/track-list.tsx`):
+- **TrackList virtualization** (`packages/ui/src/composite/media/track-list.tsx`):
   - Renders only visible rows + 10 overscan buffer (ROW_HEIGHT=48)
   - Scroll listener throttled via requestAnimationFrame
   - Uses `getBoundingClientRect()` on rows container for correct offset math
@@ -253,6 +253,7 @@ Deploy: `cd subgraphs/<dir> && npx graph codegen && npx graph build && goldsky s
 ## Key Routes
 ```
 /                      # Home (social feed — posts with translation)
+/community             # Community discovery
 /chat/ai/:personalityId  # AI chat (Scarlett) - has voice call
 /chat/:username        # XMTP peer-to-peer chat
 /wallet                # Wallet page
@@ -262,7 +263,10 @@ Deploy: `cd subgraphs/<dir> && npx graph codegen && npx graph build && goldsky s
 /post/:id              # Single post detail view
 /u/:id                 # Public profile (address, heaven name, ENS, or HNS)
 /profile               # Own profile (edit mode)
+/schedule              # Schedule / booking page
+/schedule/availability # Schedule availability editor
 /settings              # Settings page
+/c/:token              # Claim profile (standalone, no shell)
 ```
 
 ### Music Metadata & Artist/Album Pages
@@ -356,7 +360,7 @@ Available components:
 - `MusicPlayer`, `Scrubber`, `NowPlaying` - Media controls
 - `CommentItem` - Comments/threads
 
-Check `packages/ui/src/components/` before building new components.
+Check `packages/ui/src/` (primitives, composite, layout) before building new components.
 
 ### Component Backgrounds
 - **Avatars/AlbumCovers**: Use `--bg-elevated` (not `--bg-highlight`)

@@ -1,6 +1,6 @@
 import { type Component, type JSX, For, Show } from 'solid-js'
 import { Dynamic } from 'solid-js/web'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 import { ChevronRight } from '../icons'
 
 export interface SettingsMenuItem {

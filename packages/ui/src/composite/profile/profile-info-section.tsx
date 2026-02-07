@@ -1,5 +1,5 @@
 import { Show, type Component, createSignal, createEffect } from 'solid-js'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 import { EditableInfoCard, EditableInfoCardSection, EditableInfoCardRow } from './editable-info-card'
 import { OnboardingNameStep } from '../onboarding/onboarding-name-step'
 import { LanguageEditor } from './language-editor'

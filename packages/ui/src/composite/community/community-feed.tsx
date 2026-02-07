@@ -1,6 +1,6 @@
 import type { Component, JSX } from 'solid-js'
 import { Show, For, createSignal } from 'solid-js'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 import { CommunityCard, type CommunityCardProps } from './community-card'
 
 export interface CommunityTab {

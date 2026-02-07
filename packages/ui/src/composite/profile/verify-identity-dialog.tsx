@@ -1,5 +1,5 @@
 import { type Component, createSignal, createEffect, Show, Switch, Match } from 'solid-js'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 import { Button } from '../../primitives'
 import {
   Dialog,

@@ -1,7 +1,7 @@
 import type { Component } from 'solid-js'
 import { For, Show, createSignal } from 'solid-js'
 import { createVirtualizer } from '@tanstack/solid-virtual'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 import { useIsMobile } from '../../lib/use-media-query'
 import { AlbumCover } from './album-cover'
 import { IconButton } from '../../primitives/icon-button'

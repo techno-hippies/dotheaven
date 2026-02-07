@@ -5,7 +5,7 @@ import { createQuery } from '@tanstack/solid-query'
 import { ProfilePage, type ProfileTab, type ProfileScrobble } from '../components/profile'
 import { useAuth } from '../providers'
 import { openAuthDialog } from '../lib/auth-dialog'
-import { fetchScrobbleEntries, getProfile, setProfile, setTextRecord, setTextRecords, computeNode, getTextRecord, checkNameAvailable, registerHeavenName, resolveAvatarUri, resolveIpfsUri, getEnsProfile, getAddr, resolveEnsName, getPrimaryName, getVerificationStatus, buildSelfVerifyLink, syncVerificationToMegaEth, getHostBasePrice, getHostOpenSlots, getSlot, SlotStatus } from '../lib/heaven'
+import { fetchScrobbleEntries, getProfile, setProfile, setTextRecord, setTextRecords, computeNode, checkNameAvailable, registerHeavenName, getEnsProfile, getPrimaryName, getVerificationStatus, buildSelfVerifyLink, syncVerificationToMegaEth, getHostBasePrice, getHostOpenSlots, getSlot, SlotStatus } from '../lib/heaven'
 import {
   initSessionService,
   setBasePrice as setBasePriceTx,
@@ -14,197 +14,13 @@ import {
   createRequest as createRequestTx,
 } from '../lib/session-service'
 import { uploadAvatar } from '../lib/heaven/avatar'
-import { type ProfileInput, type VerificationState, type VerifyStep, type VerificationData, type TimeSlot, type SessionSlotData, getTagLabel, VerifyIdentityDialog, alpha3ToAlpha2, WalletAssets, type WalletAsset } from '@heaven/ui'
+import { type ProfileInput, type VerificationState, type VerifyStep, type VerificationData, type TimeSlot, type SessionSlotData, getTagLabel, VerifyIdentityDialog, alpha3ToAlpha2 } from '@heaven/ui'
 import { publicProfile, peerChat } from '@heaven/core'
 import { parseTagCsv } from '../lib/heaven/profile'
-import { isAddress, zeroAddress, parseEther, type Address } from 'viem'
-import { CHAINS, getNativeBalance, getErc20Balance } from '../lib/web3'
-
-function formatTimeAgo(ts: number): string {
-  const now = Math.floor(Date.now() / 1000)
-  const diff = now - ts
-  if (diff < 60) return 'just now'
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`
-  return new Date(ts * 1000).toLocaleDateString()
-}
-
-type ParsedProfileId =
-  | { type: 'address'; address: `0x${string}` }
-  | { type: 'heaven'; label: string }
-  | { type: 'ens'; name: string }
-  | { type: 'hns'; name: string; tld: string }
-  | { type: 'unknown'; input: string }
-
-type ResolvedProfileId = {
-  type: ParsedProfileId['type']
-  address: `0x${string}`
-  label?: string
-  name?: string
-  node?: `0x${string}`
-}
-
-function parseProfileId(rawId: string | undefined): ParsedProfileId {
-  const id = (rawId ?? '').trim()
-  if (!id) return { type: 'unknown', input: '' }
-
-  if (isAddress(id, { strict: false })) {
-    return { type: 'address', address: id as `0x${string}` }
-  }
-
-  const lower = id.toLowerCase()
-  if (lower.includes('.')) {
-    if (lower.endsWith('.eth')) {
-      return { type: 'ens', name: id }
-    }
-    if (lower.endsWith('.heaven')) {
-      const label = lower.slice(0, -'.heaven'.length)
-      return { type: 'heaven', label }
-    }
-    const tld = lower.slice(lower.lastIndexOf('.') + 1)
-    return { type: 'hns', name: id, tld }
-  }
-
-  return { type: 'heaven', label: lower }
-}
-
-async function resolveProfileId(parsed: ParsedProfileId): Promise<ResolvedProfileId> {
-  switch (parsed.type) {
-    case 'address': {
-      // Try reverse lookup to get their primary heaven name + node
-      const reverse = await getPrimaryName(parsed.address).catch(() => null)
-      if (reverse) {
-        return { type: 'address', address: parsed.address, label: reverse.label, node: reverse.node }
-      }
-      return { type: 'address', address: parsed.address }
-    }
-    case 'ens': {
-      const address = await resolveEnsName(parsed.name)
-      if (!address) {
-        throw new Error(`ENS name not found: ${parsed.name}`)
-      }
-      return { type: 'ens', address, name: parsed.name }
-    }
-    case 'heaven': {
-      const label = parsed.label.toLowerCase()
-      if (!label) {
-        throw new Error('Invalid Heaven name')
-      }
-      const node = computeNode(label)
-      const address = await getAddr(node)
-      if (!address || address === zeroAddress) {
-        throw new Error(`Heaven name not found: ${label}.heaven`)
-      }
-      return { type: 'heaven', address, label, node }
-    }
-    case 'hns':
-      throw new Error(`Unsupported TLD: .${parsed.tld}`)
-    default:
-      throw new Error('Invalid profile identifier')
-  }
-}
-
-async function applyHeavenRecords(profile: ProfileInput, node: `0x${string}`): Promise<ProfileInput> {
-  const enriched: ProfileInput = { ...profile }
-  const [avatar, header, description, url, twitter, github, telegram, , , location, school] = await Promise.all([
-    getTextRecord(node, 'avatar').catch(() => ''),
-    getTextRecord(node, 'header').catch(() => ''),
-    getTextRecord(node, 'description').catch(() => ''),
-    getTextRecord(node, 'url').catch(() => ''),
-    getTextRecord(node, 'com.twitter').catch(() => ''),
-    getTextRecord(node, 'com.github').catch(() => ''),
-    getTextRecord(node, 'org.telegram').catch(() => ''),
-    getTextRecord(node, 'heaven.hobbies').catch(() => ''),   // display-only, IDs from ProfileV1
-    getTextRecord(node, 'heaven.skills').catch(() => ''),    // display-only, IDs from ProfileV1
-    getTextRecord(node, 'heaven.location').catch(() => ''),
-    getTextRecord(node, 'heaven.school').catch(() => ''),
-  ])
-
-  // Resolve avatar URI (supports ipfs://, https://, eip155: NFT refs)
-  if (avatar) {
-    const resolved = await resolveAvatarUri(avatar)
-    enriched.avatar = resolved || resolveIpfsUri(avatar)
-  }
-  if (header) enriched.coverPhoto = resolveIpfsUri(header)
-  if (description) enriched.bio = description
-  if (url) enriched.url = url
-  if (twitter) enriched.twitter = twitter
-  if (github) enriched.github = github
-  if (telegram) enriched.telegram = telegram
-
-  // RecordsV1 labels (heaven.hobbies/heaven.skills) are display-only.
-  if (location) enriched.locationCityId = location
-  if (school) enriched.school = school
-
-  return enriched
-}
-
-// ── Wallet tab config ──
-import { ASSET_CONFIGS } from '../lib/wallet-assets'
-
-/** Wallet tab content — fetches balances for any address (read-only) */
-const ProfileWalletTab: Component<{ address: string }> = (props) => {
-  const balancesQuery = createQuery(() => ({
-    queryKey: ['walletBalances', props.address],
-    queryFn: async () => {
-      const results = await Promise.allSettled(
-        ASSET_CONFIGS.map(async (config) => {
-          const chain = CHAINS[config.chainKey]
-          let formatted: string
-          if (config.isNative) {
-            const result = await getNativeBalance(chain, props.address as `0x${string}`)
-            formatted = result.formatted
-          } else {
-            const result = await getErc20Balance(chain, config.tokenAddress! as `0x${string}`, props.address as `0x${string}`)
-            formatted = result.formatted
-          }
-          const num = parseFloat(formatted)
-          return { key: config.key, formatted, usd: num * config.priceUsd }
-        })
-      )
-      const map: Record<string, { formatted: string; usd: number }> = {}
-      results.forEach((r, i) => {
-        if (r.status === 'fulfilled') map[ASSET_CONFIGS[i].key] = r.value
-      })
-      return map
-    },
-    get enabled() { return !!props.address },
-    staleTime: 30_000,
-  }))
-
-  const assets = (): WalletAsset[] =>
-    ASSET_CONFIGS.map((config) => {
-      const data = balancesQuery.data?.[config.key]
-      const num = data ? parseFloat(data.formatted) : 0
-      const usd = data?.usd ?? 0
-      return {
-        id: config.id,
-        name: config.name,
-        symbol: config.symbol,
-        icon: <config.icon />,
-        chainBadge: <config.chainBadge />,
-        balance: data ? num.toFixed(4) : '—',
-        balanceUSD: data ? `$${usd.toFixed(2)}` : '$—',
-        amount: data ? `${num.toFixed(4)} ${config.unitSymbol}` : `— ${config.unitSymbol}`,
-      }
-    })
-
-  const totalUsd = () => {
-    if (!balancesQuery.data) return '$—'
-    const sum = Object.values(balancesQuery.data).reduce((s, v) => s + v.usd, 0)
-    return `$${sum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-  }
-
-  return (
-    <WalletAssets
-      address={props.address}
-      totalBalance={totalUsd()}
-      assets={assets()}
-      readOnly
-    />
-  )
-}
+import { parseEther, type Address } from 'viem'
+import { formatTimeAgo, FILEBASE_GATEWAY, isValidCid, parseProfileId, resolveProfileId, applyHeavenRecords } from './profile-utils'
+import { ProfileWalletTab } from './ProfileWalletTab'
+import { ProfileSkeleton } from './ProfileSkeleton'
 
 export const MyProfilePage: Component = () => {
   const auth = useAuth()
@@ -338,7 +154,7 @@ export const MyProfilePage: Component = () => {
     queryKey: ['ensProfile', eoaAddr()],
     queryFn: () => getEnsProfile(eoaAddr()!),
     get enabled() { return !!eoaAddr() },
-    staleTime: 1000 * 60 * 30, // 30 min cache
+    staleTime: 1000 * 60 * 30,
   }))
 
   // Handle importing an avatar URI from ENS (stores as ENSIP-12 ref or URL)
@@ -445,10 +261,6 @@ export const MyProfilePage: Component = () => {
     }
   }
 
-  const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
-  const isValidCid = (cid: string | undefined | null): cid is string =>
-    !!cid && (cid.startsWith('Qm') || cid.startsWith('bafy'))
-
   const scrobbles = (): ProfileScrobble[] => {
     const entries = scrobblesQuery.data ?? []
     return entries.map((e) => ({
@@ -475,7 +287,6 @@ export const MyProfilePage: Component = () => {
   }
 
   const handleName = () => {
-    // Prefer heaven name, then ENS, then truncated address
     const hn = heavenName()
     if (hn) return `${hn}.heaven`
     const ens = ensQuery.data
@@ -773,36 +584,6 @@ export const MyProfilePage: Component = () => {
   )
 }
 
-const ProfileSkeleton: Component = () => (
-  <div class="bg-[var(--bg-page)] min-h-screen animate-pulse">
-    {/* Banner */}
-    <div class="h-48 w-full bg-[var(--bg-elevated)]" />
-    <div class="px-8 pb-6">
-      {/* Avatar */}
-      <div class="-mt-20 mb-4">
-        <div class="w-28 h-28 rounded-full bg-[var(--bg-highlight)]" />
-      </div>
-      {/* Name */}
-      <div class="mb-4">
-        <div class="h-7 w-48 bg-[var(--bg-highlight)] rounded-md mb-2" />
-        <div class="h-5 w-32 bg-[var(--bg-elevated)] rounded-md" />
-      </div>
-      {/* Stats */}
-      <div class="flex gap-6">
-        <div class="h-5 w-24 bg-[var(--bg-elevated)] rounded-md" />
-        <div class="h-5 w-24 bg-[var(--bg-elevated)] rounded-md" />
-        <div class="h-5 w-24 bg-[var(--bg-elevated)] rounded-md" />
-      </div>
-    </div>
-    {/* Tabs */}
-    <div class="flex gap-6 px-8 border-b border-[var(--border-subtle)]">
-      <div class="h-10 w-20 bg-[var(--bg-elevated)] rounded-md" />
-      <div class="h-10 w-20 bg-[var(--bg-elevated)] rounded-md" />
-      <div class="h-10 w-20 bg-[var(--bg-elevated)] rounded-md" />
-    </div>
-  </div>
-)
-
 export const PublicProfilePage: Component = () => {
   const params = useParams()
   const navigate = useNavigate()
@@ -871,7 +652,7 @@ export const PublicProfilePage: Component = () => {
         windowStart: params.windowStart,
         windowEnd: params.windowEnd,
         durationMins: params.durationMins,
-        expiry: Math.floor(Date.now() / 1000) + 86400 * 7, // 7 day expiry
+        expiry: Math.floor(Date.now() / 1000) + 86400 * 7,
         amountWei: parseEther(params.amountEth),
       })
       publicSlotsQuery.refetch()
@@ -924,10 +705,6 @@ export const PublicProfilePage: Component = () => {
     return { verified: true, nationality: v.nationality }
   }
 
-  const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
-  const isValidCid = (cid: string | undefined | null): cid is string =>
-    !!cid && (cid.startsWith('Qm') || cid.startsWith('bafy'))
-
   const scrobbles = (): ProfileScrobble[] => {
     const entries = scrobblesQuery.data ?? []
     return entries.map((e) => ({
@@ -947,7 +724,6 @@ export const PublicProfilePage: Component = () => {
     const profile = profileQuery.data
     if (profile?.displayName) return profile.displayName
     const resolved = resolvedQuery.data
-    // Prefer heaven label from any resolution type (including address reverse lookup)
     if (resolved?.label) return resolved.label
     if (resolved?.name) return resolved.name
     const ens = ensProfileQuery.data

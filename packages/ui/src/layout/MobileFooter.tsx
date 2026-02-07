@@ -1,5 +1,5 @@
 import { type Component, type JSX, Show, For } from 'solid-js'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 
 export interface MobileFooterTab {
   /** Unique identifier for the tab */

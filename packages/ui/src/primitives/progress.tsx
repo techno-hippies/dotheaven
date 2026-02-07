@@ -1,6 +1,6 @@
 import { type Component, splitProps } from 'solid-js'
 import { Progress as KProgress } from '@kobalte/core/progress'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 
 export interface ProgressBarProps {
   /** Current value (0–100 by default) */

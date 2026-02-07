@@ -15,7 +15,7 @@ export async function createTransport(): Promise<XmtpTransport> {
   if (transport) return transport
 
   if (IS_TAURI) {
-    const { RustTransport } = await import('./rust-transport')
+    const { RustTransport } = await import('./tauri-transport')
     transport = new RustTransport()
   } else {
     const { BrowserTransport } = await import('./browser-transport')

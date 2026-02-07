@@ -1,6 +1,6 @@
 import { type Component, createSignal, createEffect, onCleanup, Show } from 'solid-js'
 import { Combobox } from '@kobalte/core/combobox'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 import { Spinner } from './spinner'
 
 export interface LocationResult {

@@ -1,7 +1,7 @@
 import type { Component, ComponentProps } from 'solid-js'
 import { splitProps } from 'solid-js'
 import { DropdownMenu as KobalteDropdownMenu } from '@kobalte/core/dropdown-menu'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 
 /**
  * DropdownMenu - Styled wrapper around Kobalte's DropdownMenu.

@@ -1,6 +1,6 @@
 import { type Component } from 'solid-js'
 import { cva, type VariantProps } from 'class-variance-authority'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 
 const spinnerVariants = cva('animate-spin', {
   variants: {

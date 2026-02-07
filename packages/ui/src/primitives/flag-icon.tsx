@@ -1,5 +1,5 @@
 import type { Component } from 'solid-js'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 
 export interface FlagIconProps {
   /** ISO 3166-1 alpha-2 country code (e.g. "US", "GB", "JP") */

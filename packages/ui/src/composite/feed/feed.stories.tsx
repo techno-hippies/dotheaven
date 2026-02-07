@@ -77,6 +77,21 @@ const feedPosts = (
       reposts={21}
       {...handlers}
     />
+    <FeedPost
+      authorName="Hana"
+      authorHandle="hana.heaven"
+      authorAvatarUrl="https://placewaifu.com/image/105"
+      authorNationalityCode="JP"
+      timestamp="10h ago"
+      text="今日は素晴らしいアルバムを見つけました。プロダクションの質が凄い。"
+      postLang="ja"
+      userLang="en"
+      likes={58}
+      comments={4}
+      reposts={2}
+      onTranslate={(lang) => console.log('translate to:', lang)}
+      {...handlers}
+    />
   </>
 )
 

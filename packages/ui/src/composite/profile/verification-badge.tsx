@@ -1,5 +1,5 @@
 import type { Component } from 'solid-js'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 
 export type VerificationState = 'verified' | 'unverified' | 'none'
 

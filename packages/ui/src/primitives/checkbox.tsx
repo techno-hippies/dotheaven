@@ -1,7 +1,7 @@
 import type { Component, JSX } from 'solid-js'
 import { splitProps } from 'solid-js'
 import { Checkbox as KCheckbox } from '@kobalte/core/checkbox'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 
 export interface CheckboxProps {
   checked?: boolean

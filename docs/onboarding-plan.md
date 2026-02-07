@@ -1,5 +1,7 @@
 # Onboarding & Identity Plan
 
+> **Note**: This is a historical planning document from early development. The actual implementation uses ProfileV2 (not ProfileV1), RecordsV1 (not RecordsV2), RegistryV1 on MegaETH (not Base), and Lit Actions for gasless operations. See the root `CLAUDE.md` for current architecture.
+
 ## Overview
 
 After WebAuthn signup, users go through a 2-step onboarding flow to claim their identity:

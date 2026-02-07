@@ -1,6 +1,6 @@
 import { For, Show, type Component, createMemo } from 'solid-js'
 import Calendar from '@corvu/calendar'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 import { IconButton } from '../../primitives/icon-button'
 import type { DayAvailability } from './types'
 

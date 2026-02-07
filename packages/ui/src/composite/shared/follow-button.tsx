@@ -1,6 +1,6 @@
 import type { Component } from 'solid-js'
 import { splitProps } from 'solid-js'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 import { Button, type ButtonProps } from '../../primitives/button'
 
 export interface FollowButtonProps {

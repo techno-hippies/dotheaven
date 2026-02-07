@@ -1,5 +1,5 @@
 import { Show, For, type Component, createSignal } from 'solid-js'
-import { cn } from '../../lib/utils'
+import { cn } from '../../lib/classnames'
 import { Switch, Button, IconButton, TextField, Spinner, Select, type SelectOption } from '../../primitives'
 import { EditableInfoCard, EditableInfoCardSection } from '../profile/editable-info-card'
 

@@ -1,6 +1,6 @@
 import type { Component } from 'solid-js'
 import { Show, For, createSignal, createMemo } from 'solid-js'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 import { useIsMobile } from '../lib/use-media-query'
 import { MagnifyingGlass, Check } from '../icons'
 import { Avatar } from '../primitives/avatar'

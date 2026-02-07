@@ -487,15 +487,26 @@ export const ScheduleAvailabilityPage: Component = () => {
         >
           <ChevronLeft class="w-5 h-5" />
         </IconButton>
-        <span class="flex-1 text-base font-semibold text-[var(--text-primary)]">Availability</span>
+        <span class="flex-1 text-base font-semibold text-[var(--text-primary)]">
+          Availability
+          <Show when={!scheduleAccepting()}>
+            <span class="text-sm font-normal text-[var(--text-muted)] ml-2">(paused)</span>
+          </Show>
+        </span>
+        <span class="text-sm text-[var(--text-muted)] mr-1 hidden sm:inline">Accepting</span>
         <Switch
           checked={scheduleAccepting()}
           onChange={handleToggleAccepting}
         />
       </div>
 
-      <div class={`flex-1 overflow-y-auto transition-opacity ${!scheduleAccepting() ? 'opacity-50 pointer-events-none' : ''}`}>
+      <div class={`flex-1 overflow-y-auto transition-opacity ${!scheduleAccepting() ? 'opacity-60' : ''}`}>
         <div class="w-full max-w-4xl mx-auto px-4 py-6">
+          <Show when={!scheduleAccepting()}>
+            <div class="mb-4 px-4 py-3 rounded-md bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-sm">
+              Bookings are paused. Toggle the switch above to accept new bookings.
+            </div>
+          </Show>
           <ScheduleDashboard
             basePrice={basePriceQuery.data}
             acceptingBookings={scheduleAccepting()}

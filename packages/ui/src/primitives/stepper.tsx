@@ -1,6 +1,6 @@
 import type { Component } from 'solid-js'
 import { For } from 'solid-js'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/classnames'
 
 export interface StepperProps {
   /** Current step index (0-based) */
