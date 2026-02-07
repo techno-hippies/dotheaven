@@ -47,13 +47,13 @@ interface ActionDef {
 const ACTIONS: Record<string, ActionDef> = {
   storyRegisterSponsor: {
     name: 'storyRegisterSponsor',
-    path: 'actions/story-register-sponsor-v1.js',
+    path: 'features/music/story-register-sponsor-v1.js',
     displayName: 'Story Register Sponsor v1',
     keys: [], // No encrypted keys — sponsor PKP pays gas directly
   },
   songPublish: {
     name: 'songPublish',
-    path: 'actions/song-publish-v1.js',
+    path: 'features/music/song-publish-v1.js',
     displayName: 'Song Publish v1',
     keys: [
       { name: 'filebase_api_key', envVar: 'FILEBASE_SONGS_BUCKET_API_KEY' },
@@ -63,7 +63,7 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   avatarUpload: {
     name: 'avatarUpload',
-    path: 'actions/avatar-upload-v1.js',
+    path: 'features/content/avatar-upload-v1.js',
     displayName: 'Avatar Upload v1',
     keys: [
       { name: 'filebase_api_key', envVar: 'FILEBASE_SONGS_BUCKET_API_KEY' },
@@ -72,19 +72,19 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   heavenClaimName: {
     name: 'heavenClaimName',
-    path: 'actions/heaven-claim-name-v1.js',
+    path: 'features/profile/heaven-claim-name-v1.js',
     displayName: 'Heaven Claim Name v1',
     keys: [], // No encrypted keys — sponsor PKP pays gas directly
   },
   heavenSetProfile: {
     name: 'heavenSetProfile',
-    path: 'actions/heaven-set-profile-v1.js',
+    path: 'features/profile/heaven-set-profile-v1.js',
     displayName: 'Heaven Set Profile v1',
     keys: [], // No encrypted keys — sponsor PKP pays gas directly
   },
   lyricsTranslate: {
     name: 'lyricsTranslate',
-    path: 'actions/lyrics-translate-v1.js',
+    path: 'features/music/lyrics-translate-v1.js',
     displayName: 'Lyrics Translate v1',
     keys: [
       { name: 'filebase_api_key', envVar: 'FILEBASE_SONGS_BUCKET_API_KEY' },
@@ -93,7 +93,7 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   playlistV1: {
     name: 'playlistV1',
-    path: 'actions/playlist-v1.js',
+    path: 'features/playlists/playlist-v1.js',
     displayName: 'Playlist v1',
     keys: [
       { name: 'filebase_covers_key', envVar: 'FILEBASE_COVERS_KEY' },
@@ -101,7 +101,7 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   trackCoverV4: {
     name: 'trackCoverV4',
-    path: 'actions/track-cover-v4.js',
+    path: 'features/content/track-cover-v4.js',
     displayName: 'Track Cover v4',
     keys: [
       { name: 'filebase_covers_key', envVar: 'FILEBASE_COVERS_KEY' },
@@ -109,13 +109,13 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   heavenSetRecords: {
     name: 'heavenSetRecords',
-    path: 'actions/heaven-set-records-v1.js',
+    path: 'features/profile/heaven-set-records-v1.js',
     displayName: 'Heaven Set Records v1',
     keys: [], // No encrypted keys — sponsor PKP pays gas directly
   },
   contentRegisterV1: {
     name: 'contentRegisterV1',
-    path: 'actions/content-register-v1.js',
+    path: 'features/content/content-register-v1.js',
     displayName: 'Content Register v1',
     keys: [
       { name: 'filebase_covers_key', envVar: 'FILEBASE_COVERS_KEY' },
@@ -123,19 +123,19 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   contentAccessV1: {
     name: 'contentAccessV1',
-    path: 'actions/content-access-v1.js',
+    path: 'features/content/content-access-v1.js',
     displayName: 'Content Access v1',
     keys: [], // No encrypted keys — sponsor PKP pays gas directly
   },
   linkEoaV1: {
     name: 'linkEoaV1',
-    path: 'actions/link-eoa-v1.js',
+    path: 'features/content/link-eoa-v1.js',
     displayName: 'Link EOA v1',
     keys: [], // No encrypted keys — sponsor PKP pays gas directly
   },
   postRegisterV1: {
     name: 'postRegisterV1',
-    path: 'actions/post-register-v1.js',
+    path: 'features/social/post-register-v1.js',
     displayName: 'Post Register v1',
     keys: [
       { name: 'filebase_api_key', envVar: 'FILEBASE_SONGS_BUCKET_API_KEY' },
@@ -144,7 +144,7 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   postTranslateV1: {
     name: 'postTranslateV1',
-    path: 'actions/post-translate-v1.js',
+    path: 'features/social/post-translate-v1.js',
     displayName: 'Post Translate v1',
     keys: [
       { name: 'openrouter_api_key', envVar: 'OPENROUTER_API_KEY' },

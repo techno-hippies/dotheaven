@@ -31,34 +31,35 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 
 | Action | File | CID (prefix) |
 |--------|------|--------------|
-| Playlist v1 | `actions/playlist-v1.js` | `QmYvozSn...` |
-| Heaven Claim Name | `actions/heaven-claim-name-v1.js` | `QmVx1YrP...` |
-| Heaven Set Profile | `actions/heaven-set-profile-v1.js` | `Qmc6657y...` |
-| Heaven Set Records | `actions/heaven-set-records-v1.js` | `QmNTJXB8...` |
-| Avatar Upload | `actions/avatar-upload-v1.js` | `QmTWwoC5...` |
-| Content Register v1 | `actions/content-register-v1.js` | `QmchDhdr...` |
-| Content Access v1 | `actions/content-access-v1.js` | `QmXnhhG1...` |
-| Link EOA v1 | `actions/link-eoa-v1.js` | `QmYPeQEp...` |
-| Post Register v1 | `actions/post-register-v1.js` | `QmeVChS4...` |
+| Playlist v1 | `features/playlists/playlist-v1.js` | `QmYvozSn...` |
+| Heaven Claim Name | `features/profile/heaven-claim-name-v1.js` | `QmVx1YrP...` |
+| Heaven Set Profile | `features/profile/heaven-set-profile-v1.js` | `Qmc6657y...` |
+| Heaven Set Records | `features/profile/heaven-set-records-v1.js` | `QmNTJXB8...` |
+| Avatar Upload | `features/content/avatar-upload-v1.js` | `QmTWwoC5...` |
+| Content Register v1 | `features/content/content-register-v1.js` | `QmchDhdr...` |
+| Content Access v1 | `features/content/content-access-v1.js` | `QmXnhhG1...` |
+| Link EOA v1 | `features/content/link-eoa-v1.js` | `QmYPeQEp...` |
+| Post Register v1 | `features/social/post-register-v1.js` | `QmeVChS4...` |
 
 ### Future (in `setup.ts` but not in `action-cids.ts`)
 
 | Action | File | Notes |
 |--------|------|-------|
-| Post Translate v1 | `actions/post-translate-v1.js` | Translates post text via LLM → EngagementV2.translateFor() on MegaETH |
-| Song Publish | `actions/song-publish-v1.js` | Not wired to frontend yet |
-| Lyrics Translate | `actions/lyrics-translate-v1.js` | Not wired to frontend yet |
-| Story Register Sponsor | `actions/story-register-sponsor-v1.js` | Not wired to frontend yet |
+| Post Translate v1 | `features/social/post-translate-v1.js` | Translates post text via LLM → EngagementV2.translateFor() on MegaETH |
+| Song Publish | `features/music/song-publish-v1.js` | Not wired to frontend yet |
+| Lyrics Translate | `features/music/lyrics-translate-v1.js` | Not wired to frontend yet |
+| Story Register Sponsor | `features/music/story-register-sponsor-v1.js` | Not wired to frontend yet |
+| Self Verify Mirror | `features/verification/self-verify-mirror-v1.js` | Not wired to frontend yet |
 
-### Retired (source files kept for reference, removed from `dev.json` + `setup.ts`)
+### Retired (in `_retired/`, removed from `dev.json` + `setup.ts`)
 
 | Action | File | Reason |
 |--------|------|--------|
-| Scrobble Submit V3 | `actions/scrobble-submit-v3.js` | Replaced by AA (ScrobbleV4) |
-| Post Create v1 | `actions/post-create-v1.js` | Superseded by post-register-v1 |
-| Post Text v1 | `actions/post-text-v1.js` | Merged into post-register-v1 |
-| Photo Reveal v1 | `actions/photo-reveal-v1.js` | Feature removed |
-| Content Decrypt v1 | `actions/content-decrypt-v1.js` | Client-side via litClient.decrypt() |
+| Scrobble Submit V3 | `_retired/scrobble-submit-v3.js` | Replaced by AA (ScrobbleV4) |
+| Post Create v1 | `_retired/post-create-v1.js` | Superseded by post-register-v1 |
+| Post Text v1 | `_retired/post-text-v1.js` | Merged into post-register-v1 |
+| Photo Reveal v1 | `_retired/photo-reveal-v1.js` | Feature removed |
+| Content Decrypt v1 | `_retired/content-decrypt-v1.js` | Client-side via litClient.decrypt() |
 
 ## TODO
 
@@ -186,23 +187,25 @@ bun scripts/setup.ts storyRegisterSponsor  # Deploy story register action (futur
 bun scripts/deploy-spg-nft.ts             # Deploy own SPG NFT collection
 bun scripts/verify.ts                      # Verify all actions configured
 
-# Tests
-bun tests/song-publish.test.ts             # Test song publish (upload + align + translate)
-bun tests/lyrics-translate.test.ts         # Test batch lyrics translation
-bun tests/story-register-sponsor.test.ts   # Test Story registration (real broadcast)
-bun tests/story-register-sponsor.test.ts --dry-run  # Dry run (sign only, no broadcast)
-bun tests/playlist-v1.test.ts              # Test playlist CRUD (create/setTracks/updateMeta/delete)
-bun tests/heaven-claim-name.test.ts        # Test .heaven name claim (MegaETH broadcast)
-bun tests/heaven-set-profile.test.ts       # Test profile write (MegaETH broadcast)
-bun tests/heaven-set-profile.test.ts --dry-run  # Dry run (sign only, no broadcast)
-bun tests/heaven-set-records.test.ts       # Test records write (claims name + sets text record)
-bun tests/post-translate.test.ts           # Test post translation (LLM + MegaETH broadcast)
-bun tests/post-translate.test.ts --dry-run # Dry run (translate only, no broadcast)
+# Tests (co-located with actions in feature folders)
+bun features/music/song-publish.test.ts             # Test song publish
+bun features/music/lyrics-translate.test.ts         # Test batch lyrics translation
+bun features/music/story-register-sponsor.test.ts   # Test Story registration
+bun features/playlists/playlist-v1.test.ts          # Test playlist CRUD
+bun features/profile/heaven-claim-name.test.ts      # Test .heaven name claim
+bun features/profile/heaven-set-profile.test.ts     # Test profile write
+bun features/profile/heaven-set-records.test.ts     # Test records write
+bun features/social/post-translate.test.ts          # Test post translation
+bun features/verification/self-verify-mirror.test.ts # Test verification mirror
+
+# Data scripts (operational, not tests)
+bun data-scripts/seed-profiles.ts          # Seed 20 test profiles on MegaETH
+bun data-scripts/ingest-dateme.ts          # Ingest dateme.directory profiles
 ```
 
 ## Updating an Action
 
-1. Edit `actions/<name>.js`
+1. Edit `features/<domain>/<name>.js`
 2. Run `bun scripts/setup.ts <actionName>` (uploads to IPFS, adds PKP permission, re-encrypts keys)
 3. New CID saved to `cids/dev.json` automatically
 
@@ -216,52 +219,68 @@ bun tests/post-translate.test.ts --dry-run # Dry run (translate only, no broadca
 
 ```
 lit-actions/
-├── actions/                           # Lit Action source files (plain JS, ethers v5)
-│   ├── playlist-v1.js                 # Event-sourced playlist CRUD on PlaylistV1 via sponsor PKP
-│   ├── heaven-claim-name-v1.js        # Gasless .heaven name claim on MegaETH via sponsor PKP
-│   ├── heaven-set-profile-v1.js       # Gasless profile write to ProfileV2 on MegaETH via sponsor PKP
-│   ├── heaven-set-records-v1.js       # Gasless ENS text record writes on RecordsV1 via sponsor PKP
-│   ├── avatar-upload-v1.js            # IPFS upload with anime style enforcement
-│   ├── content-register-v1.js         # Filecoin content registration on ContentRegistry
-│   ├── content-access-v1.js           # Grant/revoke content access on ContentRegistry
-│   ├── link-eoa-v1.js                 # Link PKP to EOA on ContentAccessMirror
-│   ├── post-register-v1.js            # Unified text + photo post registration
-│   ├── post-translate-v1.js           # LLM translation → EngagementV2.translateFor()
-│   ├── song-publish-v1.js             # Upload + alignment + translation (future)
-│   ├── lyrics-translate-v1.js         # Batch multi-language translation (future)
-│   ├── story-register-sponsor-v1.js   # Gasless Story IP registration (future)
-│   ├── scrobble-submit-v3.js          # RETIRED: replaced by AA (ScrobbleV4)
-│   ├── post-create-v1.js              # RETIRED: superseded by post-register-v1
-│   ├── post-text-v1.js                # RETIRED: merged into post-register-v1
-│   ├── photo-reveal-v1.js             # RETIRED: feature removed
-│   └── content-decrypt-v1.js          # RETIRED: client-side via litClient.decrypt()
-├── scripts/
-│   ├── mint-pkp.ts                    # Mint new PKP with EOA ownership
+├── features/                          # Actions + tests organized by feature domain
+│   ├── profile/                       # Heaven names, profiles, records
+│   │   ├── heaven-claim-name-v1.js    # Gasless .heaven name claim
+│   │   ├── heaven-claim-name.test.ts
+│   │   ├── heaven-set-profile-v1.js   # Gasless profile write to ProfileV2
+│   │   ├── heaven-set-profile.test.ts
+│   │   ├── heaven-set-records-v1.js   # Gasless ENS text record writes
+│   │   └── heaven-set-records.test.ts
+│   ├── content/                       # Uploads, access control, covers
+│   │   ├── avatar-upload-v1.js        # IPFS upload with anime style enforcement
+│   │   ├── avatar-upload.test.ts
+│   │   ├── avatar-style-check.test.ts
+│   │   ├── content-register-v1.js     # Filecoin content registration
+│   │   ├── content-register.test.ts
+│   │   ├── content-access-v1.js       # Grant/revoke content access
+│   │   ├── content-access.test.ts
+│   │   ├── content-upload.test.ts
+│   │   ├── content-decrypt.test.ts
+│   │   ├── link-eoa-v1.js             # Link PKP to EOA
+│   │   └── track-cover-v4.js          # Track cover art management
+│   ├── social/                        # Posts and engagement
+│   │   ├── post-register-v1.js        # Unified text + photo post registration
+│   │   ├── post-translate-v1.js       # LLM translation → EngagementV2
+│   │   └── post-translate.test.ts
+│   ├── playlists/                     # Playlist CRUD
+│   │   ├── playlist-v1.js             # Event-sourced playlist operations
+│   │   └── playlist-v1.test.ts
+│   ├── music/                         # Music publishing (future)
+│   │   ├── song-publish-v1.js         # Upload + alignment + translation
+│   │   ├── song-publish.test.ts
+│   │   ├── lyrics-translate-v1.js     # Batch multi-language translation
+│   │   ├── lyrics-translate.test.ts
+│   │   ├── story-register-sponsor-v1.js # Gasless Story IP registration
+│   │   └── story-register-sponsor.test.ts
+│   └── verification/                  # Identity verification
+│       ├── self-verify-mirror-v1.js   # Celo → MegaETH verification sync
+│       └── self-verify-mirror.test.ts
+├── _retired/                          # Deprecated actions (kept for reference)
+│   ├── scrobble-submit-v3.js          # Replaced by AA (ScrobbleV4)
+│   ├── post-create-v1.js              # Superseded by post-register-v1
+│   ├── post-text-v1.js                # Merged into post-register-v1
+│   ├── photo-reveal-v1.js             # Feature removed
+│   └── content-decrypt-v1.js          # Client-side via litClient.decrypt()
+├── data-scripts/                      # Operational scripts (not tests)
+│   ├── seed-profiles.ts               # Seed 20 test profiles on MegaETH
+│   └── ingest-dateme.ts               # Ingest dateme.directory profiles
+├── scripts/                           # Deployment & maintenance
 │   ├── setup.ts                       # Deploy action + add permission + encrypt keys
-│   ├── deploy-spg-nft.ts             # Deploy SPG NFT collection on Story Aeneid
 │   ├── upload-action.ts               # Upload-only (no permission/encryption)
 │   ├── encrypt-key.ts                 # Encrypt API keys for action CID
 │   ├── add-permission.ts              # Add PKP permission for CID
+│   ├── mint-pkp.ts                    # Mint new PKP with EOA ownership
+│   ├── deploy-spg-nft.ts              # Deploy SPG NFT collection on Story
 │   └── verify.ts                      # Verify configuration
-├── tests/
-│   ├── song-publish.test.ts           # E2E test for song publish (upload + align + translate)
-│   ├── lyrics-translate.test.ts       # E2E test for batch lyrics translation
-│   ├── story-register-sponsor.test.ts # E2E test for Story registration
-│   ├── scrobble-submit-v3.test.ts     # E2E test for scrobble submit V3
-│   ├── playlist-v1.test.ts             # E2E test for playlist CRUD (4 operations)
-│   ├── heaven-claim-name.test.ts      # E2E test for .heaven name claim
-│   ├── heaven-set-profile.test.ts     # E2E test for profile write
-│   ├── heaven-set-records.test.ts     # E2E test for records write (claims name + sets text record)
-│   ├── post-translate.test.ts         # E2E test for post translation (LLM + broadcast)
-│   └── shared/env.ts                  # Network detection + config loading
-├── fixtures/
-│   └── test-song.mp3                  # Test audio file
-├── config/
-│   └── lit-envs.json                  # Network configurations
-├── cids/
-│   └── dev.json                       # Deployed action CIDs
+├── tests/shared/                      # Shared test infrastructure
+│   ├── env.ts                         # Network detection + config loading
+│   └── pkp-signer.test.ts             # PKP signing utilities test
+├── fixtures/                          # Test assets
+├── config/                            # Network configurations
+├── cids/                              # Deployed action CIDs (IPFS hashes)
 ├── keys/                              # Encrypted API keys (gitignored)
-├── output/                            # PKP credentials, SPG NFT deploy output (gitignored)
+├── output/                            # PKP credentials (gitignored)
 └── .env                               # Local env vars (gitignored)
 ```
 

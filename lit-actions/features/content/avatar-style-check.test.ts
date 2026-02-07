@@ -16,14 +16,14 @@
 import { createLitClient } from "@lit-protocol/lit-client";
 import { createAuthManager, storagePlugins, ViemAccountAuthenticator } from "@lit-protocol/auth";
 import { privateKeyToAccount } from "viem/accounts";
-import { Env } from "./shared/env";
+import { Env } from "../../tests/shared/env";
 import { ethers } from "ethers";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT_DIR = join(__dirname, "../");
+const ROOT_DIR = join(__dirname, "../../");
 
 async function sha256Hex(data: Uint8Array): Promise<string> {
   const hash = await crypto.subtle.digest("SHA-256", data);
@@ -76,7 +76,7 @@ async function main() {
   if (!openrouterKey) throw new Error("OPENROUTER_API_KEY not set");
 
   // Load action code (inline — haven't redeployed to IPFS yet)
-  const actionCode = readFileSync(join(ROOT_DIR, "actions/avatar-upload-v1.js"), "utf-8");
+  const actionCode = readFileSync(join(ROOT_DIR, "features/content/avatar-upload-v1.js"), "utf-8");
   console.log(`   Action:      inline (${actionCode.length} bytes)`);
 
   console.log("\nConnecting to Lit Protocol...");

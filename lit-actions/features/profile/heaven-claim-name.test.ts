@@ -22,14 +22,14 @@ import { createLitClient } from "@lit-protocol/lit-client";
 import { createAuthManager, storagePlugins, ViemAccountAuthenticator } from "@lit-protocol/auth";
 import { privateKeyToAccount } from "viem/accounts";
 import { createPublicClient, http, parseAbi } from "viem";
-import { Env } from "./shared/env";
+import { Env } from "../../tests/shared/env";
 import { ethers } from "ethers";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT_DIR = join(__dirname, "../");
+const ROOT_DIR = join(__dirname, "../../");
 
 // MegaETH testnet
 const MEGAETH_RPC = "https://carrot.megaeth.com/rpc";
@@ -172,7 +172,7 @@ async function main() {
     if (useInlineCode) {
       // Load action code from file
       const actionCode = readFileSync(
-        join(ROOT_DIR, "actions/heaven-claim-name-v1.js"),
+        join(ROOT_DIR, "features/profile/heaven-claim-name-v1.js"),
         "utf-8"
       );
       result = await litClient.executeJs({

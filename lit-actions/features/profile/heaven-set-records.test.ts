@@ -20,13 +20,13 @@ import { createLitClient } from "@lit-protocol/lit-client";
 import { createAuthManager, storagePlugins, ViemAccountAuthenticator } from "@lit-protocol/auth";
 import { privateKeyToAccount } from "viem/accounts";
 import { createPublicClient, http, parseAbi } from "viem";
-import { Env } from "./shared/env";
+import { Env } from "../../tests/shared/env";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT_DIR = join(__dirname, "../");
+const ROOT_DIR = join(__dirname, "../../");
 
 const MEGAETH_RPC = "https://carrot.megaeth.com/rpc";
 const RECORDS_V1 = "0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3";
@@ -132,7 +132,7 @@ async function main() {
 
   let claimResult;
   if (useInlineClaim) {
-    const code = readFileSync(join(ROOT_DIR, "actions/heaven-claim-name-v1.js"), "utf-8");
+    const code = readFileSync(join(ROOT_DIR, "features/profile/heaven-claim-name-v1.js"), "utf-8");
     claimResult = await litClient.executeJs({ code, authContext, jsParams: claimParams });
   } else {
     claimResult = await litClient.executeJs({ ipfsId: claimCid, authContext, jsParams: claimParams });
@@ -179,7 +179,7 @@ async function main() {
 
   let recordsResult;
   if (useInlineRecords) {
-    const code = readFileSync(join(ROOT_DIR, "actions/heaven-set-records-v1.js"), "utf-8");
+    const code = readFileSync(join(ROOT_DIR, "features/profile/heaven-set-records-v1.js"), "utf-8");
     recordsResult = await litClient.executeJs({ code, authContext, jsParams: recordsParams });
   } else {
     recordsResult = await litClient.executeJs({ ipfsId: recordsCid, authContext, jsParams: recordsParams });

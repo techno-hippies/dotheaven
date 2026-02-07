@@ -13,7 +13,7 @@
 import { createLitClient } from "@lit-protocol/lit-client";
 import { createAuthManager, storagePlugins, ViemAccountAuthenticator } from "@lit-protocol/auth";
 import { privateKeyToAccount } from "viem/accounts";
-import { Env } from "./shared/env";
+import { Env } from "../../tests/shared/env";
 import { ethers } from "ethers";
 import { readFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
@@ -81,7 +81,7 @@ async function main() {
   console.log("Auth context ready");
 
   // Load real fixture files
-  const fixtureDir = join(__dirname, "../fixtures/plastic-love");
+  const fixtureDir = join(__dirname, "../../fixtures/plastic-love");
   const audioBytes = new Uint8Array(readFileSync(join(fixtureDir, "Plastic Love (Disco Rework).mp3")));
   const lyricsText = readFileSync(join(fixtureDir, "lyrics.txt"), "utf-8").trim();
 

@@ -25,7 +25,7 @@ import { Synapse } from "@filoz/synapse-sdk";
 import { createLitClient } from "@lit-protocol/lit-client";
 import { createAuthManager, storagePlugins, ViemAccountAuthenticator } from "@lit-protocol/auth";
 import { privateKeyToAccount } from "viem/accounts";
-import { Env } from "./shared/env";
+import { Env } from "../../tests/shared/env";
 import { ethers } from "ethers";
 
 // ── Constants ──────────────────────────────────────────────────────────

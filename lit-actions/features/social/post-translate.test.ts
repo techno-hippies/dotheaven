@@ -26,7 +26,7 @@ import {
   ViemAccountAuthenticator,
 } from "@lit-protocol/auth";
 import { privateKeyToAccount } from "viem/accounts";
-import { Env } from "./shared/env";
+import { Env } from "../../tests/shared/env";
 import { ethers } from "ethers";
 import { existsSync, readFileSync } from "fs";
 import { join, dirname } from "path";

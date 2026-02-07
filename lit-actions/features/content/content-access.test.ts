@@ -16,7 +16,7 @@
 import { createLitClient } from "@lit-protocol/lit-client";
 import { createAuthManager, storagePlugins, ViemAccountAuthenticator } from "@lit-protocol/auth";
 import { privateKeyToAccount } from "viem/accounts";
-import { Env } from "./shared/env";
+import { Env } from "../../tests/shared/env";
 import { randomBytes, hexlify, keccak256, AbiCoder, Contract, JsonRpcProvider, Wallet } from "ethers";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
