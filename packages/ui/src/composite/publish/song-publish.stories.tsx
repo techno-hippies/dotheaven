@@ -17,6 +17,7 @@ const defaultFormData: SongFormData = {
   lyrics: '',
   coverFile: null,
   audioFile: null,
+  instrumentalFile: null,
   previewStart: 0,
   previewEnd: 30,
   license: 'non-commercial',
@@ -55,6 +56,7 @@ Midnight in Seoul, we come alive
 Dancing through the city lights`,
   coverFile: null,
   audioFile: null,
+  instrumentalFile: null,
   previewStart: 45,
   previewEnd: 75,
   license: 'commercial-remix',
@@ -115,6 +117,25 @@ export const UploadClear: StoryObj = {
     <SongPublishForm
       step="upload"
       formData={{ ...defaultFormData, audioFile: new File([''], 'midnight-seoul.mp3', { type: 'audio/mpeg' }) }}
+      onFormChange={() => {}}
+      onNext={() => alert('Next')}
+      onBack={() => {}}
+      onPublish={() => {}}
+      copyrightCheck={{ status: 'clear' }}
+    />
+  ),
+}
+
+export const UploadWithInstrumental: StoryObj = {
+  name: '1c2. Upload (With Instrumental)',
+  render: () => (
+    <SongPublishForm
+      step="upload"
+      formData={{
+        ...defaultFormData,
+        audioFile: new File([''], 'midnight-seoul.mp3', { type: 'audio/mpeg' }),
+        instrumentalFile: new File([''], 'midnight-seoul-instrumental.mp3', { type: 'audio/mpeg' }),
+      }}
       onFormChange={() => {}}
       onNext={() => alert('Next')}
       onBack={() => {}}
@@ -282,6 +303,7 @@ export const Success: StoryObj = {
         ipId: '0x1234567890abcdef1234567890abcdef12345678',
         tokenId: '42',
         audioCid: 'QmXnhhG1zLnVP8dbBKjVqWYJtiXvNc7VmdGSLqN6TKszXR',
+        instrumentalCid: 'QmYvozSnK3tGhPCmqNe2ixqUFckhtv5oCnzGGPxadKFmR7',
       }}
     />
   ),
@@ -366,6 +388,7 @@ export const Interactive: StoryObj = {
           ipId: '0xabcdef1234567890abcdef1234567890abcdef12',
           tokenId: '7',
           audioCid: 'QmXnhhG1zLnVP8dbBKjVqWYJtiXvNc7VmdGSLqN6TKszXR',
+          instrumentalCid: 'QmYvozSnK3tGhPCmqNe2ixqUFckhtv5oCnzGGPxadKFmR7',
         }}
       />
     )

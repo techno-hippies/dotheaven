@@ -1,11 +1,11 @@
 import type { Component } from 'solid-js'
-import { createSignal, Show } from 'solid-js'
+import { createSignal } from 'solid-js'
 import { cn } from '../../lib/classnames'
 import { Avatar } from '../../primitives/avatar'
 import { IconButton } from '../../primitives/icon-button'
 import { Button } from '../../primitives/button'
 import { Drawer, DrawerContent } from '../../primitives/drawer'
-import { Image, Plus } from '../../icons'
+import { Image, MusicNotes, Plus } from '../../icons'
 
 // ── Desktop Compose Box (inline at top of feed) ────────────────────────
 
@@ -14,19 +14,18 @@ export interface ComposeBoxProps {
   placeholder?: string
   onPost?: (text: string) => void
   onAddMedia?: () => void
+  onAddMusic?: () => void
   class?: string
 }
 
 export const ComposeBox: Component<ComposeBoxProps> = (props) => {
   const [text, setText] = createSignal('')
-  const [focused, setFocused] = createSignal(false)
 
   const handlePost = () => {
     const val = text().trim()
     if (!val) return
     props.onPost?.(val)
     setText('')
-    setFocused(false)
   }
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -42,42 +41,43 @@ export const ComposeBox: Component<ComposeBoxProps> = (props) => {
       props.class,
     )}>
       <Avatar src={props.avatarUrl} size="md" />
-      <div class="flex-1 flex flex-col gap-3">
+      <div class="flex-1 flex flex-col gap-2">
         <textarea
           value={text()}
           onInput={(e) => setText(e.currentTarget.value)}
-          onFocus={() => setFocused(true)}
           onKeyDown={handleKeyDown}
           placeholder={props.placeholder ?? "What's on your mind?"}
-          rows={focused() || text() ? 3 : 1}
-          class={cn(
-            'w-full resize-none bg-transparent text-[var(--text-primary)] text-base',
-            'placeholder:text-[var(--text-muted)] outline-none',
-            'transition-[height] duration-150',
-          )}
+          rows={3}
+          class="w-full resize-none bg-transparent text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none"
         />
-        <Show when={focused() || text()}>
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-1">
-              <IconButton
-                variant="soft"
-                size="md"
-                aria-label="Add media"
-                onClick={() => props.onAddMedia?.()}
-              >
-                <Image class="w-5 h-5" />
-              </IconButton>
-            </div>
-            <Button
-              variant="default"
-              size="sm"
-              disabled={!text().trim()}
-              onClick={handlePost}
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-1 -ml-2">
+            <IconButton
+              variant="soft"
+              size="md"
+              aria-label="Add media"
+              onClick={() => props.onAddMedia?.()}
             >
-              Post
-            </Button>
+              <Image class="w-5 h-5" />
+            </IconButton>
+            <IconButton
+              variant="soft"
+              size="md"
+              aria-label="Add music"
+              onClick={() => props.onAddMusic?.()}
+            >
+              <MusicNotes class="w-5 h-5" />
+            </IconButton>
           </div>
-        </Show>
+          <Button
+            variant="default"
+            size="sm"
+            disabled={!text().trim()}
+            onClick={handlePost}
+          >
+            Post
+          </Button>
+        </div>
       </div>
     </div>
   )
@@ -119,6 +119,7 @@ export interface ComposeDrawerProps {
   placeholder?: string
   onPost?: (text: string) => void
   onAddMedia?: () => void
+  onAddMusic?: () => void
 }
 
 export const ComposeDrawer: Component<ComposeDrawerProps> = (props) => {
@@ -138,14 +139,24 @@ export const ComposeDrawer: Component<ComposeDrawerProps> = (props) => {
         showHandle
         footer={
           <div class="flex items-center justify-between">
-            <IconButton
-              variant="soft"
-              size="md"
-              aria-label="Add media"
-              onClick={() => props.onAddMedia?.()}
-            >
-              <Image class="w-5 h-5" />
-            </IconButton>
+            <div class="flex items-center gap-1">
+              <IconButton
+                variant="soft"
+                size="md"
+                aria-label="Add media"
+                onClick={() => props.onAddMedia?.()}
+              >
+                <Image class="w-5 h-5" />
+              </IconButton>
+              <IconButton
+                variant="soft"
+                size="md"
+                aria-label="Add music"
+                onClick={() => props.onAddMusic?.()}
+              >
+                <MusicNotes class="w-5 h-5" />
+              </IconButton>
+            </div>
             <Button
               variant="default"
               size="sm"

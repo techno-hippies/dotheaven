@@ -533,7 +533,7 @@ export const FeedPost: Component<FeedPostProps> = (props) => {
           isTranslating={props.isTranslating}
           needsTranslation={props.postLang && props.userLang ? props.postLang !== props.userLang : true}
           compact={isMobile()}
-          class="-mb-1"
+          class="-mt-1 -mb-1"
         />
       </div>
     </div>

@@ -196,7 +196,7 @@ export const FeedPage: Component = () => {
 
       {/* Desktop: inline compose box at top */}
       <Show when={!isMobile()}>
-        <ComposeBox onPost={handlePost} />
+        <ComposeBox avatarUrl={cachedAvatarUrl()} onPost={handlePost} />
       </Show>
 
       <Show
@@ -236,6 +236,7 @@ export const FeedPage: Component = () => {
         <ComposeDrawer
           open={composeOpen()}
           onOpenChange={setComposeOpen}
+          avatarUrl={cachedAvatarUrl()}
           onPost={handlePost}
         />
       </Show>

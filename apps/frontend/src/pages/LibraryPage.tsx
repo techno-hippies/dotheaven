@@ -25,7 +25,8 @@ import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 // import { ShareContentDialog } from '../components/ShareContentDialog'
 import { enqueueUpload, jobs } from '../lib/upload-manager'
 import { initFilecoinUploadService } from '../lib/filecoin-upload-service'
-import { fetchUploadedContent, fetchSharedContent, type UploadedContentEntry, type SharedContentEntry } from '../lib/heaven/scrobbles'
+import { fetchUploadedContent, fetchSharedContent } from '../lib/heaven/scrobbles'
+import { mapUploadedToTracks, mapSharedToTracks, buildEntriesMap, handleEncryptedTrackPlay } from './library-utils'
 
 type LibraryTab = 'local' | 'cloud' | 'shared' | 'publish'
 
@@ -67,6 +68,7 @@ export const LibraryPage: Component = () => {
     lyrics: '',
     coverFile: null,
     audioFile: null,
+    instrumentalFile: null,
     previewStart: 0,
     previewEnd: 30,
     license: 'non-commercial',
@@ -138,89 +140,11 @@ export const LibraryPage: Component = () => {
   )
 
 
-  // Convert uploaded entries to Track[] for TrackList
-  const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
-  const isValidCid = (cid: string | undefined | null): cid is string =>
-    !!cid && (cid.startsWith('Qm') || cid.startsWith('bafy'))
-  const uploadedTracksAsTrack = createMemo<Track[]>(() => {
-    const entries = uploadedTracks() ?? []
-    return entries.map((e) => ({
-      id: e.contentId,
-      contentId: e.contentId,
-      pieceCid: e.pieceCid,
-      title: e.title,
-      artist: e.artist,
-      album: '',
-      kind: e.kind,
-      payload: e.payload,
-      mbid: e.mbid,
-      coverCid: e.coverCid,
-      albumCover: isValidCid(e.coverCid)
-        ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
-        : undefined,
-      dateAdded: new Date(e.uploadedAt * 1000).toLocaleDateString(),
-    }))
-  })
-
-  // Map contentId -> UploadedContentEntry for playback lookup
-  const uploadedEntriesMap = createMemo(() => {
-    const map = new Map<string, UploadedContentEntry>()
-    for (const e of uploadedTracks() ?? []) {
-      map.set(e.contentId, e)
-    }
-    return map
-  })
-
-  // Convert shared entries to Track[] for TrackList
-  const sharedTracksAsTrack = createMemo<Track[]>(() => {
-    const entries = sharedTracks() ?? []
-    return entries.map((e) => ({
-      id: e.contentId,
-      contentId: e.contentId,
-      pieceCid: e.pieceCid,
-      title: e.title,
-      artist: e.artist,
-      album: '',
-      sharedBy: e.sharedBy,
-      kind: e.kind,
-      payload: e.payload,
-      mbid: e.mbid,
-      coverCid: e.coverCid,
-      albumCover: isValidCid(e.coverCid)
-        ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
-        : undefined,
-      dateAdded: new Date(e.uploadedAt * 1000).toLocaleDateString(),
-    }))
-  })
-
-  // Map contentId -> SharedContentEntry for playback lookup
-  const sharedEntriesMap = createMemo(() => {
-    const map = new Map<string, SharedContentEntry>()
-    for (const e of sharedTracks() ?? []) {
-      map.set(e.contentId, e)
-    }
-    return map
-  })
-
-  // Handle play for uploaded/shared content with toggle support
-  const handleEncryptedTrackPlay = (track: Track, entriesMap: Map<string, UploadedContentEntry | SharedContentEntry>) => {
-    const currentTrack = player.currentTrack()
-    // If same track is playing, toggle play/pause
-    if (currentTrack?.id === track.id) {
-      player.togglePlay()
-      return
-    }
-    // Otherwise play the new track
-    const entry = entriesMap.get(track.id)
-    if (entry) {
-      player.playEncryptedContent({
-        ...entry,
-        coverUrl: isValidCid(entry.coverCid)
-          ? `${FILEBASE_GATEWAY}/${entry.coverCid}?img-width=256&img-height=256&img-format=webp&img-quality=80`
-          : undefined,
-      })
-    }
-  }
+  // Convert uploaded/shared entries to Track[] for TrackList
+  const uploadedTracksAsTrack = createMemo<Track[]>(() => mapUploadedToTracks(uploadedTracks() ?? []))
+  const uploadedEntriesMap = createMemo(() => buildEntriesMap(uploadedTracks() ?? []))
+  const sharedTracksAsTrack = createMemo<Track[]>(() => mapSharedToTracks(sharedTracks() ?? []))
+  const sharedEntriesMap = createMemo(() => buildEntriesMap(sharedTracks() ?? []))
 
   // Refetch when new uploads complete (with delay for subgraph indexing)
   let lastDoneCount = 0
@@ -600,7 +524,7 @@ export const LibraryPage: Component = () => {
                   scrollRef={el()}
                   enableDrag
                   onTrackClick={(track) => player.setSelectedTrackId(track.id)}
-                  onTrackPlay={(track) => handleEncryptedTrackPlay(track, uploadedEntriesMap())}
+                  onTrackPlay={(track) => handleEncryptedTrackPlay(track, uploadedEntriesMap(), player)}
                   menuActions={menuActionsCloud}
                 />
               )}
@@ -636,7 +560,7 @@ export const LibraryPage: Component = () => {
                 scrollRef={el()}
                 enableDrag
                 onTrackClick={(track) => player.setSelectedTrackId(track.id)}
-                onTrackPlay={(track) => handleEncryptedTrackPlay(track, sharedEntriesMap())}
+                onTrackPlay={(track) => handleEncryptedTrackPlay(track, sharedEntriesMap(), player)}
                 menuActions={menuActionsShared}
               />
             )}

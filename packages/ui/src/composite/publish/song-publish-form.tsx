@@ -20,6 +20,7 @@ export interface SongFormData {
   lyrics: string
   coverFile: File | null
   audioFile: File | null
+  instrumentalFile: File | null
   previewStart: number
   previewEnd: number
   license: LicenseType
@@ -65,6 +66,7 @@ export interface SongPublishFormProps {
     ipId: string
     tokenId: string
     audioCid: string
+    instrumentalCid: string
   }
   class?: string
 }
@@ -151,9 +153,11 @@ const UploadStep: Component<{
 }> = (props) => {
   let audioInputRef: HTMLInputElement | undefined
   let coverInputRef: HTMLInputElement | undefined
+  let instrumentalInputRef: HTMLInputElement | undefined
 
   const canProceed = createMemo(() =>
-    !!props.formData.audioFile && props.copyrightCheck?.status !== 'checking'
+    !!props.formData.audioFile && !!props.formData.instrumentalFile
+    && props.copyrightCheck?.status !== 'checking'
     && props.copyrightCheck?.status !== 'match'
   )
 
@@ -288,6 +292,65 @@ const UploadStep: Component<{
                 onClick={() => {
                   props.onChange({ coverFile: null })
                   if (coverInputRef) coverInputRef.value = ''
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          )}
+        </Show>
+      </div>
+
+      {/* Instrumental track (optional) */}
+      <div>
+        <label class="text-base font-medium text-[var(--text-primary)] mb-2 block">
+          Instrumental / karaoke track <span class="text-[var(--accent-coral)]">*</span>
+        </label>
+        <input
+          ref={instrumentalInputRef}
+          type="file"
+          accept="audio/mpeg,audio/wav,audio/mp4,audio/webm"
+          class="hidden"
+          onChange={(e) => {
+            const file = e.currentTarget.files?.[0]
+            if (file) props.onChange({ instrumentalFile: file })
+          }}
+        />
+        <Show
+          when={props.formData.instrumentalFile}
+          fallback={
+            <button
+              type="button"
+              class={cn(
+                'w-full p-6 rounded-md border-2 border-dashed border-[var(--bg-highlight-hover)]',
+                'hover:border-[var(--accent-blue)]/50 hover:bg-[var(--bg-highlight)]/50',
+                'transition-colors cursor-pointer flex flex-col items-center gap-2',
+              )}
+              onClick={() => instrumentalInputRef?.click()}
+            >
+              <MusicNote class="w-6 h-6 text-[var(--text-muted)]" />
+              <div class="text-center">
+                <p class="text-[var(--text-secondary)] font-medium">Choose instrumental track</p>
+                <p class="text-sm text-[var(--text-muted)]">MP3, WAV, M4A, or WebM (max 50 MB)</p>
+              </div>
+            </button>
+          }
+        >
+          {(file) => (
+            <div class="flex items-center gap-3 p-3 rounded-md bg-[var(--bg-highlight)]">
+              <div class="w-10 h-10 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center flex-shrink-0">
+                <MusicNote class="w-5 h-5 text-[var(--accent-purple)]" />
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="text-base font-medium text-[var(--text-primary)] truncate">{file().name}</p>
+                <p class="text-sm text-[var(--text-muted)]">{formatFileSize(file().size)}</p>
+              </div>
+              <button
+                type="button"
+                class="text-base text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                onClick={() => {
+                  props.onChange({ instrumentalFile: null })
+                  if (instrumentalInputRef) instrumentalInputRef.value = ''
                 }}
               >
                 Remove
@@ -610,10 +673,18 @@ const ReviewStep: Component<{
             <span class="text-[var(--text-primary)]">{props.formData.revShare}%</span>
           </div>
         </Show>
-        <div class="flex justify-between py-1.5">
+        <div class="flex justify-between py-1.5 border-b border-[var(--bg-highlight)]">
           <span class="text-[var(--text-muted)]">Audio</span>
           <span class="text-[var(--text-primary)]">
             {props.formData.audioFile?.name ?? '—'} ({formatFileSize(props.formData.audioFile?.size ?? 0)})
+          </span>
+        </div>
+        <div class="flex justify-between py-1.5">
+          <span class="text-[var(--text-muted)]">Instrumental</span>
+          <span class="text-[var(--text-primary)]">
+            {props.formData.instrumentalFile
+              ? `${props.formData.instrumentalFile.name} (${formatFileSize(props.formData.instrumentalFile.size)})`
+              : 'None'}
           </span>
         </div>
       </div>
@@ -681,6 +752,9 @@ const SuccessStep: Component<{
             <p class="text-[var(--text-muted)]">IP ID: <span class="text-[var(--text-secondary)]">{r().ipId}</span></p>
             <p class="text-[var(--text-muted)]">Token: <span class="text-[var(--text-secondary)]">{r().tokenId}</span></p>
             <p class="text-[var(--text-muted)]">CID: <span class="text-[var(--text-secondary)]">{r().audioCid}</span></p>
+            <Show when={r().instrumentalCid}>
+              <p class="text-[var(--text-muted)]">Instrumental: <span class="text-[var(--text-secondary)]">{r().instrumentalCid}</span></p>
+            </Show>
           </div>
         )}
       </Show>

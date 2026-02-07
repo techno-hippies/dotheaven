@@ -70,6 +70,24 @@ const COUNTRY_ABBR: Record<string, string> = {
   'Japan': 'JP', 'China': 'CN', 'India': 'IN', 'Brazil': 'BR', 'Mexico': 'MX'
 }
 
+/**
+ * Abbreviate a verbose location string at display time.
+ * "Portland, Oregon, United States" → "Portland, OR, US"
+ */
+export function abbreviateLocation(location: string): string {
+  const parts = location.split(',').map(p => p.trim())
+  if (parts.length < 2) return location
+
+  return parts.map((part, i) => {
+    if (i === 0) return part // city name — keep as-is
+    const stateAbbr = US_STATE_ABBR[part]
+    if (stateAbbr) return stateAbbr
+    const countryAbbr = COUNTRY_ABBR[part]
+    if (countryAbbr) return countryAbbr
+    return part
+  }).join(', ')
+}
+
 async function searchPhoton(
   query: string,
   signal: AbortSignal

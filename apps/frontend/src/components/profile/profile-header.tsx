@@ -1,5 +1,5 @@
 import { type Component, Show } from 'solid-js'
-import { cn, Avatar, Button, VerificationBadge, type VerificationState, FollowButton, MapPin } from '@heaven/ui'
+import { cn, Avatar, Button, VerificationBadge, type VerificationState, FollowButton, MapPin, abbreviateLocation } from '@heaven/ui'
 
 const GENDER_ABBREV: Record<string, string> = {
   woman: 'F', man: 'M', 'non-binary': 'NB',
@@ -110,9 +110,9 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
             </p>
             {/* Location below username */}
             <Show when={props.location}>
-              <p class="flex items-center gap-1 text-base text-[var(--text-muted)]">
-                <MapPin class="w-4 h-4 flex-shrink-0" />
-                {props.location}
+              <p class="flex items-center gap-1.5 text-base text-[var(--text-muted)]">
+                <MapPin class="w-[18px] h-[18px] flex-shrink-0" />
+                {abbreviateLocation(props.location!)}
               </p>
             </Show>
           </div>
@@ -158,13 +158,13 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
                   isFollowing={props.isFollowing ?? false}
                   onClick={() => props.onFollowClick?.()}
                   size="md"
-                  class="flex-1 md:flex-none"
+                  class="flex-1 md:flex-none md:min-w-[110px]"
                 />
                 <Button
                   variant="secondary"
                   size="md"
                   onClick={() => props.onMessageClick?.()}
-                  class="flex-1 md:flex-none"
+                  class="flex-1 md:flex-none md:min-w-[110px]"
                 >
                   Message
                 </Button>

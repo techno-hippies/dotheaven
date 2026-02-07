@@ -7,12 +7,12 @@
  * Flow:
  * 1. Validate EIP-191 signature over content hashes
  * 2. Decrypt 3 API keys (Filebase, ElevenLabs, OpenRouter)
- * 3. Fetch audio/preview/cover content
- * 4. Upload 6 files to Filebase IPFS (audio, preview, cover, 3x metadata)
+ * 3. Fetch audio/preview/cover/instrumental content
+ * 4. Upload 7 files to Filebase IPFS (audio, preview, cover, instrumental, 3x metadata)
  * 5. Call ElevenLabs forced alignment API (word-level timestamps)
  * 6. Call OpenRouter translation API (lyrics translation)
  * 7. Upload alignment + translation JSON to IPFS (2 more files)
- * 8. Return all 8 CIDs + alignment + translation data
+ * 8. Return all 9 CIDs + alignment + translation data
  *
  * Required jsParams:
  * - userPkpPublicKey: User's PKP public key
@@ -32,6 +32,8 @@
  * - elevenlabsEncryptedKey: Lit-encrypted ElevenLabs API key
  * - openrouterEncryptedKey: Lit-encrypted OpenRouter API key
  *
+ * - instrumentalUrl: URL or inline {base64, contentType} for instrumental/karaoke track
+ *
  * Optional jsParams:
  * - filebasePlaintextKey: Dev override
  * - elevenlabsPlaintextKey: Dev override
@@ -39,7 +41,7 @@
  * - translationModel: Override LLM model (default: google/gemini-2.5-flash-lite-preview-09-2025)
  *
  * Returns: { success, version, user, audioCID, previewCID, coverCID,
- *            songMetadataCID, ipaMetadataCID, nftMetadataCID,
+ *            instrumentalCID, songMetadataCID, ipaMetadataCID, nftMetadataCID,
  *            alignmentCID, translationCID, alignment, translation, hashes }
  */
 
@@ -384,6 +386,7 @@ const main = async () => {
       audioUrl,
       previewUrl,
       coverUrl,
+      instrumentalUrl,
       songMetadataJson,
       ipaMetadataJson,
       nftMetadataJson,
@@ -406,6 +409,7 @@ const main = async () => {
     must(audioUrl, "audioUrl");
     must(previewUrl, "previewUrl");
     must(coverUrl, "coverUrl");
+    must(instrumentalUrl, "instrumentalUrl");
     must(songMetadataJson, "songMetadataJson");
     must(ipaMetadataJson, "ipaMetadataJson");
     must(nftMetadataJson, "nftMetadataJson");
@@ -433,10 +437,12 @@ const main = async () => {
     const audio = await fetchAndValidate(audioUrl, 50 * 1024 * 1024, ALLOWED_AUDIO_TYPES);
     const preview = await fetchAndValidate(previewUrl, 5 * 1024 * 1024, ALLOWED_AUDIO_TYPES);
     const cover = await fetchAndValidate(coverUrl, 5 * 1024 * 1024, ALLOWED_IMAGE_TYPES);
+    const instrumental = await fetchAndValidate(instrumentalUrl, 50 * 1024 * 1024, ALLOWED_AUDIO_TYPES);
 
     const audioHash = await sha256HexFromBuffer(audio.data);
     const previewHash = await sha256HexFromBuffer(preview.data);
     const coverHash = await sha256HexFromBuffer(cover.data);
+    const instrumentalHash = await sha256HexFromBuffer(instrumental.data);
     const songMetadataHash = await sha256Hex(songMetadataJson);
     const ipaMetadataHash = await sha256Hex(ipaMetadataJson);
     const nftMetadataHash = await sha256Hex(nftMetadataJson);
@@ -445,7 +451,7 @@ const main = async () => {
     // ========================================
     // STEP 3: Verify signature binds all content
     // ========================================
-    const message = `heaven:publish:${audioHash}:${previewHash}:${coverHash}:${songMetadataHash}:${ipaMetadataHash}:${nftMetadataHash}:${lyricsHash}:${sourceLanguage}:${targetLanguage}:${timestamp}:${nonce}`;
+    const message = `heaven:publish:${audioHash}:${previewHash}:${coverHash}:${instrumentalHash}:${songMetadataHash}:${ipaMetadataHash}:${nftMetadataHash}:${lyricsHash}:${sourceLanguage}:${targetLanguage}:${timestamp}:${nonce}`;
     const recovered = ethers.utils.verifyMessage(message, signature);
     if (recovered.toLowerCase() !== userAddress.toLowerCase()) {
       throw new Error("Invalid signature: recovered address does not match user PKP");
@@ -488,6 +494,11 @@ const main = async () => {
           const coverCID = await uploadToFilebase(
             filebaseKey, cover.data, cover.contentType,
             `cover-${prefix}.${cover.contentType.split("/")[1]}`
+          );
+          const instrExt = extMap[instrumental.contentType] || "mp3";
+          const instrumentalCID = await uploadToFilebase(
+            filebaseKey, instrumental.data, instrumental.contentType,
+            `instrumental-${prefix}.${instrExt}`
           );
           const songMetadataCID = await uploadToFilebase(
             filebaseKey, songMetadataJson, "application/json",
@@ -587,7 +598,7 @@ const main = async () => {
           );
 
           return JSON.stringify({
-            audioCID, previewCID, coverCID,
+            audioCID, previewCID, coverCID, instrumentalCID,
             songMetadataCID, ipaMetadataCID, nftMetadataCID,
             alignmentCID, translationCID,
             alignment,
@@ -612,6 +623,7 @@ const main = async () => {
           audio: `0x${audioHash}`,
           preview: `0x${previewHash}`,
           cover: `0x${coverHash}`,
+          instrumental: `0x${instrumentalHash}`,
           songMetadata: `0x${songMetadataHash}`,
         },
       }),

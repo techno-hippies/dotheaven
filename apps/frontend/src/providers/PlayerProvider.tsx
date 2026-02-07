@@ -32,12 +32,12 @@ import {
   type LocalTrack,
 } from '../lib/local-music'
 import { createScrobbleService, type ScrobbleService } from '../lib/scrobble-service'
-import { fetchAndDecrypt, fetchPlaintext } from '../lib/content-service'
 import {
-  formatTime, parseDuration, sniffAudioMime, decodeDuration,
+  formatTime, parseDuration,
   LS_TRACK_ID, LS_POSITION, LS_DURATION, LS_VOLUME,
   savePlayerState, readPlayerState,
 } from './player-utils'
+import { playEncryptedContent as playEncryptedContentImpl, type EncryptedPlaybackDeps } from './encrypted-playback'
 
 export interface EncryptedContentInfo {
   contentId: string
@@ -769,160 +769,28 @@ export const PlayerProvider: ParentComponent = (props) => {
     if (audio) audio.volume = value / 100
   }
 
-  // In-memory cache for decrypted audio blob URLs (keyed by contentId)
-  const decryptedCache = new Map<string, string>()
-  const decryptedDurationCache = new Map<string, number>()
+  // ─── Encrypted content playback (delegated) ─────────────────────────────────
 
-  async function playEncryptedContent(content: EncryptedContentInfo) {
-    console.log('[Player] playEncryptedContent called:', {
-      contentId: content.contentId,
-      pieceCid: content.pieceCid,
-      datasetOwner: content.datasetOwner,
-      algo: content.algo,
-      title: content.title,
-    })
-    if (!audio) {
-      console.error('[Player] No audio element')
-      return
-    }
-    const thisPlay = ++playId
-    if (decryptingPlayId) {
-      decryptingPlayId = 0
-      setDecrypting(false)
-    }
-    setPlaybackError(null)
-
-    // Create a synthetic track so NowPlaying displays correctly
-    const syntheticTrack: LocalTrack = {
-      id: content.contentId,
-      title: content.title,
-      artist: content.artist,
-      album: '',
-      filePath: '', // no local file
-      albumCover: content.coverUrl,
-    }
-
-    // Set as current track immediately (shows title while decrypting)
-    setTracks([syntheticTrack])
-    setCurrentIndex(0)
-    setSelectedTrackId(content.contentId)
-    setCurrentTime(0)
-    setDuration(0)
-    setIsPlaying(false)
-
-    // Check cache first
-    const cached = decryptedCache.get(content.contentId)
-    if (cached) {
-      if (thisPlay !== playId) return
-      currentRevoke?.()
-      currentRevoke = undefined
-      currentMode = 'blob'
-      fallbackTried = true
-      const cachedDuration = decryptedDurationCache.get(content.contentId)
-      if (cachedDuration) setDuration(cachedDuration)
-      audio.src = cached
-      audio.currentTime = 0
-      audio.load()
-      try {
-        await audio.play()
-        if (thisPlay === playId) setIsPlaying(true)
-      } catch {
-        if (thisPlay === playId) {
-          setPlaybackError('Audio playback failed.')
-          setIsPlaying(false)
-        }
-      }
-      return
-    }
-
-    // Fetch + decrypt (or fetch plaintext if algo=0)
-    try {
-      decryptingPlayId = thisPlay
-      setDecrypting(true)
-      console.log('[Player] Starting fetch, algo:', content.algo)
-      let result: { audio: Uint8Array }
-      if (content.algo === 0) {
-        console.log('[Player] Fetching plaintext from Beam...')
-        result = await fetchPlaintext(content.datasetOwner, content.pieceCid)
-      } else {
-        console.log('[Player] Fetching encrypted + decrypting via Lit...')
-        const authContext = await auth.getAuthContext()
-        result = await fetchAndDecrypt(
-          content.datasetOwner,
-          content.pieceCid,
-          content.contentId,
-          authContext,
-        )
-      }
-      console.log('[Player] Got audio bytes:', result.audio.length)
-      if (thisPlay !== playId) return
-
-      // Create blob URL from decrypted audio bytes
-      const detectedMime = sniffAudioMime(result.audio)
-      const canPlay = detectedMime ? audio.canPlayType(detectedMime) : ''
-      console.log('[Player] Cloud mime:', { detectedMime, canPlay })
-      if (detectedMime && !canPlay) {
-        setPlaybackError('Unsupported audio format for this device.')
-        setIsPlaying(false)
-        return
-      }
-      if (detectedMime === 'audio/flac' && canPlay !== 'probably') {
-        setPlaybackError('Unsupported audio format for this device.')
-        setIsPlaying(false)
-        return
-      }
-      const blob = detectedMime
-        ? new Blob([result.audio as BlobPart], { type: detectedMime })
-        : new Blob([result.audio as BlobPart])
-      const url = URL.createObjectURL(blob)
-      decryptedCache.set(content.contentId, url)
-      const cachedDuration = decryptedDurationCache.get(content.contentId)
-      if (cachedDuration) setDuration(cachedDuration)
-
-      // Stop current playback
-      audio.pause()
-      currentRevoke?.()
-      currentRevoke = () => {
-        // Don't revoke cached URLs — they'll be GC'd with the page
-      }
-
-      currentMode = 'blob'
-      fallbackTried = true
-      audio.src = url
-      audio.currentTime = 0
-      audio.load()
-      try {
-        await audio.play()
-        if (thisPlay === playId) setIsPlaying(true)
-      } catch {
-        if (thisPlay === playId) {
-          setPlaybackError('Audio playback failed.')
-          setIsPlaying(false)
-        }
-      }
-      if (thisPlay === playId && !duration()) {
-        setTimeout(() => {
-          if (thisPlay !== playId || duration()) return
-          void decodeDuration(result.audio).then((decodedDuration) => {
-            if (!decodedDuration) return
-            if (thisPlay !== playId || duration()) return
-            decryptedDurationCache.set(content.contentId, decodedDuration)
-            setDuration(decodedDuration)
-          })
-        }, 250)
-      }
-    } catch (e: any) {
-      console.error('[Player] Failed to decrypt content:', e)
-      if (thisPlay === playId) {
-        setPlaybackError(e?.message || 'Failed to decrypt content')
-        setIsPlaying(false)
-      }
-    } finally {
-      if (decryptingPlayId === thisPlay) {
-        decryptingPlayId = 0
-        setDecrypting(false)
-      }
-    }
+  const encryptedDeps: EncryptedPlaybackDeps = {
+    getAudio: () => audio,
+    getPlayId: () => playId,
+    incrementPlayId: () => ++playId,
+    getDecryptingPlayId: () => decryptingPlayId,
+    setDecryptingPlayId: (id) => { decryptingPlayId = id },
+    getCurrentRevoke: () => currentRevoke,
+    setCurrentRevoke: (fn) => { currentRevoke = fn },
+    setCurrentMode: (mode) => { currentMode = mode },
+    setFallbackTried: (v) => { fallbackTried = v },
+    setDecrypting,
+    setPlaybackError,
+    setIsPlaying,
+    setDuration,
+    duration,
+    setCurrentTime,
+    setCurrentIndex,
+    setTracks,
+    setSelectedTrackId,
+    getAuthContext: () => auth.getAuthContext(),
   }
 
   const progress = () => (duration() > 0 ? (currentTime() / duration()) * 100 : 0)
@@ -960,7 +828,7 @@ export const PlayerProvider: ParentComponent = (props) => {
     handleSeekStart,
     handleSeekEnd,
     handleVolumeChange,
-    playEncryptedContent,
+    playEncryptedContent: (content) => playEncryptedContentImpl(content, encryptedDeps),
 
     scrobbleService,
   }

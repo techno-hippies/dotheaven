@@ -260,7 +260,7 @@ export const ScheduleDashboard: Component<ScheduleDashboardProps> = (props) => {
       </div>
 
       {/* ── Day Selector Strip ──────────────────────────────── */}
-      <div class="flex gap-1">
+      <div class="grid grid-cols-7 gap-1.5">
         <For each={weekDates()}>
           {(date, idx) => {
             const isActive = () => idx() === selectedDayIdx()
@@ -270,27 +270,29 @@ export const ScheduleDashboard: Component<ScheduleDashboardProps> = (props) => {
               <button
                 type="button"
                 class={cn(
-                  'flex-1 flex flex-col items-center py-2 rounded-lg transition-colors',
-                  !isActive() && 'text-[var(--text-muted)] hover:bg-[var(--bg-elevated)]',
-                  isActive() && 'text-[var(--text-primary)]'
+                  'flex flex-col items-center py-2 rounded-md transition-colors cursor-pointer',
+                  isActive()
+                    ? 'bg-[var(--accent-blue)] text-white'
+                    : 'bg-[var(--bg-surface)] text-[var(--text-muted)] hover:bg-[var(--bg-highlight)]',
+                  isTodayDate && !isActive() && 'ring-1 ring-[var(--accent-coral)]/40'
                 )}
                 onClick={() => setSelectedDayIdx(idx())}
               >
                 <span class="text-xs font-medium uppercase">{DAY_LABELS_SHORT[idx()]}</span>
-                <div class={cn(
-                  'w-9 h-9 rounded-full flex items-center justify-center text-base font-semibold mt-0.5 transition-colors',
-                  isActive() && 'bg-[var(--accent-blue)] text-white',
+                <span class={cn(
+                  'text-lg font-semibold leading-tight',
+                  isActive() && 'text-white',
                   !isActive() && isTodayDate && 'text-[var(--accent-coral)]',
                   !isActive() && !isTodayDate && 'text-[var(--text-primary)]'
                 )}>
                   {date.getDate()}
-                </div>
-                <Show when={hasSlots()}>
-                  <div class={cn(
-                    'w-1 h-1 rounded-full mt-1',
-                    isActive() ? 'bg-[var(--accent-blue)]' : 'bg-[var(--text-muted)]'
-                  )} />
-                </Show>
+                </span>
+                <div class={cn(
+                  'w-1 h-1 rounded-full mt-0.5',
+                  hasSlots()
+                    ? isActive() ? 'bg-white/60' : 'bg-[var(--text-muted)]'
+                    : 'bg-transparent'
+                )} />
               </button>
             )
           }}
@@ -336,7 +338,7 @@ export const ScheduleDashboard: Component<ScheduleDashboardProps> = (props) => {
                     </div>
                   </Show>
                   <Show when={isBooked()}>
-                    <span class="text-xs px-2 py-0.5 rounded-full bg-[var(--bg-elevated)] text-[var(--text-muted)]">Booked</span>
+                    <span class="text-sm text-[var(--text-muted)]">Booked</span>
                   </Show>
                   <Show when={!isSelected() && !isBooked()}>
                     <div class="w-5 h-5 rounded-full border-2 border-[var(--bg-highlight-hover)]" />

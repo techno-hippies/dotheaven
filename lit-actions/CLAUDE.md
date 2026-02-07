@@ -273,9 +273,9 @@ lit-actions/
 
 ### Song Publish (EIP-191)
 ```
-message = `heaven:publish:${audioHash}:${previewHash}:${coverHash}:${songMetadataHash}:${ipaMetadataHash}:${nftMetadataHash}:${lyricsHash}:${sourceLanguage}:${targetLanguage}:${timestamp}:${nonce}`
+message = `heaven:publish:${audioHash}:${previewHash}:${coverHash}:${instrumentalHash}:${songMetadataHash}:${ipaMetadataHash}:${nftMetadataHash}:${lyricsHash}:${sourceLanguage}:${targetLanguage}:${timestamp}:${nonce}`
 ```
-Action fetches content, re-hashes, verifies signature recovers to user's address. All metadata, lyrics, and language params are authenticated.
+`instrumentalHash` = SHA-256 hex of instrumental audio bytes. Action fetches content, re-hashes, verifies signature recovers to user's address. All metadata, lyrics, language params, and instrumental are authenticated. `instrumentalUrl` is required — uploaded to IPFS and `instrumentalCID` returned.
 
 ### Post Register (EIP-191)
 ```

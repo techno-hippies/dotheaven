@@ -176,16 +176,23 @@ async function main() {
   const previewBytes = new Uint8Array(417);
   previewBytes[0] = 0xFF; previewBytes[1] = 0xFB; previewBytes[2] = 0x90; previewBytes[3] = 0x00;
 
+  // Reuse preview bytes as a stand-in for instrumental in tests
+  const instrumentalBytes = new Uint8Array(417);
+  instrumentalBytes[0] = 0xFF; instrumentalBytes[1] = 0xFB; instrumentalBytes[2] = 0x90; instrumentalBytes[3] = 0x00;
+
   const audioCid = await preUpload(audioBytes, "audio/mpeg", `${testPrefix}-audio.mp3`);
   console.log(`   Audio CID:     ${audioCid}`);
   const previewCid = await preUpload(previewBytes, "audio/mpeg", `${testPrefix}-preview.mp3`);
   console.log(`   Preview CID:   ${previewCid}`);
   const coverCid = await preUpload(coverBytes, "image/png", `${testPrefix}-cover.png`);
   console.log(`   Cover CID:     ${coverCid}`);
+  const instrumentalCid = await preUpload(instrumentalBytes, "audio/mpeg", `${testPrefix}-instrumental.mp3`);
+  console.log(`   Instrumental:  ${instrumentalCid}`);
 
   const audioUrl = `https://ipfs.filebase.io/ipfs/${audioCid}`;
   const previewUrl = `https://ipfs.filebase.io/ipfs/${previewCid}`;
   const coverUrl = `https://ipfs.filebase.io/ipfs/${coverCid}`;
+  const instrumentalUrl = `https://ipfs.filebase.io/ipfs/${instrumentalCid}`;
 
   console.log("   Pre-upload complete");
 
@@ -197,6 +204,7 @@ async function main() {
   const audioHash = await sha256Hex(audioBytes);
   const previewHash = await sha256Hex(previewBytes);
   const coverHash = await sha256Hex(coverBytes);
+  const instrumentalHash = await sha256Hex(instrumentalBytes);
 
   const songMetadata = JSON.stringify({
     audio: { hash: `0x${audioHash}`, mimeType: "audio/mpeg", uri: "ipfs://placeholder" },
@@ -218,12 +226,13 @@ async function main() {
   const timestamp = Date.now();
   const nonce = Math.floor(Math.random() * 1000000).toString();
 
-  const message = `heaven:publish:${audioHash}:${previewHash}:${coverHash}:${songMetadataHash}:${ipaMetadataHash}:${nftMetadataHash}:${lyricsHash}:${sourceLanguage}:${targetLanguage}:${timestamp}:${nonce}`;
+  const message = `heaven:publish:${audioHash}:${previewHash}:${coverHash}:${instrumentalHash}:${songMetadataHash}:${ipaMetadataHash}:${nftMetadataHash}:${lyricsHash}:${sourceLanguage}:${targetLanguage}:${timestamp}:${nonce}`;
   const signature = await wallet.signMessage(message);
 
   console.log(`\n   Audio size:    ${(audioBytes.length / 1024 / 1024).toFixed(2)} MB`);
   console.log(`   Audio hash:    ${audioHash.slice(0, 16)}...`);
   console.log(`   Cover hash:    ${coverHash.slice(0, 16)}...`);
+  console.log(`   Instrumental:  ${instrumentalHash.slice(0, 16)}...`);
   console.log(`   Lyrics:        ${lyricsText.split("\n").length} lines`);
   console.log(`   Translation:   ${sourceLanguage} → ${targetLanguage}`);
 
@@ -233,6 +242,7 @@ async function main() {
     audioUrl,
     previewUrl,
     coverUrl,
+    instrumentalUrl,
     songMetadataJson: songMetadata,
     ipaMetadataJson: ipaMetadata,
     nftMetadataJson: nftMetadata,
@@ -321,6 +331,7 @@ async function main() {
     console.log(`   Audio CID:       ${response.audioCID}`);
     console.log(`   Preview CID:     ${response.previewCID}`);
     console.log(`   Cover CID:       ${response.coverCID}`);
+    console.log(`   Instrumental:    ${response.instrumentalCID ?? "(none)"}`);
     console.log(`   Song Meta CID:   ${response.songMetadataCID}`);
     console.log(`   IPA Meta CID:    ${response.ipaMetadataCID}`);
     console.log(`   NFT Meta CID:    ${response.nftMetadataCID}`);
@@ -341,9 +352,10 @@ async function main() {
       console.log(`   Translated text: ${response.translation.text.slice(0, 80)}...`);
     }
 
-    // Verify all 8 CIDs
+    // Verify all 9 CIDs (instrumental included in this test)
     const cids = [
       response.audioCID, response.previewCID, response.coverCID,
+      response.instrumentalCID,
       response.songMetadataCID, response.ipaMetadataCID, response.nftMetadataCID,
       response.alignmentCID, response.translationCID,
     ];
@@ -352,7 +364,7 @@ async function main() {
         throw new Error(`Invalid CID: ${cid}`);
       }
     }
-    console.log("\n   All 8 CIDs valid");
+    console.log("\n   All 9 CIDs valid");
 
     if (response.user.toLowerCase() !== userAddress.toLowerCase()) {
       throw new Error(`User mismatch: expected ${userAddress}, got ${response.user}`);
