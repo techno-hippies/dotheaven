@@ -13,7 +13,8 @@ A sovereign social network where users karaoke, share and release music, and mak
 | **Music Streaming** | Cross-device music streaming from your local library | 跨设备播放本地音乐库 |
 | **Scrobbling** | On-chain listening history — verified plays written directly to MegaETH | 链上听歌记录——已验证的播放直接写入 MegaETH |
 | **Music Publishing** | Publish original music to IPFS with [Story Protocol](https://story.foundation) IP licensing (non-commercial, commercial use, or commercial remix with configurable royalties) | 将原创音乐发布至 IPFS，通过 [Story Protocol](https://story.foundation) 进行知识产权授权（非商业、商业使用或商业混音，可配置版税） |
-| **Karaoke Sessions** | Schedule and pay creators for live karaoke sessions | 预约并支付创作者的卡拉OK现场演出 |
+| **AI Voice** | Real-time AI voice calls via [Agora CAI](https://www.agora.io/en/products/conversational-ai/) (STT → LLM → ElevenLabs TTS) | 通过 [Agora CAI](https://www.agora.io/en/products/conversational-ai/) 实现实时 AI 语音通话（语音识别 → LLM → ElevenLabs 语音合成） |
+| **Karaoke Sessions** | Schedule and pay creators for live voice sessions with AI co-host | 预约并支付创作者的现场语音演出，配有 AI 共同主持 |
 | **Social Feed** | Post updates with automatic translation across languages | 发布动态，支持多语言自动翻译 |
 | **Encrypted Messaging** | Private peer-to-peer encrypted DMs | 端到端加密的私人消息 |
 | **Wallet** | Send and receive assets across Ethereum | 在以太坊网络上发送和接收资产 |
@@ -65,8 +66,6 @@ dotheaven/
 │   │                      # Pimlico Alto 打包器
 │   ├── heaven-api/        # API worker (photos, claims, names)
 │   │                      # API 服务（照片、认领、域名）
-│   ├── heaven-images/     # Image watermarking service
-│   │                      # 图片水印服务
 │   ├── heaven-resolver/   # MusicBrainz proxy + IPFS image rehost
 │   │                      # MusicBrainz 代理 + IPFS 图片托管
 │   ├── session-voice/     # Voice rooms (Agora + Durable Objects)
@@ -92,7 +91,7 @@ dotheaven/
 | [IPFS](https://ipfs.tech) (via [Filebase](https://filebase.com)) | Off-chain metadata, cover art, post content / 链下元数据、封面、帖子内容 |
 | [Agora](https://agora.io) | WebRTC voice calls and live rooms / WebRTC 语音通话和直播房间 |
 | [ERC-4337](https://eips.ethereum.org/EIPS/eip-4337) | Account abstraction — gasless UX via paymaster (contracts from [eth-infinitism](https://github.com/eth-infinitism/account-abstraction) v0.7, bundled by [Pimlico Alto](https://github.com/pimlicolabs/alto), gateway hosted on [EigenCloud TEE](https://eigencloud.com)) / 账户抽象——通过 Paymaster 实现无 Gas 体验（合约来自 [eth-infinitism](https://github.com/eth-infinitism/account-abstraction) v0.7，由 [Pimlico Alto](https://github.com/pimlicolabs/alto) 打包，网关托管于 [EigenCloud TEE](https://eigencloud.com)） |
-| [Handshake](https://handshake.org) | Decentralized DNS — `.heaven` TLD resolves user profiles via HNS bridge / 去中心化 DNS——`.heaven` 顶级域名通过 HNS 桥接解析用户资料 |
+| [Handshake](https://handshake.org) | Decentralized DNS — `.heaven` TLD (with planned `.⭐` and `.🪽`) resolves user profiles via HNS bridge. ERC-721 name NFTs with ENS bridge compatibility / 去中心化 DNS——`.heaven` 顶级域名（计划推出 `.⭐` 和 `.🪽`）通过 HNS 桥接解析用户资料。ERC-721 域名 NFT，兼容 ENS 桥接 |
 
 ## Smart Contracts / 智能合约
 
@@ -102,7 +101,7 @@ Deployed on **MegaETH Testnet** (chain 6343) unless noted.
 
 | Contract / 合约 | Address / 地址 | Purpose / 用途 |
 |---|---|---|
-| RegistryV1 | `0x22B618...01E5` | `.heaven` name NFTs (ERC-721) / `.heaven` 域名 NFT |
+| RegistryV1 | `0x22B618...01E5` | Multi-TLD name NFTs (ERC-721) — `.heaven`, `.⭐`, `.🪽`. ENS-bridged via CCIP-Read / 多 TLD 域名 NFT（ERC-721）——`.heaven`、`.⭐`、`.🪽`。通过 CCIP-Read 桥接 ENS |
 | RecordsV1 | `0x80D1b5...Baf3` | ENS-compatible text records / ENS 兼容文本记录 |
 | ProfileV2 | `0xa31545...d4E5` | On-chain social profiles / 链上社交资料 |
 | ScrobbleV4 | `0xBcD4Eb...bFA6` | Listening history (AA-enabled) / 播放历史（支持 AA） |
