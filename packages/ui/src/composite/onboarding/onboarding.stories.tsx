@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from 'storybook-solidjs'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { OnboardingNameStep } from './onboarding-name-step'
 import { OnboardingAvatarStep } from './onboarding-avatar-step'
 import { OnboardingBasicsStep } from './onboarding-basics-step'
@@ -115,23 +115,6 @@ export const BasicsStepWithError: StoryObj<typeof meta> = {
 
 export const MusicStep: StoryObj<typeof meta> = {
   name: 'Music Step',
-  render: () => (
-    <FullPageStep
-      title="Your music taste"
-      subtitle="Pick some artists you love. This helps us personalize your experience."
-      stepIndex={2}
-    >
-      <OnboardingMusicStep
-        claimedName="alice"
-        initialMode="manual"
-        onContinue={(data) => console.log('Music:', data)}
-      />
-    </FullPageStep>
-  ),
-}
-
-export const MusicStepManualPicker: StoryObj<typeof meta> = {
-  name: 'Music Step (Manual Picker)',
   render: () => (
     <FullPageStep
       title="Your music taste"

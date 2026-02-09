@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from 'storybook-solidjs'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { SettingsMenu } from './settings-menu'
 import { Gear, UserCircle, Bell, SignOut, Globe, Lock, Database } from '../icons'
 

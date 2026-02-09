@@ -13,6 +13,9 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 - **Link EOA v1**: Link PKP to EOA on ContentAccessMirror for shared content access.
 - **Post register v1**: Unified post registration for text AND photo posts. Text posts: AI safety check (includes language detection) + metadata upload + MegaETH mirror (no Story). Photo posts: metadata upload + Story IP + MegaETH mirror. Supports attribution for shared content. Pre-signed signature support for test/frontend flexibility.
 - **Follow v1**: Follow/unfollow a user on-chain via FollowV1 on MegaETH. Sponsor PKP pays gas. EIP-191 sig verification with timestamp freshness check.
+- **Like v1**: Like/unlike a post on-chain via EngagementV2 on MegaETH. Sponsor PKP pays gas. EIP-191 sig verification. Idempotent (re-like is no-op).
+- **Comment v1**: Add a comment to a post on-chain via EngagementV2 on MegaETH. Sponsor PKP pays gas. EIP-191 sig with text hash. Max 1000 chars.
+- **Flag v1**: Flag a post for moderation on-chain via EngagementV2 on MegaETH. Sponsor PKP pays gas. EIP-191 sig with reason code. Idempotent.
 
 ### Active (wired via song-publish.ts)
 - **Song publish**: Upload audio/preview/cover/metadata to IPFS, align lyrics (ElevenLabs), translate lyrics (OpenRouter) — all in one action with 3 encrypted keys
@@ -47,6 +50,9 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 | Post Translate v1 | `features/social/post-translate-v1.js` | `QmWAGjKK...` |
 | Track Cover v4 | `features/music/track-cover-v4.js` | `QmSVssbA...` |
 | Follow v1 | `features/social/follow-v1.js` | `QmPccpeq...` |
+| Like v1 | `features/social/like-v1.js` | `QmYrhWHG...` |
+| Comment v1 | `features/social/comment-v1.js` | `QmPim3Nk...` |
+| Flag v1 | `features/social/flag-v1.js` | `QmafHchR...` |
 | Song Publish | `features/music/song-publish-v1.js` | `Qmc2zDSs...` |
 | Lyrics Translate | `features/music/lyrics-translate-v1.js` | `Qmdf2HHL...` |
 | Story Register Sponsor | `features/music/story-register-sponsor-v1.js` | `QmRKjHrJ...` |
@@ -176,6 +182,9 @@ bun scripts/setup.ts songPublish           # Deploy song publish action (future)
 bun scripts/setup.ts lyricsTranslate       # Deploy lyrics translate action (future)
 bun scripts/setup.ts storyRegisterSponsor  # Deploy story register action (future)
 bun scripts/setup.ts followV1              # Deploy follow action
+bun scripts/setup.ts likeV1               # Deploy like action
+bun scripts/setup.ts commentV1            # Deploy comment action
+bun scripts/setup.ts flagV1               # Deploy flag action
 bun scripts/deploy-spg-nft.ts             # Deploy own SPG NFT collection
 bun scripts/verify.ts                      # Verify all actions configured
 
@@ -191,6 +200,9 @@ bun features/profile/heaven-set-records.test.ts     # Test records write
 bun features/social/post-register.test.ts            # Test post registration + language detection
 bun features/social/post-translate.test.ts          # Test post translation
 bun features/social/follow.test.ts                  # Test follow/unfollow
+bun features/social/like.test.ts                    # Test like/unlike
+bun features/social/comment.test.ts                 # Test comment
+bun features/social/flag.test.ts                    # Test flag
 bun features/verification/self-verify-mirror.test.ts # Test verification mirror
 
 # Data scripts (operational, not tests)
@@ -233,7 +245,13 @@ lit-actions/
 │   │   ├── post-register.test.ts
 │   │   ├── post-translate.test.ts
 │   │   ├── follow-v1.js               # Follow/unfollow via FollowV1
-│   │   └── follow.test.ts
+│   │   ├── follow.test.ts
+│   │   ├── like-v1.js                 # Like/unlike via EngagementV2
+│   │   ├── like.test.ts
+│   │   ├── comment-v1.js              # Comment via EngagementV2
+│   │   ├── comment.test.ts
+│   │   ├── flag-v1.js                 # Flag for moderation via EngagementV2
+│   │   └── flag.test.ts
 │   ├── music/                         # Playlists, publishing, content, covers
 │   │   ├── playlist-v1.js             # Event-sourced playlist operations
 │   │   ├── playlist-v1.test.ts
@@ -338,6 +356,24 @@ delete:     heaven:playlist:delete:${playlistId}:${timestamp}:${nonce}
 message = `heaven:follow:${checksumTarget}:${action}:${timestamp}:${nonce}`
 ```
 `action` = `"follow"` or `"unfollow"`. `checksumTarget` = checksum-formatted target address. Action verifies signature matches user PKP, validates timestamp freshness (5 min), then sponsor PKP broadcasts `followFor()` or `unfollowFor()` on MegaETH (chain 6343). FollowV1 contract address set in action constant.
+
+### Like (EIP-191)
+```
+message = `heaven:like:${postId}:${action}:${timestamp}:${nonce}`
+```
+`action` = `"like"` or `"unlike"`. `postId` = bytes32 hex. Action verifies signature matches user PKP, validates timestamp freshness (5 min), then sponsor PKP broadcasts `likeFor()` or `unlikeFor()` on EngagementV2 on MegaETH (chain 6343). Idempotent — re-liking is a no-op.
+
+### Comment (EIP-191)
+```
+message = `heaven:comment:${postId}:${textHash}:${timestamp}:${nonce}`
+```
+`textHash` = SHA-256 of comment text. Max 1000 chars. Action verifies signature matches user PKP, validates timestamp freshness (5 min), then sponsor PKP broadcasts `commentFor()` on EngagementV2 on MegaETH (chain 6343). Returns monotonic `commentId`.
+
+### Flag (EIP-191)
+```
+message = `heaven:flag:${postId}:${reason}:${timestamp}:${nonce}`
+```
+`reason` = uint8 (0=spam, 1=abuse, 2=nsfw, 3=other). Action verifies signature matches user PKP, validates timestamp freshness (5 min), then sponsor PKP broadcasts `flagFor()` on EngagementV2 on MegaETH (chain 6343). Idempotent — re-flagging is a no-op.
 
 ### Heaven Claim Name (EIP-191)
 ```

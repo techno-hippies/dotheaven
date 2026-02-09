@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from 'storybook-solidjs'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { ProfileHeader } from './profile-header'
 
 const meta = {
@@ -69,7 +69,7 @@ export const Unverified: Story = {
   },
 }
 
-export const HighFollowerCount: Story = {
+export const Celebrity: Story = {
   args: {
     username: 'celebrity.heaven',
     displayName: 'Celebrity',

@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from 'storybook-solidjs'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { createSignal } from 'solid-js'
 import { ShareViaChatDialog, type ShareRecipient } from './share-via-chat-dialog'
 import { Button } from '../primitives/button'

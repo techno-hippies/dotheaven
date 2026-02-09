@@ -64,6 +64,9 @@ export const CONTENT_ACCESS_MIRROR = '0xd4D3baB38a11D72e36F49a73D50Dbdc3c1Aa4e9A
 /** PostsV1 — Social posts */
 export const POSTS_V1 = '0xFe674F421c2bBB6D664c7F5bc0D5A0204EE0bFA6'
 
+/** EngagementV2 — Likes, comments, flags, translations */
+export const ENGAGEMENT_V2 = '0xAF769d204e51b64D282083Eb0493F6f37cd93138'
+
 /** FollowV1 — Social follow graph */
 export const FOLLOW_V1 = '0x3F32cF9e70EF69DFFed74Dfe07034cb03cF726cb'
 

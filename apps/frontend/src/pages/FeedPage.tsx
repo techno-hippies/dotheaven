@@ -8,7 +8,7 @@ import { useI18n } from '@heaven/i18n/solid'
 import type { TranslationKey } from '@heaven/i18n'
 import { useAuth, useXMTP } from '../providers'
 import { openUserMenu } from '../lib/user-menu'
-import { fetchFeedPosts, translatePost, getUserLang, type FeedPostData } from '../lib/heaven/posts'
+import { fetchFeedPosts, translatePost, likePost, getUserLang, batchGetLikedStates, type FeedPostData } from '../lib/heaven/posts'
 import { getPrimaryNamesBatch, getTextRecordsBatch } from '../lib/heaven/registry'
 import { resolveAvatarUri } from '../lib/heaven/avatar-resolver'
 import { openAuthDialog } from '../lib/auth-dialog'
@@ -30,6 +30,11 @@ function postDataToProps(
   translatingPostId: string | null,
   authGuard: (fn: () => void) => () => void,
   t: <K extends TranslationKey>(key: K, ...args: any[]) => string,
+  opts: {
+    isLiked?: boolean
+    onLike: (postId: string) => void
+    onComment: (postId: string) => void
+  },
 ): FeedPostProps {
   const media: FeedPostMedia | undefined = p.photoUrls?.length
     ? { type: 'photo', items: p.photoUrls.map((url) => ({ url })) }
@@ -44,8 +49,9 @@ function postDataToProps(
     media,
     likes: p.likeCount,
     comments: p.commentCount,
-    onLike: authGuard(() => { /* TODO: wire to EngagementV2 like */ }),
-    onComment: authGuard(() => { /* TODO: wire to comment flow */ }),
+    isLiked: opts.isLiked,
+    onLike: authGuard(() => opts.onLike(p.postId)),
+    onComment: authGuard(() => opts.onComment(p.postId)),
     onRepost: authGuard(() => { /* TODO: wire to repost */ }),
     onQuote: authGuard(() => { /* TODO: wire to quote compose */ }),
     translations: p.translations,
@@ -213,6 +219,70 @@ export const FeedPage: Component = () => {
     }
   }
 
+  // ── Liked states ─────────────────────────────────────────────────
+  const [likedStates, setLikedStates] = createSignal<Map<string, boolean>>(new Map())
+
+  // Fetch liked states when posts load + user is authenticated
+  createEffect(() => {
+    const addr = auth.pkpAddress()
+    const feedPosts = posts()
+    if (!addr || feedPosts.length === 0) return
+    const postIds = feedPosts.map((p) => p.postId as `0x${string}`)
+    batchGetLikedStates(addr as `0x${string}`, postIds)
+      .then(setLikedStates)
+      .catch((err) => {
+        if (import.meta.env.DEV) console.warn('[Feed] Failed to fetch liked states:', err)
+      })
+  })
+
+  const handleLike = async (postId: string) => {
+    const addr = auth.pkpAddress()
+    const pkpInfo = auth.pkpInfo()
+    if (!addr || !pkpInfo) return
+
+    const currentlyLiked = likedStates().get(postId) ?? false
+    const action = currentlyLiked ? 'unlike' : 'like'
+
+    // Optimistic update
+    setLikedStates((prev) => {
+      const next = new Map(prev)
+      next.set(postId, !currentlyLiked)
+      return next
+    })
+    queryClient.setQueryData<FeedPostData[]>(['feed-posts'], (old) => {
+      if (!old) return old
+      return old.map((p) => {
+        if (p.postId !== postId) return p
+        return { ...p, likeCount: p.likeCount + (currentlyLiked ? -1 : 1) }
+      })
+    })
+
+    try {
+      const authContext = await auth.getAuthContext()
+      await likePost(postId, action, (msg) => auth.signMessage(msg), authContext, pkpInfo.publicKey)
+    } catch (err) {
+      // Revert optimistic update on failure
+      console.error('Like failed:', err)
+      setLikedStates((prev) => {
+        const next = new Map(prev)
+        next.set(postId, currentlyLiked)
+        return next
+      })
+      queryClient.setQueryData<FeedPostData[]>(['feed-posts'], (old) => {
+        if (!old) return old
+        return old.map((p) => {
+          if (p.postId !== postId) return p
+          return { ...p, likeCount: p.likeCount + (currentlyLiked ? 1 : -1) }
+        })
+      })
+    }
+  }
+
+  const handleComment = async (postId: string) => {
+    // Navigate to the post detail page where the comment input is
+    navigate(post(postId))
+  }
+
   // Map XMTP conversations to share recipients
   const shareRecipients = createMemo<ShareRecipient[]>(() =>
     xmtp.conversations().map((c) => ({
@@ -327,7 +397,11 @@ export const FeedPage: Component = () => {
                   <For each={posts()}>
                     {(p) => (
                       <FeedPost
-                        {...postDataToProps(p, userLang, handleTranslate, translatingPostId(), authGuard, t)}
+                        {...postDataToProps(p, userLang, handleTranslate, translatingPostId(), authGuard, t, {
+                        isLiked: likedStates().get(p.postId),
+                        onLike: handleLike,
+                        onComment: handleComment,
+                      })}
                         onPostClick={() => navigate(post(p.postId))}
                         onCopyLink={() => handleCopyLink(p.postId)}
                         onSendViaChat={() => handleOpenShareDialog(p.postId)}
@@ -341,7 +415,11 @@ export const FeedPage: Component = () => {
                 {(p) => (
                   <div class="bg-[var(--bg-surface)] rounded-xl">
                     <FeedPost
-                      {...postDataToProps(p, userLang, handleTranslate, translatingPostId(), authGuard, t)}
+                      {...postDataToProps(p, userLang, handleTranslate, translatingPostId(), authGuard, t, {
+                        isLiked: likedStates().get(p.postId),
+                        onLike: handleLike,
+                        onComment: handleComment,
+                      })}
                       onPostClick={() => navigate(post(p.postId))}
                       onCopyLink={() => handleCopyLink(p.postId)}
                       onSendViaChat={() => handleOpenShareDialog(p.postId)}

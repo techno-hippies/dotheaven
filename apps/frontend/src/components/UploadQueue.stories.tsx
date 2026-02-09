@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from 'storybook-solidjs'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { UploadQueuePanel } from './UploadQueue'
 import type { UploadJob } from '../lib/upload-manager'
 

@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from 'storybook-solidjs'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { UserMenuDrawer } from './user-menu-drawer'
 
 const meta: Meta<typeof UserMenuDrawer> = {

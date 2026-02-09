@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from 'storybook-solidjs'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { createSignal } from 'solid-js'
 import { ClaimFlow, type ClaimState } from './claim-flow'
 import type { ClaimProfileData } from './claim-profile-card'

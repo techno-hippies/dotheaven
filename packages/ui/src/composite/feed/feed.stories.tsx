@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from 'storybook-solidjs'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { FeedPost } from './feed-post'
 import { ComposeBox, ComposeFab } from './compose-box'
 import { LiveRoomsRow, type LiveRoom } from './live-rooms-row'
@@ -144,7 +144,7 @@ export const DesktopFeed: StoryObj = {
         createAvatarUrl="https://placewaifu.com/image/200"
       />
       <div class="border-t border-[var(--border-subtle)]" />
-      <div class="bg-[var(--bg-surface)] rounded-md divide-y divide-[var(--bg-highlight)]">
+      <div class="bg-[var(--bg-surface)] rounded-md divide-y divide-[var(--border-subtle)]">
         <ComposeBox
           avatarUrl="https://placewaifu.com/image/200"
           onPost={(text, media) => console.log('Post:', text, media)}
@@ -166,7 +166,7 @@ export const MobileFeed: StoryObj = {
         createAvatarUrl="https://placewaifu.com/image/200"
       />
       <div class="border-t border-[var(--border-subtle)]" />
-      <div class="divide-y divide-[var(--bg-highlight)]">
+      <div class="divide-y divide-[var(--border-subtle)]">
         {feedPosts}
       </div>
       <ComposeFab onClick={() => console.log('Open compose')} />
@@ -219,7 +219,7 @@ export const NoLiveRooms: StoryObj = {
         onCreateRoom={() => console.log('Create room')}
         createAvatarUrl="https://placewaifu.com/image/200"
       />
-      <div class="bg-[var(--bg-surface)] rounded-md divide-y divide-[var(--bg-highlight)]">
+      <div class="bg-[var(--bg-surface)] rounded-md divide-y divide-[var(--border-subtle)]">
         <ComposeBox
           avatarUrl="https://placewaifu.com/image/200"
           onPost={(text, media) => console.log('Post:', text, media)}

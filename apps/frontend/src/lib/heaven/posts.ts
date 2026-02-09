@@ -12,9 +12,11 @@
  * 5. All users see the cached translation for that language going forward
  */
 
-import { SUBGRAPH_ACTIVITY } from '@heaven/core'
+import { createPublicClient, http, parseAbi, type Address } from 'viem'
+import { SUBGRAPH_ACTIVITY, ENGAGEMENT_V2 } from '@heaven/core'
+import { megaTestnetV2 } from '../chains'
 import { getLitClient } from '../lit/client'
-import { POST_TRANSLATE_V1_CID } from '../lit/action-cids'
+import { POST_TRANSLATE_V1_CID, LIKE_V1_CID, COMMENT_V1_CID, FLAG_V1_CID } from '../lit/action-cids'
 import type { PKPAuthContext } from '../lit/types'
 import { getPrimaryName } from './registry'
 import { resolveAvatarUri } from './avatar-resolver'
@@ -397,6 +399,141 @@ export async function translatePost(
   }
 }
 
+// ── Engagement via Lit Actions ───────────────────────────────────
+
+export interface EngagementResult {
+  success: boolean
+  txHash?: string
+  error?: string
+}
+
+/**
+ * Like or unlike a post via the Like Lit Action.
+ *
+ * Sign: "heaven:like:{postId}:{action}:{timestamp}:{nonce}"
+ * Sponsor PKP broadcasts EngagementV2.likeFor()/unlikeFor()
+ */
+export async function likePost(
+  postId: string,
+  action: 'like' | 'unlike',
+  signMessage: (message: string) => Promise<string>,
+  authContext: PKPAuthContext,
+  pkpPublicKey: string,
+): Promise<EngagementResult> {
+  const litClient = await getLitClient()
+
+  const timestamp = Date.now()
+  const nonce = Math.random().toString(36).slice(2)
+
+  const message = `heaven:like:${postId}:${action}:${timestamp}:${nonce}`
+  const signature = await signMessage(message)
+
+  const result = await litClient.executeJs({
+    ipfsId: LIKE_V1_CID,
+    authContext,
+    jsParams: {
+      userPkpPublicKey: pkpPublicKey,
+      postId,
+      action,
+      signature,
+      timestamp,
+      nonce,
+    },
+  })
+
+  const response = JSON.parse(result.response as string)
+  return {
+    success: response.success,
+    txHash: response.txHash,
+    error: response.error,
+  }
+}
+
+/**
+ * Add a comment to a post via the Comment Lit Action.
+ *
+ * Sign: "heaven:comment:{postId}:{textHash}:{timestamp}:{nonce}"
+ * Sponsor PKP broadcasts EngagementV2.commentFor()
+ */
+export async function commentPost(
+  postId: string,
+  text: string,
+  signMessage: (message: string) => Promise<string>,
+  authContext: PKPAuthContext,
+  pkpPublicKey: string,
+): Promise<EngagementResult> {
+  const litClient = await getLitClient()
+
+  const timestamp = Date.now()
+  const nonce = Math.random().toString(36).slice(2)
+  const textHash = await sha256Hex(text)
+
+  const message = `heaven:comment:${postId}:${textHash}:${timestamp}:${nonce}`
+  const signature = await signMessage(message)
+
+  const result = await litClient.executeJs({
+    ipfsId: COMMENT_V1_CID,
+    authContext,
+    jsParams: {
+      userPkpPublicKey: pkpPublicKey,
+      postId,
+      text,
+      signature,
+      timestamp,
+      nonce,
+    },
+  })
+
+  const response = JSON.parse(result.response as string)
+  return {
+    success: response.success,
+    txHash: response.txHash,
+    error: response.error,
+  }
+}
+
+/**
+ * Flag a post for moderation via the Flag Lit Action.
+ *
+ * Sign: "heaven:flag:{postId}:{reason}:{timestamp}:{nonce}"
+ * Sponsor PKP broadcasts EngagementV2.flagFor()
+ */
+export async function flagPost(
+  postId: string,
+  reason: number,
+  signMessage: (message: string) => Promise<string>,
+  authContext: PKPAuthContext,
+  pkpPublicKey: string,
+): Promise<EngagementResult> {
+  const litClient = await getLitClient()
+
+  const timestamp = Date.now()
+  const nonce = Math.random().toString(36).slice(2)
+
+  const message = `heaven:flag:${postId}:${reason}:${timestamp}:${nonce}`
+  const signature = await signMessage(message)
+
+  const result = await litClient.executeJs({
+    ipfsId: FLAG_V1_CID,
+    authContext,
+    jsParams: {
+      userPkpPublicKey: pkpPublicKey,
+      postId,
+      reason,
+      signature,
+      timestamp,
+      nonce,
+    },
+  })
+
+  const response = JSON.parse(result.response as string)
+  return {
+    success: response.success,
+    txHash: response.txHash,
+    error: response.error,
+  }
+}
+
 /**
  * Get user's browser language as 2-letter ISO 639-1 code.
  */
@@ -407,4 +544,44 @@ export function getUserLang(): string {
 
 function shortenAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+}
+
+// ── Engagement RPC reads ──────────────────────────────────────────
+
+const engagementAbi = parseAbi([
+  'function liked(bytes32, address) external view returns (bool)',
+])
+
+function getEngagementClient() {
+  return createPublicClient({
+    chain: megaTestnetV2,
+    transport: http(megaTestnetV2.rpcUrls.default.http[0]),
+  })
+}
+
+/** Check if a user has liked a specific post (direct RPC) */
+export async function getHasLiked(user: Address, postId: `0x${string}`): Promise<boolean> {
+  const client = getEngagementClient()
+  return client.readContract({
+    address: ENGAGEMENT_V2 as Address,
+    abi: engagementAbi,
+    functionName: 'liked',
+    args: [postId, user],
+  })
+}
+
+/** Batch-check liked states for multiple posts (parallel RPC calls) */
+export async function batchGetLikedStates(
+  user: Address,
+  postIds: `0x${string}`[],
+): Promise<Map<string, boolean>> {
+  if (!user || postIds.length === 0) return new Map()
+  const results = await Promise.all(
+    postIds.map((id) => getHasLiked(user, id).catch(() => false))
+  )
+  const map = new Map<string, boolean>()
+  for (let i = 0; i < postIds.length; i++) {
+    map.set(postIds[i], results[i])
+  }
+  return map
 }

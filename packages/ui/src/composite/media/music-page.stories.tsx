@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from 'storybook-solidjs'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { createSignal, For, Show } from 'solid-js'
 import { TrackList, type Track } from './track-list'
 import { MiniPlayer } from './mini-player'
@@ -471,7 +471,7 @@ function DesktopMusicPage() {
 
         {/* Main content */}
         <div class="flex-1 flex flex-col min-w-0">
-          <div class="flex items-center justify-between px-8 py-4 border-b border-[var(--bg-highlight)]">
+          <div class="flex items-center justify-between px-8 py-4 border-b border-[var(--border-subtle)]">
             <h1 class="text-2xl font-bold text-[var(--text-primary)]">All Songs</h1>
             <Button size="sm" onClick={() => console.log('Open Room')}>
               <RadioIcon />
@@ -506,7 +506,7 @@ function DesktopMusicPage() {
         </div>
 
         {/* Right panel */}
-        <div class="w-[300px] border-l border-[var(--bg-highlight)] flex flex-col overflow-y-auto">
+        <div class="w-[300px] border-l border-[var(--border-subtle)] flex flex-col overflow-y-auto">
           <SidePlayer
             title={pb.activeTrack()?.title}
             artist={pb.activeTrack()?.artist}
@@ -530,7 +530,7 @@ function DesktopMusicPage() {
       </div>
 
       {/* Desktop bottom player bar */}
-      <div class="flex items-center gap-4 px-6 py-3 border-t border-[var(--bg-highlight)] bg-[var(--bg-surface)]">
+      <div class="flex items-center gap-4 px-6 py-3 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]">
         <AlbumCover size="sm" src={pb.activeTrack()?.albumCover} />
         <div class="flex-1 min-w-0">
           <p class="text-base font-semibold text-[var(--text-primary)] truncate">{pb.activeTrack()?.title}</p>

@@ -58,3 +58,10 @@ Cargo.lock
 .vercel/
 **/.vercel/
 **/api-bundled/
+
+# Wrangler local dev state
+.wrangler/
+**/.wrangler/
+
+# Lit Actions cached auth/PKP output
+lit-actions/output/

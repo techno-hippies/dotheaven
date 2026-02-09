@@ -1,5 +1,5 @@
 import type { Component, JSX } from 'solid-js'
-import { createSignal, createMemo, Show } from 'solid-js'
+import { createSignal, createMemo, createEffect, Show } from 'solid-js'
 import { useNavigate, useParams } from '@solidjs/router'
 import { createQuery, useQueryClient } from '@tanstack/solid-query'
 import { PostDetailView, type CommentItemProps, ShareViaChatDialog, type ShareRecipient } from '@heaven/ui'
@@ -7,7 +7,7 @@ import { post as postRoute } from '@heaven/core'
 import { useAuth, useXMTP } from '../providers'
 import { useI18n } from '@heaven/i18n/solid'
 import type { TranslationKey } from '@heaven/i18n'
-import { fetchPost, fetchPostComments, translatePost, getUserLang, type FeedPostData } from '../lib/heaven/posts'
+import { fetchPost, fetchPostComments, translatePost, likePost, commentPost, getUserLang, getHasLiked, type FeedPostData } from '../lib/heaven/posts'
 import { openAuthDialog } from '../lib/auth-dialog'
 
 function timeAgo(ts: number, t: (key: TranslationKey, ...args: any[]) => string): string {
@@ -53,6 +53,73 @@ export const PostPage: Component = () => {
       return
     }
     fn()
+  }
+
+  const [isLiked, setIsLiked] = createSignal<boolean | undefined>(undefined)
+
+  // Fetch liked state when post loads + user is authenticated
+  createEffect(() => {
+    const addr = auth.pkpAddress()
+    const p = postQuery.data
+    if (!addr || !p) return
+    getHasLiked(addr as `0x${string}`, p.postId as `0x${string}`)
+      .then(setIsLiked)
+      .catch(() => {})
+  })
+
+  const handleLike = async () => {
+    const p = postQuery.data
+    const addr = auth.pkpAddress()
+    const pkpInfo = auth.pkpInfo()
+    if (!p || !addr || !pkpInfo) return
+
+    const currentlyLiked = isLiked() ?? false
+    const action = currentlyLiked ? 'unlike' : 'like'
+
+    // Optimistic update
+    setIsLiked(!currentlyLiked)
+    queryClient.setQueryData<FeedPostData>(['post', params.id], (old) => {
+      if (!old) return old
+      return { ...old, likeCount: old.likeCount + (currentlyLiked ? -1 : 1) }
+    })
+
+    try {
+      const authContext = await auth.getAuthContext()
+      await likePost(p.postId, action, (msg) => auth.signMessage(msg), authContext, pkpInfo.publicKey)
+    } catch (err) {
+      // Revert on failure
+      console.error('Like failed:', err)
+      setIsLiked(currentlyLiked)
+      queryClient.setQueryData<FeedPostData>(['post', params.id], (old) => {
+        if (!old) return old
+        return { ...old, likeCount: old.likeCount + (currentlyLiked ? 1 : -1) }
+      })
+    }
+  }
+
+  const handleSubmitComment = async (text: string) => {
+    const p = postQuery.data
+    const addr = auth.pkpAddress()
+    const pkpInfo = auth.pkpInfo()
+    if (!p || !addr || !pkpInfo) {
+      openAuthDialog()
+      return
+    }
+
+    try {
+      const authContext = await auth.getAuthContext()
+      const result = await commentPost(p.postId, text, (msg) => auth.signMessage(msg), authContext, pkpInfo.publicKey)
+      if (result.success) {
+        // Refresh comments after successful submission
+        queryClient.invalidateQueries({ queryKey: ['post-comments', params.id] })
+        queryClient.setQueryData<FeedPostData>(['post', params.id], (old) => {
+          if (!old) return old
+          return { ...old, commentCount: old.commentCount + 1 }
+        })
+      }
+    } catch (err) {
+      console.error('Comment failed:', err)
+    }
   }
 
   const handleTranslate = async (targetLang: string) => {
@@ -134,8 +201,9 @@ export const PostPage: Component = () => {
         : undefined,
       likes: p.likeCount,
       comments: p.commentCount,
-      onLike: authGuard(() => { /* TODO: wire to EngagementV2 like */ }),
-      onComment: authGuard(() => { /* TODO: wire to comment flow */ }),
+      isLiked: isLiked(),
+      onLike: authGuard(handleLike),
+      onComment: authGuard(() => { /* comment input is below the post */ }),
       onRepost: authGuard(() => { /* TODO: wire to repost */ }),
       onQuote: authGuard(() => { /* TODO: wire to quote compose */ }),
       translations: p.translations,
@@ -182,7 +250,7 @@ export const PostPage: Component = () => {
             post={p()}
             comments={commentProps()}
             onBack={() => navigate(-1)}
-            onSubmitComment={(text) => console.log('comment:', text)}
+            onSubmitComment={handleSubmitComment}
           />
         )}
       </Show>

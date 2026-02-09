@@ -225,7 +225,7 @@ export const Default: Story = {
       </nav>
 
       {/* Music section */}
-      <div class="mt-6 -mx-3 px-3 border-t border-[var(--bg-highlight)] pt-4">
+      <div class="mt-6 -mx-3 px-3 border-t border-[var(--border-subtle)] pt-4">
         <div class="flex items-center justify-between px-3 mb-2">
           <span class="text-base text-[var(--text-muted)] font-medium">Music</span>
           <IconButton variant="soft" size="md" aria-label="Create playlist">
@@ -266,7 +266,7 @@ export const WithLocalLibrary: Story = {
         <NavItem icon={UserIcon} label="Profile" active />
       </nav>
 
-      <div class="mt-6 -mx-3 px-3 border-t border-[var(--bg-highlight)] pt-4">
+      <div class="mt-6 -mx-3 px-3 border-t border-[var(--border-subtle)] pt-4">
         <div class="flex items-center justify-between px-3 mb-2">
           <span class="text-base text-[var(--text-muted)] font-medium">Music</span>
           <IconButton variant="soft" size="md" aria-label="Create playlist">
@@ -309,7 +309,7 @@ export const Compact: Story = {
       </nav>
 
       {/* Divider */}
-      <div class="w-8 border-t border-[var(--bg-highlight)] my-3" />
+      <div class="w-8 border-t border-[var(--border-subtle)] my-3" />
 
       {/* Music section — icons and thumbnails */}
       <div class="flex flex-col gap-1.5 items-center w-full">
@@ -348,7 +348,7 @@ export const CompactWithLocal: Story = {
         <CompactNavItem icon={UserIcon} label="Profile" />
       </nav>
 
-      <div class="w-8 border-t border-[var(--bg-highlight)] my-3" />
+      <div class="w-8 border-t border-[var(--border-subtle)] my-3" />
 
       <div class="flex flex-col gap-1.5 items-center w-full">
         <CompactMusicItem icon={FolderIcon} label="Local" />
@@ -391,7 +391,7 @@ export const CompactComparison: Story = {
           <CompactNavItem icon={CalendarIcon} label="Schedule" />
           <CompactNavItem icon={UserIcon} label="Profile" />
         </nav>
-        <div class="w-8 border-t border-[var(--bg-highlight)] my-3" />
+        <div class="w-8 border-t border-[var(--border-subtle)] my-3" />
         <div class="flex flex-col gap-1.5 items-center w-full">
           <CompactMusicItem icon={CloudIcon} label="Cloud" />
           <CompactMusicItem icon={ShareIcon} label="Shared" />
@@ -421,7 +421,7 @@ export const CompactComparison: Story = {
           <NavItem icon={CalendarIcon} label="Schedule" />
           <NavItem icon={UserIcon} label="Profile" />
         </nav>
-        <div class="mt-6 -mx-3 px-3 border-t border-[var(--bg-highlight)] pt-4">
+        <div class="mt-6 -mx-3 px-3 border-t border-[var(--border-subtle)] pt-4">
           <div class="flex items-center justify-between px-3 mb-2">
             <span class="text-base text-[var(--text-muted)] font-medium">Music</span>
             <IconButton variant="soft" size="md" aria-label="Create playlist"><PlusIcon /></IconButton>
@@ -458,7 +458,7 @@ export const Empty: Story = {
         <NavItem icon={UserIcon} label="Profile" />
       </nav>
 
-      <div class="mt-6 -mx-3 px-3 border-t border-[var(--bg-highlight)] pt-4">
+      <div class="mt-6 -mx-3 px-3 border-t border-[var(--border-subtle)] pt-4">
         <div class="flex items-center justify-between px-3 mb-2">
           <span class="text-base text-[var(--text-muted)] font-medium">Music</span>
           <IconButton variant="soft" size="md" aria-label="Create playlist">

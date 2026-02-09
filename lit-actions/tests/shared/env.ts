@@ -48,6 +48,9 @@ interface CIDs {
   postCreateV1: string;
   postTextV1: string;
   followV1: string;
+  likeV1: string;
+  commentV1: string;
+  flagV1: string;
   [key: string]: string;
 }
 
@@ -93,6 +96,9 @@ let cids: CIDs = {
   postCreateV1: '',
   postTextV1: '',
   followV1: '',
+  likeV1: '',
+  commentV1: '',
+  flagV1: '',
 };
 if (existsSync(cidPath)) {
   cids = JSON.parse(readFileSync(cidPath, 'utf-8'));

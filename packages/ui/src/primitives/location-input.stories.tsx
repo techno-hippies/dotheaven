@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/html'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { LocationInput, type LocationInputProps, type LocationResult } from './location-input'
 import { createSignal } from 'solid-js'
 

@@ -72,7 +72,7 @@ const tabs: TabItem[] = [
  * ProfileTabs - Tab navigation for profile sections
  *
  * Features:
- * - 4 tabs: About, Activity, Music, Schedule
+ * - 5 tabs: Posts, About, Music, Wallet, Schedule
  * - Phosphor icons for each tab
  * - Active state with bottom border highlight
  * - Click handler for tab switching

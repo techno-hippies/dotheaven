@@ -162,6 +162,24 @@ const ACTIONS: Record<string, ActionDef> = {
     displayName: 'Follow v1',
     keys: [], // No encrypted keys — sponsor PKP pays gas directly
   },
+  likeV1: {
+    name: 'likeV1',
+    path: 'features/social/like-v1.js',
+    displayName: 'Like v1',
+    keys: [], // No encrypted keys — sponsor PKP pays gas directly
+  },
+  commentV1: {
+    name: 'commentV1',
+    path: 'features/social/comment-v1.js',
+    displayName: 'Comment v1',
+    keys: [], // No encrypted keys — sponsor PKP pays gas directly
+  },
+  flagV1: {
+    name: 'flagV1',
+    path: 'features/social/flag-v1.js',
+    displayName: 'Flag v1',
+    keys: [], // No encrypted keys — sponsor PKP pays gas directly
+  },
 };
 
 // Parse CLI args

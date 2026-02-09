@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from 'storybook-solidjs'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { createSignal, Show } from 'solid-js'
 import { CommunityFilterDialog, countActiveFilters, type CommunityFilters } from './community-filter'
 import { Button } from '../../primitives/button'

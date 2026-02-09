@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from 'storybook-solidjs'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { createSignal } from 'solid-js'
 import { SidePlayer } from './side-player'
 import { RightPanel } from '../../layout/RightPanel'
@@ -230,7 +230,7 @@ export const InContext: Story = {
     (Story) => (
       <div class="h-screen bg-[var(--bg-page)] flex">
         {/* Simulated sidebar */}
-        <div class="w-60 border-r border-[var(--bg-highlight)] p-4">
+        <div class="w-60 border-r border-[var(--border-subtle)] p-4">
           <div class="text-[var(--text-muted)] text-base">Sidebar</div>
         </div>
         {/* Simulated main content */}

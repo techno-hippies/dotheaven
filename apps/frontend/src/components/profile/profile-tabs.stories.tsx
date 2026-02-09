@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from 'storybook-solidjs'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { createSignal } from 'solid-js'
 import { ProfileTabs, type ProfileTab } from './profile-tabs'
 
@@ -14,9 +14,9 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-export const Activity: Story = {
+export const Posts: Story = {
   args: {
-    activeTab: 'activity',
+    activeTab: 'posts',
   },
 }
 

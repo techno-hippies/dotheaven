@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from 'storybook-solidjs'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { createSignal, Show } from 'solid-js'
 import { CommunityFeed } from './community-feed'
 import type { CommunityCardProps } from './community-card'

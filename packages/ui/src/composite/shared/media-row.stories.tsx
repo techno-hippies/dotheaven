@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from 'storybook-solidjs'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { MediaRow } from './media-row'
 import { AlbumCover } from '../media/album-cover'
 

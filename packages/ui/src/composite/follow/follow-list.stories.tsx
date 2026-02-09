@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from 'storybook-solidjs'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { FollowList, type FollowListMember } from './follow-list'
 
 const meta: Meta<typeof FollowList> = {

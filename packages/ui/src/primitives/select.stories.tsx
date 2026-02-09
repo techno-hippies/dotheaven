@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/html'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { Select, type SelectOption } from './select'
 import { createSignal } from 'solid-js'
 

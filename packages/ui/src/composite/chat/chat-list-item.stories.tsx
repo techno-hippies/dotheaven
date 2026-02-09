@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from 'storybook-solidjs'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { ChatListItem } from './chat-list-item'
 
 const meta: Meta<typeof ChatListItem> = {

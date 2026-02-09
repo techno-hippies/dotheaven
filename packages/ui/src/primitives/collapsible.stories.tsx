@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from 'storybook-solidjs'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from './collapsible'
 
 const meta: Meta<typeof Collapsible> = {

@@ -51,5 +51,14 @@ export const LYRICS_TRANSLATE_CID = 'Qmdf2HHLzghjjeQZMvhgh6kY2EJERgC4Hw1BXfWjjea
 /** Follow v1 — follow/unfollow users on FollowV1 on MegaETH */
 export const FOLLOW_V1_CID = 'QmPccpeqwyJSHYzY1HGu6Nmp26anouhTT8daHS8Jox9VTx'
 
+/** Like v1 — like/unlike posts on EngagementV2 on MegaETH */
+export const LIKE_V1_CID = 'QmYrhWHGbQHo7eSvJnN5BCSJ68xwQV7oCGWRho2CvmA3gm'
+
+/** Comment v1 — add comments to posts on EngagementV2 on MegaETH */
+export const COMMENT_V1_CID = 'QmPim3NkdLLL7yckGgUeqz5Bdzri5DygBcWFZppYMLYLsA'
+
+/** Flag v1 — flag posts for moderation on EngagementV2 on MegaETH */
+export const FLAG_V1_CID = 'QmafHchRYrngBfBNVYqYbbgpio2xb3XVuAP6tUHg9z9Eu9'
+
 // Content decrypt is handled client-side via litClient.decrypt() — no Lit Action needed.
 // The Lit BLS nodes enforce canAccess() on Base ContentAccessMirror during threshold decryption.

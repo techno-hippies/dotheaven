@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { Avatar } from './avatar'
-import type { AvatarProps } from './avatar'
 
 const meta: Meta<typeof Avatar> = {
   title: 'Primitives/Avatar',

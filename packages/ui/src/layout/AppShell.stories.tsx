@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from 'storybook-solidjs'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { createSignal } from 'solid-js'
 import { AppShell } from './AppShell'
 import { Sidebar } from './Sidebar'
@@ -184,7 +184,7 @@ const AppSidebarStory = (props: { activeNav?: string }) => {
         </nav>
 
         {/* Music section - separator + label + plus button */}
-        <div class="mt-6 -mx-3 px-3 border-t border-[var(--bg-highlight)] pt-4">
+        <div class="mt-6 -mx-3 px-3 border-t border-[var(--border-subtle)] pt-4">
           <div class="flex items-center justify-between px-3 mb-2 min-h-10">
             <span class="text-base text-[var(--text-muted)] font-medium whitespace-nowrap">Music</span>
             <IconButton

@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from 'storybook-solidjs'
+import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { createSignal } from 'solid-js'
 import { RoomPanel, type RoomPanelProps } from './room-panel'
 import { RoomParticipants } from './room-participants'
