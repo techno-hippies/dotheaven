@@ -54,7 +54,7 @@ export const DialogContent: Component<
         <KobalteDialog.Content
           class={cn(
             'relative w-full max-w-lg bg-[var(--bg-surface)] rounded-md shadow-lg',
-            'border border-[var(--bg-highlight)]',
+            'border border-[var(--border-subtle)]',
             'data-[expanded]:animate-in data-[expanded]:fade-in-0 data-[expanded]:zoom-in-95',
             'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95',
             'flex flex-col max-h-[90vh]',
@@ -74,7 +74,7 @@ export const DialogHeader: Component<JSX.HTMLAttributes<HTMLDivElement>> = (prop
   return (
     <div
       class={cn(
-        'flex items-start justify-between gap-4 p-6 pb-4 flex-shrink-0',
+        'flex items-start justify-between gap-4 p-6 pb-2 flex-shrink-0',
         local.class
       )}
       {...others}
@@ -118,7 +118,7 @@ export const DialogFooter: Component<JSX.HTMLAttributes<HTMLDivElement>> = (prop
   return (
     <div
       class={cn(
-        'flex items-center justify-end gap-3 p-6 pt-4 flex-shrink-0',
+        'flex items-center justify-end gap-3 p-6 pt-2 flex-shrink-0',
         local.class
       )}
       {...others}

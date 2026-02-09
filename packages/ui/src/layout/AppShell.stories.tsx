@@ -125,7 +125,7 @@ const MusicFillIcon = () => (
 // ── Logo placeholder (matches AppLogo visual) ────────────────────
 
 const LogoPlaceholder = () => (
-  <div class="w-9 h-9 rounded-full bg-gradient-to-br from-[oklch(0.65_0.12_240)] to-[oklch(0.60_0.15_290)] flex items-center justify-center text-white text-sm font-bold">
+  <div class="w-9 h-9 rounded-full bg-gradient-to-br from-[oklch(0.65_0.12_240)] to-[oklch(0.60_0.15_290)] flex items-center justify-center text-white text-base font-bold">
     H
   </div>
 )
@@ -208,7 +208,7 @@ const AppSidebarStory = (props: { activeNav?: string }) => {
               </div>
               <div class="flex flex-col min-w-0 text-left">
                 <span class="text-base text-[var(--text-primary)] whitespace-nowrap">Cloud</span>
-                <span class="text-sm text-[var(--text-muted)] whitespace-nowrap">3 songs</span>
+                <span class="text-base text-[var(--text-muted)] whitespace-nowrap">3 songs</span>
               </div>
             </button>
 
@@ -222,7 +222,7 @@ const AppSidebarStory = (props: { activeNav?: string }) => {
               </div>
               <div class="flex flex-col min-w-0 text-left">
                 <span class="text-base text-[var(--text-primary)] whitespace-nowrap">Shared</span>
-                <span class="text-sm text-[var(--text-muted)] whitespace-nowrap">0 songs</span>
+                <span class="text-base text-[var(--text-muted)] whitespace-nowrap">0 songs</span>
               </div>
             </button>
 
@@ -234,7 +234,7 @@ const AppSidebarStory = (props: { activeNav?: string }) => {
               <AlbumCover size="sm" icon="playlist" class="flex-shrink-0" />
               <div class="flex flex-col min-w-0 text-left">
                 <span class="text-base text-[var(--text-primary)] truncate whitespace-nowrap">Chill Vibes</span>
-                <span class="text-sm text-[var(--text-muted)] whitespace-nowrap">12 songs</span>
+                <span class="text-base text-[var(--text-muted)] whitespace-nowrap">12 songs</span>
               </div>
             </button>
 
@@ -245,7 +245,7 @@ const AppSidebarStory = (props: { activeNav?: string }) => {
               <AlbumCover size="sm" icon="playlist" class="flex-shrink-0" />
               <div class="flex flex-col min-w-0 text-left">
                 <span class="text-base text-[var(--text-primary)] truncate whitespace-nowrap">Workout Mix</span>
-                <span class="text-sm text-[var(--text-muted)] whitespace-nowrap">8 songs</span>
+                <span class="text-base text-[var(--text-muted)] whitespace-nowrap">8 songs</span>
               </div>
             </button>
           </div>

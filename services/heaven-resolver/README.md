@@ -100,9 +100,9 @@ Frontend      → Display Filebase gateway URL
                → No more 429 errors!
 ```
 
-### Artist Endpoint Background Rehosting (Deprecated)
+### Artist Endpoint Background Rehosting
 
-The `/artist/:mbid` and `/release-group/:mbid` endpoints originally had background rehosting via `ctx.waitUntil()`, but this proved unreliable in production. **Client-side rehosting via `image-cache.ts` is now the preferred approach.**
+The `/artist/:mbid` and `/release-group/:mbid` endpoints perform background rehosting via `ctx.waitUntil()`. **Client-side rehosting via `image-cache.ts` is the preferred approach** for explicit rehosting, but the background path still runs as a best-effort warm-up.
 
 **Cache key**: `rehost:{sha256(url)}`
 **Cache TTL**: 1 year (images are immutable)
@@ -142,6 +142,8 @@ wrangler deploy
 | `resolve:` | `resolve:{artist}::{title}` | `resolve:beatles::help` | 30 days (hit), 1 hour (miss) |
 | `commons:` | `commons:{filename}` | `commons:The_Beatles.jpg` | 30 days |
 | `rehost:` | `rehost:{sha256(url)}` | `rehost:a3f2...` | 1 year |
+| `search:artist:` | `search:artist:{query}` | `search:artist:beatles` | 24 hours |
+| `spotify-artist:` | `spotify-artist:{id}` | `spotify-artist:3WrFJ7ztbogyGnTHbHJFl2` | 30 days (hit), 1 hour (miss) |
 
 ## Frontend Integration
 

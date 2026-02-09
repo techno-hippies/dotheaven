@@ -79,7 +79,7 @@ const ShareViaChatContent: Component<
     <div class="flex flex-col h-full">
       {/* Search input */}
       <div class="px-1 pb-3">
-        <div class="flex items-center gap-2 px-3 py-2.5 rounded-md border border-[var(--bg-highlight)] bg-[var(--bg-elevated)] focus-within:border-[var(--accent-purple)]">
+        <div class="flex items-center gap-2 px-3 py-2.5 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elevated)] focus-within:border-[var(--accent-purple)]">
           <MagnifyingGlass class="w-5 h-5 text-[var(--text-muted)] flex-shrink-0" />
           <input
             ref={props.inputRef}
@@ -118,7 +118,7 @@ const ShareViaChatContent: Component<
                     {recipient.name}
                   </span>
                   <Show when={recipient.handle}>
-                    <span class="text-sm text-[var(--text-muted)] truncate">
+                    <span class="text-base text-[var(--text-muted)] truncate">
                       {recipient.handle}
                     </span>
                   </Show>
@@ -141,7 +141,7 @@ const ShareViaChatContent: Component<
       </div>
 
       {/* Footer with send button */}
-      <div class="flex-shrink-0 px-1 pt-3 pb-1 border-t border-[var(--bg-highlight)]">
+      <div class="flex-shrink-0 px-1 pt-3 pb-1 border-t border-[var(--border-subtle)]">
         <Button
           class="w-full"
           disabled={selected().size === 0 || props.isSending}

@@ -183,7 +183,7 @@ export const ScheduleTab: Component<ScheduleTabProps> = (props) => {
       <Show when={props.isOwnProfile}>
         <EditableInfoCard>
           <EditableInfoCardSection title="Weekly Availability" isEditing={false}>
-            <p class="text-sm text-[var(--text-muted)] -mt-2">
+            <p class="text-base text-[var(--text-muted)] -mt-2">
               Click cells to toggle your available hours. This helps visitors know when you're free.
             </p>
             <AvailabilityGrid
@@ -236,7 +236,7 @@ export const ScheduleTab: Component<ScheduleTabProps> = (props) => {
             {/* Booked slots (own profile only) */}
             <Show when={props.isOwnProfile && bookedSlots().length > 0}>
               <div class="mt-4">
-                <h3 class="text-sm font-medium text-[var(--text-muted)] mb-2 uppercase tracking-wider">Booked</h3>
+                <h3 class="text-base font-medium text-[var(--text-muted)] mb-2 uppercase tracking-wider">Booked</h3>
                 <div class="flex flex-col gap-2">
                   <For each={bookedSlots()}>
                     {(slot) => (
@@ -321,7 +321,7 @@ export const ScheduleTab: Component<ScheduleTabProps> = (props) => {
                   inputClass="[color-scheme:dark]"
                 />
                 <div class="flex flex-col gap-2">
-                  <span class="text-sm font-medium text-[var(--text-primary)]">Start</span>
+                  <span class="text-base font-medium text-[var(--text-primary)]">Start</span>
                   <Select
                     options={HOUR_OPTIONS}
                     value={HOUR_OPTIONS.find(o => o.value === reqStartHour())}
@@ -330,7 +330,7 @@ export const ScheduleTab: Component<ScheduleTabProps> = (props) => {
                   />
                 </div>
                 <div class="flex flex-col gap-2">
-                  <span class="text-sm font-medium text-[var(--text-primary)]">Duration</span>
+                  <span class="text-base font-medium text-[var(--text-primary)]">Duration</span>
                   <Select
                     options={DURATION_OPTIONS}
                     value={DURATION_OPTIONS.find(o => o.value === reqDuration())}

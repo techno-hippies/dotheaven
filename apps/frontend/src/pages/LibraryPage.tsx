@@ -1,13 +1,12 @@
 import { type Component, createSignal, createMemo, Show, onCleanup, createEffect, createResource } from 'solid-js'
 import {
   MediaHeader,
-  type MediaHeaderMenuItem,
   TrackList,
   IconButton,
-  Button,
   PlayButton,
-  DownloadAppCta,
   SongPublishForm,
+  StorageCard,
+  AddFundsDialog,
   type SongFormData,
   type PublishStep,
   type Track,
@@ -27,6 +26,8 @@ import { enqueueUpload, jobs } from '../lib/upload-manager'
 import { initFilecoinUploadService } from '../lib/filecoin-upload-service'
 import { fetchUploadedContent, fetchSharedContent } from '../lib/heaven/scrobbles'
 import { mapUploadedToTracks, mapSharedToTracks, buildEntriesMap, handleEncryptedTrackPlay } from './library-utils'
+import { publishSong, type PublishResult } from '../lib/heaven/song-publish'
+import { getStorageStatus, depositAndApprove, type StorageStatus } from '../lib/storage-service'
 
 type LibraryTab = 'local' | 'cloud' | 'shared' | 'publish'
 
@@ -61,7 +62,6 @@ export const LibraryPage: Component = () => {
   const defaultFormData: SongFormData = {
     title: '',
     artist: '',
-    album: '',
     genre: '',
     primaryLanguage: '',
     secondaryLanguage: '',
@@ -69,20 +69,20 @@ export const LibraryPage: Component = () => {
     coverFile: null,
     audioFile: null,
     instrumentalFile: null,
-    previewStart: 0,
-    previewEnd: 30,
+    canvasFile: null,
     license: 'non-commercial',
     revShare: 10,
     mintingFee: '0',
     attestation: false,
   }
 
-  const [publishStep, setPublishStep] = createSignal<PublishStep>('upload')
+  const [publishStep, setPublishStep] = createSignal<PublishStep>('song')
   const [publishForm, setPublishForm] = createSignal<SongFormData>({ ...defaultFormData })
   const [publishProgress, setPublishProgress] = createSignal(0)
   const [publishError, setPublishError] = createSignal<string | undefined>()
+  const [publishResult, setPublishResult] = createSignal<PublishResult | undefined>()
 
-  const publishSteps: PublishStep[] = ['upload', 'details', 'lyrics', 'license', 'review']
+  const publishSteps: PublishStep[] = ['song', 'canvas', 'details', 'license']
 
   const handlePublishNext = () => {
     const idx = publishSteps.indexOf(publishStep())
@@ -90,33 +90,42 @@ export const LibraryPage: Component = () => {
   }
 
   const handlePublishBack = () => {
-    if (publishStep() === 'error') { setPublishStep('review'); return }
+    if (publishStep() === 'error') { setPublishStep('license'); return }
     const idx = publishSteps.indexOf(publishStep())
     if (idx > 0) setPublishStep(publishSteps[idx - 1])
   }
 
-  const handlePublish = () => {
+  const handlePublishSkip = () => {
+    if (publishStep() === 'canvas') setPublishStep('details')
+  }
+
+  const handlePublish = async () => {
     setPublishStep('publishing')
     setPublishProgress(0)
-    // TODO: Wire to Lit Action song-publish-v1 + story-register-sponsor-v1
-    // For now, simulate progress
-    const stages = [10, 25, 40, 55, 70, 85, 95, 100]
-    let i = 0
-    const tick = setInterval(() => {
-      setPublishProgress(stages[i])
-      i++
-      if (i >= stages.length) {
-        clearInterval(tick)
-        setTimeout(() => setPublishStep('success'), 500)
-      }
-    }, 800)
+    setPublishError(undefined)
+    try {
+      const pkp = auth.pkpInfo()
+      if (!pkp) throw new Error('Not authenticated — sign in first')
+      const authContext = await auth.getAuthContext()
+      const result = await publishSong(
+        publishForm(), authContext, pkp,
+        (pct) => setPublishProgress(pct),
+      )
+      setPublishResult(result)
+      setPublishStep('success')
+    } catch (err: any) {
+      console.error('[Publish] Failed:', err)
+      setPublishError(err?.message || 'Publishing failed')
+      setPublishStep('error')
+    }
   }
 
   const handlePublishDone = () => {
-    setPublishStep('upload')
+    setPublishStep('song')
     setPublishForm({ ...defaultFormData })
     setPublishProgress(0)
     setPublishError(undefined)
+    setPublishResult(undefined)
     navigate(musicTab('cloud'))
   }
 
@@ -158,6 +167,64 @@ export const LibraryPage: Component = () => {
       setTimeout(() => refetchUploaded(), 8000)
       setTimeout(() => refetchUploaded(), 15000)
     }
+  })
+
+  // ── Storage state (cloud tab) ──────────────────────────────────────
+  const [storageStatus, setStorageStatus] = createSignal<StorageStatus | null>(null)
+  const [storageLoading, setStorageLoading] = createSignal(false)
+  const [storageError, setStorageError] = createSignal<string | null>(null)
+  const [depositLoading, setDepositLoading] = createSignal(false)
+  const [addFundsOpen, setAddFundsOpen] = createSignal(false)
+
+  let storageRefreshInflight = false
+  async function refreshStorage() {
+    const pkp = auth.pkpInfo()
+    if (!pkp || storageRefreshInflight) return
+    storageRefreshInflight = true
+    setStorageLoading(true)
+    setStorageError(null)
+    try {
+      const authCtx = await auth.getAuthContext()
+      const status = await getStorageStatus(pkp, authCtx)
+      setStorageStatus(status)
+    } catch (e: any) {
+      console.error('[Library] Storage status error:', e)
+      setStorageError(e.message || 'Failed to load storage status')
+    } finally {
+      setStorageLoading(false)
+      storageRefreshInflight = false
+    }
+  }
+
+  async function handleDeposit(amount: string) {
+    const pkp = auth.pkpInfo()
+    if (!pkp) return
+    setDepositLoading(true)
+    try {
+      const authCtx = await auth.getAuthContext()
+      await depositAndApprove(pkp, authCtx, amount)
+      await refreshStorage()
+    } catch (e: any) {
+      console.error('[Library] Deposit error:', e)
+      setStorageError(e.message || 'Deposit failed')
+    } finally {
+      setDepositLoading(false)
+      setAddFundsOpen(false)
+    }
+  }
+
+  // Load storage status when authenticated and on cloud tab
+  createEffect(() => {
+    if (auth.isAuthenticated() && auth.pkpInfo() && tab() === 'cloud') {
+      refreshStorage()
+    }
+  })
+
+  // Compute balance as number for AddFundsDialog estimate
+  const balanceNum = createMemo(() => {
+    const status = storageStatus()
+    if (!status) return 0
+    return parseFloat(status.balance.replace('$', '')) || 0
   })
 
   const [scrollRef, setScrollRef] = createSignal<HTMLDivElement | undefined>(undefined)
@@ -259,23 +326,6 @@ export const LibraryPage: Component = () => {
           })
         }
       : undefined,
-    onUploadToFilecoinPublic: platform.isTauri
-      ? (track) => {
-          const lt = track as LocalTrack
-          if (!lt.filePath) {
-            console.warn('[Upload] No filePath for track:', track.title)
-            return
-          }
-          enqueueUpload({
-            id: lt.id,
-            title: lt.title,
-            artist: lt.artist,
-            filePath: lt.filePath,
-            coverPath: lt.coverPath,
-            encrypted: false,
-          })
-        }
-      : undefined,
   })
 
   const menuActionsCloud = buildMenuActions(plDialog)
@@ -287,33 +337,17 @@ export const LibraryPage: Component = () => {
       onScroll={handleScroll}
       class="h-full overflow-y-auto"
     >
-      <Show when={tab() !== 'publish'}>
+      {/* Cloud tab — no header, storage section acts as header */}
+
+
+      {/* Other tabs — full MediaHeader */}
+      <Show when={tab() !== 'publish' && tab() !== 'cloud'}>
       <MediaHeader
         type="playlist"
-        title={tab() === 'local' ? 'Local Files' : tab() === 'cloud' ? 'Cloud Library' : 'Shared with Me'}
-        creator={tab() === 'local' ? (player.folderPath() || 'No folder selected') : tab() === 'cloud' ? `${uploadedTracks()?.length ?? 0} tracks` : `${sharedTracks()?.length ?? 0} tracks`}
-        stats={tab() === 'local' ? { songCount: player.tracks().length } : { songCount: (tab() === 'cloud' ? uploadedTracks()?.length : sharedTracks()?.length) ?? 0 }}
+        title={tab() === 'local' ? 'Local Files' : 'Shared with Me'}
+        creator={tab() === 'local' ? (player.folderPath() || 'No folder selected') : `${sharedTracks()?.length ?? 0} tracks`}
+        stats={tab() === 'local' ? { songCount: player.tracks().length } : { songCount: sharedTracks()?.length ?? 0 }}
         onBack={() => navigate(-1)}
-        mobileMenuItems={[
-          {
-            label: 'Request Access',
-            icon: (
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
-              </svg>
-            ),
-            onSelect: () => console.log('Request Access'),
-          } satisfies MediaHeaderMenuItem,
-          {
-            label: 'Mint NFT',
-            icon: (
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
-              </svg>
-            ),
-            onSelect: () => console.log('Mint NFT'),
-          } satisfies MediaHeaderMenuItem,
-        ]}
         actionsSlot={
           <>
             <Show when={tab() === 'local'}>
@@ -389,28 +423,6 @@ export const LibraryPage: Component = () => {
                 </Show>
               </div>
             </Show>
-            <Show when={tab() === 'shared'}>
-              <div class="flex items-center gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => console.log('Request Access')}
-                >
-                  <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
-                  </svg>
-                  Request Access
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => console.log('Mint NFT')}
-                >
-                  <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
-                  </svg>
-                  Mint NFT
-                </Button>
-              </div>
-            </Show>
           </>
         }
       />
@@ -425,10 +437,12 @@ export const LibraryPage: Component = () => {
             onFormChange={(partial) => setPublishForm((prev) => ({ ...prev, ...partial }))}
             onNext={handlePublishNext}
             onBack={handlePublishBack}
+            onSkip={handlePublishSkip}
             onPublish={handlePublish}
             onDone={handlePublishDone}
             progress={publishProgress()}
             error={publishError()}
+            result={publishResult()}
           />
         </div>
       </Show>
@@ -487,6 +501,22 @@ export const LibraryPage: Component = () => {
 
       {/* Cloud tab */}
       <Show when={tab() === 'cloud'}>
+        <div class="px-6 pt-4 pb-6">
+          <StorageCard
+            status={storageStatus() ?? {
+              balance: '$0.00',
+              balanceRaw: 0n,
+              operatorApproved: false,
+              monthlyCost: '$0.00',
+              daysRemaining: 0,
+              ready: false,
+            }}
+            loading={storageLoading()}
+            error={storageError()}
+            onAddFunds={() => setAddFundsOpen(true)}
+          />
+        </div>
+
         <Show when={uploadedTracks.loading}>
           <div class="flex items-center justify-center py-20 text-[var(--text-muted)]">
             <div class="flex items-center gap-3">
@@ -499,38 +529,33 @@ export const LibraryPage: Component = () => {
           </div>
         </Show>
         <Show when={!uploadedTracks.loading}>
-          <Show
-            when={uploadedTracksAsTrack().length > 0}
-            fallback={
-              <div class="flex flex-col items-center justify-center py-20 text-[var(--text-muted)]">
-                <Show
-                  when={platform.isTauri}
-                  fallback={<DownloadAppCta />}
-                >
-                  <p class="text-lg mb-2">No uploaded tracks yet</p>
-                  <p>Right-click a local track and select "Upload to Filecoin".</p>
-                </Show>
-              </div>
-            }
-          >
-            <Show when={scrollRef()}>
-              {(el) => (
-                <TrackList
-                  tracks={uploadedTracksAsTrack()}
-                  showDateAdded
-                  activeTrackId={player.currentTrack()?.id}
-                  activeTrackPlaying={player.isPlaying()}
-                  selectedTrackId={player.selectedTrackId() || undefined}
-                  scrollRef={el()}
-                  enableDrag
-                  onTrackClick={(track) => player.setSelectedTrackId(track.id)}
-                  onTrackPlay={(track) => handleEncryptedTrackPlay(track, uploadedEntriesMap(), player)}
-                  menuActions={menuActionsCloud}
-                />
-              )}
-            </Show>
+          <Show when={scrollRef()}>
+            {(el) => (
+              <TrackList
+                tracks={uploadedTracksAsTrack()}
+                showDateAdded
+                activeTrackId={player.currentTrack()?.id}
+                activeTrackPlaying={player.isPlaying()}
+                selectedTrackId={player.selectedTrackId() || undefined}
+                scrollRef={el()}
+                enableDrag
+                onTrackClick={(track) => player.setSelectedTrackId(track.id)}
+                onTrackPlay={(track) => handleEncryptedTrackPlay(track, uploadedEntriesMap(), player)}
+                menuActions={menuActionsCloud}
+              />
+            )}
           </Show>
         </Show>
+
+        <AddFundsDialog
+          open={addFundsOpen()}
+          onOpenChange={setAddFundsOpen}
+          currentBalance={storageStatus()?.balance ?? '$0.00'}
+          daysRemaining={storageStatus()?.daysRemaining ?? null}
+          balanceNum={balanceNum()}
+          loading={depositLoading()}
+          onDeposit={handleDeposit}
+        />
       </Show>
 
       {/* Shared tab */}

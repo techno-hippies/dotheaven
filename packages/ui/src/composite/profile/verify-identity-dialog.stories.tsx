@@ -144,7 +144,7 @@ export const FullFlow: Story = {
             Simulate Error
           </Button>
         </div>
-        <p class="text-sm text-[var(--text-muted)]">Current: {step()}</p>
+        <p class="text-base text-[var(--text-muted)]">Current: {step()}</p>
         <VerifyIdentityDialog
           open={open()}
           onOpenChange={setOpen}

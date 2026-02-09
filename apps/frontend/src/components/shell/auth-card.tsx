@@ -61,7 +61,7 @@ export const AuthCard: Component<AuthCardProps> = (props) => {
 
   return (
     <div class={cn(
-      "w-full max-w-md bg-[var(--bg-surface)] border border-[var(--bg-highlight)] rounded-md p-8 shadow-xl",
+      "w-full max-w-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-md p-8 shadow-xl",
       props.class
     )}>
       {/* Idle State */}
@@ -75,13 +75,15 @@ export const AuthCard: Component<AuthCardProps> = (props) => {
             />
           </Show>
           <div>
-            <h2 class="text-2xl font-bold text-[var(--text-primary)]">{appName()}</h2>
+            <h2 class="text-2xl font-bold text-[var(--text-primary)]">Welcome to {appName()}</h2>
+            <Show when={props.tagline}>
+              <p class="text-base text-[var(--text-secondary)] mt-2">{props.tagline}</p>
+            </Show>
           </div>
-          <div class="flex flex-row gap-3">
+          <div class="grid grid-cols-2 gap-3">
             <Button
               variant="secondary"
               size="lg"
-              class="flex-1"
               onClick={props.onSignIn}
             >
               Sign In
@@ -89,7 +91,6 @@ export const AuthCard: Component<AuthCardProps> = (props) => {
             <Button
               variant="default"
               size="lg"
-              class="flex-1"
               onClick={props.onRegister}
             >
               New Account
@@ -99,7 +100,7 @@ export const AuthCard: Component<AuthCardProps> = (props) => {
             <div class="space-y-4">
               <div class="relative">
                 <div class="absolute inset-0 flex items-center">
-                  <div class="w-full border-t border-[var(--bg-highlight)]" />
+                  <div class="w-full border-t border-[var(--border-subtle)]" />
                 </div>
                 <div class="relative flex justify-center text-base">
                   <span class="bg-[var(--bg-surface)] px-2 text-[var(--text-muted)]">or</span>

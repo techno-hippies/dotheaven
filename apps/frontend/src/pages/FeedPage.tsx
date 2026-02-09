@@ -1,17 +1,13 @@
 import type { Component } from 'solid-js'
-import { createSignal, createMemo, For, Show } from 'solid-js'
+import { createSignal, createMemo, createEffect, For, Show } from 'solid-js'
 import { createQuery, useQueryClient } from '@tanstack/solid-query'
-import { FeedPost, type FeedPostProps, type FeedPostMedia, Avatar, Tabs, ComposeBox, ComposeFab, ComposeDrawer, useIsMobile, type ProfileInput, ShareViaChatDialog, type ShareRecipient } from '@heaven/ui'
+import { FeedPost, type FeedPostProps, type FeedPostMedia, Avatar, ComposeBox, ComposeFab, ComposeDrawer, useIsMobile, type ProfileInput, ShareViaChatDialog, type ShareRecipient, LiveRoomsRow, type LiveRoom } from '@heaven/ui'
 import { useNavigate } from '@solidjs/router'
-import { post } from '@heaven/core'
+import { post, room } from '@heaven/core'
 import { useAuth, useXMTP } from '../providers'
 import { openUserMenu } from '../lib/user-menu'
 import { fetchFeedPosts, translatePost, getUserLang, type FeedPostData } from '../lib/heaven/posts'
-
-const feedTabs = [
-  { id: 'foryou', label: 'For you' },
-  { id: 'following', label: 'Following' },
-]
+import { useActiveRooms } from '../lib/voice/useActiveRooms'
 
 function timeAgo(ts: number): string {
   const diff = Math.floor(Date.now() / 1000) - ts
@@ -62,13 +58,35 @@ export const FeedPage: Component = () => {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [composeOpen, setComposeOpen] = createSignal(false)
-  const [feedTab, setFeedTab] = createSignal('foryou')
   const [translatingPostId, setTranslatingPostId] = createSignal<string | null>(null)
   const [shareDialogOpen, setShareDialogOpen] = createSignal(false)
   const [sharePostId, setSharePostId] = createSignal<string | null>(null)
   const [isSending, setIsSending] = createSignal(false)
 
   const userLang = getUserLang()
+
+  // Active voice rooms
+  const activeRooms = useActiveRooms()
+  const liveRooms = createMemo<LiveRoom[]>(() =>
+    activeRooms.rooms().map((r) => ({
+      id: r.room_id,
+      hostName: `${r.host_wallet.slice(0, 6)}...${r.host_wallet.slice(-4)}`,
+      participantCount: r.participant_count,
+    }))
+  )
+  const showLiveRoomsLoading = createMemo(
+    () => activeRooms.isLoading() && liveRooms().length === 0,
+  )
+  const showLiveRoomsError = createMemo(
+    () => !activeRooms.isLoading() && !!activeRooms.error() && liveRooms().length === 0,
+  )
+
+  createEffect(() => {
+    const err = activeRooms.error()
+    if (import.meta.env.DEV && err) {
+      console.warn('[Feed] Failed to load active rooms:', err)
+    }
+  })
 
   // Fetch posts from subgraph
   const postsQuery = createQuery(() => ({
@@ -89,8 +107,8 @@ export const FeedPage: Component = () => {
     return undefined
   })
 
-  const handlePost = (text: string) => {
-    console.log('Post:', text)
+  const handlePost = (text: string, media?: File[]) => {
+    console.log('Post:', text, media?.length ? `(${media.length} files)` : '')
     // TODO: wire to Lit Action post pipeline
   }
 
@@ -191,8 +209,25 @@ export const FeedPage: Component = () => {
             />
           </div>
         </Show>
-        <Tabs tabs={feedTabs} activeTab={feedTab()} onTabChange={setFeedTab} />
       </header>
+
+      {/* Live rooms row */}
+      <Show when={showLiveRoomsLoading()}>
+        <div class="px-5 py-2 text-sm text-[var(--text-muted)]">
+          Loading live rooms...
+        </div>
+      </Show>
+      <Show when={showLiveRoomsError()}>
+        <div class="px-5 py-2 text-sm text-[var(--text-muted)]">
+          Live rooms are temporarily unavailable.
+        </div>
+      </Show>
+      <LiveRoomsRow
+        rooms={liveRooms()}
+        onRoomClick={(roomId) => navigate(room(roomId))}
+        onCreateRoom={() => navigate(room('new'))}
+        createAvatarUrl={cachedAvatarUrl()}
+      />
 
       {/* Desktop: inline compose box at top */}
       <Show when={!isMobile()}>

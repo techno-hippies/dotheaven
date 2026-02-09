@@ -134,8 +134,8 @@ export const ClaimFlow: Component<ClaimFlowProps> = (props) => {
 
             {/* Code entry */}
             <Show when={props.state === 'profile'}>
-              <div class="bg-[var(--bg-surface)] border border-[var(--bg-highlight)] rounded-md p-6 space-y-4">
-                <p class="text-sm text-[var(--text-secondary)]">
+              <div class="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-md p-6 space-y-4">
+                <p class="text-base text-[var(--text-secondary)]">
                   Enter the code from your message to verify this is you.
                 </p>
                 <TextField
@@ -156,7 +156,7 @@ export const ClaimFlow: Component<ClaimFlowProps> = (props) => {
 
             {/* Checking */}
             <Show when={props.state === 'checking'}>
-              <div class="bg-[var(--bg-surface)] border border-[var(--bg-highlight)] rounded-md p-6 text-center">
+              <div class="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-md p-6 text-center">
                 <Spinner size="lg" class="mx-auto mb-4 text-[var(--accent-blue)]" />
                 <p class="text-[var(--text-secondary)]">Verifying...</p>
               </div>
@@ -164,9 +164,9 @@ export const ClaimFlow: Component<ClaimFlowProps> = (props) => {
 
             {/* Passkey creation */}
             <Show when={props.state === 'passkey'}>
-              <div class="bg-[var(--bg-surface)] border border-[var(--bg-highlight)] rounded-md p-6 space-y-4">
+              <div class="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-md p-6 space-y-4">
                 <h2 class="font-semibold text-[var(--text-primary)]">Create your passkey</h2>
-                <p class="text-sm text-[var(--text-secondary)]">
+                <p class="text-base text-[var(--text-secondary)]">
                   A passkey lets you sign in securely using Face ID, fingerprint, or your device PIN.
                   No password needed.
                 </p>
@@ -178,7 +178,7 @@ export const ClaimFlow: Component<ClaimFlowProps> = (props) => {
 
             {/* Inline error */}
             <Show when={props.error && props.state !== 'error'}>
-              <p class="text-sm text-[var(--accent-coral)] text-center">{props.error}</p>
+              <p class="text-base text-[var(--accent-coral)] text-center">{props.error}</p>
             </Show>
           </div>
         </div>

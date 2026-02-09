@@ -39,14 +39,20 @@ export const MUSIC = '/music'
 /** Chat hub (shows conversation list) */
 export const CHAT = '/chat'
 
-/** Community discovery */
-export const COMMUNITY = '/community'
+/** Search / discovery page */
+export const SEARCH = '/search'
+
+/** @deprecated Use SEARCH instead */
+export const COMMUNITY = SEARCH
 
 /** Settings page */
 export const SETTINGS = '/settings'
 
 /** Claim profile (standalone, no shell) */
 export const CLAIM = '/c'
+
+/** Live voice room (standalone, no shell) */
+export const ROOM = '/room'
 
 // ── Dynamic Route Builders ────────────────────────────────────────
 
@@ -99,6 +105,12 @@ export const aiChat = (personality: string) => `/chat/ai/${personality}`
 export const post = (id: string) => `/post/${id}`
 
 /**
+ * Live voice room.
+ * @param roomId - Room UUID
+ */
+export const room = (roomId: string) => `/room/${roomId}`
+
+/**
  * Claim profile page.
  * @param token - Claim token from the shadow profile link
  */
@@ -110,6 +122,10 @@ export const claimProfile = (token: string) => `/c/${token}`
 export const ROUTE_PARAMS = {
   /** Public profile: /u/:id */
   PUBLIC_PROFILE: '/u/:id',
+  /** Followers list: /u/:id/followers */
+  FOLLOWERS: '/u/:id/followers',
+  /** Following list: /u/:id/following */
+  FOLLOWING: '/u/:id/following',
   /** Playlist: /playlist/:id */
   PLAYLIST: '/playlist/:id',
   /** Artist: /artist/:mbid */
@@ -124,6 +140,8 @@ export const ROUTE_PARAMS = {
   AI_CHAT: '/ai/:personality',
   /** Post detail: /post/:id */
   POST: '/post/:id',
+  /** Live room: /room/:roomId */
+  ROOM: '/room/:roomId',
   /** Claim profile: /c/:token */
   CLAIM: '/c/:token',
 } as const

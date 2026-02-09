@@ -47,7 +47,7 @@ export const SideMenuDrawer: Component<SideMenuDrawerProps> = (props) => {
               onClick={() => props.onOpenChange(false)}
             >
               <GithubLogo class="w-5 h-5" />
-              <span class="text-sm font-medium">GitHub</span>
+              <span class="text-base font-medium">GitHub</span>
             </a>
 
             {/* Log out (authenticated only) */}
@@ -58,7 +58,7 @@ export const SideMenuDrawer: Component<SideMenuDrawerProps> = (props) => {
                 onClick={() => handleNav(props.onLogout)}
               >
                 <SignOut class="w-5 h-5" />
-                <span class="text-sm font-medium">Log Out</span>
+                <span class="text-base font-medium">Log Out</span>
               </button>
             </Show>
           </div>
@@ -90,7 +90,7 @@ export const SideMenuDrawer: Component<SideMenuDrawerProps> = (props) => {
               size="md"
             />
             <div class="flex flex-col min-w-0">
-              <span class="text-sm font-semibold text-[var(--text-primary)] truncate">
+              <span class="text-base font-semibold text-[var(--text-primary)] truncate">
                 {props.displayName}
               </span>
               <Show when={props.username}>
@@ -110,7 +110,7 @@ export const SideMenuDrawer: Component<SideMenuDrawerProps> = (props) => {
             onClick={() => handleNav(props.onSettings)}
           >
             <Gear class="w-5 h-5" />
-            <span class="text-sm font-medium">Settings</span>
+            <span class="text-base font-medium">Settings</span>
           </button>
 
           <button
@@ -119,7 +119,7 @@ export const SideMenuDrawer: Component<SideMenuDrawerProps> = (props) => {
             onClick={() => handleNav(props.onWallet)}
           >
             <Wallet class="w-5 h-5" />
-            <span class="text-sm font-medium">Wallet</span>
+            <span class="text-base font-medium">Wallet</span>
           </button>
 
           {props.extraItems}

@@ -44,7 +44,7 @@ export const Switch: Component<SwitchProps> = (props) => {
       </KSwitch.Control>
       <div class="flex flex-col gap-0.5">
         {local.label && (
-          <KSwitch.Label class="text-sm text-[var(--text-primary)] leading-tight">
+          <KSwitch.Label class="text-base text-[var(--text-primary)] leading-tight">
             {local.label}
           </KSwitch.Label>
         )}

@@ -47,6 +47,7 @@ interface CIDs {
   contentDecryptV1: string;
   postCreateV1: string;
   postTextV1: string;
+  followV1: string;
   [key: string]: string;
 }
 
@@ -91,6 +92,7 @@ let cids: CIDs = {
   contentDecryptV1: '',
   postCreateV1: '',
   postTextV1: '',
+  followV1: '',
 };
 if (existsSync(cidPath)) {
   cids = JSON.parse(readFileSync(cidPath, 'utf-8'));

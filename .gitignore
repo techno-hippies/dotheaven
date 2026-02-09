@@ -5,6 +5,7 @@ node_modules/
 # Build output
 dist/
 **/dist/
+**/dist-web/
 storybook-static/
 
 # Tauri build output
@@ -15,7 +16,9 @@ storybook-static/
 .env
 .env.local
 .env.*.local
+.env.*
 **/.env
+**/.env.*
 **/.env.local
 **/.env.*.local
 

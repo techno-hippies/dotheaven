@@ -127,12 +127,49 @@ export const EndOfTrack: Story = {
   },
 }
 
+// With search bar
+export const WithSearch: Story = {
+  decorators: [
+    () => {
+      const [query, setQuery] = createSignal('')
+
+      return (
+        <div class="h-screen bg-[var(--bg-page)] flex justify-end">
+          <RightPanel>
+            <SidePlayer
+              title="Neon Dreams"
+              artist="Synthwave Collective"
+              coverSrc="https://picsum.photos/seed/album1/400/400"
+              currentTime="2:47"
+              duration="4:39"
+              progress={58}
+              isPlaying={true}
+              onPlayPause={() => console.log('play/pause')}
+              onPrev={() => console.log('prev')}
+              onNext={() => console.log('next')}
+              track={{ id: '1', title: 'Neon Dreams', artist: 'Synthwave Collective', album: 'Neon Album' }}
+              menuActions={{
+                onAddToPlaylist: (t) => console.log('Add to playlist:', t),
+                onAddToQueue: (t) => console.log('Add to queue:', t),
+              }}
+              searchQuery={query()}
+              onSearchChange={setQuery}
+              onSearchSubmit={(q) => console.log('Search:', q)}
+            />
+          </RightPanel>
+        </div>
+      )
+    },
+  ],
+}
+
 // Interactive example with state
 export const Interactive: Story = {
   decorators: [
     () => {
       const [isPlaying, setIsPlaying] = createSignal(true)
       const [progress, setProgress] = createSignal(35)
+      const [searchQuery, setSearchQuery] = createSignal('')
 
       // Simulate progress
       setInterval(() => {
@@ -176,6 +213,9 @@ export const Interactive: Story = {
                 onAddToPlaylist: (t) => console.log('Add to playlist:', t),
                 onAddToQueue: (t) => console.log('Add to queue:', t),
               }}
+              searchQuery={searchQuery()}
+              onSearchChange={setSearchQuery}
+              onSearchSubmit={(q) => console.log('Search:', q)}
             />
           </RightPanel>
         </div>
@@ -191,7 +231,7 @@ export const InContext: Story = {
       <div class="h-screen bg-[var(--bg-page)] flex">
         {/* Simulated sidebar */}
         <div class="w-60 border-r border-[var(--bg-highlight)] p-4">
-          <div class="text-[var(--text-muted)] text-sm">Sidebar</div>
+          <div class="text-[var(--text-muted)] text-base">Sidebar</div>
         </div>
         {/* Simulated main content */}
         <div class="flex-1 p-8">

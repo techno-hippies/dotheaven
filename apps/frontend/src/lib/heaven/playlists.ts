@@ -1,5 +1,5 @@
 import type { Track } from '@heaven/ui'
-import { MEGAETH_RPC, PLAYLIST_V1 } from '@heaven/core'
+import { MEGAETH_RPC, PLAYLIST_V1, SUBGRAPH_ACTIVITY, SUBGRAPH_PLAYLISTS } from '@heaven/core'
 import { getCoverCache, getCoverCacheById } from '../cover-cache'
 import { payloadToMbid } from './artist'
 
@@ -12,12 +12,6 @@ import { payloadToMbid } from './artist'
  * Track display strings (title/artist/album) live on ScrobbleV3 (getTrack),
  * resolved via MegaETH RPC — same pattern as scrobbles.ts.
  */
-
-const PLAYLIST_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-playlists/1.0.0/gn'
-
-const ACTIVITY_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/12.0.0/gn'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -79,7 +73,7 @@ export async function fetchUserPlaylists(
     }
   }`
 
-  const res = await fetch(PLAYLIST_ENDPOINT, {
+  const res = await fetch(SUBGRAPH_PLAYLISTS, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),
@@ -108,7 +102,7 @@ export async function fetchPlaylist(playlistId: string): Promise<OnChainPlaylist
     }
   }`
 
-  const res = await fetch(PLAYLIST_ENDPOINT, {
+  const res = await fetch(SUBGRAPH_PLAYLISTS, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),
@@ -141,7 +135,7 @@ export async function fetchPlaylistWithTracks(
     }
   }`
 
-  const res = await fetch(PLAYLIST_ENDPOINT, {
+  const res = await fetch(SUBGRAPH_PLAYLISTS, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),
@@ -177,7 +171,7 @@ export async function fetchPlaylistTracks(
     }
   }`
 
-  const res = await fetch(PLAYLIST_ENDPOINT, {
+  const res = await fetch(SUBGRAPH_PLAYLISTS, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),
@@ -300,7 +294,7 @@ async function batchGetTracks(trackIds: string[]): Promise<Map<string, TrackMeta
   }`
 
   try {
-    const res = await fetch(ACTIVITY_ENDPOINT, {
+    const res = await fetch(SUBGRAPH_ACTIVITY, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),
@@ -362,7 +356,7 @@ async function batchGetContentMeta(trackIds: string[]): Promise<Map<string, Cont
   }`
 
   try {
-    const res = await fetch(ACTIVITY_ENDPOINT, {
+    const res = await fetch(SUBGRAPH_ACTIVITY, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),

@@ -9,19 +9,17 @@
  */
 
 import type { Component, JSX } from 'solid-js'
-import { createSignal, createEffect, Show } from 'solid-js'
+import { createEffect, Show } from 'solid-js'
 import {
   Button,
-  IconButton,
   Dialog,
   DialogContent,
+  DialogHeader,
   DialogBody,
-  DialogCloseButton,
   Drawer,
   DrawerContent,
   Spinner,
   Wallet,
-  X,
   useIsMobile,
 } from '@heaven/ui'
 import { useAuth } from '../../providers'
@@ -34,9 +32,6 @@ export interface AuthDialogProps {
 export const AuthDialog: Component<AuthDialogProps> = (props) => {
   const auth = useAuth()
   const isMobile = useIsMobile()
-
-  const [authMethod, setAuthMethod] = createSignal<'passkey' | 'eoa'>('passkey')
-  const [authMode, setAuthMode] = createSignal<'signin' | 'register'>('signin')
 
   // Auto-close on successful auth
   createEffect(() => {
@@ -56,20 +51,14 @@ export const AuthDialog: Component<AuthDialogProps> = (props) => {
   const hasError = () => !!auth.authError()
 
   const handleSignIn = async () => {
-    setAuthMethod('passkey')
-    setAuthMode('signin')
     try { await auth.loginWithPasskey() } catch { /* handled by state */ }
   }
 
   const handleRegister = async () => {
-    setAuthMethod('passkey')
-    setAuthMode('register')
     try { await auth.registerWithPasskey() } catch { /* handled by state */ }
   }
 
   const handleConnectWallet = async () => {
-    setAuthMethod('eoa')
-    setAuthMode('signin')
     try { await auth.connectWallet() } catch { /* handled by state */ }
   }
 
@@ -94,36 +83,28 @@ export const AuthDialog: Component<AuthDialogProps> = (props) => {
 
   // Shared body content (buttons + error + loading)
   const bodyContent = (): JSX.Element => (
-    <div class="space-y-4">
+    <div class="flex flex-col gap-5">
       <Show when={hasError()}>
         <div class="flex items-center gap-3 p-3 rounded-md bg-red-500/10">
           <svg class="w-5 h-5 text-red-500 shrink-0" fill="currentColor" viewBox="0 0 256 256">
             <path d="M236.8,188.09,149.35,36.22h0a24.76,24.76,0,0,0-42.7,0L19.2,188.09a23.51,23.51,0,0,0,0,23.72A24.35,24.35,0,0,0,40.55,224h174.9a24.35,24.35,0,0,0,21.33-12.19A23.51,23.51,0,0,0,236.8,188.09ZM222.93,203.8a8.5,8.5,0,0,1-7.48,4.2H40.55a8.5,8.5,0,0,1-7.48-4.2,7.59,7.59,0,0,1,0-7.72L120.52,44.21a8.75,8.75,0,0,1,15,0l87.45,151.87A7.59,7.59,0,0,1,222.93,203.8ZM120,144V104a8,8,0,0,1,16,0v40a8,8,0,0,1-16,0Zm20,36a12,12,0,1,1-12-12A12,12,0,0,1,140,180Z" />
           </svg>
-          <p class="text-sm text-red-400">{auth.authError()}</p>
+          <p class="text-base text-red-400">{auth.authError()}</p>
         </div>
       </Show>
 
       <Show
         when={!isLoading()}
         fallback={
-          <div class="flex flex-col items-center gap-3 py-4">
+          <div class="flex flex-col items-center py-4">
             <Spinner size="md" />
-            <p class="text-sm text-[var(--text-secondary)] text-center">
-              {authMethod() === 'eoa'
-                ? 'Confirm in your wallet'
-                : authMode() === 'register'
-                  ? 'Complete the passkey prompt to create your account'
-                  : 'Complete the passkey prompt to sign in'}
-            </p>
           </div>
         }
       >
-        <div class="flex gap-3">
+        <div class="grid grid-cols-2 gap-3">
           <Button
             variant="secondary"
             size="lg"
-            class="flex-1"
             onClick={hasError() ? handleRetry : handleSignIn}
           >
             {hasError() ? 'Try Again' : 'Sign In'}
@@ -131,14 +112,20 @@ export const AuthDialog: Component<AuthDialogProps> = (props) => {
           <Button
             variant="default"
             size="lg"
-            class="flex-1"
             onClick={handleRegister}
           >
             New Account
           </Button>
         </div>
 
-        <p class="text-center text-[var(--text-muted)] text-sm">or</p>
+        <div class="relative">
+          <div class="absolute inset-0 flex items-center">
+            <div class="w-full border-t border-[var(--border-subtle)]" />
+          </div>
+          <div class="relative flex justify-center text-base">
+            <span class="bg-[var(--bg-surface)] px-3 text-[var(--text-muted)]">or</span>
+          </div>
+        </div>
 
         <Button
           variant="secondary"
@@ -159,19 +146,11 @@ export const AuthDialog: Component<AuthDialogProps> = (props) => {
       fallback={
         // Desktop: Dialog
         <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-          <DialogContent class="max-w-sm">
-            {/* Custom header with centered content and absolute close button */}
-            <div class="relative p-6 pb-4">
-              <DialogCloseButton
-                as={(closeProps: any) => (
-                  <IconButton {...closeProps} variant="soft" size="md" aria-label="Close" class="absolute top-4 right-4">
-                    <X class="w-5 h-5" />
-                  </IconButton>
-                )}
-              />
+          <DialogContent class="max-w-md">
+            <DialogHeader>
               {headerContent()}
-            </div>
-            <DialogBody>{bodyContent()}</DialogBody>
+            </DialogHeader>
+            <DialogBody class="pb-6">{bodyContent()}</DialogBody>
           </DialogContent>
         </Dialog>
       }

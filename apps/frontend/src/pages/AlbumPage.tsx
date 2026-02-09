@@ -122,7 +122,7 @@ export const AlbumPage: Component = () => {
                 </For>
                 </div>
 
-              <div class="flex flex-wrap items-center gap-2 text-sm text-[var(--text-muted)]">
+              <div class="flex flex-wrap items-center gap-2 text-base text-[var(--text-muted)]">
                 <Show when={albumInfo().trackCount}>
                   <span>{albumInfo().trackCount} tracks</span>
                 </Show>
@@ -165,15 +165,15 @@ export const AlbumPage: Component = () => {
               />
 
               <div class="px-4 md:px-8 pb-5">
-                <div class="rounded-xl border border-[var(--bg-highlight)] bg-[var(--bg-elevated)]/70 px-4 py-3 md:px-6 md:py-4">
+                <div class="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/70 px-4 py-3 md:px-6 md:py-4">
                   <div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-                    <div class="md:pr-6 md:border-r md:border-[var(--bg-highlight)]">
+                    <div class="md:pr-6 md:border-r md:border-[var(--border-subtle)]">
                       <div class="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Listeners</div>
                       <div class="text-2xl md:text-3xl font-semibold text-[var(--text-primary)] tabular-nums mt-1">
                         {uniqueListeners().toLocaleString()}
                       </div>
                     </div>
-                    <div class="md:px-6 md:border-r md:border-[var(--bg-highlight)]">
+                    <div class="md:px-6 md:border-r md:border-[var(--border-subtle)]">
                       <div class="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Scrobbles</div>
                       <div class="text-2xl md:text-3xl font-semibold text-[var(--text-primary)] tabular-nums mt-1">
                         {totalScrobbles().toLocaleString()}
@@ -194,7 +194,7 @@ export const AlbumPage: Component = () => {
               <Show when={tracks().length > 0} fallback={
                 <div class="px-8 py-12 text-center">
                   <p class="text-[var(--text-muted)] text-lg">No scrobbles found</p>
-                  <p class="text-[var(--text-muted)] text-sm mt-2">
+                  <p class="text-[var(--text-muted)] text-base mt-2">
                     Scrobble tracks from this album to see them here
                   </p>
                 </div>

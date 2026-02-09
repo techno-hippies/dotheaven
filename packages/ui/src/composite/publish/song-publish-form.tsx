@@ -5,15 +5,13 @@ import { Button } from '../../primitives/button'
 import { TextField, TextArea } from '../../primitives/text-field'
 import { Select, type SelectOption } from '../../primitives/select'
 import { Spinner } from '../../primitives/spinner'
-import { Stepper } from '../../primitives/stepper'
-import { MusicNote, Image, Check, ChevronLeft, Warning } from '../../icons'
+import { MusicNote, Image, Check, Warning, Plus, X } from '../../icons'
 
 // ── Types ──────────────────────────────────────────────────────────
 
 export interface SongFormData {
   title: string
   artist: string
-  album: string
   genre: string
   primaryLanguage: string
   secondaryLanguage: string
@@ -21,8 +19,7 @@ export interface SongFormData {
   coverFile: File | null
   audioFile: File | null
   instrumentalFile: File | null
-  previewStart: number
-  previewEnd: number
+  canvasFile: File | null
   license: LicenseType
   revShare: number
   mintingFee: string
@@ -35,11 +32,10 @@ export type LicenseType =
   | 'commercial-remix'
 
 export type PublishStep =
-  | 'upload'
+  | 'song'
+  | 'canvas'
   | 'details'
-  | 'lyrics'
   | 'license'
-  | 'review'
   | 'publishing'
   | 'success'
   | 'error'
@@ -50,13 +46,9 @@ export interface SongPublishFormProps {
   onFormChange: (data: Partial<SongFormData>) => void
   onNext: () => void
   onBack: () => void
+  onSkip?: () => void
   onPublish: () => void
   onDone?: () => void
-  /** AcoustID check result */
-  copyrightCheck?: {
-    status: 'idle' | 'checking' | 'clear' | 'match'
-    matchInfo?: string
-  }
   /** Publishing progress (0-100) */
   progress?: number
   /** Error message */
@@ -127,12 +119,12 @@ const LICENSE_OPTIONS: { value: LicenseType; label: string; description: string 
   {
     value: 'commercial-use',
     label: 'Commercial Use',
-    description: 'Others pay a license fee to use your song commercially. You earn revenue share on derivatives.',
+    description: 'Others pay a license fee to use your song commercially.',
   },
   {
     value: 'commercial-remix',
     label: 'Commercial Remix',
-    description: 'Others pay to remix your song commercially. You earn ongoing royalties from all derivatives.',
+    description: 'Others pay to remix commercially. You earn ongoing royalties.',
   },
 ]
 
@@ -143,247 +135,314 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-// ── Step: Upload ───────────────────────────────────────────────────
+// ── Shared: File dropzone ──────────────────────────────────────────
 
-const UploadStep: Component<{
-  formData: SongFormData
-  copyrightCheck?: SongPublishFormProps['copyrightCheck']
-  onChange: (data: Partial<SongFormData>) => void
-  onNext: () => void
+const FileDropzone: Component<{
+  icon: Component<{ class?: string }>
+  iconClass?: string
+  label: string
+  hint: string
+  accept: string
+  file: File | null
+  onSelect: (file: File) => void
+  onRemove: () => void
 }> = (props) => {
-  let audioInputRef: HTMLInputElement | undefined
-  let coverInputRef: HTMLInputElement | undefined
-  let instrumentalInputRef: HTMLInputElement | undefined
+  let inputRef: HTMLInputElement | undefined
 
-  const canProceed = createMemo(() =>
-    !!props.formData.audioFile && !!props.formData.instrumentalFile
-    && props.copyrightCheck?.status !== 'checking'
-    && props.copyrightCheck?.status !== 'match'
+  return (
+    <div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={props.accept}
+        class="hidden"
+        onChange={(e) => {
+          const file = e.currentTarget.files?.[0]
+          if (file) props.onSelect(file)
+        }}
+      />
+      <Show
+        when={props.file}
+        fallback={
+          <button
+            type="button"
+            class={cn(
+              'w-full flex items-center gap-3.5 p-4 rounded-xl',
+              'border border-dashed border-[var(--border-subtle)]',
+              'bg-[var(--bg-surface)]',
+              'hover:border-[var(--accent-blue)]/40 hover:bg-[var(--bg-elevated)]/50',
+              'transition-colors cursor-pointer',
+            )}
+            onClick={() => inputRef?.click()}
+          >
+            <props.icon class={cn('w-5 h-5 flex-shrink-0', props.iconClass ?? 'text-[var(--accent-blue)]')} />
+            <div class="text-left">
+              <p class="font-medium text-[var(--text-primary)]">{props.label}</p>
+              <p class="text-base text-[var(--text-muted)]">{props.hint}</p>
+            </div>
+          </button>
+        }
+      >
+        {(file) => (
+          <div class="flex items-center gap-3 p-3 rounded-xl bg-[var(--bg-elevated)]">
+            <div class="w-9 h-9 rounded-lg bg-[var(--bg-highlight)] flex items-center justify-center flex-shrink-0">
+              <props.icon class={cn('w-4 h-4', props.iconClass ?? 'text-[var(--accent-blue)]')} />
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="font-medium text-[var(--text-primary)] truncate">{file().name}</p>
+              <p class="text-base text-[var(--text-muted)]">{formatFileSize(file().size)}</p>
+            </div>
+            <button
+              type="button"
+              class="text-base text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer p-1"
+              onClick={() => {
+                props.onRemove()
+                if (inputRef) inputRef.value = ''
+              }}
+            >
+              <X class="w-4 h-4" />
+            </button>
+          </div>
+        )}
+      </Show>
+    </div>
+  )
+}
+
+// ── Step 1: Your Song ──────────────────────────────────────────────
+
+const SongStep: Component<{
+  formData: SongFormData
+  onChange: (data: Partial<SongFormData>) => void
+}> = (props) => {
+  let coverInputRef: HTMLInputElement | undefined
+
+  const genreValue = createMemo(() =>
+    GENRE_OPTIONS.find((o) => o.value === props.formData.genre)
   )
 
   return (
-    <div class="flex flex-col gap-6">
-      {/* Audio file */}
-      <div>
-        <label class="text-base font-medium text-[var(--text-primary)] mb-2 block">
-          Audio file <span class="text-[var(--accent-coral)]">*</span>
-        </label>
-        <input
-          ref={audioInputRef}
-          type="file"
-          accept="audio/mpeg,audio/wav,audio/mp4,audio/webm"
-          class="hidden"
-          onChange={(e) => {
-            const file = e.currentTarget.files?.[0]
-            if (file) props.onChange({ audioFile: file })
-          }}
-        />
-        <Show
-          when={props.formData.audioFile}
-          fallback={
-            <button
-              type="button"
-              class={cn(
-                'w-full p-8 rounded-md border-2 border-dashed border-[var(--bg-highlight-hover)]',
-                'hover:border-[var(--accent-blue)]/50 hover:bg-[var(--bg-highlight)]/50',
-                'transition-colors cursor-pointer flex flex-col items-center gap-3',
-              )}
-              onClick={() => audioInputRef?.click()}
-            >
-              <MusicNote class="w-10 h-10 text-[var(--text-muted)]" />
-              <div class="text-center">
-                <p class="text-[var(--text-primary)] font-medium">Choose audio file</p>
-                <p class="text-base text-[var(--text-muted)]">MP3, WAV, M4A, or WebM (max 50 MB)</p>
-              </div>
-            </button>
-          }
-        >
-          {(file) => (
-            <div class="flex items-center gap-3 p-3 rounded-md bg-[var(--bg-highlight)]">
-              <div class="w-10 h-10 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center flex-shrink-0">
-                <MusicNote class="w-5 h-5 text-[var(--accent-blue)]" />
-              </div>
-              <div class="flex-1 min-w-0">
-                <p class="text-base font-medium text-[var(--text-primary)] truncate">{file().name}</p>
-                <p class="text-sm text-[var(--text-muted)]">{formatFileSize(file().size)}</p>
-              </div>
-              <button
-                type="button"
-                class="text-base text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
-                onClick={() => {
-                  props.onChange({ audioFile: null })
-                  if (audioInputRef) audioInputRef.value = ''
-                }}
-              >
-                Remove
-              </button>
-            </div>
-          )}
-        </Show>
-
-        {/* AcoustID check status */}
-        <Show when={props.copyrightCheck && props.copyrightCheck.status !== 'idle'}>
-          <div class={cn(
-            'mt-2 flex items-center gap-2 text-base px-3 py-2 rounded-md',
-            props.copyrightCheck?.status === 'checking' && 'bg-[var(--bg-highlight)] text-[var(--text-secondary)]',
-            props.copyrightCheck?.status === 'clear' && 'bg-green-500/10 text-green-400',
-            props.copyrightCheck?.status === 'match' && 'bg-[var(--accent-coral)]/10 text-[var(--accent-coral)]',
-          )}>
-            <Show when={props.copyrightCheck?.status === 'checking'}>
-              <Spinner size="sm" />
-              <span>Checking audio fingerprint...</span>
-            </Show>
-            <Show when={props.copyrightCheck?.status === 'clear'}>
-              <Check class="w-4 h-4" />
-              <span>No known matches found</span>
-            </Show>
-            <Show when={props.copyrightCheck?.status === 'match'}>
-              <Warning class="w-4 h-4" />
-              <span>Possible match: {props.copyrightCheck?.matchInfo}</span>
-            </Show>
-          </div>
-        </Show>
-      </div>
-
-      {/* Cover art */}
-      <div>
-        <label class="text-base font-medium text-[var(--text-primary)] mb-2 block">Cover art</label>
-        <input
-          ref={coverInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          class="hidden"
-          onChange={(e) => {
-            const file = e.currentTarget.files?.[0]
-            if (file) props.onChange({ coverFile: file })
-          }}
-        />
-        <Show
-          when={props.formData.coverFile}
-          fallback={
-            <button
-              type="button"
-              class={cn(
-                'w-32 h-32 rounded-md border-2 border-dashed border-[var(--bg-highlight-hover)]',
-                'hover:border-[var(--accent-blue)]/50 hover:bg-[var(--bg-highlight)]/50',
-                'transition-colors cursor-pointer flex flex-col items-center justify-center gap-2',
-              )}
-              onClick={() => coverInputRef?.click()}
-            >
-              <Image class="w-6 h-6 text-[var(--text-muted)]" />
-              <span class="text-sm text-[var(--text-muted)]">Add cover</span>
-            </button>
-          }
-        >
-          {(file) => (
-            <div class="relative w-32 h-32 group">
-              <img
-                src={URL.createObjectURL(file())}
-                alt="Cover art"
-                class="w-32 h-32 rounded-md object-cover"
-              />
+    <div class="flex flex-col gap-5">
+      {/* Cover art + metadata — stacks on mobile */}
+      <div class="flex flex-col sm:flex-row gap-5">
+        {/* Cover art */}
+        <div class="flex-shrink-0 self-center sm:self-start">
+          <input
+            ref={coverInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            class="hidden"
+            onChange={(e) => {
+              const file = e.currentTarget.files?.[0]
+              if (file) props.onChange({ coverFile: file })
+            }}
+          />
+          <Show
+            when={props.formData.coverFile}
+            fallback={
               <button
                 type="button"
                 class={cn(
-                  'absolute inset-0 rounded-md bg-black/60 opacity-0 group-hover:opacity-100',
-                  'transition-opacity cursor-pointer flex items-center justify-center',
-                  'text-base text-white font-medium',
+                  'w-[120px] h-[120px] sm:w-[140px] sm:h-[140px] rounded-lg flex flex-col items-center justify-center gap-2',
+                  'bg-[var(--bg-elevated)] border border-dashed border-[var(--border-subtle)]',
+                  'hover:border-[var(--accent-blue)]/40 transition-colors cursor-pointer',
                 )}
-                onClick={() => {
-                  props.onChange({ coverFile: null })
-                  if (coverInputRef) coverInputRef.value = ''
-                }}
+                onClick={() => coverInputRef?.click()}
               >
-                Remove
+                <Image class="w-6 h-6 text-[var(--text-muted)]" />
+                <span class="text-base text-[var(--text-muted)]">Cover art</span>
               </button>
-            </div>
-          )}
-        </Show>
+            }
+          >
+            {(file) => (
+              <div class="relative w-[120px] h-[120px] sm:w-[140px] sm:h-[140px] group">
+                <img
+                  src={URL.createObjectURL(file())}
+                  alt="Cover art"
+                  class="w-full h-full rounded-lg object-cover"
+                />
+                <button
+                  type="button"
+                  class={cn(
+                    'absolute inset-0 rounded-lg bg-black/60 opacity-0 group-hover:opacity-100',
+                    'transition-opacity cursor-pointer flex items-center justify-center',
+                    'text-base text-white font-medium',
+                  )}
+                  onClick={() => {
+                    props.onChange({ coverFile: null })
+                    if (coverInputRef) coverInputRef.value = ''
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            )}
+          </Show>
+        </div>
+
+        {/* Title / Artist / Album */}
+        <div class="flex flex-col gap-3 flex-1 min-w-0 justify-center">
+          <TextField
+            label="Title"
+            value={props.formData.title}
+            onChange={(v) => props.onChange({ title: v })}
+            placeholder="Song title"
+            required
+          />
+          <TextField
+            label="Artist"
+            value={props.formData.artist}
+            onChange={(v) => props.onChange({ artist: v })}
+            placeholder="Artist name"
+            required
+          />
+        </div>
       </div>
 
-      {/* Instrumental track (optional) */}
+      {/* Song file */}
+      <FileDropzone
+        icon={MusicNote}
+        label="Choose song file"
+        hint="MP3, WAV, M4A, or WebM — max 50 MB"
+        accept="audio/mpeg,audio/wav,audio/mp4,audio/webm"
+        file={props.formData.audioFile}
+        onSelect={(f) => props.onChange({ audioFile: f })}
+        onRemove={() => props.onChange({ audioFile: null })}
+      />
+
+      {/* Instrumental */}
+      <FileDropzone
+        icon={MusicNote}
+        iconClass="text-[var(--accent-purple)]"
+        label="Choose instrumental track"
+        hint="MP3, WAV, M4A, or WebM — max 50 MB"
+        accept="audio/mpeg,audio/wav,audio/mp4,audio/webm"
+        file={props.formData.instrumentalFile}
+        onSelect={(f) => props.onChange({ instrumentalFile: f })}
+        onRemove={() => props.onChange({ instrumentalFile: null })}
+      />
+
+      {/* Genre */}
       <div>
-        <label class="text-base font-medium text-[var(--text-primary)] mb-2 block">
-          Instrumental / karaoke track <span class="text-[var(--accent-coral)]">*</span>
-        </label>
-        <input
-          ref={instrumentalInputRef}
-          type="file"
-          accept="audio/mpeg,audio/wav,audio/mp4,audio/webm"
-          class="hidden"
-          onChange={(e) => {
-            const file = e.currentTarget.files?.[0]
-            if (file) props.onChange({ instrumentalFile: file })
-          }}
+        <label class="text-base font-medium text-[var(--text-secondary)] mb-1.5 block">Genre</label>
+        <Select
+          options={GENRE_OPTIONS}
+          value={genreValue()}
+          onChange={(v) => props.onChange({ genre: v?.value ?? '' })}
+          placeholder="Select genre..."
         />
-        <Show
-          when={props.formData.instrumentalFile}
-          fallback={
-            <button
-              type="button"
-              class={cn(
-                'w-full p-6 rounded-md border-2 border-dashed border-[var(--bg-highlight-hover)]',
-                'hover:border-[var(--accent-blue)]/50 hover:bg-[var(--bg-highlight)]/50',
-                'transition-colors cursor-pointer flex flex-col items-center gap-2',
-              )}
-              onClick={() => instrumentalInputRef?.click()}
-            >
-              <MusicNote class="w-6 h-6 text-[var(--text-muted)]" />
-              <div class="text-center">
-                <p class="text-[var(--text-secondary)] font-medium">Choose instrumental track</p>
-                <p class="text-sm text-[var(--text-muted)]">MP3, WAV, M4A, or WebM (max 50 MB)</p>
-              </div>
-            </button>
-          }
-        >
-          {(file) => (
-            <div class="flex items-center gap-3 p-3 rounded-md bg-[var(--bg-highlight)]">
-              <div class="w-10 h-10 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center flex-shrink-0">
-                <MusicNote class="w-5 h-5 text-[var(--accent-purple)]" />
-              </div>
-              <div class="flex-1 min-w-0">
-                <p class="text-base font-medium text-[var(--text-primary)] truncate">{file().name}</p>
-                <p class="text-sm text-[var(--text-muted)]">{formatFileSize(file().size)}</p>
-              </div>
-              <button
-                type="button"
-                class="text-base text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
-                onClick={() => {
-                  props.onChange({ instrumentalFile: null })
-                  if (instrumentalInputRef) instrumentalInputRef.value = ''
-                }}
-              >
-                Remove
-              </button>
-            </div>
-          )}
-        </Show>
-      </div>
-
-      <div class="flex justify-end">
-        <Button disabled={!canProceed()} onClick={props.onNext}>
-          Next
-        </Button>
       </div>
     </div>
   )
 }
 
-// ── Step: Details ──────────────────────────────────────────────────
+// ── Step 2: Canvas ─────────────────────────────────────────────────
+
+const CanvasStep: Component<{
+  formData: SongFormData
+  onChange: (data: Partial<SongFormData>) => void
+}> = (props) => {
+  let videoInputRef: HTMLInputElement | undefined
+
+  return (
+    <div class="flex flex-col gap-5">
+      <div class="flex flex-col sm:flex-row gap-6 items-center sm:items-start">
+        {/* 9:16 video preview */}
+        <div class="flex-shrink-0">
+          <input
+            ref={videoInputRef}
+            type="file"
+            accept="video/mp4,video/webm"
+            class="hidden"
+            onChange={(e) => {
+              const file = e.currentTarget.files?.[0]
+              if (file) props.onChange({ canvasFile: file })
+            }}
+          />
+          <Show
+            when={props.formData.canvasFile}
+            fallback={
+              <button
+                type="button"
+                class={cn(
+                  'w-[150px] h-[267px] sm:w-[180px] sm:h-[320px] rounded-xl flex flex-col items-center justify-center gap-3',
+                  'bg-[var(--bg-elevated)] border border-dashed border-[var(--border-subtle)]',
+                  'hover:border-[var(--accent-coral)]/40 transition-colors cursor-pointer',
+                )}
+                onClick={() => videoInputRef?.click()}
+              >
+                <Plus class="w-6 h-6 text-[var(--text-muted)]" />
+                <span class="text-base text-[var(--text-muted)]">Add video</span>
+                <Show when={props.formData.title}>
+                  <div class="text-center mt-4 px-3">
+                    <p class="text-base font-semibold text-[var(--text-primary)] truncate">
+                      {props.formData.title}
+                    </p>
+                    <p class="text-base text-[var(--text-secondary)] truncate">
+                      {props.formData.artist}
+                    </p>
+                  </div>
+                </Show>
+              </button>
+            }
+          >
+            {(file) => (
+              <div class="relative w-[150px] h-[267px] sm:w-[180px] sm:h-[320px] rounded-xl overflow-hidden group">
+                <video
+                  src={URL.createObjectURL(file())}
+                  class="w-full h-full object-cover"
+                  autoplay
+                  loop
+                  muted
+                  playsinline
+                />
+                <button
+                  type="button"
+                  class={cn(
+                    'absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100',
+                    'transition-opacity cursor-pointer flex items-center justify-center',
+                    'text-base text-white font-medium',
+                  )}
+                  onClick={() => {
+                    props.onChange({ canvasFile: null })
+                    if (videoInputRef) videoInputRef.value = ''
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            )}
+          </Show>
+        </div>
+
+        {/* Guidelines */}
+        <div class="flex flex-col gap-5 flex-1">
+          <div>
+            <p class="font-semibold text-[var(--text-primary)] mb-3">File requirements</p>
+            <ul class="space-y-2">
+              {['9:16 aspect ratio', 'At least 720px tall', 'MP4 or WebM format', '3 to 8 seconds long (loops)', 'No text overlays or URLs'].map((req) => (
+                <li class="flex items-start gap-2 text-base text-[var(--text-secondary)]">
+                  <span class="text-[var(--text-muted)] font-bold mt-px">·</span>
+                  {req}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <p class="text-base text-[var(--text-muted)] italic">
+            Canvas is optional — a short looping video that plays behind your cover art.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Step 3: Details ────────────────────────────────────────────────
 
 const DetailsStep: Component<{
   formData: SongFormData
   onChange: (data: Partial<SongFormData>) => void
-  onNext: () => void
-  onBack: () => void
 }> = (props) => {
-  const canProceed = createMemo(() =>
-    !!props.formData.title.trim() && !!props.formData.artist.trim() && !!props.formData.primaryLanguage
-  )
-
-  const genreValue = createMemo(() =>
-    GENRE_OPTIONS.find((o) => o.value === props.formData.genre)
-  )
 
   const primaryLangValue = createMemo(() =>
     LANGUAGE_OPTIONS.find((o) => o.value === props.formData.primaryLanguage)
@@ -394,43 +453,10 @@ const DetailsStep: Component<{
   )
 
   return (
-    <div class="flex flex-col gap-4">
-      <TextField
-        label="Title"
-        value={props.formData.title}
-        onChange={(v) => props.onChange({ title: v })}
-        placeholder="Song title"
-        required
-      />
-
-      <TextField
-        label="Artist"
-        value={props.formData.artist}
-        onChange={(v) => props.onChange({ artist: v })}
-        placeholder="Artist name"
-        required
-      />
-
-      <TextField
-        label="Album"
-        value={props.formData.album}
-        onChange={(v) => props.onChange({ album: v })}
-        placeholder="Album or single name (optional)"
-      />
-
-      <div>
-        <label class="text-base font-medium text-[var(--text-primary)] mb-2 block">Genre</label>
-        <Select
-          options={GENRE_OPTIONS}
-          value={genreValue()}
-          onChange={(v) => props.onChange({ genre: v?.value ?? '' })}
-          placeholder="Select genre..."
-        />
-      </div>
-
-      <div class="grid grid-cols-2 gap-3">
+    <div class="flex flex-col gap-5">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label class="text-base font-medium text-[var(--text-primary)] mb-2 block">
+          <label class="text-base font-medium text-[var(--text-secondary)] mb-1.5 block">
             Primary language <span class="text-[var(--accent-coral)]">*</span>
           </label>
           <Select
@@ -441,7 +467,7 @@ const DetailsStep: Component<{
           />
         </div>
         <div>
-          <label class="text-base font-medium text-[var(--text-primary)] mb-2 block">
+          <label class="text-base font-medium text-[var(--text-secondary)] mb-1.5 block">
             Secondary language
           </label>
           <Select
@@ -450,94 +476,77 @@ const DetailsStep: Component<{
             onChange={(v) => props.onChange({ secondaryLanguage: v?.value ?? '' })}
             placeholder="None"
           />
-          <p class="text-sm text-[var(--text-muted)] mt-1">For bilingual songs (K-Pop, etc.)</p>
+          <p class="text-base text-[var(--text-muted)] mt-1">For bilingual songs (K-Pop, etc.)</p>
         </div>
       </div>
 
-      <div class="flex justify-between">
-        <Button variant="ghost" onClick={props.onBack}>
-          <ChevronLeft class="w-4 h-4" /> Back
-        </Button>
-        <Button disabled={!canProceed()} onClick={props.onNext}>
-          Next
-        </Button>
+      <div>
+        <div class="flex justify-between items-center mb-1.5">
+          <label class="text-base font-medium text-[var(--text-secondary)]">Lyrics</label>
+          <span class="text-base text-[var(--text-muted)]">Optional</span>
+        </div>
+        <TextArea
+          value={props.formData.lyrics}
+          onChange={(v) => props.onChange({ lyrics: v })}
+          placeholder={'[Verse 1]\nPaste or type lyrics here...\n\n[Chorus]\n...'}
+          textAreaClass="min-h-[200px] font-mono"
+        />
+        <p class="text-base text-[var(--text-muted)] mt-1.5">
+          Include [Verse], [Chorus], [Bridge] markers for synced lyrics and translation.
+        </p>
       </div>
     </div>
   )
 }
 
-// ── Step: Lyrics ───────────────────────────────────────────────────
-
-const LyricsStep: Component<{
-  formData: SongFormData
-  onChange: (data: Partial<SongFormData>) => void
-  onNext: () => void
-  onBack: () => void
-}> = (props) => {
-  return (
-    <div class="flex flex-col gap-4">
-      <TextArea
-        label="Lyrics"
-        value={props.formData.lyrics}
-        onChange={(v) => props.onChange({ lyrics: v })}
-        placeholder={'[Verse 1]\nPaste or type lyrics here...\n\n[Chorus]\n...'}
-        textAreaClass="min-h-[200px] font-mono text-base"
-        description="Include section markers like [Verse], [Chorus], [Bridge]. Enables synced lyrics and translation."
-      />
-
-      <p class="text-sm text-[var(--text-muted)]">
-        Lyrics are optional but enable word-level synced playback and automatic translation.
-      </p>
-
-      <div class="flex justify-between">
-        <Button variant="ghost" onClick={props.onBack}>
-          <ChevronLeft class="w-4 h-4" /> Back
-        </Button>
-        <Button onClick={props.onNext}>
-          Next
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-// ── Step: License ──────────────────────────────────────────────────
+// ── Step 4: License & Publish ──────────────────────────────────────
 
 const LicenseStep: Component<{
   formData: SongFormData
   onChange: (data: Partial<SongFormData>) => void
-  onNext: () => void
-  onBack: () => void
 }> = (props) => {
+  const langLabel = (code: string) =>
+    LANGUAGE_OPTIONS.find((o) => o.value === code)?.label ?? code
+
   return (
-    <div class="flex flex-col gap-4">
-      <div>
-        <label class="text-base font-medium text-[var(--text-primary)] mb-3 block">
-          License type <span class="text-[var(--accent-coral)]">*</span>
-        </label>
-        <div class="flex flex-col gap-2">
-          <For each={LICENSE_OPTIONS}>
-            {(option) => (
-              <button
-                type="button"
-                class={cn(
-                  'w-full text-left p-3 rounded-md border-2 transition-colors cursor-pointer',
-                  props.formData.license === option.value
-                    ? 'border-[var(--accent-blue)] bg-[var(--accent-blue)]/5'
-                    : 'border-[var(--bg-highlight)] hover:border-[var(--bg-highlight-hover)] bg-[var(--bg-highlight)]/50',
-                )}
-                onClick={() => props.onChange({ license: option.value })}
-              >
-                <p class="text-base font-medium text-[var(--text-primary)]">{option.label}</p>
-                <p class="text-sm text-[var(--text-secondary)] mt-0.5">{option.description}</p>
-              </button>
-            )}
-          </For>
-        </div>
+    <div class="flex flex-col gap-5">
+      {/* License options */}
+      <div class="flex flex-col gap-2">
+        <For each={LICENSE_OPTIONS}>
+          {(option) => (
+            <button
+              type="button"
+              class={cn(
+                'w-full text-left p-3 rounded-lg flex items-start gap-3 transition-colors cursor-pointer',
+                'border',
+                props.formData.license === option.value
+                  ? 'border-[var(--accent-blue)] bg-[var(--accent-blue)]/5'
+                  : 'border-[var(--border-subtle)] hover:border-[var(--border-default)] bg-[var(--bg-surface)]',
+              )}
+              onClick={() => props.onChange({ license: option.value })}
+            >
+              <div class={cn(
+                'w-4 h-4 rounded-full border-2 flex-shrink-0 mt-0.5 flex items-center justify-center',
+                props.formData.license === option.value
+                  ? 'border-[var(--accent-blue)]'
+                  : 'border-[var(--text-muted)]',
+              )}>
+                <Show when={props.formData.license === option.value}>
+                  <div class="w-2 h-2 rounded-full bg-[var(--accent-blue)]" />
+                </Show>
+              </div>
+              <div>
+                <p class="font-medium text-[var(--text-primary)]">{option.label}</p>
+                <p class="text-base text-[var(--text-muted)] mt-0.5">{option.description}</p>
+              </div>
+            </button>
+          )}
+        </For>
       </div>
 
+      {/* Rev share fields */}
       <Show when={props.formData.license !== 'non-commercial'}>
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <TextField
             label="Revenue share %"
             value={String(props.formData.revShare)}
@@ -546,31 +555,28 @@ const LicenseStep: Component<{
               if (!isNaN(n) && n >= 0 && n <= 100) props.onChange({ revShare: n })
             }}
             placeholder="10"
-            description="% of derivative revenue"
           />
           <TextField
-            label="License fee (WIP)"
+            label="License fee"
             value={props.formData.mintingFee}
             onChange={(v) => props.onChange({ mintingFee: v })}
             placeholder="0"
-            description="Fee to mint a license"
           />
         </div>
       </Show>
 
-      {/* Copyright attestation */}
+      {/* Attestation */}
       <label class={cn(
-        'flex items-start gap-3 p-3 rounded-md cursor-pointer',
-        'border-2 transition-colors',
+        'flex items-start gap-3 p-3 rounded-lg cursor-pointer border transition-colors',
         props.formData.attestation
           ? 'border-[var(--accent-blue)]/30 bg-[var(--accent-blue)]/5'
-          : 'border-[var(--bg-highlight)] hover:border-[var(--bg-highlight-hover)]',
+          : 'border-[var(--border-subtle)] hover:border-[var(--border-default)]',
       )}>
         <div class={cn(
-          'w-5 h-5 rounded-md border-2 flex-shrink-0 mt-0.5 flex items-center justify-center transition-colors',
+          'w-4 h-4 rounded flex-shrink-0 mt-0.5 flex items-center justify-center transition-colors',
           props.formData.attestation
-            ? 'bg-[var(--accent-blue)] border-[var(--accent-blue)]'
-            : 'border-[var(--text-muted)]',
+            ? 'bg-[var(--accent-blue)]'
+            : 'border-2 border-[var(--text-muted)]',
         )}>
           <Show when={props.formData.attestation}>
             <Check class="w-3 h-3 text-white" />
@@ -580,8 +586,7 @@ const LicenseStep: Component<{
           <p class="text-base font-medium text-[var(--text-primary)]">
             I own or have the rights to distribute this work
           </p>
-          <p class="text-sm text-[var(--text-secondary)] mt-0.5">
-            By publishing, you confirm you hold the copyright or a valid license for this content.
+          <p class="text-base text-[var(--text-muted)] mt-0.5">
             False claims may result in a Story Protocol dispute and removal.
           </p>
         </div>
@@ -593,110 +598,72 @@ const LicenseStep: Component<{
         />
       </label>
 
-      <div class="flex justify-between">
-        <Button variant="ghost" onClick={props.onBack}>
-          <ChevronLeft class="w-4 h-4" /> Back
-        </Button>
-        <Button disabled={!props.formData.attestation} onClick={props.onNext}>
-          Review
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-// ── Step: Review ───────────────────────────────────────────────────
-
-const ReviewStep: Component<{
-  formData: SongFormData
-  onBack: () => void
-  onPublish: () => void
-}> = (props) => {
-  const langLabel = (code: string) =>
-    LANGUAGE_OPTIONS.find((o) => o.value === code)?.label ?? code
-
-  const licenseLabel = (type: LicenseType) =>
-    LICENSE_OPTIONS.find((o) => o.value === type)?.label ?? type
-
-  return (
-    <div class="flex flex-col gap-4">
-      <div class="flex gap-4">
-        <Show when={props.formData.coverFile}>
-          {(file) => (
-            <img
-              src={URL.createObjectURL(file())}
-              alt="Cover"
-              class="w-20 h-20 rounded-md object-cover flex-shrink-0"
-            />
-          )}
-        </Show>
-        <div class="flex-1 min-w-0">
-          <h3 class="text-lg font-semibold text-[var(--text-primary)] truncate">
-            {props.formData.title || 'Untitled'}
-          </h3>
-          <p class="text-base text-[var(--text-secondary)]">{props.formData.artist}</p>
-          <Show when={props.formData.album}>
-            <p class="text-sm text-[var(--text-muted)]">{props.formData.album}</p>
+      {/* Review summary */}
+      <div class="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4">
+        <div class="flex gap-3 items-center mb-3">
+          <Show when={props.formData.coverFile}>
+            {(file) => (
+              <img
+                src={URL.createObjectURL(file())}
+                alt="Cover"
+                class="w-10 h-10 rounded-md object-cover flex-shrink-0"
+              />
+            )}
           </Show>
-        </div>
-      </div>
-
-      <div class="space-y-2 text-base">
-        <div class="flex justify-between py-1.5 border-b border-[var(--bg-highlight)]">
-          <span class="text-[var(--text-muted)]">Genre</span>
-          <span class="text-[var(--text-primary)]">
-            {GENRE_OPTIONS.find((o) => o.value === props.formData.genre)?.label ?? 'Not set'}
-          </span>
-        </div>
-        <div class="flex justify-between py-1.5 border-b border-[var(--bg-highlight)]">
-          <span class="text-[var(--text-muted)]">Language</span>
-          <span class="text-[var(--text-primary)]">
-            {langLabel(props.formData.primaryLanguage)}
-            <Show when={props.formData.secondaryLanguage}>
-              {' / '}{langLabel(props.formData.secondaryLanguage)}
-            </Show>
-          </span>
-        </div>
-        <div class="flex justify-between py-1.5 border-b border-[var(--bg-highlight)]">
-          <span class="text-[var(--text-muted)]">Lyrics</span>
-          <span class="text-[var(--text-primary)]">
-            {props.formData.lyrics.trim() ? `${props.formData.lyrics.trim().split('\n').length} lines` : 'None'}
-          </span>
-        </div>
-        <div class="flex justify-between py-1.5 border-b border-[var(--bg-highlight)]">
-          <span class="text-[var(--text-muted)]">License</span>
-          <span class="text-[var(--text-primary)]">{licenseLabel(props.formData.license)}</span>
-        </div>
-        <Show when={props.formData.license !== 'non-commercial'}>
-          <div class="flex justify-between py-1.5 border-b border-[var(--bg-highlight)]">
-            <span class="text-[var(--text-muted)]">Rev share</span>
-            <span class="text-[var(--text-primary)]">{props.formData.revShare}%</span>
+          <Show when={!props.formData.coverFile}>
+            <div class="w-10 h-10 rounded-md bg-[var(--bg-elevated)] flex-shrink-0" />
+          </Show>
+          <div class="min-w-0">
+            <p class="font-semibold text-[var(--text-primary)] truncate">
+              {props.formData.title || 'Untitled'}
+            </p>
+            <p class="text-base text-[var(--text-secondary)] truncate">
+              {props.formData.artist}
+            </p>
           </div>
-        </Show>
-        <div class="flex justify-between py-1.5 border-b border-[var(--bg-highlight)]">
-          <span class="text-[var(--text-muted)]">Audio</span>
-          <span class="text-[var(--text-primary)]">
-            {props.formData.audioFile?.name ?? '—'} ({formatFileSize(props.formData.audioFile?.size ?? 0)})
-          </span>
         </div>
-        <div class="flex justify-between py-1.5">
-          <span class="text-[var(--text-muted)]">Instrumental</span>
-          <span class="text-[var(--text-primary)]">
-            {props.formData.instrumentalFile
-              ? `${props.formData.instrumentalFile.name} (${formatFileSize(props.formData.instrumentalFile.size)})`
-              : 'None'}
-          </span>
+        <div class="border-t border-[var(--bg-elevated)] pt-3 space-y-1.5 text-base">
+          <div class="flex justify-between">
+            <span class="text-[var(--text-muted)]">Genre</span>
+            <span class="text-[var(--text-primary)]">
+              {GENRE_OPTIONS.find((o) => o.value === props.formData.genre)?.label ?? '—'}
+            </span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-[var(--text-muted)]">Language</span>
+            <span class="text-[var(--text-primary)]">
+              {langLabel(props.formData.primaryLanguage) || '—'}
+              <Show when={props.formData.secondaryLanguage}>
+                {` / ${langLabel(props.formData.secondaryLanguage)}`}
+              </Show>
+            </span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-[var(--text-muted)]">Lyrics</span>
+            <span class="text-[var(--text-primary)]">
+              {props.formData.lyrics.trim() ? `${props.formData.lyrics.trim().split('\n').length} lines` : '—'}
+            </span>
+          </div>
+          <Show when={props.formData.license !== 'non-commercial'}>
+            <div class="flex justify-between">
+              <span class="text-[var(--text-muted)]">License</span>
+              <span class="text-[var(--text-primary)]">
+                {LICENSE_OPTIONS.find((o) => o.value === props.formData.license)?.label} · {props.formData.revShare}%
+              </span>
+            </div>
+          </Show>
+          <div class="flex justify-between">
+            <span class="text-[var(--text-muted)]">Song</span>
+            <span class="text-[var(--text-primary)]">
+              {props.formData.audioFile?.name ?? '—'}
+              <Show when={props.formData.audioFile}>
+                {` · ${formatFileSize(props.formData.audioFile!.size)}`}
+              </Show>
+            </span>
+          </div>
         </div>
       </div>
 
-      <div class="flex justify-between pt-2">
-        <Button variant="ghost" onClick={props.onBack}>
-          <ChevronLeft class="w-4 h-4" /> Back
-        </Button>
-        <Button onClick={props.onPublish}>
-          Publish Song
-        </Button>
-      </div>
     </div>
   )
 }
@@ -725,7 +692,7 @@ const PublishingStep: Component<{ progress?: number }> = (props) => {
             style={{ width: `${props.progress ?? 0}%` }}
           />
         </div>
-        <p class="text-sm text-[var(--text-muted)] text-center mt-1">{props.progress ?? 0}%</p>
+        <p class="text-base text-[var(--text-muted)] text-center mt-1">{props.progress ?? 0}%</p>
       </div>
     </div>
   )
@@ -739,16 +706,16 @@ const SuccessStep: Component<{
 }> = (props) => {
   return (
     <div class="flex flex-col items-center justify-center py-12 gap-4">
-      <div class="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center">
-        <Check class="w-8 h-8 text-green-400" />
+      <div class="w-14 h-14 rounded-full bg-green-500/10 flex items-center justify-center">
+        <Check class="w-7 h-7 text-green-400" />
       </div>
-      <h2 class="text-xl font-semibold text-[var(--text-primary)]">Published!</h2>
-      <p class="text-base text-[var(--text-secondary)] text-center max-w-sm">
+      <h2 class="text-lg font-semibold text-[var(--text-primary)]">Published!</h2>
+      <p class="text-[var(--text-secondary)] text-center max-w-sm">
         Your song is now registered as an IP Asset on Story Protocol and available on IPFS.
       </p>
       <Show when={props.result}>
         {(r) => (
-          <div class="w-full space-y-1 text-sm bg-[var(--bg-highlight)] p-3 rounded-md font-mono">
+          <div class="w-full space-y-1 text-base bg-[var(--bg-elevated)] p-3 rounded-lg font-mono">
             <p class="text-[var(--text-muted)]">IP ID: <span class="text-[var(--text-secondary)]">{r().ipId}</span></p>
             <p class="text-[var(--text-muted)]">Token: <span class="text-[var(--text-secondary)]">{r().tokenId}</span></p>
             <p class="text-[var(--text-muted)]">CID: <span class="text-[var(--text-secondary)]">{r().audioCid}</span></p>
@@ -771,11 +738,11 @@ const ErrorStep: Component<{
 }> = (props) => {
   return (
     <div class="flex flex-col items-center justify-center py-12 gap-4">
-      <div class="w-16 h-16 rounded-full bg-[var(--accent-coral)]/10 flex items-center justify-center">
-        <Warning class="w-8 h-8 text-[var(--accent-coral)]" />
+      <div class="w-14 h-14 rounded-full bg-[var(--accent-coral)]/10 flex items-center justify-center">
+        <Warning class="w-7 h-7 text-[var(--accent-coral)]" />
       </div>
-      <h2 class="text-xl font-semibold text-[var(--text-primary)]">Publishing failed</h2>
-      <p class="text-base text-[var(--accent-coral)] text-center max-w-sm">
+      <h2 class="text-lg font-semibold text-[var(--text-primary)]">Publishing failed</h2>
+      <p class="text-[var(--accent-coral)] text-center max-w-sm">
         {props.error || 'Something went wrong. Please try again.'}
       </p>
       <Button variant="secondary" onClick={props.onBack}>Try again</Button>
@@ -783,72 +750,91 @@ const ErrorStep: Component<{
   )
 }
 
-// ── Step index mapping ─────────────────────────────────────────────
+// ── Step headers ──────────────────────────────────────────────────
 
-const PUBLISH_STEPS: PublishStep[] = ['upload', 'details', 'lyrics', 'license', 'review']
+const STEP_CONFIG: Record<string, { title: string; subtitle: string }> = {
+  song: { title: 'Your Song', subtitle: 'Upload your track and set the basics' },
+  canvas: { title: 'Canvas', subtitle: 'Add a looping video that plays behind your cover art' },
+  details: { title: 'Details', subtitle: 'Language and lyrics for translation support' },
+  license: { title: 'License & Publish', subtitle: 'Choose how others can use your music' },
+}
+
+const PUBLISH_STEPS: PublishStep[] = ['song', 'canvas', 'details', 'license']
 
 // ── Main Component ─────────────────────────────────────────────────
 
 export const SongPublishForm: Component<SongPublishFormProps> = (props) => {
   const stepIndex = createMemo(() => PUBLISH_STEPS.indexOf(props.step))
+  const config = createMemo(() => STEP_CONFIG[props.step])
+  const isFormStep = createMemo(() => stepIndex() >= 0)
+
+  const nextDisabled = createMemo(() => {
+    switch (props.step) {
+      case 'song':
+        return !props.formData.title.trim()
+          || !props.formData.artist.trim()
+          || !props.formData.audioFile
+          || !props.formData.instrumentalFile
+      case 'details':
+        return !props.formData.primaryLanguage
+      case 'license':
+        return !props.formData.attestation
+      default:
+        return false
+    }
+  })
 
   return (
-    <div class={cn('w-full max-w-lg mx-auto', props.class)}>
-      {/* Stepper — hidden during terminal states */}
-      <Show when={stepIndex() >= 0}>
-        <Stepper steps={5} currentStep={stepIndex()} showLabels={false} class="mb-6" />
+    <div class={cn('w-full px-4 pb-24 [&_.text-base]:text-base', props.class)}>
+      {/* Progress bar — thin segments */}
+      <Show when={isFormStep()}>
+        <div class="flex gap-1.5 mb-5">
+          <For each={PUBLISH_STEPS}>
+            {(_, i) => (
+              <div class={cn(
+                'h-1 flex-1 rounded-full transition-colors',
+                i() <= stepIndex() ? 'bg-[var(--accent-blue)]' : 'bg-[var(--bg-elevated)]',
+              )} />
+            )}
+          </For>
+        </div>
       </Show>
 
-      {/* Header */}
-      <div class="mb-4">
-        <h1 class="text-xl font-semibold text-[var(--text-primary)]">Publish Song</h1>
-        <p class="text-base text-[var(--text-secondary)]">
-          Upload and register your music as an IP Asset
-        </p>
-      </div>
+      {/* Step header */}
+      <Show when={config()}>
+        {(cfg) => (
+          <div class="mb-5">
+            <div class="flex items-center justify-between">
+              <h1 class="text-xl font-semibold text-[var(--text-primary)]">{cfg().title}</h1>
+              <Show when={props.step === 'canvas' && props.onSkip}>
+                <button
+                  type="button"
+                  class="text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors cursor-pointer"
+                  onClick={props.onSkip}
+                >
+                  Skip
+                </button>
+              </Show>
+            </div>
+            <p class="text-[var(--text-secondary)]">{cfg().subtitle}</p>
+          </div>
+        )}
+      </Show>
 
-      <Show when={props.step === 'upload'}>
-        <UploadStep
-          formData={props.formData}
-          copyrightCheck={props.copyrightCheck}
-          onChange={props.onFormChange}
-          onNext={props.onNext}
-        />
+      <Show when={props.step === 'song'}>
+        <SongStep formData={props.formData} onChange={props.onFormChange} />
+      </Show>
+
+      <Show when={props.step === 'canvas'}>
+        <CanvasStep formData={props.formData} onChange={props.onFormChange} />
       </Show>
 
       <Show when={props.step === 'details'}>
-        <DetailsStep
-          formData={props.formData}
-          onChange={props.onFormChange}
-          onNext={props.onNext}
-          onBack={props.onBack}
-        />
-      </Show>
-
-      <Show when={props.step === 'lyrics'}>
-        <LyricsStep
-          formData={props.formData}
-          onChange={props.onFormChange}
-          onNext={props.onNext}
-          onBack={props.onBack}
-        />
+        <DetailsStep formData={props.formData} onChange={props.onFormChange} />
       </Show>
 
       <Show when={props.step === 'license'}>
-        <LicenseStep
-          formData={props.formData}
-          onChange={props.onFormChange}
-          onNext={props.onNext}
-          onBack={props.onBack}
-        />
-      </Show>
-
-      <Show when={props.step === 'review'}>
-        <ReviewStep
-          formData={props.formData}
-          onBack={props.onBack}
-          onPublish={props.onPublish}
-        />
+        <LicenseStep formData={props.formData} onChange={props.onFormChange} />
       </Show>
 
       <Show when={props.step === 'publishing'}>
@@ -861,6 +847,29 @@ export const SongPublishForm: Component<SongPublishFormProps> = (props) => {
 
       <Show when={props.step === 'error'}>
         <ErrorStep error={props.error} onBack={props.onBack} />
+      </Show>
+
+      {/* Footer — fixed to viewport bottom */}
+      <Show when={isFormStep()}>
+        <div class="fixed bottom-0 left-0 right-0 bg-[var(--bg-page)] border-t border-[var(--bg-elevated)] px-4 pt-3 pb-5 flex items-center gap-3">
+          <Show when={stepIndex() > 0} fallback={<div class="flex-1" />}>
+            <Button variant="secondary" onClick={props.onBack} class="flex-1">
+              Back
+            </Button>
+          </Show>
+          <Show
+            when={props.step !== 'license'}
+            fallback={
+              <Button disabled={nextDisabled()} onClick={props.onPublish} class="flex-1">
+                Publish Song
+              </Button>
+            }
+          >
+            <Button disabled={nextDisabled()} onClick={props.onNext} class="flex-1">
+              Next
+            </Button>
+          </Show>
+        </div>
       </Show>
     </div>
   )

@@ -1,10 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { Alert } from 'react-native';
 import { useLitBridge } from './LitProvider';
 
 const AUTH_SERVICE_BASE_URL = 'https://naga-dev-auth-service.getlit.dev';
-const APP_SCHEME = 'litrnpoc';
 const STORAGE_KEY_PKP = 'heaven:pkpInfo';
 const STORAGE_KEY_AUTH = 'heaven:authData';
 
@@ -20,14 +19,65 @@ export interface AuthData {
   accessToken?: string;
 }
 
+function normalizeBigInts(value: unknown): unknown {
+  if (typeof value === 'bigint') {
+    const asNumber = Number(value);
+    return Number.isSafeInteger(asNumber) ? asNumber : value.toString();
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeBigInts(item));
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, normalizeBigInts(v)]);
+    return Object.fromEntries(entries);
+  }
+
+  return value;
+}
+
+function normalizeAuthData(raw: unknown): AuthData {
+  const normalized = normalizeBigInts(raw) as Record<string, unknown> | null;
+  const authMethodType = Number(normalized?.authMethodType);
+  if (!Number.isFinite(authMethodType)) {
+    throw new Error('Invalid auth method type returned from auth bridge');
+  }
+
+  const authMethodId = String(normalized?.authMethodId ?? '');
+  const accessToken = normalized?.accessToken == null ? undefined : String(normalized.accessToken);
+
+  return {
+    authMethodType,
+    authMethodId,
+    accessToken,
+  };
+}
+
+function normalizePkpInfo(raw: unknown): PKPInfo {
+  const normalized = normalizeBigInts(raw) as Record<string, unknown> | null;
+  const pubkey = String(normalized?.pubkey ?? normalized?.publicKey ?? '');
+  if (!pubkey) {
+    throw new Error('Missing PKP public key');
+  }
+
+  return {
+    pubkey,
+    ethAddress: normalized?.ethAddress == null ? undefined : String(normalized.ethAddress),
+    tokenId: normalized?.tokenId == null ? undefined : String(normalized.tokenId),
+  };
+}
+
 interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
+  isNewUser: boolean;
   pkpInfo: PKPInfo | null;
   authData: AuthData | null;
   register: () => Promise<void>;
   authenticate: () => Promise<void>;
   createAuthContext: () => Promise<any>;
+  completeOnboarding: () => void;
   logout: () => Promise<void>;
 }
 
@@ -38,8 +88,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [pkpInfo, setPkpInfo] = useState<PKPInfo | null>(null);
   const [authData, setAuthData] = useState<AuthData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isNewUser, setIsNewUser] = useState(false);
 
-  // Restore persisted auth on mount
+  // Restore persisted auth on mount + check onboarding status
   useEffect(() => {
     (async () => {
       try {
@@ -47,8 +98,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           AsyncStorage.getItem(STORAGE_KEY_PKP),
           AsyncStorage.getItem(STORAGE_KEY_AUTH),
         ]);
-        if (storedPkp) setPkpInfo(JSON.parse(storedPkp));
-        if (storedAuth) setAuthData(JSON.parse(storedAuth));
+        if (storedPkp) {
+          const pkp = normalizePkpInfo(JSON.parse(storedPkp));
+          setPkpInfo(pkp);
+
+          // Check if onboarding was completed
+          if (pkp.ethAddress) {
+            const onboardingStatus = await AsyncStorage.getItem(
+              `heaven:onboarding:${pkp.ethAddress.toLowerCase()}`
+            );
+            if (onboardingStatus !== 'complete') {
+              // User registered but didn't finish onboarding
+              setIsNewUser(true);
+            }
+          }
+        }
+        if (storedAuth) {
+          setAuthData(normalizeAuthData(JSON.parse(storedAuth)));
+        }
       } catch (err) {
         console.error('[Auth] Failed to restore:', err);
       } finally {
@@ -59,62 +126,74 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const persistAuth = async (pkp: PKPInfo | null, auth: AuthData | null) => {
     if (pkp) {
-      await AsyncStorage.setItem(STORAGE_KEY_PKP, JSON.stringify(pkp));
+      await AsyncStorage.setItem(STORAGE_KEY_PKP, JSON.stringify(normalizeBigInts(pkp)));
     } else {
       await AsyncStorage.removeItem(STORAGE_KEY_PKP);
     }
     if (auth) {
-      await AsyncStorage.setItem(STORAGE_KEY_AUTH, JSON.stringify(auth));
+      await AsyncStorage.setItem(STORAGE_KEY_AUTH, JSON.stringify(normalizeBigInts(auth)));
     } else {
       await AsyncStorage.removeItem(STORAGE_KEY_AUTH);
     }
   };
 
   const register = useCallback(async () => {
-    if (!bridge || !isReady) throw new Error('Lit bridge not ready');
+    if (!bridge || !isReady) {
+      Alert.alert('Not Ready', 'Lit engine is still loading. Please wait a moment and try again.');
+      return;
+    }
 
-    const result = await bridge.sendRequest('registerAndMintPKP', {
-      authServiceBaseUrl: AUTH_SERVICE_BASE_URL,
-      scopes: ['sign-anything'],
-    }, 120000);
+    try {
+      const result = await bridge.sendRequest('registerAndMintPKP', {
+        authServiceBaseUrl: AUTH_SERVICE_BASE_URL,
+        scopes: ['sign-anything'],
+      }, 120000);
 
-    const pkp: PKPInfo = result.pkpInfo;
-    const auth: AuthData = result.authData || {
-      authMethodType: 8,
-      authMethodId: result.webAuthnPublicKey,
-    };
+      const pkp = normalizePkpInfo(result.pkpInfo);
+      const auth = normalizeAuthData(result.authData);
 
-    setPkpInfo(pkp);
-    setAuthData(auth);
-    await persistAuth(pkp, auth);
+      setPkpInfo(pkp);
+      setAuthData(auth);
+      await persistAuth(pkp, auth);
+      setIsNewUser(true); // Trigger onboarding flow
+    } catch (err: any) {
+      console.error('[Auth] Registration failed:', err);
+      Alert.alert('Registration Failed', err?.message || 'Something went wrong');
+    }
   }, [bridge, isReady]);
 
   const authenticate = useCallback(async () => {
-    if (!bridge || !isReady) throw new Error('Lit bridge not ready');
+    if (!bridge || !isReady) {
+      Alert.alert('Not Ready', 'Lit engine is still loading. Please wait a moment and try again.');
+      return;
+    }
 
-    const result = await bridge.sendRequest('authenticate', {
-      authServiceBaseUrl: AUTH_SERVICE_BASE_URL,
-    }, 120000);
+    try {
+      const result = await bridge.sendRequest('authenticate', {
+        authServiceBaseUrl: AUTH_SERVICE_BASE_URL,
+      }, 120000);
 
-    const auth: AuthData = {
-      authMethodType: result.authMethodType,
-      authMethodId: result.authMethodId,
-      accessToken: result.accessToken,
-    };
-    setAuthData(auth);
+      const auth = normalizeAuthData(result);
+      setAuthData(auth);
 
-    // Look up PKPs for this auth
-    const pkpsResult = await bridge.sendRequest('viewPKPsByAuthData', {
-      authData: { authMethodType: auth.authMethodType, authMethodId: auth.authMethodId },
-      pagination: { limit: 1, offset: 0 },
-    });
+      // Look up PKPs for this auth
+      const pkpsResult = await bridge.sendRequest('viewPKPsByAuthData', {
+        authData: { authMethodType: auth.authMethodType, authMethodId: auth.authMethodId },
+        pagination: { limit: 1, offset: 0 },
+      });
 
-    if (pkpsResult.pkps?.length > 0) {
-      const pkp: PKPInfo = { pubkey: pkpsResult.pkps[0].pubkey };
-      setPkpInfo(pkp);
-      await persistAuth(pkp, auth);
-    } else {
-      await persistAuth(null, auth);
+      if (pkpsResult.pkps?.length > 0) {
+        const pkp = normalizePkpInfo(pkpsResult.pkps[0]);
+        setPkpInfo(pkp);
+        await persistAuth(pkp, auth);
+      } else {
+        await persistAuth(null, auth);
+      }
+
+      Alert.alert('Welcome back', 'You are now logged in.');
+    } catch (err: any) {
+      console.error('[Auth] Authentication failed:', err);
+      Alert.alert('Login Failed', err?.message || 'Something went wrong');
     }
   }, [bridge, isReady]);
 
@@ -140,9 +219,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return result.authContext;
   }, [bridge, isReady, authData, pkpInfo]);
 
+  const completeOnboarding = useCallback(() => {
+    setIsNewUser(false);
+  }, []);
+
   const logout = useCallback(async () => {
     setPkpInfo(null);
     setAuthData(null);
+    setIsNewUser(false);
     await persistAuth(null, null);
   }, []);
 
@@ -151,11 +235,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         isAuthenticated: !!pkpInfo && !!authData,
         isLoading,
+        isNewUser,
         pkpInfo,
         authData,
         register,
         authenticate,
         createAuthContext: createAuthCtx,
+        completeOnboarding,
         logout,
       }}
     >

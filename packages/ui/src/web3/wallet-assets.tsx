@@ -13,7 +13,6 @@ export interface WalletAsset {
   chainBadge?: JSX.Element
   balance: string
   balanceUSD: string
-  amount: string
 }
 
 export interface ConnectedWallet {
@@ -55,7 +54,7 @@ const AssetRow: Component<{ asset: WalletAsset }> = (props) => (
     </div>
     <div class="flex flex-col items-end flex-shrink-0">
       <div class="text-base font-medium text-[var(--text-primary)]">{props.asset.balanceUSD}</div>
-      <div class="text-base text-[var(--text-muted)]">{props.asset.amount}</div>
+      <div class="text-base text-[var(--text-muted)]">{props.asset.balance}</div>
     </div>
   </div>
 )
@@ -73,7 +72,7 @@ const WalletView: Component<{
     {/* Header with balance */}
     <div class="flex flex-col items-center gap-6 px-4 py-12">
       <div class="flex flex-col items-center gap-3">
-        <div class="text-sm text-[var(--text-muted)]">Total Balance</div>
+        <div class="text-base text-[var(--text-muted)]">Total Balance</div>
         <div class="text-6xl font-bold text-[var(--text-primary)]">{props.totalBalance}</div>
       </div>
       <WalletAddress address={props.address} variant="compact" class="w-full max-w-lg" />
@@ -103,7 +102,7 @@ const WalletView: Component<{
       <Show when={props.assets.length > 0} fallback={
         <div class="text-center py-8 text-[var(--text-muted)]">No assets found</div>
       }>
-        <div class="flex flex-col gap-1">
+        <div class="flex flex-col divide-y divide-[var(--border-subtle)] border-y border-[var(--border-subtle)]">
           <For each={props.assets}>
             {(asset) => <AssetRow asset={asset} />}
           </For>
@@ -127,7 +126,7 @@ export const WalletAssets: Component<WalletAssetsProps> = (props) => {
         <div class="flex items-center gap-1 mx-auto mt-6 p-1 rounded-md bg-[var(--bg-elevated)]">
           <button
             class={cn(
-              'px-6 py-2 rounded-md text-sm font-medium transition-colors',
+              'px-6 py-2 rounded-md text-base font-medium transition-colors',
               activeTab() === 'heaven'
                 ? 'bg-[var(--bg-highlight)] text-[var(--text-primary)]'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
@@ -138,7 +137,7 @@ export const WalletAssets: Component<WalletAssetsProps> = (props) => {
           </button>
           <button
             class={cn(
-              'px-6 py-2 rounded-md text-sm font-medium transition-colors',
+              'px-6 py-2 rounded-md text-base font-medium transition-colors',
               activeTab() === 'wallet'
                 ? 'bg-[var(--bg-highlight)] text-[var(--text-primary)]'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'

@@ -25,6 +25,7 @@ export const Idle: Story = {
   args: {
     status: 'idle',
     logoSrc: '/images/heaven.png',
+    tagline: 'Karaoke to learn a language, make friends, and date.',
     onSignIn: () => console.log('Sign in clicked'),
     onRegister: () => console.log('Register clicked'),
     onConnectWallet: () => console.log('Connect wallet clicked'),
@@ -35,6 +36,7 @@ export const IdlePasskeyOnly: Story = {
   args: {
     status: 'idle',
     logoSrc: '/images/heaven.png',
+    tagline: 'Karaoke to learn a language, make friends, and date.',
     onSignIn: () => console.log('Sign in clicked'),
     onRegister: () => console.log('Register clicked'),
   },

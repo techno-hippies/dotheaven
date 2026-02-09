@@ -64,7 +64,7 @@ export const PostDetailView: Component<PostDetailViewProps> = (props) => {
           <Show
             when={props.comments.length > 0}
             fallback={
-              <p class="text-sm text-[var(--text-muted)] py-4 text-center">No comments yet</p>
+              <p class="text-base text-[var(--text-muted)] py-4 text-center">No comments yet</p>
             }
           >
             <CommentSection>

@@ -32,7 +32,7 @@ export const WithDuration: Story = {
     title: 'Electric Hearts',
     subtitle: 'Neon Pulse',
     cover: <AlbumCover size="sm" src="https://picsum.photos/seed/cover2/96/96" />,
-    trailing: <span class="text-sm text-[var(--text-muted)]">4:18</span>,
+    trailing: <span class="text-base text-[var(--text-muted)]">4:18</span>,
     onClick: () => console.log('clicked'),
   },
 }
@@ -42,7 +42,7 @@ export const WithTimestamp: Story = {
     title: 'Summer Waves',
     subtitle: 'Ocean Blue',
     cover: <AlbumCover size="sm" src="https://picsum.photos/seed/cover3/96/96" />,
-    trailing: <span class="text-sm text-[var(--text-muted)]">2m ago</span>,
+    trailing: <span class="text-base text-[var(--text-muted)]">2m ago</span>,
     onClick: () => console.log('clicked'),
   },
 }
@@ -71,6 +71,6 @@ export const NonClickable: Story = {
     title: 'Crystal Clear',
     subtitle: 'Aqua Dreams',
     cover: <AlbumCover size="sm" src="https://picsum.photos/seed/cover6/96/96" />,
-    trailing: <span class="text-sm text-[var(--text-muted)]">5:10</span>,
+    trailing: <span class="text-base text-[var(--text-muted)]">5:10</span>,
   },
 }

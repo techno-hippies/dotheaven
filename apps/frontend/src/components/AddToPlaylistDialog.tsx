@@ -311,10 +311,10 @@ export const AddToPlaylistDialog: Component<AddToPlaylistDialogProps> = (props) 
             <div class="flex flex-col gap-1">
               {/* Create New Playlist */}
               <button
-                class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--bg-highlight)] transition-colors text-left"
+                class="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-[var(--bg-highlight)] transition-colors text-left"
                 onClick={() => setShowCreate(true)}
               >
-                <div class="w-10 h-10 rounded-lg bg-[var(--bg-highlight)] flex items-center justify-center text-[var(--text-muted)]">
+                <div class="w-10 h-10 rounded-md bg-[var(--bg-highlight)] flex items-center justify-center text-[var(--text-muted)]">
                   <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                     <path d="M12 5v14M5 12h14" />
                   </svg>
@@ -323,14 +323,14 @@ export const AddToPlaylistDialog: Component<AddToPlaylistDialogProps> = (props) 
               </button>
 
               <Show when={playlistsQuery.isLoading}>
-                <div class="px-3 py-4 text-center text-[var(--text-muted)] text-sm">Loading playlists...</div>
+                <div class="px-3 py-4 text-center text-[var(--text-muted)] text-base">Loading playlists...</div>
               </Show>
 
               <Show when={!playlistsQuery.isLoading}>
                 <For each={playlists()}>
                   {(pl) => (
                     <button
-                      class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--bg-highlight)] transition-colors text-left"
+                      class="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-[var(--bg-highlight)] transition-colors text-left"
                       onClick={() => handleAddToPlaylist(pl)}
                     >
                       <AlbumCover
@@ -339,7 +339,7 @@ export const AddToPlaylistDialog: Component<AddToPlaylistDialogProps> = (props) 
                         icon="playlist"
                       />
                       <div class="flex-1 min-w-0">
-                        <p class="text-[var(--text-primary)] text-sm truncate">{pl.name}</p>
+                        <p class="text-[var(--text-primary)] text-base truncate">{pl.name}</p>
                         <p class="text-[var(--text-muted)] text-xs">{pl.trackCount} songs</p>
                       </div>
                     </button>
@@ -348,7 +348,7 @@ export const AddToPlaylistDialog: Component<AddToPlaylistDialogProps> = (props) 
               </Show>
 
               <Show when={!playlistsQuery.isLoading && playlists().length === 0}>
-                <div class="px-3 py-4 text-center text-[var(--text-muted)] text-sm">
+                <div class="px-3 py-4 text-center text-[var(--text-muted)] text-base">
                   No playlists yet. Create one above.
                 </div>
               </Show>

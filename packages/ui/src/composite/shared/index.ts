@@ -1,4 +1,3 @@
-export { DownloadAppCta, type DownloadAppCtaProps, type DetectedPlatform } from './download-app-cta'
 export { FollowButton, type FollowButtonProps } from './follow-button'
 export { ListItem, type ListItemProps } from './list-item'
 export { MediaRow, type MediaRowProps } from './media-row'

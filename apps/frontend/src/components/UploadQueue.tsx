@@ -144,9 +144,9 @@ export const UploadQueuePanel: Component<UploadQueuePanelProps> = (props) => {
                       </Show>
                     </div>
                   </div>
-                  <div class="text-[var(--text-muted)] text-sm mt-0.5">{job.artist}</div>
+                  <div class="text-[var(--text-muted)] text-base mt-0.5">{job.artist}</div>
                   <Show when={isActive}>
-                    <div class="text-[var(--text-secondary)] text-sm mt-0.5">{STEP_LABELS[job.step]}</div>
+                    <div class="text-[var(--text-secondary)] text-base mt-0.5">{STEP_LABELS[job.step]}</div>
                     <ProgressBar value={progress} class="mt-1" />
                   </Show>
                   <Show when={isDone}>
@@ -157,7 +157,7 @@ export const UploadQueuePanel: Component<UploadQueuePanelProps> = (props) => {
                       <svg class="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
                       </svg>
-                      <span class="text-red-400 text-sm">{friendlyError(job.error)}</span>
+                      <span class="text-red-400 text-base">{friendlyError(job.error)}</span>
                     </div>
                   </Show>
                 </div>

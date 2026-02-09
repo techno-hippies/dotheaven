@@ -36,7 +36,7 @@ export const Checkbox: Component<CheckboxProps> = (props) => {
       <KCheckbox.Control
         class={cn(
           'flex items-center justify-center w-5 h-5 rounded-sm border-2 transition-colors',
-          'border-[var(--bg-highlight)] bg-[var(--bg-elevated)]',
+          'border-[var(--border-default)] bg-[var(--bg-elevated)]',
           'group-data-[checked]:bg-[var(--accent-blue)] group-data-[checked]:border-[var(--accent-blue)]',
           'group-data-[disabled]:opacity-50 group-data-[disabled]:cursor-not-allowed',
         )}
@@ -47,7 +47,7 @@ export const Checkbox: Component<CheckboxProps> = (props) => {
       </KCheckbox.Control>
       <div class="flex flex-col gap-0.5">
         {local.label && (
-          <KCheckbox.Label class="text-sm text-[var(--text-primary)] leading-tight">
+          <KCheckbox.Label class="text-base text-[var(--text-primary)] leading-tight">
             {local.label}
           </KCheckbox.Label>
         )}

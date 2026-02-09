@@ -6,9 +6,9 @@ export const Toaster = () => (
     <For each={toasts()}>
       {(t) => (
         <div
-          class="px-4 py-2.5 rounded-lg text-sm font-medium shadow-lg pointer-events-auto animate-[fadeIn_0.2s_ease-out]"
+          class="px-4 py-2.5 rounded-lg text-base font-medium shadow-lg pointer-events-auto animate-[fadeIn_0.2s_ease-out]"
           classList={{
-            'bg-[var(--bg-elevated)] text-[var(--text-primary)] border border-[var(--bg-highlight)]': t.type === 'info',
+            'bg-[var(--bg-elevated)] text-[var(--text-primary)] border border-[var(--border-subtle)]': t.type === 'info',
             'bg-green-900/80 text-green-100 border border-green-700/50': t.type === 'success',
             'bg-red-900/80 text-red-100 border border-red-700/50': t.type === 'error',
           }}

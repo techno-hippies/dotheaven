@@ -215,7 +215,7 @@ export const AvailabilityPage: Story = {
           <span class="flex-1 text-base font-semibold text-[var(--text-primary)]">
             Availability
             <Show when={!accepting()}>
-              <span class="text-sm font-normal text-[var(--text-muted)] ml-2">(paused)</span>
+              <span class="text-base font-normal text-[var(--text-muted)] ml-2">(paused)</span>
             </Show>
           </span>
           <Switch checked={accepting()} onChange={setAccepting} />
@@ -225,7 +225,7 @@ export const AvailabilityPage: Story = {
         <div class={`flex-1 overflow-y-auto transition-opacity ${!accepting() ? 'opacity-60' : ''}`}>
           <div class="px-4 py-5">
             <Show when={!accepting()}>
-              <div class="mb-4 px-4 py-3 rounded-md bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-sm">
+              <div class="mb-4 px-4 py-3 rounded-md bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-base">
                 Bookings are paused. Toggle the switch above to accept new bookings.
               </div>
             </Show>

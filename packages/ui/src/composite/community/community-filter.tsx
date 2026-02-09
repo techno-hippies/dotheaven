@@ -16,8 +16,10 @@ import { createSignal, Show } from 'solid-js'
 import {
   Dialog,
   DialogContent,
+  DialogHeader,
+  DialogTitle,
   DialogBody,
-  DialogCloseButton,
+  DialogFooter,
 } from '../../primitives/dialog'
 import {
   Drawer,
@@ -28,12 +30,12 @@ import { Select, type SelectOption } from '../../primitives/select'
 import { Switch } from '../../primitives/switch'
 import { useIsMobile } from '../../lib/use-media-query'
 import { GENDER_OPTIONS, LEARNING_LANGUAGE_OPTIONS } from '../../constants/profile-options'
-import { X } from '../../icons'
 
 export interface CommunityFilters {
   gender?: string
   nativeLanguage?: string
   learningLanguage?: string
+  sameCity?: boolean
   verified?: boolean
 }
 
@@ -90,7 +92,7 @@ export const CommunityFilterDialog: Component<CommunityFilterProps> = (props) =>
   // Check if any filters are set
   const hasFilters = () => {
     const f = localFilters()
-    return !!(f.gender || f.nativeLanguage || f.learningLanguage || f.verified)
+    return !!(f.gender || f.nativeLanguage || f.learningLanguage || f.sameCity || f.verified)
   }
 
   // Shared filter content
@@ -98,7 +100,7 @@ export const CommunityFilterDialog: Component<CommunityFilterProps> = (props) =>
     <div class="flex flex-col gap-6">
       {/* Gender */}
       <div class="flex flex-col gap-2">
-        <label class="text-sm font-medium text-[var(--text-secondary)]">
+        <label class="text-base font-medium text-[var(--text-secondary)]">
           Gender
         </label>
         <Select
@@ -109,10 +111,10 @@ export const CommunityFilterDialog: Component<CommunityFilterProps> = (props) =>
         />
       </div>
 
-      {/* Native Language (speaks) */}
+      {/* Native Language */}
       <div class="flex flex-col gap-2">
-        <label class="text-sm font-medium text-[var(--text-secondary)]">
-          Speaks (Native)
+        <label class="text-base font-medium text-[var(--text-secondary)]">
+          Native Language
         </label>
         <Select
           options={LANGUAGE_FILTER_OPTIONS}
@@ -120,15 +122,12 @@ export const CommunityFilterDialog: Component<CommunityFilterProps> = (props) =>
           onChange={(opt) => setLocalFilters((f) => ({ ...f, nativeLanguage: opt?.value || undefined }))}
           placeholder="Any"
         />
-        <p class="text-xs text-[var(--text-muted)]">
-          Find native speakers of this language
-        </p>
       </div>
 
       {/* Learning Language */}
       <div class="flex flex-col gap-2">
-        <label class="text-sm font-medium text-[var(--text-secondary)]">
-          Learning
+        <label class="text-base font-medium text-[var(--text-secondary)]">
+          Learning Language
         </label>
         <Select
           options={LANGUAGE_FILTER_OPTIONS}
@@ -136,21 +135,24 @@ export const CommunityFilterDialog: Component<CommunityFilterProps> = (props) =>
           onChange={(opt) => setLocalFilters((f) => ({ ...f, learningLanguage: opt?.value || undefined }))}
           placeholder="Any"
         />
-        <p class="text-xs text-[var(--text-muted)]">
-          Find people learning this language
-        </p>
+      </div>
+
+      {/* Same City */}
+      <div class="flex items-center justify-between py-2">
+        <label class="text-base font-medium text-[var(--text-secondary)]">
+          Same City
+        </label>
+        <Switch
+          checked={localFilters().sameCity ?? false}
+          onChange={(checked) => setLocalFilters((f) => ({ ...f, sameCity: checked || undefined }))}
+        />
       </div>
 
       {/* Verified */}
       <div class="flex items-center justify-between py-2">
-        <div class="flex flex-col gap-0.5">
-          <label class="text-sm font-medium text-[var(--text-secondary)]">
-            Verified Only
-          </label>
-          <p class="text-xs text-[var(--text-muted)]">
-            Passport-verified identity
-          </p>
-        </div>
+        <label class="text-base font-medium text-[var(--text-secondary)]">
+          Verified
+        </label>
         <Switch
           checked={localFilters().verified ?? false}
           onChange={(checked) => setLocalFilters((f) => ({ ...f, verified: checked || undefined }))}
@@ -161,10 +163,10 @@ export const CommunityFilterDialog: Component<CommunityFilterProps> = (props) =>
 
   // Footer with Apply/Reset buttons
   const filterFooter = (): JSX.Element => (
-    <div class="flex gap-3">
+    <div class="flex gap-3 w-full">
       <Show when={hasFilters()}>
         <Button
-          variant="ghost"
+          variant="secondary"
           class="flex-1"
           onClick={handleReset}
         >
@@ -176,7 +178,7 @@ export const CommunityFilterDialog: Component<CommunityFilterProps> = (props) =>
         class="flex-1"
         onClick={handleApply}
       >
-        Apply Filters
+        Apply
       </Button>
     </div>
   )
@@ -188,20 +190,15 @@ export const CommunityFilterDialog: Component<CommunityFilterProps> = (props) =>
         // Desktop: Dialog
         <Dialog open={props.open} onOpenChange={handleOpenChange}>
           <DialogContent class="max-w-sm">
-            <div class="relative p-6 pb-4">
-              <DialogCloseButton class="absolute top-4 right-4 p-2 rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-highlight)] transition-colors cursor-pointer">
-                <X class="w-5 h-5" />
-              </DialogCloseButton>
-              <h2 class="text-lg font-semibold text-[var(--text-primary)]">
-                Filter Members
-              </h2>
-            </div>
+            <DialogHeader>
+              <DialogTitle>Filter Members</DialogTitle>
+            </DialogHeader>
             <DialogBody>
               {filterContent()}
-              <div class="mt-6">
-                {filterFooter()}
-              </div>
             </DialogBody>
+            <DialogFooter class="!justify-stretch">
+              {filterFooter()}
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       }
@@ -233,6 +230,7 @@ export function countActiveFilters(filters: CommunityFilters): number {
   if (filters.gender) count++
   if (filters.nativeLanguage) count++
   if (filters.learningLanguage) count++
+  if (filters.sameCity) count++
   if (filters.verified) count++
   return count
 }

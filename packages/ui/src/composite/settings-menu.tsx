@@ -64,7 +64,7 @@ const SettingsMenuRow: Component<{ item: SettingsMenuItem }> = (props) => {
           {item.label}
         </div>
         <Show when={item.description}>
-          <div class="text-sm text-[var(--text-muted)] truncate mt-0.5">
+          <div class="text-base text-[var(--text-muted)] truncate mt-0.5">
             {item.description}
           </div>
         </Show>
@@ -77,7 +77,7 @@ const SettingsMenuRow: Component<{ item: SettingsMenuItem }> = (props) => {
       <Show when={!item.right && isClickable}>
         <div class="flex items-center gap-2 flex-shrink-0">
           <Show when={item.value}>
-            <span class="text-sm text-[var(--text-muted)]">{item.value}</span>
+            <span class="text-base text-[var(--text-muted)]">{item.value}</span>
           </Show>
           <ChevronRight class="w-4 h-4 text-[var(--text-muted)]" />
         </div>
@@ -94,7 +94,7 @@ export const SettingsMenu: Component<SettingsMenuProps> = (props) => {
           {props.title}
         </h3>
       </Show>
-      <div class="rounded-md bg-[var(--bg-surface)] overflow-hidden divide-y divide-[var(--bg-highlight)]">
+      <div class="rounded-md bg-[var(--bg-surface)] overflow-hidden divide-y divide-[var(--border-subtle)]">
         <For each={props.items}>
           {(item) => <SettingsMenuRow item={item} />}
         </For>

@@ -5,7 +5,8 @@ import { AlbumCover } from './album-cover'
 import { Scrubber } from './scrubber'
 import { IconButton } from '../../primitives/icon-button'
 import { PlayButton } from '../../primitives/play-button'
-import { DotsThree } from '../../icons'
+import { DotsThree, MagnifyingGlass } from '../../icons'
+import { TextField } from '../../primitives/text-field'
 import type { TrackMenuActions } from './track-list'
 import {
   DropdownMenu,
@@ -41,6 +42,12 @@ export interface SidePlayerProps {
   track?: { id: string; title: string; artist: string; album: string; albumCover?: string; duration?: string }
   /** Direct callback for clicking the artist name */
   onArtistClick?: () => void
+  /** Search query value (controlled) */
+  searchQuery?: string
+  /** Callback when search query changes */
+  onSearchChange?: (query: string) => void
+  /** Callback when search is submitted (Enter key) */
+  onSearchSubmit?: (query: string) => void
 }
 
 /**
@@ -58,47 +65,23 @@ export interface SidePlayerProps {
 export const SidePlayer: Component<SidePlayerProps> = (props) => {
   return (
     <div class={cn('flex flex-col h-full', props.class)}>
-      {/* Menu bar above album art */}
-      <Show when={props.menuActions && props.track}>
-        <div class="flex items-center justify-end px-4 pt-3 pb-0">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              as={(triggerProps: any) => <IconButton {...triggerProps} variant="soft" size="md" />}
-              aria-label="More options"
-            >
-              <DotsThree class="w-5 h-5" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <Show when={props.menuActions?.onAddToPlaylist}>
-                <DropdownMenuItem onSelect={() => props.menuActions?.onAddToPlaylist?.(props.track!)}>
-                  Add to playlist
-                </DropdownMenuItem>
-              </Show>
-              <Show when={props.menuActions?.onAddToQueue}>
-                <DropdownMenuItem onSelect={() => props.menuActions?.onAddToQueue?.(props.track!)}>
-                  Add to queue
-                </DropdownMenuItem>
-              </Show>
-              <Show when={(props.menuActions?.onAddToPlaylist || props.menuActions?.onAddToQueue) && (props.menuActions?.onGoToArtist || props.menuActions?.onGoToAlbum)}>
-                <DropdownMenuSeparator />
-              </Show>
-              <Show when={props.menuActions?.onGoToArtist}>
-                <DropdownMenuItem onSelect={() => props.menuActions?.onGoToArtist?.(props.track!)}>
-                  Go to artist
-                </DropdownMenuItem>
-              </Show>
-              <Show when={props.menuActions?.onGoToAlbum}>
-                <DropdownMenuItem onSelect={() => props.menuActions?.onGoToAlbum?.(props.track!)}>
-                  Go to album
-                </DropdownMenuItem>
-              </Show>
-            </DropdownMenuContent>
-          </DropdownMenu>
+      {/* Search bar */}
+      <Show when={props.onSearchChange}>
+        <div class="px-4 pt-4 pb-2">
+          <TextField
+            value={props.searchQuery ?? ''}
+            onChange={(v) => props.onSearchChange?.(v)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') props.onSearchSubmit?.(props.searchQuery ?? '')
+            }}
+            placeholder="Search songs, people, rooms..."
+            icon={<MagnifyingGlass class="w-4 h-4" />}
+          />
         </div>
       </Show>
 
       {/* Album Art */}
-      <div class={cn("px-4", props.menuActions && props.track ? "pt-1" : "pt-4")}>
+      <div class="px-4 pt-2">
         <div class="w-full aspect-square rounded-md overflow-hidden bg-[var(--bg-elevated)]">
           <Show
             when={props.coverSrc}
@@ -121,9 +104,46 @@ export const SidePlayer: Component<SidePlayerProps> = (props) => {
 
       {/* Track Info */}
       <div class="px-4 pt-4 pb-2">
-        <h3 class="text-lg font-semibold text-[var(--text-primary)] truncate">
-          {props.title || 'No track playing'}
-        </h3>
+        <div class="flex items-center gap-2">
+          <h3 class="text-lg font-semibold text-[var(--text-primary)] truncate flex-1 min-w-0">
+            {props.title || 'No track playing'}
+          </h3>
+          <Show when={props.menuActions && props.track}>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                as={(triggerProps: any) => <IconButton {...triggerProps} variant="soft" size="sm" />}
+                aria-label="More options"
+              >
+                <DotsThree class="w-4 h-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <Show when={props.menuActions?.onAddToPlaylist}>
+                  <DropdownMenuItem onSelect={() => props.menuActions?.onAddToPlaylist?.(props.track!)}>
+                    Add to playlist
+                  </DropdownMenuItem>
+                </Show>
+                <Show when={props.menuActions?.onAddToQueue}>
+                  <DropdownMenuItem onSelect={() => props.menuActions?.onAddToQueue?.(props.track!)}>
+                    Add to queue
+                  </DropdownMenuItem>
+                </Show>
+                <Show when={(props.menuActions?.onAddToPlaylist || props.menuActions?.onAddToQueue) && (props.menuActions?.onGoToArtist || props.menuActions?.onGoToAlbum)}>
+                  <DropdownMenuSeparator />
+                </Show>
+                <Show when={props.menuActions?.onGoToArtist}>
+                  <DropdownMenuItem onSelect={() => props.menuActions?.onGoToArtist?.(props.track!)}>
+                    Go to artist
+                  </DropdownMenuItem>
+                </Show>
+                <Show when={props.menuActions?.onGoToAlbum}>
+                  <DropdownMenuItem onSelect={() => props.menuActions?.onGoToAlbum?.(props.track!)}>
+                    Go to album
+                  </DropdownMenuItem>
+                </Show>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </Show>
+        </div>
         <Show
           when={props.onArtistClick}
           fallback={

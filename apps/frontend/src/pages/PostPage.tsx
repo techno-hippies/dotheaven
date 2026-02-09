@@ -140,7 +140,7 @@ export const PostPage: Component = () => {
       authorName: `${c.author.slice(0, 8)}...`,
       children: (
         <div>
-          <p class="text-sm text-[var(--text-primary)]">{c.text}</p>
+          <p class="text-base text-[var(--text-primary)]">{c.text}</p>
           <span class="text-xs text-[var(--text-muted)]">{timeAgo(c.blockTimestamp)}</span>
         </div>
       ) as JSX.Element,

@@ -45,6 +45,14 @@ export interface LitDecryptParams {
   authContext: any;
 }
 
+function toJsonSafeValue(value: unknown): unknown {
+  if (typeof value === 'bigint') {
+    const asNumber = Number(value);
+    return Number.isSafeInteger(asNumber) ? asNumber : value.toString();
+  }
+  return value;
+}
+
 /**
  * Storage provider interface for native secure storage
  */
@@ -210,7 +218,7 @@ export class LitBridge {
    */
   private postToWebView(message: any): void {
     if (this.webViewRef) {
-      this.webViewRef.postMessage(JSON.stringify(message));
+      this.webViewRef.postMessage(JSON.stringify(message, (_key, value) => toJsonSafeValue(value)));
     }
   }
 

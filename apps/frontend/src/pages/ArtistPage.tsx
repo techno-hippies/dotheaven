@@ -143,9 +143,9 @@ export const ArtistPage: Component = () => {
     <Show when={!query.isLoading} fallback={
       <div class="h-full overflow-y-auto">
         {/* Skeleton loader */}
-        <div class="px-4 md:px-8 pt-4 md:pt-6 pb-4">
+        <div class="pb-4">
           {/* Hero skeleton */}
-          <div class="relative overflow-hidden rounded-2xl border border-[var(--bg-highlight)] h-[280px] md:h-[420px] bg-[var(--bg-elevated)] animate-pulse" />
+          <div class="relative overflow-hidden h-[280px] md:h-[420px] bg-[var(--bg-elevated)] animate-pulse" />
         </div>
         {/* Track list skeleton */}
         <div class="px-4 md:px-8 pb-2">
@@ -180,8 +180,8 @@ export const ArtistPage: Component = () => {
           const linkEntries = () => Object.entries(artistInfo().links).filter(([key]) => getLinkIcon(key))
           return (
             <div class="h-full overflow-y-auto">
-              <div class="px-4 md:px-8 pt-4 md:pt-6 pb-4">
-                <div class="relative overflow-hidden rounded-2xl border border-[var(--bg-highlight)] h-[280px] md:h-[420px]">
+              <div class="pb-4">
+                <div class="relative overflow-hidden h-[280px] md:h-[420px]">
                   {/* Show skeleton while rehosting, then show image */}
                   <Show when={!rehostedImageUrl.loading && heroImageSrc()} fallback={
                     <div class="absolute inset-0 bg-[var(--bg-elevated)] animate-pulse" />
@@ -206,7 +206,7 @@ export const ArtistPage: Component = () => {
                       {artist().name}
                     </h1>
                     <div class="mt-3 md:mt-4 flex items-end justify-between gap-3 flex-wrap">
-                      <div class="text-sm md:text-base text-white/95">
+                      <div class="text-base md:text-base text-white/95">
                         {uniqueListeners().toLocaleString()} listeners
                       </div>
                       <Show when={linkEntries().length > 0}>
@@ -239,7 +239,7 @@ export const ArtistPage: Component = () => {
             <Show when={tracks().length > 0} fallback={
               <div class="px-8 py-12 text-center">
                 <p class="text-[var(--text-muted)] text-lg">No scrobbles found</p>
-                <p class="text-[var(--text-muted)] text-sm mt-2">
+                <p class="text-[var(--text-muted)] text-base mt-2">
                   Scrobble tracks by this artist to see them here
                 </p>
               </div>

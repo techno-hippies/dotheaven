@@ -108,7 +108,7 @@ export const LanguageEditor: Component<LanguageEditorProps> = (props) => {
       <For each={props.languages}>
         {(entry, index) => (
           <div class="flex items-center gap-2">
-            <span class="text-sm text-[var(--text-primary)] min-w-[100px]">
+            <span class="text-base text-[var(--text-primary)] min-w-[100px]">
               {langLabel(entry.code)}
             </span>
             <div class="w-[200px]">
@@ -139,7 +139,7 @@ export const LanguageEditor: Component<LanguageEditorProps> = (props) => {
               type="button"
               class={cn(
                 'flex items-center gap-2 py-2 px-3 rounded-md transition-colors',
-                'text-sm font-medium text-[var(--accent-blue)]',
+                'text-base font-medium text-[var(--accent-blue)]',
                 'hover:bg-[var(--bg-highlight)]',
               )}
               onClick={() => setAddingLang(true)}

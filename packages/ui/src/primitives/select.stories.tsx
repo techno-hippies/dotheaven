@@ -53,7 +53,7 @@ export const Default: Story = {
           placeholder="Select a fruit..."
         />
         <div class="mt-4 p-3 bg-[var(--bg-highlight)] rounded-md">
-          <p class="text-sm text-[var(--text-secondary)] mb-1">Selected value:</p>
+          <p class="text-base text-[var(--text-secondary)] mb-1">Selected value:</p>
           <p class="text-base text-[var(--text-primary)] font-medium">
             {value() || 'None'}
           </p>
@@ -70,7 +70,7 @@ export const WithLabel: Story = {
     return (
       <div class="max-w-md p-8">
         <div class="flex flex-col gap-1.5">
-          <label class="text-sm font-medium text-[var(--text-secondary)]">
+          <label class="text-base font-medium text-[var(--text-secondary)]">
             Favorite fruit
           </label>
           <Select
@@ -98,7 +98,7 @@ export const PreSelected: Story = {
           placeholder="Select a fruit..."
         />
         <div class="mt-4 p-3 bg-[var(--bg-highlight)] rounded-md">
-          <p class="text-sm text-[var(--text-secondary)] mb-1">Selected value:</p>
+          <p class="text-base text-[var(--text-secondary)] mb-1">Selected value:</p>
           <p class="text-base text-[var(--text-primary)] font-medium">{value()}</p>
         </div>
       </div>
@@ -113,7 +113,7 @@ export const WithError: Story = {
     return (
       <div class="max-w-md p-8">
         <div class="flex flex-col gap-1.5">
-          <label class="text-sm font-medium text-[var(--text-secondary)]">
+          <label class="text-base font-medium text-[var(--text-secondary)]">
             Favorite fruit
           </label>
           <Select
@@ -154,7 +154,7 @@ export const Languages: Story = {
     return (
       <div class="max-w-md p-8">
         <div class="flex flex-col gap-1.5">
-          <label class="text-sm font-medium text-[var(--text-secondary)]">
+          <label class="text-base font-medium text-[var(--text-secondary)]">
             Native language
           </label>
           <Select
@@ -178,7 +178,7 @@ export const TwoSelects: Story = {
       <div class="max-w-md p-8">
         <div class="flex gap-3">
           <div class="flex flex-col gap-1.5 flex-1">
-            <label class="text-sm font-medium text-[var(--text-secondary)]">
+            <label class="text-base font-medium text-[var(--text-secondary)]">
               Native language
             </label>
             <Select
@@ -190,7 +190,7 @@ export const TwoSelects: Story = {
           </div>
 
           <div class="flex flex-col gap-1.5 flex-1">
-            <label class="text-sm font-medium text-[var(--text-secondary)]">Learning</label>
+            <label class="text-base font-medium text-[var(--text-secondary)]">Learning</label>
             <Select
               options={LANGUAGE_OPTIONS}
               value={targetLang()}
@@ -201,11 +201,11 @@ export const TwoSelects: Story = {
         </div>
 
         <div class="mt-4 p-3 bg-[var(--bg-highlight)] rounded-md">
-          <p class="text-sm text-[var(--text-secondary)] mb-2">Selection:</p>
-          <p class="text-sm text-[var(--text-primary)]">
+          <p class="text-base text-[var(--text-secondary)] mb-2">Selection:</p>
+          <p class="text-base text-[var(--text-primary)]">
             Native: {nativeLang() || 'None'}
           </p>
-          <p class="text-sm text-[var(--text-primary)]">
+          <p class="text-base text-[var(--text-primary)]">
             Learning: {targetLang() || 'None'}
           </p>
         </div>
@@ -230,7 +230,7 @@ export const WithDisabledOptions: Story = {
     return (
       <div class="max-w-md p-8">
         <div class="flex flex-col gap-1.5">
-          <label class="text-sm font-medium text-[var(--text-secondary)]">
+          <label class="text-base font-medium text-[var(--text-secondary)]">
             Available fruits
           </label>
           <Select

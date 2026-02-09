@@ -45,6 +45,38 @@ type Comment @entity(immutable: true) {
   transactionHash: Bytes!
 }
 
+# ── LyricsEngagementV1 — Song Lyrics Translations ─────────────────
+
+type SongTranslation @entity(immutable: true) {
+  id: ID!                      # "{txHash}-{logIndex}" — unique per event, query latest by ipId+lang
+  ipId: Bytes!                 # Story Protocol IP Asset address (the song)
+  langCode: String!            # ISO 639-1 code, e.g. "zh", "en"
+  translator: Bytes!           # address that triggered the translation
+  cid: String!                 # IPFS CID of translation JSON
+  textHash: Bytes!             # SHA-256 hash of translated text
+  byteLen: Int!                # UTF-8 byte length of translated text
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+# ── FollowV1 — Social follow graph ──────────────────────────────────
+
+type Follow @entity(immutable: false) {
+  id: ID!                      # "{follower}-{followee}"
+  follower: Bytes!             # follower address
+  followee: Bytes!             # followee address
+  active: Boolean!             # true = following, false = unfollowed
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type UserFollowStats @entity(immutable: false) {
+  id: ID!                      # user address hex (lowercase)
+  followerCount: Int!
+  followingCount: Int!
+}
+
 # ── ScrobbleV3 — Track Registry + Scrobble Events ─────────────────
 
 type Track @entity(immutable: false) {

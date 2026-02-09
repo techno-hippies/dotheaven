@@ -4,11 +4,12 @@ import { View } from 'react-native';
 import { BottomTabBar, type TabItem } from './BottomTabBar';
 
 const defaultTabs: TabItem[] = [
-  { key: 'home', label: 'Home', icon: 'home' },
-  { key: 'search', label: 'Search', icon: 'search' },
-  { key: 'music', label: 'Music', icon: 'music' },
-  { key: 'messages', label: 'Messages', icon: 'messages' },
-  { key: 'profile', label: 'Profile', icon: 'profile' },
+  { key: 'Home', label: 'Home', icon: 'home' },
+  { key: 'Community', label: 'Community', icon: 'community' },
+  { key: 'Music', label: 'Music', icon: 'music' },
+  { key: 'Chat', label: 'Chat', icon: 'chat' },
+  { key: 'Schedule', label: 'Schedule', icon: 'schedule' },
+  { key: 'Wallet', label: 'Wallet', icon: 'wallet' },
 ];
 
 const meta: Meta<typeof BottomTabBar> = {
@@ -23,7 +24,7 @@ const meta: Meta<typeof BottomTabBar> = {
   ],
   args: {
     tabs: defaultTabs,
-    activeTab: 'home',
+    activeTab: 'Home',
     onTabPress: (key: string) => console.log('tab pressed:', key),
   },
 };
@@ -33,18 +34,22 @@ type Story = StoryObj<typeof BottomTabBar>;
 
 export const HomeActive: Story = {};
 
-export const SearchActive: Story = {
-  args: { activeTab: 'search' },
+export const CommunityActive: Story = {
+  args: { activeTab: 'Community' },
 };
 
 export const MusicActive: Story = {
-  args: { activeTab: 'music' },
+  args: { activeTab: 'Music' },
 };
 
-export const MessagesActive: Story = {
-  args: { activeTab: 'messages' },
+export const ChatActive: Story = {
+  args: { activeTab: 'Chat' },
 };
 
-export const ProfileActive: Story = {
-  args: { activeTab: 'profile' },
+export const ScheduleActive: Story = {
+  args: { activeTab: 'Schedule' },
+};
+
+export const WalletActive: Story = {
+  args: { activeTab: 'Wallet' },
 };

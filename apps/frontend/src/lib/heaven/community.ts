@@ -6,17 +6,12 @@
  * resolved via RPC after the subgraph query.
  */
 
-import type { CommunityCardProps, VerificationState } from '@heaven/ui'
+import type { CommunityCardProps, VerificationState, LanguageEntry } from '@heaven/ui'
 import { unpackLanguages } from '@heaven/ui'
+import { SUBGRAPH_ACTIVITY, SUBGRAPH_PROFILES } from '@heaven/core'
 import { getPrimaryName, getPrimaryNode, getTextRecord } from './registry'
 import { resolveAvatarUri } from './avatar-resolver'
-import { NUM_TO_GENDER, GENDER_TO_NUM } from './profile'
-
-const PROFILES_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-profiles/1.0.0/gn'
-
-const ACTIVITY_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/12.0.0/gn'
+import { NUM_TO_GENDER, GENDER_TO_NUM, bytes2ToCode } from './profile'
 
 const MEGAETH_RPC = 'https://carrot.megaeth.com/rpc'
 const VERIFICATION_MIRROR = (import.meta.env.VITE_VERIFICATION_MIRROR_MEGAETH ?? '') as string
@@ -42,6 +37,8 @@ interface ProfileGQL {
 export interface CommunityMember extends CommunityCardProps {
   address: string
   bio?: string
+  /** Unpacked languages for client-side filtering (not displayed on card) */
+  languages?: LanguageEntry[]
   topArtists?: string[]
   locationCityId: string
   createdAt: number
@@ -110,7 +107,7 @@ export async function fetchCommunityMembers(
     }
   }`
 
-  const res = await fetch(PROFILES_ENDPOINT, {
+  const res = await fetch(SUBGRAPH_PROFILES, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),
@@ -175,6 +172,8 @@ async function resolveProfileToMember(
   let bio: string | undefined
   let avatarUrl: string | undefined
 
+  let location: string | undefined
+
   try {
     const primaryName = await getPrimaryName(addr)
     if (primaryName?.label) {
@@ -184,11 +183,13 @@ async function resolveProfileToMember(
     // If we have a heaven name, load text records
     const node = await getPrimaryNode(addr)
     if (node && node !== ZERO_HASH) {
-      const [desc, avatar] = await Promise.all([
+      const [desc, avatar, loc] = await Promise.all([
         getTextRecord(node as `0x${string}`, 'description').catch(() => ''),
         getTextRecord(node as `0x${string}`, 'avatar').catch(() => ''),
+        getTextRecord(node as `0x${string}`, 'heaven.location').catch(() => ''),
       ])
       bio = desc || undefined
+      location = loc || undefined
       if (avatar) {
         const resolved = await resolveAvatarUri(avatar).catch(() => null)
         avatarUrl = resolved ?? undefined
@@ -220,11 +221,16 @@ async function resolveProfileToMember(
   const isVerified = verifiedMap.get(addr)
   const verified: VerificationState = isVerified ? 'verified' : 'none'
 
+  // Nationality code for avatar flag badge
+  const nationalityCode = bytes2ToCode(p.nationality, true)
+
   return {
     address: p.id,
     name,
     avatarUrl,
+    nationalityCode,
     bio,
+    location,
     languages,
     age: p.age > 0 ? p.age : undefined,
     gender,
@@ -251,7 +257,7 @@ export async function fetchUserLocationCityId(
   }`
 
   try {
-    const res = await fetch(PROFILES_ENDPOINT, {
+    const res = await fetch(SUBGRAPH_PROFILES, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),
@@ -296,7 +302,7 @@ async function fetchTopArtistsBatch(
   }`
 
   try {
-    const res = await fetch(ACTIVITY_ENDPOINT, {
+    const res = await fetch(SUBGRAPH_ACTIVITY, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),

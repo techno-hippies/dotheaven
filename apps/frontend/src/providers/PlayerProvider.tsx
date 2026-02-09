@@ -550,7 +550,7 @@ export const PlayerProvider: ParentComponent = (props) => {
       album: track.album || null,
       durationMs: parseDuration(track.duration) * 1000 || null,
       mbid: track.mbid || null,
-      ipId: null,
+      ipId: track.ipId || null,
       coverCid: track.coverCid || null,
       coverPath: track.coverPath || null,
       filePath: track.filePath || null,

@@ -3,11 +3,11 @@
  * Test Song Publish v1 Lit Action
  *
  * Verifies the combined action:
- *  - Upload 6 files to Filebase IPFS
+ *  - Upload 7 files to Filebase IPFS (audio, cover, instrumental, canvas, 3 metadata)
  *  - Lyrics alignment via ElevenLabs
  *  - Lyrics translation via OpenRouter
  *  - Upload alignment + translation to IPFS
- *  - Returns all 8 CIDs + alignment + translation data
+ *  - Returns all 9 CIDs + alignment + translation data
  */
 
 import { createLitClient } from "@lit-protocol/lit-client";
@@ -171,28 +171,26 @@ async function main() {
   }
 
   const testPrefix = `test-${Date.now()}`;
-  // Create a tiny valid MP3 frame for preview (too small for real audio but passes type check)
-  // Minimal MPEG frame: sync word 0xFFE0, MPEG1 Layer3
-  const previewBytes = new Uint8Array(417);
-  previewBytes[0] = 0xFF; previewBytes[1] = 0xFB; previewBytes[2] = 0x90; previewBytes[3] = 0x00;
-
-  // Reuse preview bytes as a stand-in for instrumental in tests
+  // Minimal MPEG frame for instrumental (too small for real audio but passes type check)
   const instrumentalBytes = new Uint8Array(417);
   instrumentalBytes[0] = 0xFF; instrumentalBytes[1] = 0xFB; instrumentalBytes[2] = 0x90; instrumentalBytes[3] = 0x00;
 
+  // Real 1-second black 360x640 MP4 video (H.264, ~2.4KB)
+  const canvasBytes = new Uint8Array(readFileSync(join(fixtureDir, "../test-canvas.mp4")));
+
   const audioCid = await preUpload(audioBytes, "audio/mpeg", `${testPrefix}-audio.mp3`);
   console.log(`   Audio CID:     ${audioCid}`);
-  const previewCid = await preUpload(previewBytes, "audio/mpeg", `${testPrefix}-preview.mp3`);
-  console.log(`   Preview CID:   ${previewCid}`);
   const coverCid = await preUpload(coverBytes, "image/png", `${testPrefix}-cover.png`);
   console.log(`   Cover CID:     ${coverCid}`);
   const instrumentalCid = await preUpload(instrumentalBytes, "audio/mpeg", `${testPrefix}-instrumental.mp3`);
   console.log(`   Instrumental:  ${instrumentalCid}`);
+  const canvasCid = await preUpload(canvasBytes, "video/mp4", `${testPrefix}-canvas.mp4`);
+  console.log(`   Canvas CID:    ${canvasCid}`);
 
   const audioUrl = `https://ipfs.filebase.io/ipfs/${audioCid}`;
-  const previewUrl = `https://ipfs.filebase.io/ipfs/${previewCid}`;
   const coverUrl = `https://ipfs.filebase.io/ipfs/${coverCid}`;
   const instrumentalUrl = `https://ipfs.filebase.io/ipfs/${instrumentalCid}`;
+  const canvasUrl = `https://ipfs.filebase.io/ipfs/${canvasCid}`;
 
   console.log("   Pre-upload complete");
 
@@ -202,9 +200,9 @@ async function main() {
   };
 
   const audioHash = await sha256Hex(audioBytes);
-  const previewHash = await sha256Hex(previewBytes);
   const coverHash = await sha256Hex(coverBytes);
   const instrumentalHash = await sha256Hex(instrumentalBytes);
+  const canvasHash = await sha256Hex(canvasBytes);
 
   const songMetadata = JSON.stringify({
     audio: { hash: `0x${audioHash}`, mimeType: "audio/mpeg", uri: "ipfs://placeholder" },
@@ -226,13 +224,14 @@ async function main() {
   const timestamp = Date.now();
   const nonce = Math.floor(Math.random() * 1000000).toString();
 
-  const message = `heaven:publish:${audioHash}:${previewHash}:${coverHash}:${instrumentalHash}:${songMetadataHash}:${ipaMetadataHash}:${nftMetadataHash}:${lyricsHash}:${sourceLanguage}:${targetLanguage}:${timestamp}:${nonce}`;
+  const message = `heaven:publish:${audioHash}:${coverHash}:${instrumentalHash}:${canvasHash}:${songMetadataHash}:${ipaMetadataHash}:${nftMetadataHash}:${lyricsHash}:${sourceLanguage}:${targetLanguage}:${timestamp}:${nonce}`;
   const signature = await wallet.signMessage(message);
 
   console.log(`\n   Audio size:    ${(audioBytes.length / 1024 / 1024).toFixed(2)} MB`);
   console.log(`   Audio hash:    ${audioHash.slice(0, 16)}...`);
   console.log(`   Cover hash:    ${coverHash.slice(0, 16)}...`);
   console.log(`   Instrumental:  ${instrumentalHash.slice(0, 16)}...`);
+  console.log(`   Canvas hash:   ${canvasHash.slice(0, 16)}...`);
   console.log(`   Lyrics:        ${lyricsText.split("\n").length} lines`);
   console.log(`   Translation:   ${sourceLanguage} → ${targetLanguage}`);
 
@@ -240,9 +239,9 @@ async function main() {
   let jsParams: any = {
     userPkpPublicKey,
     audioUrl,
-    previewUrl,
     coverUrl,
     instrumentalUrl,
+    canvasUrl,
     songMetadataJson: songMetadata,
     ipaMetadataJson: ipaMetadata,
     nftMetadataJson: nftMetadata,
@@ -329,9 +328,9 @@ async function main() {
     console.log(`   Version:         ${response.version}`);
     console.log(`   User:            ${response.user}`);
     console.log(`   Audio CID:       ${response.audioCID}`);
-    console.log(`   Preview CID:     ${response.previewCID}`);
     console.log(`   Cover CID:       ${response.coverCID}`);
     console.log(`   Instrumental:    ${response.instrumentalCID ?? "(none)"}`);
+    console.log(`   Canvas CID:      ${response.canvasCID ?? "(none)"}`);
     console.log(`   Song Meta CID:   ${response.songMetadataCID}`);
     console.log(`   IPA Meta CID:    ${response.ipaMetadataCID}`);
     console.log(`   NFT Meta CID:    ${response.nftMetadataCID}`);
@@ -340,8 +339,8 @@ async function main() {
 
     // Verify alignment
     if (response.alignment?.lines?.length > 0) {
-      const totalWords = response.alignment.lines.reduce((n: number, l: any) => n + (l.words?.length || 0), 0);
-      console.log(`   Alignment:       ${response.alignment.lines.length} lines, ${totalWords} words, loss=${response.alignment.loss}`);
+      const totalChars = response.alignment.lines.reduce((n: number, l: any) => n + (l.characters?.length || 0), 0);
+      console.log(`   Alignment:       ${response.alignment.lines.length} lines, ${totalChars} characters, loss=${response.alignment.loss}`);
     } else {
       console.log("   Alignment:       (no lines returned)");
     }
@@ -352,10 +351,10 @@ async function main() {
       console.log(`   Translated text: ${response.translation.text.slice(0, 80)}...`);
     }
 
-    // Verify all 9 CIDs (instrumental included in this test)
+    // Verify all 9 CIDs (instrumental + canvas included in this test)
     const cids = [
-      response.audioCID, response.previewCID, response.coverCID,
-      response.instrumentalCID,
+      response.audioCID, response.coverCID,
+      response.instrumentalCID, response.canvasCID,
       response.songMetadataCID, response.ipaMetadataCID, response.nftMetadataCID,
       response.alignmentCID, response.translationCID,
     ];

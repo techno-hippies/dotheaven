@@ -120,7 +120,7 @@ export const ProfileEditor: Story = {
         {isEditing() && (
           <div class="bg-[var(--bg-highlight)] rounded-md p-4 mb-6 border-l-4 border-[var(--accent-blue)]">
             <p class="text-[var(--text-primary)] font-medium">Editing your profile</p>
-            <p class="text-[var(--text-secondary)] text-sm mt-1">Complete your profile to help others get to know you better</p>
+            <p class="text-[var(--text-secondary)] text-base mt-1">Complete your profile to help others get to know you better</p>
           </div>
         )}
 
@@ -164,7 +164,7 @@ export const EmptyProfile: Story = {
 
         <div class="bg-[var(--bg-highlight)] rounded-md p-4 mb-6 border-l-4 border-[var(--accent-coral)]">
           <p class="text-[var(--text-primary)] font-medium">Your profile is 10% complete</p>
-          <p class="text-[var(--text-secondary)] text-sm mt-1">Add more info to help others connect with you</p>
+          <p class="text-[var(--text-secondary)] text-base mt-1">Add more info to help others connect with you</p>
         </div>
 
         <div class="flex flex-col gap-4">

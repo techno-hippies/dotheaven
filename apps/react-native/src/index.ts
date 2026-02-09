@@ -20,4 +20,4 @@ export { LitProvider, useLit, useLitBridge } from './providers/LitProvider';
 export type { LitContextValue, LitProviderProps } from './providers/LitProvider';
 
 export { AuthProvider, useAuth } from './providers/AuthProvider';
-export { PlayerProvider, usePlayer } from './providers/PlayerProvider';
+export { PlayerProvider, usePlayer, usePlayerProgress } from './providers/PlayerProvider';

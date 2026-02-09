@@ -237,6 +237,10 @@ export const ProfilePage: Component<ProfilePageProps> = (props) => {
           verificationState={props.verificationState}
           isFollowing={props.isFollowing}
           isOwnProfile={props.isOwnProfile}
+          followerCount={props.followerCount}
+          followingCount={props.followingCount}
+          onFollowerCountClick={props.onFollowerCountClick}
+          onFollowingCountClick={props.onFollowingCountClick}
           isEditing={isEditing()}
           isSaving={isSaving()}
           onFollowClick={props.onFollowClick}
@@ -316,7 +320,7 @@ export const ProfilePage: Component<ProfilePageProps> = (props) => {
               </div>
             </Show>
             <Show when={!props.scrobblesLoading && props.scrobbles && props.scrobbles.length > 0}>
-              <div class="divide-y divide-[var(--bg-highlight)] max-w-[600px]">
+              <div class="divide-y divide-[var(--border-subtle)] max-w-[600px]">
                 <For each={props.scrobbles}>
                   {(scrobble) => (
                     <div class="flex items-center gap-4 py-3 px-4">
@@ -350,13 +354,15 @@ export const ProfilePage: Component<ProfilePageProps> = (props) => {
                 <path d="M212.92,25.69a8,8,0,0,0-6.86-1.45l-128,32A8,8,0,0,0,72,64V174.08A36,36,0,1,0,88,204V70.25l112-28v99.83A36,36,0,1,0,216,172V32A8,8,0,0,0,212.92,25.69ZM52,224a20,20,0,1,1,20-20A20,20,0,0,1,52,224Zm128-32a20,20,0,1,1,20-20A20,20,0,0,1,180,192Z" />
               </svg>
               <p class="text-lg font-medium">Music Collection</p>
-              <p class="text-sm mt-2">Coming soon...</p>
+              <p class="text-base mt-2">Coming soon...</p>
             </div>
           </Show>
 
-          {/* Wallet Tab */}
+          {/* Wallet Tab — rendered without parent padding for edge-to-edge parity with /wallet */}
           <Show when={props.activeTab === 'wallet'}>
-            {props.walletSlot}
+            <div class="-mx-4 md:-mx-8">
+              {props.walletSlot}
+            </div>
           </Show>
 
           {/* Schedule Tab — always shows the booking calendar (Scheduler) */}

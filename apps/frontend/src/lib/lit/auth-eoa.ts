@@ -4,9 +4,9 @@ import { WalletClientAuthenticator } from '@lit-protocol/auth'
 import { getLitClient } from './client'
 import type { PKPInfo, AuthData } from './types'
 
-// Relayer API for sponsored PKP minting (free on naga-dev)
+// Relayer API for sponsored PKP minting (naga-test)
 const LIT_SPONSORSHIP_API_URL =
-  import.meta.env.VITE_LIT_SPONSORSHIP_API_URL || 'https://lit-sponsorship-api.vercel.app'
+  import.meta.env.VITE_LIT_SPONSORSHIP_API_URL || 'https://lit-relayer.vercel.app'
 
 /**
  * Connect to an injected wallet (MetaMask, Rabby, etc.) via window.ethereum.

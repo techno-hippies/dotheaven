@@ -111,7 +111,7 @@ export const PlaylistDropTarget: Component<PlaylistDropTargetProps> = (props) =>
           />
           <div class="flex flex-col min-w-0 text-left">
             <span class="text-base text-[var(--text-primary)] truncate whitespace-nowrap">{props.playlist.name}</span>
-            <span class="text-sm text-[var(--text-muted)] whitespace-nowrap">{props.playlist.trackCount} songs</span>
+            <span class="text-base text-[var(--text-muted)] whitespace-nowrap">{props.playlist.trackCount} songs</span>
           </div>
         </>
       }>

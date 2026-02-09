@@ -1,11 +1,13 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
-import { House, MagnifyingGlass, MusicNotes, ChatCircle, User } from 'phosphor-react-native';
+import { StyleSheet, View, TouchableOpacity } from 'react-native';
+import { House, MagnifyingGlass, MusicNote, ChatCircle, CalendarBlank, Wallet } from 'phosphor-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { colors } from '../lib/theme';
 
 export interface TabItem {
   key: string;
   label: string;
-  icon: 'home' | 'search' | 'music' | 'messages' | 'profile';
+  icon: 'home' | 'community' | 'music' | 'chat' | 'schedule' | 'wallet';
 }
 
 interface BottomTabBarProps {
@@ -16,19 +18,21 @@ interface BottomTabBarProps {
 
 const ICON_MAP = {
   home: House,
-  search: MagnifyingGlass,
-  music: MusicNotes,
-  messages: ChatCircle,
-  profile: User,
+  community: MagnifyingGlass,
+  music: MusicNote,
+  chat: ChatCircle,
+  schedule: CalendarBlank,
+  wallet: Wallet,
 } as const;
 
 export const BottomTabBar: React.FC<BottomTabBarProps> = ({ tabs, activeTab, onTabPress }) => {
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 8) }]}>
       {tabs.map((tab) => {
         const isActive = tab.key === activeTab;
         const Icon = ICON_MAP[tab.icon];
-        const color = isActive ? '#8fb8e0' : '#7878a0';
+        const color = isActive ? colors.textPrimary : colors.textMuted;
         const weight = isActive ? 'fill' : 'regular';
 
         return (
@@ -38,8 +42,9 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({ tabs, activeTab, onT
             onPress={() => onTabPress(tab.key)}
             activeOpacity={0.7}
           >
-            <Icon size={24} color={color} weight={weight} />
-            <Text style={[styles.label, { color }]}>{tab.label}</Text>
+            <View style={styles.iconWrap}>
+              <Icon size={24} color={color} weight={weight} />
+            </View>
           </TouchableOpacity>
         );
       })}
@@ -50,21 +55,26 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({ tabs, activeTab, onT
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    backgroundColor: '#1f1b2e',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: colors.bgSurface,
     borderTopWidth: 1,
-    borderTopColor: '#2d2645',
-    paddingBottom: 8,
+    borderTopColor: colors.borderSubtle,
     paddingTop: 8,
-    height: 60,
+    paddingHorizontal: 2,
   },
   tab: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
+    minWidth: 48,
+    height: 48,
+    paddingHorizontal: 16,
+    borderRadius: 8,
   },
-  label: {
-    fontSize: 11,
-    fontWeight: '500',
+  iconWrap: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

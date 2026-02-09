@@ -3,4 +3,6 @@ export { MediaHeader, type MediaHeaderProps, type MediaHeaderMenuItem } from './
 export { MiniPlayer, type MiniPlayerProps } from './mini-player'
 export { Scrubber, type ScrubberProps } from './scrubber'
 export { SidePlayer, type SidePlayerProps } from './side-player'
+export { StorageCard, type StorageCardProps, type StorageStatus } from './storage-card'
+export { AddFundsDialog, type AddFundsDialogProps } from './add-funds-dialog'
 export { TrackList, type TrackListProps, type Track, type TrackMenuActions, type ScrobbleStatus, type SortField, type SortDirection, type SortState } from './track-list'

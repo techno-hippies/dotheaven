@@ -1,5 +1,6 @@
 export { FeedPost, type FeedPostProps, type FeedPostMedia, type MediaItem, type PostProvenance } from './feed-post'
 export { EngagementBar, type EngagementBarProps } from './engagement-bar'
 export { CommentItem, type CommentItemProps, CommentSection, type CommentSectionProps } from './comment-item'
-export { ComposeBox, type ComposeBoxProps, ComposeFab, type ComposeFabProps, ComposeDrawer, type ComposeDrawerProps } from './compose-box'
+export { ComposeBox, type ComposeBoxProps, ComposeFab, type ComposeFabProps, ComposeDrawer, type ComposeDrawerProps, type PublishedSong } from './compose-box'
 export { PostDetailView, type PostDetailViewProps } from './post-detail'
+export { LiveRoomsRow, type LiveRoomsRowProps, type LiveRoom } from './live-rooms-row'

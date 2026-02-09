@@ -39,7 +39,7 @@ export const NowPlaying: Component<NowPlayingProps> = (props) => {
     <div class={cn('flex flex-col gap-4', local.class)}>
       {/* Section Header with Share Button */}
       <div class="flex items-center justify-between">
-        <span class="text-sm font-medium text-[var(--text-primary)]">Now Playing</span>
+        <span class="text-base font-medium text-[var(--text-primary)]">Now Playing</span>
         <Show when={local.onShare}>
           <IconButton
             variant="soft"
@@ -77,7 +77,7 @@ export const NowPlaying: Component<NowPlayingProps> = (props) => {
         <h3 class="text-lg font-semibold text-[var(--text-primary)] truncate">
           {local.title}
         </h3>
-        <p class="text-sm text-[var(--text-secondary)] truncate">
+        <p class="text-base text-[var(--text-secondary)] truncate">
           {local.artist}
         </p>
       </div>

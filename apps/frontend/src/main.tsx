@@ -11,7 +11,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/solid-query'
 import { PlatformProvider, platform } from 'virtual:heaven-platform'
 import { AuthProvider, WalletProvider, XMTPProvider, PlayerProvider } from './providers'
 import {
-  HOME, AUTH, ONBOARDING, PROFILE, WALLET, SCHEDULE, SCHEDULE_AVAILABILITY, COMMUNITY, SETTINGS,
+  HOME, AUTH, ONBOARDING, PROFILE, WALLET, SCHEDULE, SCHEDULE_AVAILABILITY, SEARCH, SETTINGS,
   MUSIC, CHAT, ROUTE_PARAMS,
   publicProfile,
 } from '@heaven/core'
@@ -46,6 +46,8 @@ import { SettingsPage } from './pages/SettingsPage'
 import { FeedPage } from './pages/FeedPage'
 import { PostPage } from './pages/PostPage'
 import { MusicPage } from './pages/MusicPage'
+import { FollowListPage } from './pages/FollowListPage'
+import { RoomPage } from './pages/RoomPage'
 
 function maybeRedirectHandshakeProfile() {
   if (typeof window === 'undefined') return
@@ -90,12 +92,15 @@ render(
                 <Route path={AUTH} component={AuthPage} />
                 <Route path={ONBOARDING} component={OnboardingPage} />
                 <Route path={ROUTE_PARAMS.CLAIM} component={ClaimPage} />
+                <Route path={ROUTE_PARAMS.ROOM} component={RoomPage} />
 
                 {/* App routes with shared layout */}
                 <Route path={HOME} component={AppLayout}>
                   <Route path={HOME} component={FeedPage} />
-                  <Route path={COMMUNITY} component={App} />
+                  <Route path={SEARCH} component={App} />
                   <Route path={ROUTE_PARAMS.PUBLIC_PROFILE} component={PublicProfilePage} />
+                  <Route path={ROUTE_PARAMS.FOLLOWERS} component={FollowListPage} />
+                  <Route path={ROUTE_PARAMS.FOLLOWING} component={FollowListPage} />
                   <Route path={ROUTE_PARAMS.POST} component={PostPage} />
                   <Route path={ROUTE_PARAMS.PLAYLIST} component={PlaylistPage} />
                   <Route path={ROUTE_PARAMS.ARTIST} component={ArtistPage} />

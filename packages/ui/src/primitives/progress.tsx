@@ -55,12 +55,12 @@ export const ProgressBar: Component<ProgressBarProps> = (props) => {
       {(local.label || local.showValue) && (
         <div class="flex items-center justify-between mb-1">
           {local.label && (
-            <KProgress.Label class="text-sm text-[var(--text-secondary)]">
+            <KProgress.Label class="text-base text-[var(--text-secondary)]">
               {local.label}
             </KProgress.Label>
           )}
           {local.showValue && (
-            <KProgress.ValueLabel class="text-sm text-[var(--text-muted)] tabular-nums" />
+            <KProgress.ValueLabel class="text-base text-[var(--text-muted)] tabular-nums" />
           )}
         </div>
       )}

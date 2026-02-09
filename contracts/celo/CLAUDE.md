@@ -11,7 +11,6 @@ User scans QR → Self app → Self Hub (Celo) → SelfProfileVerifier.customVer
                                                     ↓
                                               verifiedAt[user] = timestamp
                                               nationality[user] = "GBR"
-                                              age[user] = 28
                                                     ↓
                                         Lit Action reads Celo state
                                                     ↓
@@ -65,7 +64,7 @@ The frontend `SelfAppBuilder` requests:
 
 ## Nullifier
 
-One passport → one verified address. `nullifierOwner[nullifier]` prevents the same passport from verifying multiple accounts. Same wallet can re-verify (updates timestamp/nationality/age). Nullifier is scope-bound (different apps get different nullifiers for the same passport).
+One passport → one verified address. `nullifierOwner[nullifier]` prevents the same passport from verifying multiple accounts. Same wallet can re-verify (updates timestamp/nationality). Nullifier is scope-bound (different apps get different nullifiers for the same passport).
 
 ## Commands
 
@@ -124,7 +123,7 @@ See: `apps/frontend/src/lib/heaven/verification.ts`
 3. User scans with Self app → Self submits proof to Celo (Self pays gas)
 4. Frontend polls `verifiedAt(user)` on Celo every 5s
 5. On verification: mirrors to MegaETH via Lit Action (sponsor PKP pays gas), shows success
-6. Badge appears next to display name, nationality/age fields show verified values
+6. Badge appears next to display name, nationality field shows verified value
 
 ## Files
 
@@ -146,7 +145,7 @@ contracts/megaeth/src/VerificationMirror.sol              # MegaETH mirror contr
 lit-actions/features/verification/self-verify-mirror-v1.js # Lit Action for Celo→MegaETH sync
 apps/frontend/src/lib/heaven/verification.ts              # Frontend verification helpers
 apps/frontend/src/pages/ProfilePage.tsx                   # Verification dialog + polling wiring
-packages/ui/src/composite/verify-identity-dialog.tsx      # QR code dialog component
-packages/ui/src/composite/verification-badge.tsx          # Verified/unverified badge
+packages/ui/src/composite/profile/verify-identity-dialog.tsx  # QR code dialog component
+packages/ui/src/composite/profile/verification-badge.tsx     # Verified/unverified badge
 apps/frontend/src/components/profile/profile-header.tsx   # "Verify Identity" button
 ```

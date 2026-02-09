@@ -1,30 +1,17 @@
 /**
- * SessionEscrowV1 Contract Client
+ * SessionEscrowV1 Contract Client (CF Worker)
+ *
+ * Adapted from Bun version: no module-level clients,
+ * accepts rpcUrl/escrowAddress/chainId from Env.
  */
 
-import { createPublicClient, createWalletClient, http, type Address, encodeFunctionData, keccak256, toHex } from 'viem'
+import { createPublicClient, createWalletClient, http, type Address, keccak256, toHex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import { config } from './config.js'
-
-const client = createPublicClient({
-  transport: http(config.rpcUrl),
-})
-
-// Oracle wallet client (only created if ORACLE_PRIVATE_KEY is set)
-const oracleAccount = config.oraclePrivateKey
-  ? privateKeyToAccount(config.oraclePrivateKey as `0x${string}`)
-  : null
-
-const walletClient = oracleAccount
-  ? createWalletClient({
-      account: oracleAccount,
-      transport: http(config.rpcUrl),
-    })
-  : null
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as Address
+const MOCK_HOST = '0x000000000000000000000000000000000000dEaD' as Address
+const MOCK_GUEST = '0x0000000000000000000000000000000000000001' as Address
 
-// Minimal ABI for reads we need (SessionEscrowV1)
 const escrowAbi = [
   {
     name: 'getSlot',
@@ -131,11 +118,28 @@ export interface Booking {
   disputedAt: number
 }
 
-export async function getSlot(slotId: bigint): Promise<Slot | null> {
-  if (config.mockEscrow) {
+export interface AttestMetrics {
+  hostJoinedAt: number
+  hostLeftAt: number
+  guestJoinedAt: number
+  guestLeftAt: number
+  overlapSeconds: number
+}
+
+function getReadClient(rpcUrl: string) {
+  return createPublicClient({ transport: http(rpcUrl) })
+}
+
+export async function getSlot(
+  rpcUrl: string,
+  escrowAddress: string,
+  slotId: bigint,
+  mock?: boolean,
+): Promise<Slot | null> {
+  if (mock) {
     const now = Math.floor(Date.now() / 1000)
     return {
-      host: config.mockHost as Address,
+      host: MOCK_HOST,
       startTime: now - 60,
       durationMins: 30,
       price: 0n,
@@ -147,8 +151,9 @@ export async function getSlot(slotId: bigint): Promise<Slot | null> {
   }
 
   try {
+    const client = getReadClient(rpcUrl)
     const result = await client.readContract({
-      address: config.escrowAddress as Address,
+      address: escrowAddress as Address,
       abi: escrowAbi,
       functionName: 'getSlot',
       args: [slotId],
@@ -171,11 +176,16 @@ export async function getSlot(slotId: bigint): Promise<Slot | null> {
   }
 }
 
-export async function getBooking(bookingId: bigint): Promise<Booking | null> {
-  if (config.mockEscrow) {
+export async function getBooking(
+  rpcUrl: string,
+  escrowAddress: string,
+  bookingId: bigint,
+  mock?: boolean,
+): Promise<Booking | null> {
+  if (mock) {
     return {
       slotId: 1n,
-      guest: config.mockGuest as Address,
+      guest: MOCK_GUEST,
       amount: 1000000000000000n,
       status: BookingStatus.Booked,
       oracleOutcome: 0,
@@ -189,8 +199,9 @@ export async function getBooking(bookingId: bigint): Promise<Booking | null> {
   }
 
   try {
+    const client = getReadClient(rpcUrl)
     const result = await client.readContract({
-      address: config.escrowAddress as Address,
+      address: escrowAddress as Address,
       abi: escrowAbi,
       functionName: 'getBooking',
       args: [bookingId],
@@ -216,17 +227,6 @@ export async function getBooking(bookingId: bigint): Promise<Booking | null> {
   }
 }
 
-export interface AttestMetrics {
-  hostJoinedAt: number
-  hostLeftAt: number
-  guestJoinedAt: number
-  guestLeftAt: number
-  overlapSeconds: number
-}
-
-/**
- * Compute metrics hash from participation data
- */
 export function computeMetricsHash(bookingId: string, metrics: AttestMetrics): `0x${string}` {
   const encoded = toHex(
     JSON.stringify({
@@ -241,41 +241,42 @@ export function computeMetricsHash(bookingId: string, metrics: AttestMetrics): `
   return keccak256(encoded)
 }
 
-/**
- * Submit attestation to contract
- */
 export async function attestOutcome(
+  rpcUrl: string,
+  escrowAddress: string,
+  chainId: number,
+  oraclePrivateKey: string,
   bookingId: bigint,
   outcome: Outcome,
-  metricsHash: `0x${string}`
+  metricsHash: `0x${string}`,
+  mock?: boolean,
 ): Promise<{ txHash: `0x${string}` } | { error: string }> {
-  if (!walletClient || !oracleAccount) {
-    return { error: 'oracle not configured' }
-  }
-
-  if (config.mockEscrow) {
-    // In mock mode, just return a fake tx hash
+  if (mock) {
     return { txHash: '0x0000000000000000000000000000000000000000000000000000000000000001' }
   }
 
   try {
-    const txHash = await walletClient.writeContract({
-      address: config.escrowAddress as Address,
+    const account = privateKeyToAccount(oraclePrivateKey as `0x${string}`)
+    const wc = createWalletClient({
+      account,
+      transport: http(rpcUrl),
+    })
+
+    const txHash = await wc.writeContract({
+      address: escrowAddress as Address,
       abi: escrowAbi,
       functionName: 'attest',
       args: [bookingId, outcome, metricsHash],
-      chain: { id: config.chainId, name: 'megaeth', nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [config.rpcUrl] } } },
+      chain: {
+        id: chainId,
+        name: 'megaeth',
+        nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+        rpcUrls: { default: { http: [rpcUrl] } },
+      },
     })
 
     return { txHash }
   } catch (e: any) {
     return { error: e.message || 'attestation failed' }
   }
-}
-
-/**
- * Check if oracle is configured
- */
-export function isOracleConfigured(): boolean {
-  return oracleAccount !== null
 }

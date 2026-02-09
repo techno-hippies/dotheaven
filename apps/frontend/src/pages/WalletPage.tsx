@@ -1,8 +1,8 @@
 import type { Component } from 'solid-js'
-import { createMemo, createEffect, createSignal, onMount, Show } from 'solid-js'
+import { createMemo, createEffect, onMount } from 'solid-js'
 import { createStore } from 'solid-js/store'
 import { createQuery } from '@tanstack/solid-query'
-import { WalletAssets, type ConnectedWallet, Button } from '@heaven/ui'
+import { WalletAssets, type ConnectedWallet } from '@heaven/ui'
 import { useAuth } from '../providers'
 import { getEnsProfile } from '../lib/heaven/avatar-resolver'
 import {
@@ -10,11 +10,6 @@ import {
   getNativeBalance,
   getErc20Balance,
 } from '../lib/web3'
-import {
-  getStorageStatus,
-  depositAndApprove,
-  type StorageStatus,
-} from '../lib/storage-service'
 import { ASSET_CONFIGS, type AssetConfig } from '../lib/wallet-assets'
 
 // ============ Types ============
@@ -254,7 +249,6 @@ export const WalletPage: Component = () => {
         chainBadge: <config.chainBadge />,
         balance: formatted ? numericBalance.toFixed(4) : '—',
         balanceUSD: formatted ? `$${usd.toFixed(2)}` : '$—',
-        amount: formatted ? `${numericBalance.toFixed(4)} ${config.unitSymbol}` : `— ${config.unitSymbol}`,
       }
     })
   )
@@ -296,64 +290,12 @@ export const WalletPage: Component = () => {
         icon: <config.icon />,
         chainBadge: <config.chainBadge />,
         balance: formatted ? numericBalance.toFixed(4) : '—',
-        balanceUSD: formatted ? `$${usd.toFixed(2)}` : '$—', // Show $0.00 if we have data
-        amount: formatted ? `${numericBalance.toFixed(4)} ${config.unitSymbol}` : `— ${config.unitSymbol}`,
+        balanceUSD: formatted ? `$${usd.toFixed(2)}` : '$—',
         // For potential UI indicators
         _status: state?.status ?? 'idle',
         _error: state?.error,
       }
     })
-  })
-
-  // ── Storage section state ──
-  const [storageStatus, setStorageStatus] = createSignal<StorageStatus | null>(null)
-  const [storageLoading, setStorageLoading] = createSignal(false)
-  const [storageError, setStorageError] = createSignal<string | null>(null)
-  const [depositLoading, setDepositLoading] = createSignal(false)
-
-  let storageRefreshInflight = false
-  async function refreshStorage() {
-    const pkp = auth.pkpInfo()
-    if (!pkp || storageRefreshInflight) return
-    storageRefreshInflight = true
-    setStorageLoading(true)
-    setStorageError(null)
-    try {
-      const authCtx = await auth.getAuthContext()
-      const status = await getStorageStatus(pkp, authCtx)
-      setStorageStatus(status)
-    } catch (e: any) {
-      console.error('[Wallet] Storage status error:', e)
-      setStorageError(e.message || 'Failed to load storage status')
-    } finally {
-      setStorageLoading(false)
-      storageRefreshInflight = false
-    }
-  }
-
-  async function handleDeposit(amount: string) {
-    const pkp = auth.pkpInfo()
-    if (!pkp) return
-    setDepositLoading(true)
-    try {
-      const authCtx = await auth.getAuthContext()
-      await depositAndApprove(pkp, authCtx, amount)
-      // Refresh status after deposit
-      await refreshStorage()
-    } catch (e: any) {
-      console.error('[Wallet] Deposit error:', e)
-      setStorageError(e.message || 'Deposit failed')
-    } finally {
-      setDepositLoading(false)
-    }
-  }
-
-  // Load storage status after auth is fully ready (delay to let EOA auth complete)
-  createEffect(() => {
-    if (auth.isAuthenticated() && auth.pkpInfo()) {
-      // Small delay to let the EOA auth context cache populate
-      setTimeout(() => refreshStorage(), 1500)
-    }
   })
 
   // Zero-state assets for unauthenticated users
@@ -366,7 +308,6 @@ export const WalletPage: Component = () => {
       chainBadge: <config.chainBadge />,
       balance: '0.0000',
       balanceUSD: '$0.00',
-      amount: `0.0000 ${config.unitSymbol}`,
       _status: 'idle' as const,
     }))
   )
@@ -381,110 +322,6 @@ export const WalletPage: Component = () => {
         onSend={() => console.log('Send clicked')}
         onReceive={() => console.log('Receive clicked')}
       />
-
-      {/* Storage Section — only shown when authenticated */}
-      <Show when={auth.isAuthenticated()}>
-        <div class="w-full max-w-4xl mx-auto px-4 pb-12">
-          <h2 class="text-2xl font-bold text-[var(--text-primary)] mb-4 mt-8">Storage</h2>
-          <div class="rounded-md bg-[var(--bg-elevated)] p-6">
-            <Show when={storageLoading() && !storageStatus()} fallback={null}>
-              <div class="text-[var(--text-muted)] text-sm">Loading storage status...</div>
-            </Show>
-
-            <Show when={storageError() && !storageStatus()}>
-              <div class="text-[var(--text-muted)] text-sm">{storageError()}</div>
-            </Show>
-
-            <Show when={storageStatus()}>
-              {(status) => (
-                <>
-                  {/* Stats */}
-                  <div class="grid grid-cols-3 gap-6 mb-6">
-                    <div>
-                      <div class="text-sm text-[var(--text-muted)] mb-1">Balance</div>
-                      <div class="text-2xl font-bold text-[var(--text-primary)]">{status().balance}</div>
-                    </div>
-                    <div>
-                      <div class="text-sm text-[var(--text-muted)] mb-1">Monthly Cost</div>
-                      <div class="text-2xl font-bold text-[var(--text-primary)]">{status().monthlyCost}</div>
-                    </div>
-                    <div>
-                      <div class="text-sm text-[var(--text-muted)] mb-1">Days Remaining</div>
-                      <div class="text-2xl font-bold text-[var(--text-primary)]">
-                        {status().daysRemaining !== null ? `~${status().daysRemaining}` : '—'}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Low balance warning */}
-                  <Show when={status().daysRemaining !== null && status().daysRemaining! < 7 && status().daysRemaining! > 0}>
-                    <div class="rounded-md bg-amber-500/10 border border-amber-500/20 p-3 mb-4 text-sm text-amber-300">
-                      Low storage funds — ~{status().daysRemaining} days remaining. Add funds to avoid interruption.
-                    </div>
-                  </Show>
-
-                  {/* Add funds buttons */}
-                  <div class="flex items-center gap-3">
-                    <Button
-                      onClick={() => handleDeposit('1')}
-                      variant="secondary"
-                      loading={depositLoading()}
-                    >
-                      Add $1
-                    </Button>
-                    <Button
-                      onClick={() => handleDeposit('5')}
-                      variant="secondary"
-                      loading={depositLoading()}
-                    >
-                      Add $5
-                    </Button>
-                    <Button
-                      onClick={() => handleDeposit('10')}
-                      variant="secondary"
-                      loading={depositLoading()}
-                    >
-                      Add $10
-                    </Button>
-                    <Show when={storageLoading()}>
-                      <span class="text-xs text-[var(--text-muted)] ml-2">Refreshing...</span>
-                    </Show>
-                  </div>
-
-                  {/* Help text */}
-                  <p class="text-xs text-[var(--text-muted)] mt-4">
-                    Storage balance is used for Filecoin uploads. Costs accrue continuously.
-                    Keep at least 30 days funded to avoid interruptions.
-                  </p>
-                </>
-              )}
-            </Show>
-
-            {/* First-time state: no status loaded yet, no error */}
-            <Show when={!storageStatus() && !storageLoading() && !storageError()}>
-              <div class="text-[var(--text-muted)] text-sm">
-                Add funds to enable Filecoin storage for your uploads.
-              </div>
-              <div class="flex items-center gap-3 mt-4">
-                <Button
-                  onClick={() => handleDeposit('1')}
-                  variant="secondary"
-                  loading={depositLoading()}
-                >
-                  Add $1
-                </Button>
-                <Button
-                  onClick={() => handleDeposit('5')}
-                  variant="secondary"
-                  loading={depositLoading()}
-                >
-                  Add $5
-                </Button>
-              </div>
-            </Show>
-          </div>
-        </div>
-      </Show>
     </div>
   )
 }

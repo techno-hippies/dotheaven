@@ -24,8 +24,8 @@ export const CommentItem: Component<CommentItemProps> = (props) => {
         class="flex-shrink-0"
       />
       <div class="flex-1 min-w-0 flex flex-col gap-1">
-        <span class="font-medium text-sm text-[var(--text-secondary)]">{local.authorName}</span>
-        <p class="text-sm leading-relaxed text-[var(--text-primary)]">{local.children}</p>
+        <span class="font-medium text-base text-[var(--text-secondary)]">{local.authorName}</span>
+        <p class="text-base leading-relaxed text-[var(--text-primary)]">{local.children}</p>
       </div>
     </div>
   )
@@ -43,7 +43,7 @@ export const CommentSection: Component<CommentSectionProps> = (props) => {
   return (
     <div class={cn('flex flex-col gap-3', local.class)}>
       {local.title && (
-        <h4 class="text-sm font-medium text-[var(--text-primary)]">{local.title}</h4>
+        <h4 class="text-base font-medium text-[var(--text-primary)]">{local.title}</h4>
       )}
       <div class="flex flex-col gap-2">
         {local.children}

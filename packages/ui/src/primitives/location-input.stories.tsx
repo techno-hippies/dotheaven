@@ -22,9 +22,9 @@ export const Default: Story = {
       <div class="max-w-md p-8">
         <LocationInput value={value()} onChange={setValue} />
         <div class="mt-4 p-3 bg-[var(--bg-highlight)] rounded-md">
-          <p class="text-sm text-[var(--text-secondary)] mb-2">Selected location:</p>
+          <p class="text-base text-[var(--text-secondary)] mb-2">Selected location:</p>
           {value() ? (
-            <div class="text-sm space-y-1">
+            <div class="text-base space-y-1">
               <p class="text-[var(--text-primary)] font-medium">{value()!.label}</p>
               <p class="text-[var(--text-muted)]">
                 Lat: {value()!.lat.toFixed(4)}, Lng: {value()!.lng.toFixed(4)}
@@ -34,7 +34,7 @@ export const Default: Story = {
               </p>
             </div>
           ) : (
-            <p class="text-[var(--text-muted)] text-sm">None</p>
+            <p class="text-[var(--text-muted)] text-base">None</p>
           )}
         </div>
       </div>
@@ -108,16 +108,16 @@ export const PrePopulated: Story = {
       <div class="max-w-md p-8">
         <LocationInput value={value()} onChange={setValue} />
         <div class="mt-4 p-3 bg-[var(--bg-highlight)] rounded-md">
-          <p class="text-sm text-[var(--text-secondary)] mb-2">Selected location:</p>
+          <p class="text-base text-[var(--text-secondary)] mb-2">Selected location:</p>
           {value() ? (
-            <div class="text-sm space-y-1">
+            <div class="text-base space-y-1">
               <p class="text-[var(--text-primary)] font-medium">{value()!.label}</p>
               <p class="text-[var(--text-muted)]">
                 Lat: {value()!.lat.toFixed(4)}, Lng: {value()!.lng.toFixed(4)}
               </p>
             </div>
           ) : (
-            <p class="text-[var(--text-muted)] text-sm">None</p>
+            <p class="text-[var(--text-muted)] text-base">None</p>
           )}
         </div>
       </div>

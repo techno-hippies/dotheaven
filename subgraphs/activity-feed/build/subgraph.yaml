@@ -134,3 +134,47 @@ dataSources:
         - event: Flagged(indexed bytes32,indexed address,uint8)
           handler: handleFlagged
       file: EngagementV2/EngagementV2.wasm
+  - kind: ethereum
+    name: LyricsEngagementV1
+    network: megaeth-testnet-v2
+    source:
+      address: "0x6C832a6Cb9F360f81D697Bed66250Dc361386EB4"
+      abi: LyricsEngagementV1
+      startBlock: 10850766
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - SongTranslation
+      abis:
+        - name: LyricsEngagementV1
+          file: LyricsEngagementV1/LyricsEngagementV1.json
+      eventHandlers:
+        - event: LyricsTranslationAdded(indexed address,indexed bytes2,indexed
+            address,string,bytes32,uint32)
+          handler: handleLyricsTranslationAdded
+      file: LyricsEngagementV1/LyricsEngagementV1.wasm
+  - kind: ethereum
+    name: FollowV1
+    network: megaeth-testnet-v2
+    source:
+      address: "0x3F32cF9e70EF69DFFed74Dfe07034cb03cF726cb"
+      abi: FollowV1
+      startBlock: 10904615
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Follow
+        - UserFollowStats
+      abis:
+        - name: FollowV1
+          file: FollowV1/FollowV1.json
+      eventHandlers:
+        - event: Followed(indexed address,indexed address)
+          handler: handleFollowed
+        - event: Unfollowed(indexed address,indexed address)
+          handler: handleUnfollowed
+      file: FollowV1/FollowV1.wasm

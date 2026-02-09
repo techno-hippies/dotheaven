@@ -3,26 +3,28 @@ import {
   StyleSheet,
   Text,
   View,
-  FlatList,
-  TouchableOpacity,
+  ScrollView,
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Plus, ArrowsClockwise, MusicNotes, FolderOpen, Disc } from 'phosphor-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scanMediaLibrary, pickMusicFiles, extractArtistFromFilename, type MusicTrack } from '../services/music-scanner';
 import { TrackItem } from '../components/TrackItem';
 import { usePlayer } from '../providers/PlayerProvider';
+import { colors } from '../lib/theme';
+import { Button, IconButton } from '../ui';
 
 const TRACKS_STORAGE_KEY = 'heaven:music-tracks';
 
 export const MusicScreen: React.FC = () => {
+  const insets = useSafeAreaInsets();
   const [tracks, setTracks] = useState<MusicTrack[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
-  const { currentTrack, isPlaying, playTrack } = usePlayer();
+  const { currentTrack, isPlaying, playTrack, togglePlayPause } = usePlayer();
 
-  // Restore cached tracks on mount
   useEffect(() => {
     (async () => {
       const stored = await AsyncStorage.getItem(TRACKS_STORAGE_KEY);
@@ -42,7 +44,6 @@ export const MusicScreen: React.FC = () => {
     setLoading(true);
     try {
       const scanned = await scanMediaLibrary();
-      // Enrich artist from filename
       const enriched = scanned.map((t) => ({
         ...t,
         artist: t.artist === 'Unknown Artist' ? extractArtistFromFilename(t.filename) : t.artist,
@@ -80,77 +81,93 @@ export const MusicScreen: React.FC = () => {
 
   const handlePlayTrack = useCallback(
     (track: MusicTrack) => {
-      playTrack(track, tracks);
+      if (currentTrack?.id === track.id) {
+        void togglePlayPause();
+        return;
+      }
+      void playTrack(track, tracks);
     },
-    [playTrack, tracks],
+    [currentTrack, togglePlayPause, playTrack, tracks],
   );
 
-  const renderTrack = useCallback(
-    ({ item }: { item: MusicTrack }) => (
-      <TrackItem
-        track={item}
-        isActive={currentTrack?.id === item.id}
-        isPlaying={currentTrack?.id === item.id && isPlaying}
-        onPress={() => handlePlayTrack(item)}
-      />
-    ),
-    [currentTrack, isPlaying, handlePlayTrack],
-  );
 
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Music</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={handlePickFiles} style={styles.headerButton}>
-            <Ionicons name="add" size={24} color="#b8b8d0" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleScanLibrary} style={styles.headerButton}>
-            <Ionicons name="refresh" size={22} color="#b8b8d0" />
-          </TouchableOpacity>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.headerTitle}>Music</Text>
+        </View>
+        <View style={styles.headerRight}>
+          <IconButton variant="soft" size="md" accessibilityLabel="Add music files" onPress={handlePickFiles}>
+            <Plus size={20} color={colors.textSecondary} />
+          </IconButton>
+          <IconButton variant="soft" size="md" accessibilityLabel="Scan library" onPress={handleScanLibrary}>
+            <ArrowsClockwise size={18} color={colors.textSecondary} />
+          </IconButton>
         </View>
       </View>
 
       {loading && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="small" color="#8fb8e0" />
+        <View style={styles.loadingRow}>
+          <ActivityIndicator size="small" color={colors.accentBlue} />
           <Text style={styles.loadingText}>Scanning...</Text>
         </View>
       )}
 
       {!hasScanned && !loading ? (
         <View style={styles.emptyContainer}>
-          <Ionicons name="musical-notes-outline" size={64} color="#7878a0" />
+          <View style={styles.emptyIcon}>
+            <MusicNotes size={40} color={colors.textMuted} weight="light" />
+          </View>
           <Text style={styles.emptyTitle}>No Music Yet</Text>
           <Text style={styles.emptySubtitle}>
             Scan your device library or add files manually
           </Text>
           <View style={styles.emptyButtons}>
-            <TouchableOpacity style={styles.scanButton} onPress={handleScanLibrary}>
-              <Ionicons name="library" size={20} color="#1a1625" />
-              <Text style={styles.scanButtonText}>Scan Library</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.pickButton} onPress={handlePickFiles}>
-              <Ionicons name="folder-open" size={20} color="#f0f0f5" />
-              <Text style={styles.pickButtonText}>Pick Files</Text>
-            </TouchableOpacity>
+            <Button
+              variant="default"
+              size="md"
+              fullWidth
+              onPress={handleScanLibrary}
+              leftIcon={<Disc size={18} color={colors.white} weight="fill" />}
+            >
+              Scan Library
+            </Button>
+            <Button
+              variant="secondary"
+              size="md"
+              fullWidth
+              onPress={handlePickFiles}
+              leftIcon={<FolderOpen size={18} color={colors.textPrimary} />}
+            >
+              Pick Files
+            </Button>
           </View>
         </View>
-      ) : (
+      ) : hasScanned ? (
         <>
-          <Text style={styles.trackCount}>
-            {tracks.length} {tracks.length === 1 ? 'track' : 'tracks'}
-          </Text>
-          <FlatList
-            data={tracks}
-            keyExtractor={(item) => item.id}
-            renderItem={renderTrack}
+          <View style={styles.countRow}>
+            <Text style={styles.trackCount}>
+              {tracks.length} {tracks.length === 1 ? 'track' : 'tracks'}
+            </Text>
+          </View>
+          <ScrollView
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
-          />
+          >
+            {tracks.map((track) => (
+              <TrackItem
+                key={track.id}
+                track={track}
+                isActive={currentTrack?.id === track.id}
+                isPlaying={currentTrack?.id === track.id && isPlaying}
+                onPress={() => handlePlayTrack(track)}
+              />
+            ))}
+          </ScrollView>
         </>
-      )}
+      ) : null}
     </View>
   );
 };
@@ -158,105 +175,83 @@ export const MusicScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1625',
+    backgroundColor: colors.bgPage,
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 60,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
     paddingBottom: 16,
-    backgroundColor: '#1f1b2e',
     borderBottomWidth: 1,
-    borderBottomColor: '#2d2645',
+    borderBottomColor: colors.borderSubtle,
+  },
+  headerLeft: {
+    flex: 1,
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#f0f0f5',
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.textPrimary,
   },
-  headerActions: {
+  headerRight: {
     flexDirection: 'row',
-    gap: 12,
-  },
-  headerButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: '#252139',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 8,
   },
-  loadingContainer: {
+  loadingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 16,
     gap: 8,
   },
   loadingText: {
-    color: '#b8b8d0',
+    color: colors.textSecondary,
     fontSize: 14,
   },
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 40,
+    paddingHorizontal: 32,
+    paddingVertical: 80,
+  },
+  emptyIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 9999,
+    backgroundColor: colors.bgElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
   emptyTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#f0f0f5',
-    marginTop: 16,
+    color: colors.textPrimary,
+    marginBottom: 8,
   },
   emptySubtitle: {
-    fontSize: 14,
-    color: '#7878a0',
+    fontSize: 16,
+    color: colors.textMuted,
     textAlign: 'center',
-    marginTop: 8,
+    lineHeight: 22,
+    marginBottom: 32,
   },
   emptyButtons: {
-    marginTop: 24,
     gap: 12,
     width: '100%',
   },
-  scanButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: '#8fb8e0',
-  },
-  scanButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1a1625',
-  },
-  pickButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: '#2d2645',
-  },
-  pickButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#f0f0f5',
+  countRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   trackCount: {
-    fontSize: 13,
-    color: '#7878a0',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
+    fontSize: 14,
+    color: colors.textMuted,
   },
   listContent: {
-    paddingBottom: 120, // Space for mini player + tabs
+    paddingBottom: 140,
   },
 });

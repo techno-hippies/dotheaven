@@ -129,7 +129,7 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   linkEoaV1: {
     name: 'linkEoaV1',
-    path: 'features/music/link-eoa-v1.js',
+    path: 'features/profile/link-eoa-v1.js',
     displayName: 'Link EOA v1',
     keys: [], // No encrypted keys — sponsor PKP pays gas directly
   },
@@ -149,6 +149,18 @@ const ACTIONS: Record<string, ActionDef> = {
     keys: [
       { name: 'openrouter_api_key', envVar: 'OPENROUTER_API_KEY' },
     ],
+  },
+  selfVerifyMirrorV1: {
+    name: 'selfVerifyMirrorV1',
+    path: 'features/verification/self-verify-mirror-v1.js',
+    displayName: 'Self Verify Mirror v1',
+    keys: [], // No encrypted keys — sponsor PKP pays gas directly
+  },
+  followV1: {
+    name: 'followV1',
+    path: 'features/social/follow-v1.js',
+    displayName: 'Follow v1',
+    keys: [], // No encrypted keys — sponsor PKP pays gas directly
   },
 };
 

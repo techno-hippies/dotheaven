@@ -124,7 +124,7 @@ export const ShareContentDialog: Component<ShareContentDialogProps> = (props) =>
               </p>
             </Show>
             <Show when={error()}>
-              <p class="text-sm text-red-400 mt-2">{error()}</p>
+              <p class="text-base text-red-400 mt-2">{error()}</p>
             </Show>
           </Show>
           <Show when={status() === 'done'}>

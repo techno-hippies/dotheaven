@@ -47,6 +47,8 @@ export interface Track {
   coverPath?: string
   /** IPFS CID for cover art */
   coverCid?: string
+  /** Story Protocol IP Asset ID (for published songs) */
+  ipId?: string
   /** Who shared this track (heaven name or address) */
   sharedBy?: string
 }
@@ -59,7 +61,6 @@ export interface TrackMenuActions {
   onRemoveFromPlaylist?: (track: Track) => void
   onIdentify?: (track: Track) => void
   onUploadToFilecoin?: (track: Track) => void
-  onUploadToFilecoinPublic?: (track: Track) => void
 }
 
 export type SortField = 'title' | 'artist' | 'album' | 'dateAdded' | 'duration'
@@ -107,7 +108,7 @@ const isTrackDraggable = (track: Track): boolean =>
 /** Create a custom drag preview element */
 const createDragPreview = (track: Track): HTMLElement => {
   const el = document.createElement('div')
-  el.className = 'fixed pointer-events-none px-3 py-2 rounded-md bg-[var(--bg-elevated)] border border-[var(--bg-highlight)] shadow-lg text-sm text-[var(--text-primary)] whitespace-nowrap z-[9999]'
+  el.className = 'fixed pointer-events-none px-3 py-2 rounded-md bg-[var(--bg-elevated)] border border-[var(--border-subtle)] shadow-lg text-base text-[var(--text-primary)] whitespace-nowrap z-[9999]'
   el.textContent = `${track.title} \u2022 ${track.artist}`
   el.style.cssText = 'position: fixed; top: -1000px; left: -1000px;'
   document.body.appendChild(el)
@@ -253,12 +254,7 @@ export const TrackList: Component<TrackListProps> = (props) => {
         </Show>
         <Show when={props.menuActions?.onUploadToFilecoin}>
           <DropdownMenuItem onSelect={() => props.menuActions?.onUploadToFilecoin?.(menuProps.track)}>
-            Upload to Filecoin (Encrypted)
-          </DropdownMenuItem>
-        </Show>
-        <Show when={props.menuActions?.onUploadToFilecoinPublic}>
-          <DropdownMenuItem onSelect={() => props.menuActions?.onUploadToFilecoinPublic?.(menuProps.track)}>
-            Upload to Filecoin (Public)
+            Encrypt & Upload
           </DropdownMenuItem>
         </Show>
       </DropdownMenuContent>
@@ -518,7 +514,7 @@ export const TrackList: Component<TrackListProps> = (props) => {
       {/* Sticky Header - only show on desktop */}
       <Show when={!isCompact()}>
         <div
-          class="sticky top-0 z-10 grid gap-4 px-4 py-2 border-b border-[var(--border-subtle)] text-base text-[var(--text-muted)] font-medium bg-[var(--bg-page)]"
+          class="sticky top-0 z-10 grid gap-4 px-4 py-2 text-base text-[var(--text-muted)] font-medium bg-[var(--bg-page)] border-b border-[var(--border-subtle)]"
           style={{ 'grid-template-columns': gridTemplate() }}
         >
           <div class="text-center">#</div>

@@ -2,59 +2,14 @@
 
 Cloudflare Worker providing the Heaven Names Registry API, claim/matching endpoints, scrobble submission, and photo pipeline.
 
-## Claim Flow Status (Feb 6, 2026)
+## Claim Flow
 
-### Current State
+Claim logic: `src/routes/claim.ts`. Frontend: `apps/frontend/src/pages/ClaimPage.tsx`.
 
-- Claim logic now lives in this repo at `services/heaven-api/src/routes/claim.ts`.
-- Live deploy target: `https://heaven-api.deletion-backup782.workers.dev`
-- Latest deployed version during this session: `b95a741c-a7bc-46dc-aa98-df6da54da264`
-- Frontend claim page is wired in this repo at `apps/frontend/src/pages/ClaimPage.tsx`.
-
-### Security Hardening Completed
-
-- `POST /api/claim/complete` now requires a signed claimant payload:
-  - `claimId`, `address`, `signature`, `timestamp`, `nonce`
-  - Signature is verified against a canonical message:
-    - `heaven-claim:v1`
-    - `claim_id`
-    - `shadow_profile_id`
-    - `address`
-    - `nonce`
-    - `issued_at`
-    - `expires_at`
-- `POST /api/claim/complete` now does atomic DB updates via `DB.batch(...)` and checks affected rows to prevent race-condition false success.
-- `POST /api/claim/start` is now protected by `CLAIM_START_SECRET` (except local development without a configured secret).
-- `POST /api/claim/verify-dm` now enforces `method = 'dm'`.
-- Human verification code generation now uses cryptographic randomness.
-
-### In-Progress / Remaining
-
-- Full end-to-end browser claim confirmation is pending due to current Lit network instability.
-- Bio-edit verification is still a stub and currently always succeeds; DM code flow is the path being tested.
-
-### Next Manual Browser Test (When Lit Is Stable)
-
-- Shadow profile: `dateme-30` (`source: dateme.directory`, display name `Valeria`)
-- Claim URL: `http://localhost:5173/#/c/84212685de5b056ef432d625d9ce7e1c028306243c754925`
-- Code to enter: `HVN-6RGZYV`
-- Expiry: `2026-02-13T12:53:17.424Z`
-
-If this token/code pair expires before testing, generate a fresh pair with:
-
-```bash
-API="https://heaven-api.deletion-backup782.workers.dev"
-SHADOW="dateme-30"
-curl -sS -X POST "$API/api/claim/start" \
-  -H "content-type: application/json" \
-  -H "X-Claim-Start-Secret: $CLAIM_START_SECRET" \
-  --data "{\"shadowProfileId\":\"$SHADOW\",\"method\":\"dm\"}"
-```
-
-Expected JSON includes:
-- `token` -> use in `/#/c/<token>`
-- `verificationCode` -> enter on claim page
-- `claimId` -> server-side tracking id
+- `POST /api/claim/start` — protected by `CLAIM_START_SECRET`. Creates claim token + verification code.
+- `POST /api/claim/verify-dm` — validates DM verification code (enforces `method = 'dm'`).
+- `POST /api/claim/complete` — requires signed claimant payload (`claimId`, `address`, `signature`, `timestamp`, `nonce`). Atomic DB updates via `DB.batch(...)`.
+- Bio-edit verification is still a stub (always succeeds); DM code flow is the tested path.
 
 ## Deployment
 
@@ -162,21 +117,6 @@ In development (`ENVIRONMENT=development`), auth is skipped for local testing.
 }
 ```
 
-## DNS Server Integration
-
-The DNS server (`services/dns-server`) calls this API to resolve `.heaven` names.
-
-**Secret mapping**:
-- Worker: `DNS_SHARED_SECRET` (set via `wrangler secret put`)
-- DNS Server: `HEAVEN_DNS_SECRET` (env var, must match Worker's secret)
-
-**Example DNS server config**:
-```bash
-HEAVEN_API_URL=https://heaven-api.deletion-backup782.workers.dev
-HEAVEN_DNS_SECRET=<same-value-as-DNS_SHARED_SECRET>
-HEAVEN_GATEWAY_IP=144.126.205.242
-```
-
 ## Registration Flow
 
 1. Client generates nonce locally (`crypto.getRandomValues`)
@@ -206,6 +146,25 @@ Key tables for names registry:
 - `heaven_nonces` - Anti-replay nonces for signatures
 
 See `schema.sql` for full schema.
+
+### Additional Route Modules
+
+| Prefix | Source | Description |
+|--------|--------|-------------|
+| `/api/candidates` | `src/routes/candidates.ts` | Candidate profiles for swiping |
+| `/api/likes` | `src/routes/likes.ts` | Likes + match detection |
+| `/api/self` | `src/routes/self.ts` | Self.xyz verification endpoints |
+| `/api/sleep` | `src/routes/sleep.ts` | Sleep tracking |
+| `/api/wallet` | `src/routes/wallet.ts` | Wallet endpoints |
+
+### Additional Migrations
+
+| File | Description |
+|------|-------------|
+| `migrations/0004_ipfs_cids.sql` | IPFS CID storage |
+| `migrations/0005_self_verifications.sql` | Self.xyz verification records |
+| `migrations/0006_scrobble_track_events.sql` | Scrobble track events |
+| `migrations/0007_wallet_rate_limits.sql` | Wallet rate limiting |
 
 ## Scrobble API
 
@@ -495,72 +454,11 @@ Creates access records for all owner's photos with fingerprint codes.
 
 See `migrations/0001_photos.sql` for full schema.
 
-## Current Status (Jan 2026)
-
-### Deployed & Working
-- **Photo Pipeline** - `POST /api/photos/pipeline`
-  - Tested with 4 real photos → anime tiles generated successfully
-  - fal.ai integration working (nano-banana-pro/edit)
-  - Cloudflare Images trim/resize working
-  - ~180s end-to-end (mostly fal.ai processing time)
-  - Deployed: https://heaven-api.deletion-backup782.workers.dev
-
-- **Anime Tile Serving** - `GET /api/photos/anime/:userId/:slot`
-  - Public endpoints, 1-day cache
-  - WebP format, 500×500px
-
-- **Photo Reveal with Watermarks** - `GET /api/photos/reveal/:photoId`
-  - Per-viewer watermark with full wallet address
-  - 7 horizontal rows alternating branding position:
-    - Odd rows: `Heaven Dating • 0xWallet...`
-    - Even rows: `0xWallet... • Heaven Dating`
-  - Uses opentype.js to convert text → SVG paths → PNG (no font rendering issues)
-  - Watermark overlay composited via Cloudflare Images `.draw()`
-  - Cached variants stored in R2_REVEAL
-  - Sidecar metadata JSON stored for attribution tracking
-
-- **Photo Access** - `POST /api/photos/access`
-  - Creates access records on match
-  - Generates HMAC fingerprint codes per viewer/photo
-  - Stores full wallet + short wallet for watermarking
-
-### Watermark Implementation Details
-
-**Tech stack:**
-- `svg2png-wasm` - SVG to PNG conversion (resvg-based)
-- `opentype.js` - Text to SVG path conversion (bypasses font rendering)
-- `RobotoMono-Bold.ttf` - Bundled font in `src/assets/`
-- Cloudflare Images binding for `.draw()` compositing
-
-**Key files:**
-- `src/lib/watermark.ts` - Watermark generation (SVG → PNG)
-- `src/routes/photos.ts` - Photo pipeline + reveal endpoints
-
-**Watermark features:**
-- Full wallet address (no truncation) for clear attribution
-- Semi-transparent (white fill 0.45, black stroke 0.2)
-- Stock-photo style coverage - impossible to crop out
-- Fingerprint code stored in sidecar metadata JSON
-
-- **Meal Tracking** - Two-step flow: analyze + anime + EAS attestation
-  - `POST /api/meal/analyze` - Upload photo, resize to 512px WebP, IPFS pin, AI analysis
-    - AI via OpenRouter `bytedance-seed/seed-1.6-flash` (fast + cheap)
-    - Returns description, items, macros (calories, protein, carbs, fat)
-    - Includes face/PII/body-parts rejection (returns `rejected: true` with reason)
-    - Stores in D1 `meal_photos` table
-    - Creates `MealPhotoV1` EAS attestation (base) + `MealCaloriesV1` extension (with analysisCid)
-  - `POST /api/meal/anime` - Background anime conversion (called after user posts)
-    - Fetches photo from IPFS, converts via fal.ai FLUX.2 edit
-    - Ghibli-style prompt with guidance_scale 7.0 (avoids hallucinating food)
-    - Pins anime result to Filebase IPFS, returns `animeCid`
-  - Android flow: Camera → Analyzing → Summary → Post → background anime mini bar
-  - Profile timeline only shows meals with animeCid (never raw photos)
-  - EAS attestation flow: MealPhotoV1 (revocable) → MealCaloriesV1 extension (non-revocable, references base via refUID)
-  - Voice worker fetches meal descriptions from subgraph `analysisCid` → IPFS
+## Status Notes
 
 ### Not Yet Done
-- Android `FLAG_SECURE` for screenshot blocking (separate task)
 - Production auth for reveal endpoint (currently dev-only with `X-User-Pkp`)
+- Bio-edit claim verification (stub — always succeeds)
 
 ### Test Commands
 ```bash

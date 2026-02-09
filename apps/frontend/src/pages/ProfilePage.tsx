@@ -14,6 +14,7 @@ import {
   createRequest as createRequestTx,
 } from '../lib/session-service'
 import { uploadAvatar } from '../lib/heaven/avatar'
+import { getFollowState, getFollowCounts, toggleFollow } from '../lib/heaven/follow'
 import { type ProfileInput, type VerificationState, type VerifyStep, type VerificationData, type TimeSlot, type SessionSlotData, getTagLabel, VerifyIdentityDialog, alpha3ToAlpha2 } from '@heaven/ui'
 import { publicProfile, peerChat } from '@heaven/core'
 import { parseTagCsv } from '../lib/heaven/profile'
@@ -24,6 +25,7 @@ import { ProfileSkeleton } from './ProfileSkeleton'
 
 export const MyProfilePage: Component = () => {
   const auth = useAuth()
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = createSignal<ProfileTab>('posts')
   const [heavenName, setHeavenName] = createSignal<string | null>(localStorage.getItem('heaven:username'))
   const [nameClaiming, setNameClaiming] = createSignal(false)
@@ -122,6 +124,13 @@ export const MyProfilePage: Component = () => {
       console.error('[Schedule] cancelSlot failed:', err)
     }
   }
+
+  const myFollowCountsQuery = createQuery(() => ({
+    queryKey: ['followCounts', address()],
+    queryFn: () => getFollowCounts(address()! as Address),
+    get enabled() { return !!address() },
+    staleTime: 1000 * 60,
+  }))
 
   const scrobblesQuery = createQuery(() => ({
     queryKey: ['scrobbles', address()],
@@ -539,6 +548,10 @@ export const MyProfilePage: Component = () => {
           avatarUrl={profileQuery.data?.avatar || ensQuery.data?.avatar || undefined}
           nationalityCode={nationalityCode()}
           isOwnProfile={true}
+          followerCount={myFollowCountsQuery.data?.followers}
+          followingCount={myFollowCountsQuery.data?.following}
+          onFollowerCountClick={() => { const id = heavenName() ? `${heavenName()}.heaven` : address(); if (id) navigate(`/u/${id}/followers`) }}
+          onFollowingCountClick={() => { const id = heavenName() ? `${heavenName()}.heaven` : address(); if (id) navigate(`/u/${id}/following`) }}
           verificationState={verificationState()}
           onVerifyClick={handleVerifyClick}
           walletSlot={address() ? <ProfileWalletTab address={address()!} /> : undefined}
@@ -661,6 +674,51 @@ export const PublicProfilePage: Component = () => {
     }
   }
 
+  // ── Follow state ──────────────────────────────────────────────────
+  const auth = useAuth()
+  const myAddress = () => auth.pkpAddress()
+
+  const followStateQuery = createQuery(() => ({
+    queryKey: ['followState', myAddress(), address()],
+    queryFn: () => getFollowState(myAddress()! as Address, address()! as Address),
+    get enabled() { return !!myAddress() && !!address() && myAddress() !== address() },
+    staleTime: 1000 * 30,
+  }))
+
+  const followCountsQuery = createQuery(() => ({
+    queryKey: ['followCounts', address()],
+    queryFn: () => getFollowCounts(address()! as Address),
+    get enabled() { return !!address() },
+    staleTime: 1000 * 60,
+  }))
+
+  const handleFollowClick = async () => {
+    const target = address()
+    const pkp = auth.pkpInfo()
+    if (!target || !pkp) {
+      openAuthDialog()
+      return
+    }
+    const action = followStateQuery.data ? 'unfollow' : 'follow'
+    try {
+      const result = await toggleFollow(
+        target,
+        action,
+        (msg: string) => auth.signMessage(msg),
+        auth.getAuthContext(),
+        pkp.publicKey,
+      )
+      if (result.success) {
+        followStateQuery.refetch()
+        followCountsQuery.refetch()
+      } else {
+        console.error('[Follow] failed:', result.error)
+      }
+    } catch (err) {
+      console.error('[Follow] error:', err)
+    }
+  }
+
   const scrobblesQuery = createQuery(() => ({
     queryKey: ['scrobbles', address()],
     queryFn: () => fetchScrobbleEntries(address()!),
@@ -762,7 +820,7 @@ export const PublicProfilePage: Component = () => {
           <div class="min-h-screen bg-[var(--bg-page)] flex items-center justify-center px-6">
             <div class="text-center text-[var(--text-secondary)]">
               <div class="text-xl font-semibold text-[var(--text-primary)] mb-2">Profile not found</div>
-              <div class="text-sm">{(resolvedQuery.error as Error | undefined)?.message || 'Unable to resolve this profile.'}</div>
+              <div class="text-base">{(resolvedQuery.error as Error | undefined)?.message || 'Unable to resolve this profile.'}</div>
             </div>
           </div>
         }
@@ -774,6 +832,12 @@ export const PublicProfilePage: Component = () => {
             avatarUrl={profileQuery.data?.avatar || ensProfileQuery.data?.avatar || undefined}
             nationalityCode={publicNationalityCode()}
             isOwnProfile={false}
+            isFollowing={followStateQuery.data ?? false}
+            onFollowClick={handleFollowClick}
+            followerCount={followCountsQuery.data?.followers}
+            followingCount={followCountsQuery.data?.following}
+            onFollowerCountClick={() => { const a = address(); if (a) navigate(`/u/${params.id}/followers`) }}
+            onFollowingCountClick={() => { const a = address(); if (a) navigate(`/u/${params.id}/following`) }}
             walletSlot={address() ? <ProfileWalletTab address={address()!} /> : undefined}
             activeTab={activeTab()}
             onTabChange={setActiveTab}

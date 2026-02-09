@@ -43,7 +43,7 @@ export const ClaimProfileCard: Component<ClaimProfileCardProps> = (props) => {
   return (
     <div class={cn(
       'bg-[var(--bg-surface)] rounded-md p-5',
-      'border border-[var(--bg-highlight)]',
+      'border border-[var(--border-subtle)]',
       props.class,
     )}>
       <div class="flex gap-4 items-start">
@@ -56,7 +56,7 @@ export const ClaimProfileCard: Component<ClaimProfileCardProps> = (props) => {
             {p().displayName}
           </h3>
           <Show when={p().age || p().gender || p().location}>
-            <p class="text-sm text-[var(--text-secondary)] mt-0.5">
+            <p class="text-base text-[var(--text-secondary)] mt-0.5">
               {[p().age && `${p().age}`, p().gender, p().location]
                 .filter(Boolean)
                 .join(' · ')}
@@ -66,7 +66,7 @@ export const ClaimProfileCard: Component<ClaimProfileCardProps> = (props) => {
       </div>
 
       <Show when={p().bio}>
-        <p class="text-sm text-[var(--text-secondary)] mt-4 line-clamp-3">
+        <p class="text-base text-[var(--text-secondary)] mt-4 line-clamp-3">
           {p().bio}
         </p>
       </Show>

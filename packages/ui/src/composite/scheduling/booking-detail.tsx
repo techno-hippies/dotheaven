@@ -265,7 +265,7 @@ export const BookingDetail: Component<BookingDetailProps> = (props) => {
           </div>
           <div class="text-right">
             <div class="text-lg font-semibold text-[var(--text-primary)]">{b().amountEth} ETH</div>
-            <div class="text-sm text-[var(--text-muted)]">
+            <div class="text-base text-[var(--text-muted)]">
               {b().bookingStatus === 'finalized' ? 'settled' : 'held in escrow'}
             </div>
           </div>
@@ -275,13 +275,13 @@ export const BookingDetail: Component<BookingDetailProps> = (props) => {
 
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <div class="text-[var(--text-muted)] text-sm mb-0.5">Date</div>
+            <div class="text-[var(--text-muted)] text-base mb-0.5">Date</div>
             <div class="text-[var(--text-primary)] font-medium">
               {new Date(b().startTime * 1000).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
             </div>
           </div>
           <div>
-            <div class="text-[var(--text-muted)] text-sm mb-0.5">
+            <div class="text-[var(--text-muted)] text-base mb-0.5">
               Time{getTimezone() ? ` (${getTimezone()})` : ''}
             </div>
             <div class="text-[var(--text-primary)] font-medium">
@@ -289,22 +289,22 @@ export const BookingDetail: Component<BookingDetailProps> = (props) => {
             </div>
           </div>
           <div>
-            <div class="text-[var(--text-muted)] text-sm mb-0.5">Duration</div>
+            <div class="text-[var(--text-muted)] text-base mb-0.5">Duration</div>
             <div class="text-[var(--text-primary)]">{b().durationMins} min</div>
           </div>
           <Show
             when={b().bookingStatus === 'booked' && !isPast(b().startTime)}
             fallback={
               <div>
-                <div class="text-[var(--text-muted)] text-sm mb-0.5">ID</div>
+                <div class="text-[var(--text-muted)] text-base mb-0.5">ID</div>
                 <Show when={explorerTxUrl()} fallback={
-                  <div class="text-[var(--text-primary)] font-mono text-sm">{truncateHash(displayTxHash())}</div>
+                  <div class="text-[var(--text-primary)] font-mono text-base">{truncateHash(displayTxHash())}</div>
                 }>
                   <a
                     href={explorerTxUrl()}
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="inline-flex items-center gap-1 text-[var(--text-primary)] hover:text-[oklch(0.65_0.12_240)] transition-colors font-mono text-sm"
+                    class="inline-flex items-center gap-1 text-[var(--text-primary)] hover:text-[oklch(0.65_0.12_240)] transition-colors font-mono text-base"
                   >
                     {truncateHash(displayTxHash())}
                     <ExternalLinkIcon />
@@ -314,7 +314,7 @@ export const BookingDetail: Component<BookingDetailProps> = (props) => {
             }
           >
             <div>
-              <div class="text-[var(--text-muted)] text-sm mb-0.5">Free cancel until</div>
+              <div class="text-[var(--text-muted)] text-base mb-0.5">Free cancel until</div>
               <div class="text-[var(--text-primary)]">
                 {formatTime(b().startTime - b().cancelCutoffMins * 60)}
               </div>
@@ -322,15 +322,15 @@ export const BookingDetail: Component<BookingDetailProps> = (props) => {
           </Show>
           <Show when={b().bookingStatus === 'booked' && !isPast(b().startTime)}>
             <div>
-              <div class="text-[var(--text-muted)] text-sm mb-0.5">ID</div>
+              <div class="text-[var(--text-muted)] text-base mb-0.5">ID</div>
               <Show when={explorerTxUrl()} fallback={
-                <div class="text-[var(--text-primary)] font-mono text-sm">{truncateHash(displayTxHash())}</div>
+                <div class="text-[var(--text-primary)] font-mono text-base">{truncateHash(displayTxHash())}</div>
               }>
                 <a
                   href={explorerTxUrl()}
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="inline-flex items-center gap-1 text-[var(--text-primary)] hover:text-[oklch(0.65_0.12_240)] transition-colors font-mono text-sm"
+                  class="inline-flex items-center gap-1 text-[var(--text-primary)] hover:text-[oklch(0.65_0.12_240)] transition-colors font-mono text-base"
                 >
                   {truncateHash(displayTxHash())}
                   <ExternalLinkIcon />
@@ -394,7 +394,7 @@ export const BookingDetail: Component<BookingDetailProps> = (props) => {
           'rounded-md p-4 text-base',
           b().outcome === 'completed' && 'bg-green-500/10 border border-green-500/20',
           (b().outcome === 'no-show-host' || b().outcome === 'no-show-guest') && 'bg-yellow-500/10 border border-yellow-500/20',
-          (b().outcome === 'cancelled-by-host' || b().outcome === 'cancelled-by-guest') && 'bg-[var(--bg-elevated)] border border-[var(--bg-highlight)]'
+          (b().outcome === 'cancelled-by-host' || b().outcome === 'cancelled-by-guest') && 'bg-[var(--bg-elevated)] border border-[var(--border-subtle)]'
         )}>
           <Show when={b().outcome !== 'completed'}>
             <div class="text-[var(--text-primary)]">{outcomeDesc()}</div>
@@ -425,7 +425,7 @@ export const BookingDetail: Component<BookingDetailProps> = (props) => {
       <Show when={canReportProblem() && props.onReportProblem}>
         <Show when={!showProblemOptions()} fallback={
           <div class="rounded-md bg-[var(--bg-elevated)] p-4 flex flex-col gap-3">
-            <div class="text-sm text-[var(--text-secondary)]">
+            <div class="text-base text-[var(--text-secondary)]">
               If something went wrong with this session, you can dispute the recorded outcome.
               This requires a small bond that will be returned if your dispute is valid.
             </div>

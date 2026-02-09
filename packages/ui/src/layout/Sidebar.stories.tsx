@@ -108,7 +108,7 @@ const MusicCollectionItem = (props: { icon: () => any; label: string; count: str
     </div>
     <div class="flex flex-col min-w-0 text-left">
       <span class="text-base text-[var(--text-primary)]">{props.label}</span>
-      <span class="text-sm text-[var(--text-muted)]">{props.count}</span>
+      <span class="text-base text-[var(--text-muted)]">{props.count}</span>
     </div>
   </button>
 )
@@ -126,7 +126,7 @@ const PlaylistItem = (props: { name: string; count: number; coverSrc?: string; a
     />
     <div class="flex flex-col min-w-0 text-left">
       <span class="text-base text-[var(--text-primary)] truncate">{props.name}</span>
-      <span class="text-sm text-[var(--text-muted)]">{props.count} songs</span>
+      <span class="text-base text-[var(--text-muted)]">{props.count} songs</span>
     </div>
   </button>
 )

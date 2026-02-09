@@ -17,7 +17,6 @@
  * Required jsParams:
  * - userPkpPublicKey: User's PKP public key
  * - audioUrl: URL or inline {base64, contentType} for audio
- * - previewUrl: URL or inline for preview clip
  * - coverUrl: URL or inline for cover image
  * - songMetadataJson: SongMetadata JSON string
  * - ipaMetadataJson: IPA Metadata JSON string
@@ -35,12 +34,13 @@
  * - instrumentalUrl: URL or inline {base64, contentType} for instrumental/karaoke track
  *
  * Optional jsParams:
+ * - canvasUrl: URL or inline {base64, contentType} for 9:16 looping canvas video (MP4/WebM)
  * - filebasePlaintextKey: Dev override
  * - elevenlabsPlaintextKey: Dev override
  * - openrouterPlaintextKey: Dev override
  * - translationModel: Override LLM model (default: google/gemini-2.5-flash-lite-preview-09-2025)
  *
- * Returns: { success, version, user, audioCID, previewCID, coverCID,
+ * Returns: { success, version, user, audioCID, coverCID,
  *            instrumentalCID, songMetadataCID, ipaMetadataCID, nftMetadataCID,
  *            alignmentCID, translationCID, alignment, translation, hashes }
  */
@@ -184,6 +184,7 @@ async function uploadToFilebase(filebaseApiKey, content, contentType, fileName) 
 
 const ALLOWED_AUDIO_TYPES = ["audio/mpeg", "audio/wav", "audio/mp4", "audio/webm"];
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const ALLOWED_VIDEO_TYPES = ["video/mp4", "video/webm"];
 
 async function fetchAndValidate(urlOrInline, maxBytes, allowedTypes) {
   if (typeof urlOrInline === "object" && urlOrInline.base64 && urlOrInline.contentType) {
@@ -384,9 +385,9 @@ const main = async () => {
     const {
       userPkpPublicKey,
       audioUrl,
-      previewUrl,
       coverUrl,
       instrumentalUrl,
+      canvasUrl,
       songMetadataJson,
       ipaMetadataJson,
       nftMetadataJson,
@@ -407,7 +408,6 @@ const main = async () => {
 
     must(userPkpPublicKey, "userPkpPublicKey");
     must(audioUrl, "audioUrl");
-    must(previewUrl, "previewUrl");
     must(coverUrl, "coverUrl");
     must(instrumentalUrl, "instrumentalUrl");
     must(songMetadataJson, "songMetadataJson");
@@ -435,14 +435,14 @@ const main = async () => {
     // STEP 2: Fetch content + compute hashes
     // ========================================
     const audio = await fetchAndValidate(audioUrl, 50 * 1024 * 1024, ALLOWED_AUDIO_TYPES);
-    const preview = await fetchAndValidate(previewUrl, 5 * 1024 * 1024, ALLOWED_AUDIO_TYPES);
     const cover = await fetchAndValidate(coverUrl, 5 * 1024 * 1024, ALLOWED_IMAGE_TYPES);
     const instrumental = await fetchAndValidate(instrumentalUrl, 50 * 1024 * 1024, ALLOWED_AUDIO_TYPES);
+    const canvas = canvasUrl ? await fetchAndValidate(canvasUrl, 30 * 1024 * 1024, ALLOWED_VIDEO_TYPES) : null;
 
     const audioHash = await sha256HexFromBuffer(audio.data);
-    const previewHash = await sha256HexFromBuffer(preview.data);
     const coverHash = await sha256HexFromBuffer(cover.data);
     const instrumentalHash = await sha256HexFromBuffer(instrumental.data);
+    const canvasHash = canvas ? await sha256HexFromBuffer(canvas.data) : null;
     const songMetadataHash = await sha256Hex(songMetadataJson);
     const ipaMetadataHash = await sha256Hex(ipaMetadataJson);
     const nftMetadataHash = await sha256Hex(nftMetadataJson);
@@ -451,7 +451,7 @@ const main = async () => {
     // ========================================
     // STEP 3: Verify signature binds all content
     // ========================================
-    const message = `heaven:publish:${audioHash}:${previewHash}:${coverHash}:${instrumentalHash}:${songMetadataHash}:${ipaMetadataHash}:${nftMetadataHash}:${lyricsHash}:${sourceLanguage}:${targetLanguage}:${timestamp}:${nonce}`;
+    const message = `heaven:publish:${audioHash}:${coverHash}:${instrumentalHash}:${canvasHash || ''}:${songMetadataHash}:${ipaMetadataHash}:${nftMetadataHash}:${lyricsHash}:${sourceLanguage}:${targetLanguage}:${timestamp}:${nonce}`;
     const recovered = ethers.utils.verifyMessage(message, signature);
     if (recovered.toLowerCase() !== userAddress.toLowerCase()) {
       throw new Error("Invalid signature: recovered address does not match user PKP");
@@ -460,14 +460,17 @@ const main = async () => {
     // ========================================
     // STEP 4: Decrypt all 3 keys
     // ========================================
+    const isInstrumental = lyricsText === "(instrumental)";
+
     const filebaseKey = await decryptKey(filebaseEncryptedKey, filebasePlaintextKey);
     if (!filebaseKey) throw new Error("filebaseEncryptedKey or filebasePlaintextKey is required");
 
-    const elevenLabsKey = await decryptKey(elevenlabsEncryptedKey, elevenlabsPlaintextKey);
-    if (!elevenLabsKey) throw new Error("elevenlabsEncryptedKey or elevenlabsPlaintextKey is required");
+    // ElevenLabs + OpenRouter only needed when there are lyrics to align/translate
+    const elevenLabsKey = isInstrumental ? null : await decryptKey(elevenlabsEncryptedKey, elevenlabsPlaintextKey);
+    if (!isInstrumental && !elevenLabsKey) throw new Error("elevenlabsEncryptedKey or elevenlabsPlaintextKey is required");
 
-    const openRouterKey = await decryptKey(openrouterEncryptedKey, openrouterPlaintextKey);
-    if (!openRouterKey) throw new Error("openrouterEncryptedKey or openrouterPlaintextKey is required");
+    const openRouterKey = isInstrumental ? null : await decryptKey(openrouterEncryptedKey, openrouterPlaintextKey);
+    if (!isInstrumental && !openRouterKey) throw new Error("openrouterEncryptedKey or openrouterPlaintextKey is required");
 
     // ========================================
     // STEP 5-8: All external IO in runOnce
@@ -478,18 +481,13 @@ const main = async () => {
       { waitForResponse: true, name: "songPublish" },
       async () => {
         try {
-          // --- STEP 5: Upload 6 files to Filebase IPFS ---
+          // --- STEP 5: Upload files to Filebase IPFS ---
           const extMap = { "audio/mpeg": "mp3", "audio/wav": "wav", "audio/mp4": "m4a", "audio/webm": "webm" };
           const audioExt = extMap[audio.contentType] || "mp3";
-          const previewExt = extMap[preview.contentType] || "mp3";
 
           const audioCID = await uploadToFilebase(
             filebaseKey, audio.data, audio.contentType,
             `audio-${prefix}.${audioExt}`
-          );
-          const previewCID = await uploadToFilebase(
-            filebaseKey, preview.data, preview.contentType,
-            `preview-${prefix}.${previewExt}`
           );
           const coverCID = await uploadToFilebase(
             filebaseKey, cover.data, cover.contentType,
@@ -512,93 +510,105 @@ const main = async () => {
             filebaseKey, nftMetadataJson, "application/json",
             `nft-meta-${prefix}.json`
           );
+          const canvasCID = canvas ? await uploadToFilebase(
+            filebaseKey, canvas.data, canvas.contentType,
+            `canvas-${prefix}.${canvas.contentType.split("/")[1]}`
+          ) : null;
 
-          // --- STEP 6: Lyrics alignment (ElevenLabs) ---
-          // Strip section markers and empty lines before alignment
-          const { alignmentText } = prepareLyricsForAlignment(lyricsText);
+          // --- STEP 6-8: Lyrics alignment + translation (skip for instrumentals) ---
+          let alignment = null;
+          let translation = null;
+          let alignmentCID = null;
+          let translationCID = null;
 
-          const audioBlob = new Blob([audio.data], { type: audio.contentType });
-          const formData = new FormData();
-          formData.append("file", audioBlob, `audio.${audioExt}`);
-          formData.append("text", alignmentText);
+          if (!isInstrumental) {
+            // --- STEP 6: Lyrics alignment (ElevenLabs) ---
+            // Strip section markers and empty lines before alignment
+            const { alignmentText } = prepareLyricsForAlignment(lyricsText);
 
-          const alignResponse = await fetch("https://api.elevenlabs.io/v1/forced-alignment", {
-            method: "POST",
-            headers: { "xi-api-key": elevenLabsKey },
-            body: formData,
-          });
+            const audioBlob = new Blob([audio.data], { type: audio.contentType });
+            const formData = new FormData();
+            formData.append("file", audioBlob, `audio.${audioExt}`);
+            formData.append("text", alignmentText);
 
-          if (!alignResponse.ok) {
-            const errText = await alignResponse.text();
-            return JSON.stringify({ _error: `ElevenLabs alignment error: ${alignResponse.status} ${errText}` });
-          }
+            const alignResponse = await fetch("https://api.elevenlabs.io/v1/forced-alignment", {
+              method: "POST",
+              headers: { "xi-api-key": elevenLabsKey },
+              body: formData,
+            });
 
-          const alignResult = await alignResponse.json();
-          const rawWords = alignResult.words || [];
+            if (!alignResponse.ok) {
+              const errText = await alignResponse.text();
+              return JSON.stringify({ _error: `ElevenLabs alignment error: ${alignResponse.status} ${errText}` });
+            }
 
-          // Fix intro-stretched words (ElevenLabs anchors first word at 0s)
-          const fixedWords = fixIntroStretchedWords(rawWords);
+            const alignResult = await alignResponse.json();
+            const rawWords = alignResult.words || [];
 
-          // Parse into clean line+word structure
-          const alignmentLines = parseAlignmentLines(fixedWords);
+            // Fix intro-stretched words (ElevenLabs anchors first word at 0s)
+            const fixedWords = fixIntroStretchedWords(rawWords);
 
-          const alignment = {
-            lines: alignmentLines,
-            loss: alignResult.loss || 0,
-            rawWordCount: rawWords.length,
-          };
+            // Parse into clean line+word structure
+            const alignmentLines = parseAlignmentLines(fixedWords);
 
-          // --- STEP 7: Lyrics translation (OpenRouter) ---
-          const translateResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${openRouterKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
+            alignment = {
+              lines: alignmentLines,
+              loss: alignResult.loss || 0,
+              rawWordCount: rawWords.length,
+            };
+
+            // --- STEP 7: Lyrics translation (OpenRouter) ---
+            const translateResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${openRouterKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model,
+                messages: [
+                  {
+                    role: "user",
+                    content: `Translate these song lyrics from ${sourceLanguage} to ${targetLanguage}.\nMaintain line breaks. Output only the translation, nothing else.\n\n${lyricsText}`,
+                  },
+                ],
+              }),
+            });
+
+            if (!translateResponse.ok) {
+              const errText = await translateResponse.text();
+              return JSON.stringify({ _error: `OpenRouter translation error: ${translateResponse.status} ${errText}` });
+            }
+
+            const translateResult = await translateResponse.json();
+            const translatedText = translateResult.choices?.[0]?.message?.content;
+            if (!translatedText) {
+              return JSON.stringify({ _error: "No translation returned from LLM" });
+            }
+
+            translation = {
+              languageCode: targetLanguage,
+              text: translatedText,
               model,
-              messages: [
-                {
-                  role: "user",
-                  content: `Translate these song lyrics from ${sourceLanguage} to ${targetLanguage}.\nMaintain line breaks. Output only the translation, nothing else.\n\n${lyricsText}`,
-                },
-              ],
-            }),
-          });
+            };
 
-          if (!translateResponse.ok) {
-            const errText = await translateResponse.text();
-            return JSON.stringify({ _error: `OpenRouter translation error: ${translateResponse.status} ${errText}` });
+            // --- STEP 8: Upload alignment + translation to IPFS ---
+            alignmentCID = await uploadToFilebase(
+              filebaseKey,
+              JSON.stringify(alignment),
+              "application/json",
+              `alignment-${prefix}.json`
+            );
+            translationCID = await uploadToFilebase(
+              filebaseKey,
+              JSON.stringify(translation),
+              "application/json",
+              `translation-${prefix}.json`
+            );
           }
-
-          const translateResult = await translateResponse.json();
-          const translatedText = translateResult.choices?.[0]?.message?.content;
-          if (!translatedText) {
-            return JSON.stringify({ _error: "No translation returned from LLM" });
-          }
-
-          const translation = {
-            languageCode: targetLanguage,
-            text: translatedText,
-            model,
-          };
-
-          // --- STEP 8: Upload alignment + translation to IPFS ---
-          const alignmentCID = await uploadToFilebase(
-            filebaseKey,
-            JSON.stringify(alignment),
-            "application/json",
-            `alignment-${prefix}.json`
-          );
-          const translationCID = await uploadToFilebase(
-            filebaseKey,
-            JSON.stringify(translation),
-            "application/json",
-            `translation-${prefix}.json`
-          );
 
           return JSON.stringify({
-            audioCID, previewCID, coverCID, instrumentalCID,
+            audioCID, coverCID, instrumentalCID, canvasCID,
             songMetadataCID, ipaMetadataCID, nftMetadataCID,
             alignmentCID, translationCID,
             alignment,
@@ -621,9 +631,9 @@ const main = async () => {
         ...result,
         hashes: {
           audio: `0x${audioHash}`,
-          preview: `0x${previewHash}`,
           cover: `0x${coverHash}`,
           instrumental: `0x${instrumentalHash}`,
+          canvas: canvasHash ? `0x${canvasHash}` : null,
           songMetadata: `0x${songMetadataHash}`,
         },
       }),

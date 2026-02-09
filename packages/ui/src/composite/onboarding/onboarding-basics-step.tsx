@@ -107,7 +107,7 @@ export const OnboardingBasicsStep: Component<OnboardingBasicsStepProps> = (props
       <div class="flex gap-3">
         {/* Age */}
         <div class="flex flex-col gap-1.5 w-24 shrink-0">
-          <label class="text-sm font-medium text-[var(--text-secondary)]">Age</label>
+          <label class="text-base font-medium text-[var(--text-secondary)]">Age</label>
           <input
             type="number"
             inputMode="numeric"
@@ -132,7 +132,7 @@ export const OnboardingBasicsStep: Component<OnboardingBasicsStepProps> = (props
 
         {/* Gender */}
         <div class="flex flex-col gap-1.5 flex-1">
-          <label class="text-sm font-medium text-[var(--text-secondary)]">Gender</label>
+          <label class="text-base font-medium text-[var(--text-secondary)]">Gender</label>
           <PillGroup
             options={GENDER_OPTIONS}
             value={gender()}
@@ -143,7 +143,7 @@ export const OnboardingBasicsStep: Component<OnboardingBasicsStepProps> = (props
 
       {/* Location */}
       <div class="flex flex-col gap-1.5">
-        <label class="text-sm font-medium text-[var(--text-secondary)]">City / Timezone</label>
+        <label class="text-base font-medium text-[var(--text-secondary)]">City / Timezone</label>
         <LocationInput
           value={location()}
           onChange={setLocation}
@@ -154,7 +154,7 @@ export const OnboardingBasicsStep: Component<OnboardingBasicsStepProps> = (props
       {/* Languages row */}
       <div class="flex gap-3">
         <div class="flex flex-col gap-1.5 flex-1">
-          <label class="text-sm font-medium text-[var(--text-secondary)]">Native language</label>
+          <label class="text-base font-medium text-[var(--text-secondary)]">Native language</label>
           <Select
             options={LANGUAGE_OPTIONS}
             value={nativeLang()}
@@ -164,7 +164,7 @@ export const OnboardingBasicsStep: Component<OnboardingBasicsStepProps> = (props
         </div>
 
         <div class="flex flex-col gap-1.5 flex-1">
-          <label class="text-sm font-medium text-[var(--text-secondary)]">Learning</label>
+          <label class="text-base font-medium text-[var(--text-secondary)]">Learning</label>
           <Select
             options={LANGUAGE_OPTIONS}
             value={targetLang()}
@@ -176,7 +176,7 @@ export const OnboardingBasicsStep: Component<OnboardingBasicsStepProps> = (props
 
       {/* Error */}
       <Show when={props.error}>
-        <div class="flex items-center gap-2 px-3 py-2 rounded-md bg-[var(--accent-coral)]/10 text-[var(--accent-coral)] text-sm">
+        <div class="flex items-center gap-2 px-3 py-2 rounded-md bg-[var(--accent-coral)]/10 text-[var(--accent-coral)] text-base">
           <svg class="w-4 h-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
           </svg>

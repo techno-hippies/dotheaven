@@ -157,7 +157,7 @@ export const UpcomingSessions: Component<UpcomingSessionsProps> = (props) => {
           <For each={groupedByDay()}>
             {(group) => (
               <div class="flex flex-col gap-2">
-                <h3 class="text-sm font-medium text-[var(--text-muted)] uppercase tracking-wider">
+                <h3 class="text-base font-medium text-[var(--text-muted)] uppercase tracking-wider">
                   {group.label}
                 </h3>
                 <For each={group.bookings}>

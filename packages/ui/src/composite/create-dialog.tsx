@@ -60,7 +60,7 @@ export const CreateDialog: Component<CreateDialogProps> = (props) => {
               </span>
               <div class="flex flex-col min-w-0">
                 <span class="text-base font-medium text-[var(--text-primary)]">New Playlist</span>
-                <span class="text-sm text-[var(--text-muted)]">Curate your own collection</span>
+                <span class="text-base text-[var(--text-muted)]">Curate your own collection</span>
               </div>
               <span class="ml-auto text-[var(--text-muted)]">
                 <ChevronRightIcon />
@@ -80,7 +80,7 @@ export const CreateDialog: Component<CreateDialogProps> = (props) => {
               </span>
               <div class="flex flex-col min-w-0">
                 <span class="text-base font-medium text-[var(--text-primary)]">Publish Song</span>
-                <span class="text-sm text-[var(--text-muted)]">Release on Story Protocol</span>
+                <span class="text-base text-[var(--text-muted)]">Release on Story Protocol</span>
               </div>
               <span class="ml-auto text-[var(--text-muted)]">
                 <ChevronRightIcon />

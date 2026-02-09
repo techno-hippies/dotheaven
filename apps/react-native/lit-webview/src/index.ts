@@ -1,6 +1,6 @@
 import { createLitClient } from '@lit-protocol/lit-client';
 import { nagaDev } from '@lit-protocol/networks';
-import { createAuthManager, type AuthManager, WebAuthnAuthenticator } from '@lit-protocol/auth';
+import { createAuthManager, storagePlugins, WebAuthnAuthenticator } from '@lit-protocol/auth';
 import type { LitClient } from '@lit-protocol/lit-client';
 import { Buffer } from 'buffer';
 
@@ -22,6 +22,18 @@ interface BridgeResponse {
   ok: boolean;
   result?: any;
   error?: string;
+}
+
+function toJsonSafeValue(value: unknown): unknown {
+  if (typeof value === 'bigint') {
+    const asNumber = Number(value);
+    return Number.isSafeInteger(asNumber) ? asNumber : value.toString();
+  }
+  return value;
+}
+
+function stringifyJsonSafe(value: unknown): string {
+  return JSON.stringify(value, (_key, v) => toJsonSafeValue(v));
 }
 
 function addMessageListener(handler: (event: MessageEvent) => void): void {
@@ -105,7 +117,7 @@ class NativeStoragePlugin {
 
   private postToNative(message: any): void {
     if ((window as any).ReactNativeWebView) {
-      (window as any).ReactNativeWebView.postMessage(JSON.stringify(message));
+      (window as any).ReactNativeWebView.postMessage(stringifyJsonSafe(message));
     } else {
       // Fallback for testing in browser
       console.log('[NativeStorage]', message);
@@ -118,7 +130,8 @@ class NativeStoragePlugin {
 // ============================================================================
 
 let litClient: LitClient | null = null;
-let authManager: AuthManager | null = null;
+let authManager: ReturnType<typeof createAuthManager> | null = null;
+let lastAuthContext: any = null;
 let isInitialized = false;
 let initPromise: Promise<void> | null = null;
 
@@ -131,20 +144,12 @@ async function initLit(): Promise<void> {
       console.log('[Lit] Initializing Lit client...');
       litClient = await createLitClient({ network: nagaDev });
 
-      console.log('[Lit] Creating auth manager with native storage...');
-      const storage = new NativeStoragePlugin();
+      console.log('[Lit] Creating auth manager with localStorage...');
       authManager = createAuthManager({
-        storage: {
-          async getItem(key: string) {
-            return storage.getItem(key);
-          },
-          async setItem(key: string, value: string) {
-            await storage.setItem(key, value);
-          },
-          async removeItem(key: string) {
-            await storage.removeItem(key);
-          }
-        } as any,
+        storage: storagePlugins.localStorage({
+          appName: 'heaven',
+          networkName: 'naga-dev',
+        }),
       });
 
       isInitialized = true;
@@ -163,7 +168,7 @@ async function initLit(): Promise<void> {
 // ============================================================================
 
 function reply(msg: BridgeResponse): void {
-  const message = JSON.stringify(msg);
+  const message = stringifyJsonSafe(msg);
   if ((window as any).ReactNativeWebView) {
     (window as any).ReactNativeWebView.postMessage(message);
   } else {
@@ -217,40 +222,106 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
       }
 
       case 'getAuthContext': {
-        if (!authManager) throw new Error('Auth manager not initialized');
-        const result = await authManager.getAuthContext();
-        return reply({ id, ok: true, result });
+        return reply({ id, ok: true, result: lastAuthContext });
       }
 
       case 'setAuthContext': {
-        if (!authManager) throw new Error('Auth manager not initialized');
-        await authManager.setAuthContext(payload);
+        lastAuthContext = payload;
         return reply({ id, ok: true, result: { success: true } });
       }
 
       case 'registerAndMintPKP': {
         if (!litClient) throw new Error('Lit client not initialized');
         console.log('[Lit] Registering WebAuthn credential and minting PKP...');
-        const result = await WebAuthnAuthenticator.registerAndMintPKP({
-          authServiceBaseUrl: payload.authServiceBaseUrl,
-          scopes: payload.scopes || ['sign-anything'],
+
+        const authServiceBaseUrl = payload.authServiceBaseUrl;
+        const username = payload.username || 'Heaven';
+        const rpName = payload.rpName || 'Heaven';
+        const scopes = payload.scopes || ['sign-anything'];
+
+        // Step 1: Get registration options from auth service
+        const opts = await WebAuthnAuthenticator.getRegistrationOptions({
+          username,
+          authServiceBaseUrl,
         });
-        console.log('[Lit] PKP minted:', result.pkpInfo);
+
+        // Step 2: Override rp.name so the passkey dialog shows our app name
+        if (opts.rp) {
+          (opts.rp as any).name = rpName;
+        }
+
+        // Step 3: Prompt user to create passkey
+        const { startRegistration } = await import('@simplewebauthn/browser');
+        const attResp = await startRegistration(opts);
+
+        // Step 4: Extract public key + compute auth method ID
+        const authMethodPubkey = WebAuthnAuthenticator.getPublicKeyFromRegistration(attResp);
+        const authMethodId = await WebAuthnAuthenticator.authMethodId({
+          authMethodType: 3, // WebAuthn
+          accessToken: JSON.stringify(attResp),
+        });
+
+        // Step 5: Mint PKP via auth service
+        const mintBody = {
+          authMethodType: 3,
+          authMethodId,
+          pubkey: authMethodPubkey,
+          scopes,
+        };
+
+        const mintRes = await fetch(`${authServiceBaseUrl}/pkp/mint`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(mintBody),
+        });
+
+        if (mintRes.status !== 202) {
+          const errBody = await mintRes.text();
+          throw new Error(`PKP mint failed: ${mintRes.status} ${errBody}`);
+        }
+
+        const { jobId } = await mintRes.json();
+
+        // Step 6: Poll for mint completion
+        let pkpData: any = null;
+        for (let i = 0; i < 20; i++) {
+          await new Promise(r => setTimeout(r, 3000));
+          const statusRes = await fetch(`${authServiceBaseUrl}/status/${jobId}`);
+          const status = await statusRes.json();
+          if (status.state === 'completed' && status.returnValue) {
+            pkpData = status.returnValue.data;
+            break;
+          }
+          if (status.state === 'failed' || status.state === 'error') {
+            throw new Error(`PKP mint job failed: ${JSON.stringify(status)}`);
+          }
+        }
+
+        if (!pkpData) throw new Error('PKP mint timed out');
+
+        console.log('[Lit] PKP minted:', pkpData);
+
+        // Step 7: Authenticate with the newly created passkey to get a valid accessToken.
+        // Registration attestation ≠ authentication assertion — the Lit SDK needs
+        // an assertion response (from authenticate()) to create auth contexts.
+        console.log('[Lit] Authenticating with new passkey...');
+        const postMintAuth = await WebAuthnAuthenticator.authenticate();
+        console.log('[Lit] Post-mint authentication successful');
+
         return reply({ id, ok: true, result: {
-          pkpInfo: result.pkpInfo,
-          webAuthnPublicKey: result.webAuthnPublicKey,
+          pkpInfo: pkpData,
+          webAuthnPublicKey: authMethodPubkey,
           authData: {
-            authMethodType: 8, // WebAuthn
-            authMethodId: result.webAuthnPublicKey
+            authMethodType: postMintAuth.authMethodType,
+            authMethodId: postMintAuth.authMethodId,
+            accessToken: postMintAuth.accessToken,
           }
         }});
       }
 
       case 'authenticate': {
         console.log('[Lit] Authenticating with existing WebAuthn credential...');
-        const authData = await WebAuthnAuthenticator.authenticate({
-          authServiceBaseUrl: payload.authServiceBaseUrl,
-        });
+        const authData = await WebAuthnAuthenticator.authenticate();
         console.log('[Lit] Authentication successful');
         return reply({ id, ok: true, result: authData });
       }
@@ -275,6 +346,7 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
           authConfig: payload.authConfig,
           litClient: litClient,
         });
+        lastAuthContext = authContext;
         console.log('[Lit] Auth context created');
         return reply({ id, ok: true, result: { success: true, authContext } });
       }
@@ -286,7 +358,7 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
         // Get or create auth context
         let authContext = payload.authContext;
         if (!authContext) {
-          authContext = await authManager.getAuthContext();
+          authContext = lastAuthContext;
         }
         if (!authContext) throw new Error('No auth context available. Call createAuthContext first.');
 
@@ -325,7 +397,7 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
 
         let authContext = payload.authContext;
         if (!authContext) {
-          authContext = await authManager.getAuthContext();
+          authContext = lastAuthContext;
         }
         if (!authContext) throw new Error('No auth context available');
 
@@ -381,7 +453,7 @@ function checkEnvironment(): void {
 
     // Report error to native
     if ((window as any).ReactNativeWebView) {
-      (window as any).ReactNativeWebView.postMessage(JSON.stringify({
+      (window as any).ReactNativeWebView.postMessage(stringifyJsonSafe({
         type: 'error',
         error: error.message
       }));
@@ -401,7 +473,7 @@ try {
 
   // Signal ready to native
   if ((window as any).ReactNativeWebView) {
-    (window as any).ReactNativeWebView.postMessage(JSON.stringify({
+    (window as any).ReactNativeWebView.postMessage(stringifyJsonSafe({
       type: 'ready',
       timestamp: Date.now()
     }));

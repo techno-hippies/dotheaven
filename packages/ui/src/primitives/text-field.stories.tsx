@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { TextField, TextArea } from './text-field'
 import { createSignal } from 'solid-js'
+import { MagnifyingGlass } from '../icons'
 
 const meta: Meta<typeof TextField> = {
   title: 'Primitives/TextField',
@@ -86,7 +87,7 @@ export const Controlled: Story = {
           value={value()}
           onChange={setValue}
         />
-        <p class="text-sm text-[var(--text-secondary)]">Current value: {value()}</p>
+        <p class="text-base text-[var(--text-secondary)]">Current value: {value()}</p>
       </div>
     )
   },
@@ -142,6 +143,29 @@ export const MessageInputStyle: Story = {
       </div>
     )
   },
+}
+
+export const WithIcon: Story = {
+  args: {
+    placeholder: 'Search songs, people, rooms...',
+    icon: (() => <MagnifyingGlass class="w-4 h-4" />) as any,
+  },
+  render: (args) => (
+    <TextField
+      placeholder={args.placeholder}
+      icon={<MagnifyingGlass class="w-4 h-4" />}
+    />
+  ),
+}
+
+export const WithIconAndLabel: Story = {
+  render: () => (
+    <TextField
+      label="Search"
+      placeholder="Search songs, people, rooms..."
+      icon={<MagnifyingGlass class="w-4 h-4" />}
+    />
+  ),
 }
 
 export const AllStates: Story = {

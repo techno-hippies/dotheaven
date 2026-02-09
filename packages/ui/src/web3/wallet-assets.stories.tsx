@@ -77,7 +77,6 @@ export const PasskeyUser: Story = {
         chainBadge: <FilecoinIcon />,
         balance: '142.8',
         balanceUSD: '$712.56',
-        amount: '142.8 FIL',
       },
       {
         id: 'usdfc-filecoin',
@@ -87,7 +86,6 @@ export const PasskeyUser: Story = {
         chainBadge: <FilecoinIcon />,
         balance: '5250.00',
         balanceUSD: '$5,250.00',
-        amount: '5,250.00 USDFC',
       },
       {
         id: 'eth-sepolia',
@@ -97,7 +95,6 @@ export const PasskeyUser: Story = {
         chainBadge: <EthereumIcon />,
         balance: '0.5000',
         balanceUSD: '$1,545.00',
-        amount: '0.5000 ETH',
       },
       {
         id: 'eth-megaeth',
@@ -107,7 +104,6 @@ export const PasskeyUser: Story = {
         chainBadge: <MegaETHIcon />,
         balance: '0.0940',
         balanceUSD: '$291.00',
-        amount: '0.0940 ETH',
       },
       {
         id: 'usdm-megaeth',
@@ -117,7 +113,6 @@ export const PasskeyUser: Story = {
         chainBadge: <MegaETHIcon />,
         balance: '1000.00',
         balanceUSD: '$1,000.00',
-        amount: '1,000.00 USDM',
       },
     ],
     onSend: () => console.log('Send'),
@@ -139,7 +134,6 @@ export const EOAUserWithENS: Story = {
         chainBadge: <FilecoinIcon />,
         balance: '142.8',
         balanceUSD: '$712.56',
-        amount: '142.8 FIL',
       },
       {
         id: 'usdfc-filecoin',
@@ -149,7 +143,6 @@ export const EOAUserWithENS: Story = {
         chainBadge: <FilecoinIcon />,
         balance: '500.00',
         balanceUSD: '$500.00',
-        amount: '500.00 USDFC',
       },
       {
         id: 'eth-sepolia',
@@ -159,7 +152,6 @@ export const EOAUserWithENS: Story = {
         chainBadge: <EthereumIcon />,
         balance: '0.3200',
         balanceUSD: '$988.80',
-        amount: '0.3200 ETH',
       },
       {
         id: 'eth-megaeth',
@@ -169,7 +161,6 @@ export const EOAUserWithENS: Story = {
         chainBadge: <MegaETHIcon />,
         balance: '0.0012',
         balanceUSD: '$3.71',
-        amount: '0.0012 ETH',
       },
       {
         id: 'usdm-megaeth',
@@ -179,7 +170,6 @@ export const EOAUserWithENS: Story = {
         chainBadge: <MegaETHIcon />,
         balance: '56.20',
         balanceUSD: '$56.20',
-        amount: '56.20 USDM',
       },
     ],
     connectedWallet: {
@@ -196,7 +186,6 @@ export const EOAUserWithENS: Story = {
           chainBadge: <FilecoinIcon />,
           balance: '25.0000',
           balanceUSD: '$125.00',
-          amount: '25.0000 FIL',
         },
         {
           id: 'usdfc-filecoin',
@@ -206,7 +195,6 @@ export const EOAUserWithENS: Story = {
           chainBadge: <FilecoinIcon />,
           balance: '1200.00',
           balanceUSD: '$1,200.00',
-          amount: '1,200.00 USDFC',
         },
         {
           id: 'eth-sepolia',
@@ -216,7 +204,6 @@ export const EOAUserWithENS: Story = {
           chainBadge: <EthereumIcon />,
           balance: '15.6129',
           balanceUSD: '$48,244.00',
-          amount: '15.6129 ETH',
         },
         {
           id: 'eth-megaeth',
@@ -226,7 +213,6 @@ export const EOAUserWithENS: Story = {
           chainBadge: <MegaETHIcon />,
           balance: '0.0250',
           balanceUSD: '$77.25',
-          amount: '0.0250 ETH',
         },
         {
           id: 'usdm-megaeth',
@@ -236,7 +222,6 @@ export const EOAUserWithENS: Story = {
           chainBadge: <MegaETHIcon />,
           balance: '216.31',
           balanceUSD: '$216.31',
-          amount: '216.31 USDM',
         },
       ],
     },
@@ -259,7 +244,6 @@ export const EOAUserNoENS: Story = {
         chainBadge: <FilecoinIcon />,
         balance: '0.0000',
         balanceUSD: '$0.00',
-        amount: '0.0000 FIL',
       },
       {
         id: 'usdfc-filecoin',
@@ -269,7 +253,6 @@ export const EOAUserNoENS: Story = {
         chainBadge: <FilecoinIcon />,
         balance: '0.00',
         balanceUSD: '$0.00',
-        amount: '0.00 USDFC',
       },
       {
         id: 'eth-sepolia',
@@ -279,7 +262,6 @@ export const EOAUserNoENS: Story = {
         chainBadge: <EthereumIcon />,
         balance: '0.5000',
         balanceUSD: '$1,545.00',
-        amount: '0.5000 ETH',
       },
       {
         id: 'eth-megaeth',
@@ -289,7 +271,6 @@ export const EOAUserNoENS: Story = {
         chainBadge: <MegaETHIcon />,
         balance: '0.0012',
         balanceUSD: '$3.71',
-        amount: '0.0012 ETH',
       },
       {
         id: 'usdm-megaeth',
@@ -299,7 +280,6 @@ export const EOAUserNoENS: Story = {
         chainBadge: <MegaETHIcon />,
         balance: '0.00',
         balanceUSD: '$0.00',
-        amount: '0.00 USDM',
       },
     ],
     connectedWallet: {
@@ -314,7 +294,6 @@ export const EOAUserNoENS: Story = {
           chainBadge: <FilecoinIcon />,
           balance: '0.0000',
           balanceUSD: '$0.00',
-          amount: '0.0000 FIL',
         },
         {
           id: 'usdfc-filecoin',
@@ -324,7 +303,6 @@ export const EOAUserNoENS: Story = {
           chainBadge: <FilecoinIcon />,
           balance: '500.00',
           balanceUSD: '$500.00',
-          amount: '500.00 USDFC',
         },
         {
           id: 'eth-sepolia',
@@ -334,7 +312,6 @@ export const EOAUserNoENS: Story = {
           chainBadge: <EthereumIcon />,
           balance: '10.5000',
           balanceUSD: '$32,450.00',
-          amount: '10.5000 ETH',
         },
         {
           id: 'eth-megaeth',
@@ -344,7 +321,6 @@ export const EOAUserNoENS: Story = {
           chainBadge: <MegaETHIcon />,
           balance: '0.0012',
           balanceUSD: '$3.71',
-          amount: '0.0012 ETH',
         },
         {
           id: 'usdm-megaeth',
@@ -354,7 +330,6 @@ export const EOAUserNoENS: Story = {
           chainBadge: <MegaETHIcon />,
           balance: '0.00',
           balanceUSD: '$0.00',
-          amount: '0.00 USDM',
         },
       ],
     },

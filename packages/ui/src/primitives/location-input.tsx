@@ -55,8 +55,19 @@ const US_STATE_ABBR: Record<string, string> = {
   'Oklahoma': 'OK', 'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
   'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT', 'Vermont': 'VT',
   'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY',
-  'District of Columbia': 'DC'
+  'District of Columbia': 'DC',
 }
+
+// Canadian province abbreviations
+const CA_PROVINCE_ABBR: Record<string, string> = {
+  'Alberta': 'AB', 'British Columbia': 'BC', 'Manitoba': 'MB', 'New Brunswick': 'NB',
+  'Newfoundland and Labrador': 'NL', 'Nova Scotia': 'NS', 'Ontario': 'ON',
+  'Prince Edward Island': 'PE', 'Quebec': 'QC', 'Saskatchewan': 'SK',
+  'Northwest Territories': 'NT', 'Nunavut': 'NU', 'Yukon': 'YT',
+}
+
+// Region/state abbreviation lookup (US + CA)
+const REGION_ABBR: Record<string, string> = { ...US_STATE_ABBR, ...CA_PROVINCE_ABBR }
 
 // Common country abbreviations (ISO 3166-1 alpha-2)
 const COUNTRY_ABBR: Record<string, string> = {
@@ -67,25 +78,48 @@ const COUNTRY_ABBR: Record<string, string> = {
   'Netherlands': 'NL', 'Belgium': 'BE', 'Switzerland': 'CH', 'Austria': 'AT',
   'Sweden': 'SE', 'Norway': 'NO', 'Denmark': 'DK', 'Finland': 'FI',
   'Poland': 'PL', 'Ireland': 'IE', 'Portugal': 'PT', 'Greece': 'GR',
-  'Japan': 'JP', 'China': 'CN', 'India': 'IN', 'Brazil': 'BR', 'Mexico': 'MX'
+  'Japan': 'JP', 'China': 'CN', 'India': 'IN', 'Brazil': 'BR', 'Mexico': 'MX',
+  'South Korea': 'KR', 'Taiwan': 'TW', 'Thailand': 'TH', 'Vietnam': 'VN',
+  'Indonesia': 'ID', 'Philippines': 'PH', 'Singapore': 'SG', 'Malaysia': 'MY',
+  'Argentina': 'AR', 'Colombia': 'CO', 'Chile': 'CL', 'Peru': 'PE',
+  'Turkey': 'TR', 'Egypt': 'EG', 'South Africa': 'ZA', 'Nigeria': 'NG',
+  'Russia': 'RU', 'Ukraine': 'UA', 'Czech Republic': 'CZ', 'Czechia': 'CZ',
+  'Romania': 'RO', 'Hungary': 'HU', 'Croatia': 'HR',
 }
 
 /**
  * Abbreviate a verbose location string at display time.
- * "Portland, Oregon, United States" → "Portland, OR, US"
+ *
+ * 3 parts (City, Region, Country):
+ *   - US/CA: abbreviate region + country → "Portland, OR, US", "Toronto, ON, CA"
+ *   - Others: drop region, abbreviate country → "Amsterdam, NL", "Edinburgh, UK"
+ *
+ * 2 parts (City, Country):
+ *   - Abbreviate country → "Berlin, DE", "Tokyo, JP"
  */
 export function abbreviateLocation(location: string): string {
   const parts = location.split(',').map(p => p.trim())
   if (parts.length < 2) return location
 
-  return parts.map((part, i) => {
-    if (i === 0) return part // city name — keep as-is
-    const stateAbbr = US_STATE_ABBR[part]
-    if (stateAbbr) return stateAbbr
-    const countryAbbr = COUNTRY_ABBR[part]
-    if (countryAbbr) return countryAbbr
-    return part
-  }).join(', ')
+  if (parts.length >= 3) {
+    const city = parts[0]
+    const region = parts[1]
+    const country = parts[parts.length - 1]
+    const countryCode = COUNTRY_ABBR[country] ?? country
+    const regionAbbr = REGION_ABBR[region]
+
+    // US/CA: keep abbreviated region
+    if (regionAbbr) {
+      return `${city}, ${regionAbbr}, ${countryCode}`
+    }
+    // Others: drop verbose region (e.g. "North Holland", "Ile-de-France", "Maharashtra")
+    return `${city}, ${countryCode}`
+  }
+
+  // 2 parts: City, Country — just abbreviate country
+  const city = parts[0]
+  const country = parts[1]
+  return `${city}, ${COUNTRY_ABBR[country] ?? country}`
 }
 
 async function searchPhoton(
@@ -136,20 +170,20 @@ async function searchPhoton(
 
     const [lng, lat] = feature.geometry?.coordinates || [0, 0]
 
-    // Build display label with abbreviations (city, ST, CC format)
+    // Build display label: City, ST, CC (US/CA) or City, CC (others)
     const parts: string[] = []
     if (props.name) parts.push(props.name)
 
-    // Abbreviate state for US locations
+    // US/CA: include abbreviated region; others: drop region
     if (props.state && props.state !== props.name) {
-      const stateAbbr = US_STATE_ABBR[props.state]
-      parts.push(stateAbbr || props.state)
+      const regionAbbr = REGION_ABBR[props.state]
+      if (regionAbbr) parts.push(regionAbbr)
+      // Non-US/CA regions dropped — country code is enough
     }
 
     // Abbreviate country
     if (props.country) {
-      const countryAbbr = COUNTRY_ABBR[props.country]
-      parts.push(countryAbbr || props.country)
+      parts.push(COUNTRY_ABBR[props.country] || props.country)
     }
 
     const label = parts.join(', ')
@@ -358,13 +392,13 @@ export const LocationInput: Component<LocationInputProps> = (props) => {
         <Combobox.Portal>
           <Combobox.Content
             class={cn(
-              'z-50 mt-1 rounded-md bg-[var(--bg-surface)] border border-[var(--bg-highlight)]',
+              'z-50 mt-1 rounded-md bg-[var(--bg-surface)] border border-[var(--border-subtle)]',
               'shadow-xl w-[var(--kb-popper-anchor-width)] overflow-hidden'
             )}
           >
             <Combobox.Listbox class="py-1 max-h-64 overflow-y-auto" />
             {/* OSM Attribution */}
-            <div class="px-3 py-1.5 bg-[var(--bg-highlight)]/50 border-t border-[var(--bg-highlight)]">
+            <div class="px-3 py-1.5 bg-[var(--bg-highlight)]/50 border-t border-[var(--border-subtle)]">
               <p class="text-xs text-[var(--text-muted)]">
                 Data ©{' '}
                 <a

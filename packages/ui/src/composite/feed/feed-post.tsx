@@ -370,7 +370,7 @@ const PostContent: Component<{
           <div class="flex items-center gap-2 mt-1.5">
             <button
               type="button"
-              class="flex items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--accent-blue)] cursor-pointer transition-colors"
+              class="flex items-center gap-1 text-base text-[var(--text-muted)] hover:text-[var(--accent-blue)] cursor-pointer transition-colors"
               data-no-post-click
               onClick={() => setShowOriginal(!showOriginal())}
             >
@@ -533,7 +533,7 @@ export const FeedPost: Component<FeedPostProps> = (props) => {
           isTranslating={props.isTranslating}
           needsTranslation={props.postLang && props.userLang ? props.postLang !== props.userLang : true}
           compact={isMobile()}
-          class="-mt-1 -mb-1"
+          class="mt-3"
         />
       </div>
     </div>

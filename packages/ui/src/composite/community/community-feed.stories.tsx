@@ -1,15 +1,23 @@
 import type { Meta, StoryObj } from 'storybook-solidjs'
+import { createSignal, Show } from 'solid-js'
 import { CommunityFeed } from './community-feed'
 import type { CommunityCardProps } from './community-card'
-import { PageHeader } from '../shared/page-header'
-import { Avatar } from '../../primitives/avatar'
-import { IconButton } from '../../primitives/icon-button'
-import { Sliders } from '../../icons'
+import { CommunityFilterDialog, countActiveFilters, type CommunityFilters } from './community-filter'
+import { Button } from '../../primitives/button'
+import { TextField } from '../../primitives/text-field'
+import { Sliders, MagnifyingGlass } from '../../icons'
 
 const meta: Meta<typeof CommunityFeed> = {
-  title: 'Community/CommunityFeed',
+  title: 'Search/CommunityFeed',
   component: CommunityFeed,
   parameters: { layout: 'fullscreen' },
+  decorators: [
+    (Story) => (
+      <div style={{ height: '100vh', background: 'var(--bg-page)' }} class="flex flex-col">
+        <Story />
+      </div>
+    ),
+  ],
 }
 
 export default meta
@@ -21,259 +29,138 @@ const sampleMembers: CommunityCardProps[] = [
   {
     name: 'Matthias',
     avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face',
-    bio: 'I love red wine, comic books, hiking, and my dog Max.',
+    nationalityCode: 'DE',
     online: true,
     age: 28,
     gender: 'M',
     verified: 'verified',
-    topArtists: ['Radiohead', 'Tame Impala', 'Khruangbin'],
-    languages: [
-      { code: 'en', proficiency: 7 },
-      { code: 'de', proficiency: 7 },
-      { code: 'es', proficiency: 3 },
-      { code: 'ja', proficiency: 2 },
-    ],
+    location: 'Berlin, Germany',
   },
   {
     name: 'Hannah',
     avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop&crop=face',
-    bio: "I'm heading to Spain this summer! Can anyone give me recommendations?",
+    nationalityCode: 'US',
     age: 24,
     gender: 'F',
     verified: 'verified',
-    topArtists: ['Bad Bunny', 'Rosalia'],
-    languages: [
-      { code: 'en', proficiency: 7 },
-      { code: 'es', proficiency: 4 },
-      { code: 'fr', proficiency: 3 },
-      { code: 'it', proficiency: 2 },
-      { code: 'pt', proficiency: 1 },
-    ],
+    location: 'New York, USA',
   },
   {
     name: 'Eduardo',
     avatarUrl: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=200&h=200&fit=crop&crop=face',
-    bio: "I just moved to Madrid. Let's get coffee!",
+    nationalityCode: 'BR',
     online: true,
     age: 31,
     gender: 'M',
-    topArtists: ['Gustavo Cerati', 'Soda Stereo'],
-    languages: [
-      { code: 'en', proficiency: 7 },
-      { code: 'pt', proficiency: 7 },
-      { code: 'es', proficiency: 5 },
-      { code: 'fr', proficiency: 3 },
-      { code: 'de', proficiency: 2 },
-      { code: 'it', proficiency: 2 },
-      { code: 'ja', proficiency: 1 },
-      { code: 'ko', proficiency: 1 },
-    ],
+    location: 'Madrid, Spain',
   },
   {
     name: 'Mia',
     avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=face',
-    bio: 'Music lover. Looking for people to practice Japanese with!',
+    nationalityCode: 'CA',
     age: 22,
-    topArtists: ['Frank Ocean', 'Nujabes'],
-    languages: [
-      { code: 'en', proficiency: 7 },
-      { code: 'ja', proficiency: 3 },
-      { code: 'ko', proficiency: 1 },
-    ],
+    location: 'Toronto, Canada',
   },
   {
     name: 'Liam',
     avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop&crop=face',
-    bio: 'Software engineer by day, language nerd by night. Currently grinding Korean dramas for immersion.',
+    nationalityCode: 'GB',
     online: true,
     age: 29,
     gender: 'M',
-    languages: [
-      { code: 'en', proficiency: 7 },
-      { code: 'ko', proficiency: 3 },
-      { code: 'ja', proficiency: 2 },
-    ],
+    location: 'London, UK',
   },
   {
     name: 'Sakura',
     avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&h=200&fit=crop&crop=face',
-    bio: 'Art student in Tokyo. I can help with Japanese!',
+    nationalityCode: 'JP',
     age: 21,
     gender: 'F',
     verified: 'verified',
-    topArtists: ['Yoasobi', 'Kenshi Yonezu', 'Aimer'],
-    languages: [
-      { code: 'ja', proficiency: 7 },
-      { code: 'en', proficiency: 4 },
-      { code: 'fr', proficiency: 2 },
-    ],
+    location: 'Tokyo, Japan',
   },
 ]
 
-const featuredMember: CommunityCardProps = {
-  name: 'Martina',
-  avatarUrl: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=300&h=300&fit=crop&crop=face',
-  bio: 'I want to practice some new Spanish words I learned.',
-  online: true,
-  age: 26,
-  gender: 'F',
-  verified: 'verified',
-  topArtists: ['Taylor Swift', 'Billie Eilish', 'SZA'],
-  languages: [
-    { code: 'en', proficiency: 7 },
-    { code: 'de', proficiency: 7 },
-    { code: 'es', proficiency: 3 },
-    { code: 'ja', proficiency: 2 },
-  ],
-}
+// ── Default ─────────────────────────────────────────────────────────
 
-// ── Mobile view ─────────────────────────────────────────────────────────
-
-export const Mobile: Story = {
-  decorators: [
-    (Story) => (
-      <div style={{ width: '390px', height: '844px', background: 'var(--bg-page)' }} class="flex flex-col">
-        <PageHeader
-          title="Community"
-          leftSlot={
-            <Avatar
-              src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80&h=80&fit=crop&crop=face"
-              size="sm"
-            />
-          }
-          rightSlot={
-            <IconButton size="sm" variant="ghost" aria-label="Filter">
-              <Sliders class="w-5 h-5" />
-            </IconButton>
-          }
-        />
-        <Story />
-      </div>
-    ),
-  ],
+export const Default: Story = {
   args: {
     members: sampleMembers,
-    featuredMember,
-    tabs: [
-      { id: 'all', label: 'All' },
-      { id: 'nearby', label: 'Nearby', badge: '99+' },
-    ],
-  },
-}
-
-// ── Desktop view ────────────────────────────────────────────────────────
-
-export const Desktop: Story = {
-  decorators: [
-    (Story) => (
-      <div style={{ width: '800px', height: '700px', background: 'var(--bg-page)' }} class="flex flex-col">
-        <PageHeader
-          title="Community"
-          leftSlot={
-            <Avatar
-              src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80&h=80&fit=crop&crop=face"
-              size="sm"
-            />
-          }
-          rightSlot={
-            <IconButton size="sm" variant="ghost" aria-label="Filter">
-              <Sliders class="w-5 h-5" />
-            </IconButton>
-          }
-        />
-        <Story />
-      </div>
-    ),
-  ],
-  args: {
-    members: sampleMembers,
-    featuredMember,
-    tabs: [
-      { id: 'all', label: 'All' },
-      { id: 'nearby', label: 'Nearby', badge: '99+' },
-    ],
-  },
-}
-
-// ── No featured member ──────────────────────────────────────────────────
-
-export const NoFeatured: Story = {
-  decorators: [
-    (Story) => (
-      <div style={{ width: '390px', height: '844px', background: 'var(--bg-page)' }} class="flex flex-col">
-        <PageHeader
-          title="Community"
-          rightSlot={
-            <IconButton size="sm" variant="ghost" aria-label="Filter">
-              <Sliders class="w-5 h-5" />
-            </IconButton>
-          }
-        />
-        <Story />
-      </div>
-    ),
-  ],
-  args: {
-    members: sampleMembers,
-    tabs: [
-      { id: 'all', label: 'All' },
-      { id: 'nearby', label: 'Nearby', badge: '99+' },
-    ],
   },
 }
 
 // ── Empty state ─────────────────────────────────────────────────────────
 
 export const Empty: Story = {
-  decorators: [
-    (Story) => (
-      <div style={{ width: '390px', height: '400px', background: 'var(--bg-page)' }} class="flex flex-col">
-        <PageHeader
-          title="Community"
-          rightSlot={
-            <IconButton size="sm" variant="ghost" aria-label="Filter">
-              <Sliders class="w-5 h-5" />
-            </IconButton>
-          }
-        />
-        <Story />
-      </div>
-    ),
-  ],
   args: {
     members: [],
-    tabs: [
-      { id: 'all', label: 'All' },
-      { id: 'nearby', label: 'Nearby' },
-    ],
-    activeTab: 'nearby',
   },
 }
 
-// ── Nearby tab active ───────────────────────────────────────────────────
+// ── Loading state ───────────────────────────────────────────────────────
 
-export const NearbyTab: Story = {
-  decorators: [
-    (Story) => (
-      <div style={{ width: '390px', height: '844px', background: 'var(--bg-page)' }} class="flex flex-col">
-        <PageHeader
-          title="Community"
-          rightSlot={
-            <IconButton size="sm" variant="ghost" aria-label="Filter">
-              <Sliders class="w-5 h-5" />
-            </IconButton>
-          }
-        />
-        <Story />
-      </div>
-    ),
-  ],
+export const Loading: Story = {
   args: {
-    members: sampleMembers.slice(0, 3),
-    tabs: [
-      { id: 'all', label: 'All' },
-      { id: 'nearby', label: 'Nearby', badge: '3' },
-    ],
-    activeTab: 'nearby',
+    members: [],
+    isLoading: true,
   },
+}
+
+// ── With search bar + filter button (interactive) ───────────────────────
+
+export const WithSearchAndFilter: Story = {
+  decorators: [
+    () => {
+      const [query, setQuery] = createSignal('')
+      const [filterOpen, setFilterOpen] = createSignal(false)
+      const [filters, setFilters] = createSignal<CommunityFilters>({})
+      const activeCount = () => countActiveFilters(filters())
+
+      const filtered = () => {
+        const q = query().toLowerCase().trim()
+        if (!q) return sampleMembers
+        return sampleMembers.filter(
+          (m) =>
+            m.name?.toLowerCase().includes(q) ||
+            m.location?.toLowerCase().includes(q),
+        )
+      }
+
+      return (
+        <div style={{ height: '100vh', background: 'var(--bg-page)' }} class="flex flex-col">
+          <div class="flex items-center gap-2 px-4 pt-4 pb-2">
+            <TextField
+              value={query()}
+              onChange={setQuery}
+              placeholder="Search people..."
+              icon={<MagnifyingGlass class="w-4 h-4" />}
+              class="flex-1"
+            />
+            <div class="relative flex-shrink-0">
+              <Button
+                variant="secondary"
+                icon={<Sliders />}
+                onClick={() => setFilterOpen(true)}
+                class="h-12"
+              >
+                Filter
+              </Button>
+              <Show when={activeCount() > 0}>
+                <span class="absolute -top-0.5 -right-1.5 w-4 h-4 bg-[var(--accent-coral)] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                  {activeCount()}
+                </span>
+              </Show>
+            </div>
+          </div>
+          <CommunityFeed members={filtered()} />
+          <CommunityFilterDialog
+            open={filterOpen()}
+            onOpenChange={setFilterOpen}
+            filters={filters()}
+            onFiltersChange={setFilters}
+          />
+        </div>
+      )
+    },
+  ],
 }

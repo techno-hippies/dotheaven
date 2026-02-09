@@ -304,12 +304,26 @@ export async function linkEoa(
   const timestamp = Date.now().toString()
   const nonce = crypto.randomUUID()
 
+  // Derive PKP address from public key for the signature message
+  const { computeAddress } = await import('ethers')
+  const pkpAddress = computeAddress(pkpPublicKey).toLowerCase()
+
+  // Pre-sign EIP-191 message proving PKP ownership (via user's PKP)
+  const { signMessageWithPKP } = await import('./lit/signer-pkp')
+  const message = `heaven:linkEoa:${pkpAddress}:${eoaAddress.toLowerCase()}:${timestamp}:${nonce}`
+  const signature = await signMessageWithPKP(
+    { publicKey: pkpPublicKey, ethAddress: eoaAddress as `0x${string}`, tokenId: '' },
+    authContext,
+    message,
+  )
+
   const result = await litClient.executeJs({
     ipfsId: LINK_EOA_V1_CID,
     authContext,
     jsParams: {
       userPkpPublicKey: pkpPublicKey,
       eoaAddress,
+      signature,
       timestamp,
       nonce,
     },

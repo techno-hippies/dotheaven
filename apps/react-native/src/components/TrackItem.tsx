@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { MusicNote, DotsThree } from 'phosphor-react-native';
+import { colors } from '../lib/theme';
 import type { MusicTrack } from '../services/music-scanner';
 
 interface TrackItemProps {
@@ -10,13 +11,6 @@ interface TrackItemProps {
   onPress: () => void;
 }
 
-function formatDuration(seconds: number): string {
-  if (!seconds || seconds <= 0) return '--:--';
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
 export const TrackItem: React.FC<TrackItemProps> = ({ track, isActive, isPlaying, onPress }) => {
   return (
     <TouchableOpacity
@@ -24,13 +18,16 @@ export const TrackItem: React.FC<TrackItemProps> = ({ track, isActive, isPlaying
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <View style={styles.icon}>
-        {isActive && isPlaying ? (
-          <Ionicons name="musical-notes" size={18} color="#b8b8d0" />
-        ) : (
-          <Ionicons name="musical-note-outline" size={18} color="#7878a0" />
-        )}
+      {/* Album cover placeholder */}
+      <View style={styles.albumCover}>
+        <MusicNote
+          size={20}
+          color={isActive ? colors.accentBlue : colors.textMuted}
+          weight={isPlaying ? 'fill' : 'regular'}
+        />
       </View>
+
+      {/* Title + Artist */}
       <View style={styles.info}>
         <Text style={[styles.title, isActive && styles.titleActive]} numberOfLines={1}>
           {track.title}
@@ -39,7 +36,11 @@ export const TrackItem: React.FC<TrackItemProps> = ({ track, isActive, isPlaying
           {track.artist}
         </Text>
       </View>
-      <Text style={styles.duration}>{formatDuration(track.duration)}</Text>
+
+      {/* Menu button */}
+      <View style={styles.menuButton}>
+        <DotsThree size={20} color={colors.textSecondary} weight="bold" />
+      </View>
     </TouchableOpacity>
   );
 };
@@ -49,38 +50,44 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginHorizontal: 8,
-    marginVertical: 2,
+    height: 72,
+    gap: 12,
   },
   active: {
-    backgroundColor: '#2d2645',
+    backgroundColor: colors.bgHighlight,
   },
-  icon: {
-    width: 32,
+  albumCover: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: colors.bgElevated,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   info: {
     flex: 1,
-    marginLeft: 8,
+    minWidth: 0,
   },
   title: {
-    fontSize: 15,
-    color: '#f0f0f5',
+    fontSize: 16,
     fontWeight: '500',
+    color: colors.textPrimary,
   },
   titleActive: {
-    color: '#8fb8e0',
+    color: colors.accentBlue,
   },
   artist: {
-    fontSize: 13,
-    color: '#7878a0',
-    marginTop: 2,
+    fontSize: 16,
+    color: colors.textMuted,
+    marginTop: 1,
   },
-  duration: {
-    fontSize: 13,
-    color: '#7878a0',
-    marginLeft: 12,
+  menuButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 9999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
 });

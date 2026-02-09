@@ -31,6 +31,11 @@ export interface ProfileHeaderProps {
   onEditClick?: () => void
   onSaveClick?: () => void
   onVerifyClick?: () => void
+  // Follow counts (optional — shown when provided)
+  followerCount?: number
+  followingCount?: number
+  onFollowerCountClick?: () => void
+  onFollowingCountClick?: () => void
   // Additional metadata to display
   age?: number
   gender?: string
@@ -114,6 +119,27 @@ export const ProfileHeader: Component<ProfileHeaderProps> = (props) => {
                 <MapPin class="w-[18px] h-[18px] flex-shrink-0" />
                 {abbreviateLocation(props.location!)}
               </p>
+            </Show>
+            {/* Follower/following counts */}
+            <Show when={props.followerCount !== undefined || props.followingCount !== undefined}>
+              <div class="flex items-center gap-3 text-base">
+                <button
+                  type="button"
+                  class="hover:underline text-[var(--text-primary)] font-semibold"
+                  onClick={() => props.onFollowerCountClick?.()}
+                >
+                  {props.followerCount ?? 0}
+                  <span class="text-[var(--text-muted)] font-normal ml-1">followers</span>
+                </button>
+                <button
+                  type="button"
+                  class="hover:underline text-[var(--text-primary)] font-semibold"
+                  onClick={() => props.onFollowingCountClick?.()}
+                >
+                  {props.followingCount ?? 0}
+                  <span class="text-[var(--text-muted)] font-normal ml-1">following</span>
+                </button>
+              </div>
             </Show>
           </div>
 

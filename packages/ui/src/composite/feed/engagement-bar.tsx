@@ -52,7 +52,7 @@ function formatCount(n: number): string {
 
 export const EngagementBar: Component<EngagementBarProps> = (props) => {
   const iconSize = () => props.compact ? 'w-4.5 h-4.5' : 'w-5 h-5'
-  const iconBtn = 'rounded-full p-2 cursor-pointer transition-colors'
+  const iconBtn = 'rounded-full px-2 py-1.5 cursor-pointer transition-colors'
 
   return (
     <div class={cn('flex items-center justify-between w-full -ml-2', props.class)}>
@@ -65,7 +65,7 @@ export const EngagementBar: Component<EngagementBarProps> = (props) => {
         >
           <ChatCircle class={iconSize()} />
         </button>
-        <span class="text-sm">{formatCount(props.comments ?? 0)}</span>
+        <span class="text-base">{formatCount(props.comments ?? 0)}</span>
       </div>
 
       {/* Repost with dropdown */}
@@ -89,7 +89,7 @@ export const EngagementBar: Component<EngagementBarProps> = (props) => {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <span class="text-sm">{formatCount(props.reposts ?? 0)}</span>
+        <span class="text-base">{formatCount(props.reposts ?? 0)}</span>
       </div>
 
       {/* Like */}
@@ -103,7 +103,7 @@ export const EngagementBar: Component<EngagementBarProps> = (props) => {
             <HeartFill class={iconSize()} />
           </Show>
         </button>
-        <span class="text-sm">{formatCount(props.likes ?? 0)}</span>
+        <span class="text-base">{formatCount(props.likes ?? 0)}</span>
       </div>
 
       {/* Translate */}

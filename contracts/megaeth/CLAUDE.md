@@ -23,6 +23,9 @@
 | `aa/HeavenPaymaster.sol` | Thin wrapper around eth-infinitism `VerifyingPaymaster` v0.7. Off-chain gateway signer validates policy and signs UserOp approvals. |
 | `aa/AccountBinding.sol` | Shared abstract contract with `onlyAccountOf(user)` modifier. Verifies `msg.sender == FACTORY.getAddress(user, SALT)` — not spoofable. Inherited by ScrobbleV4 (and future AA-enabled contracts). |
 | `SessionEscrowV1.sol` | ETH-native escrow for scheduled 1:1 voice sessions. Hosts publish slots → guests book (payable) → oracle attests outcome → challenge window → finalize payout. Pull-payment fallback via `owed` mapping for failed transfers. |
+| `FollowV1.sol` | Social follow graph. `followFor()`/`unfollowFor()` sponsor-gated. On-chain `follows` mapping + `followerCount`/`followingCount` counters. `followBatchFor()` for multi-follow. Idempotent (no-ops if already following/unfollowing). |
+| `LyricsEngagementV1.sol` | Song lyrics translation persistence. Stores translation CIDs per (ipId, language). Sponsor-gated. |
+| `VerificationMirror.sol` | Mirrors Self.xyz verification state from Celo Sepolia. Stores verifiedAt + nationality. Sponsor-gated. |
 
 ## Chain Info
 
@@ -49,9 +52,11 @@ All names are **FREE** (`pricePerYear = 0`). Tiered pricing for short names (2-4
 | EngagementV2 | `0xAF769d204e51b64D282083Eb0493F6f37cd93138` |
 | PostsV1 | `0xFe674F421c2bBB6D664c7F5bc0D5A0204EE0bFA6` |
 | HeavenAccountFactory | `0xB66BF4066F40b36Da0da34916799a069CBc79408` |
-| HeavenPaymaster | `0xd7C9436b7d6D62cF2bd5B3eE48f0f2D55d974c67` |
+| HeavenPaymaster | `0xEb3C4c145AE16d7cC044657D1632ef08d6B2D5d9` |
 | ScrobbleV4 | `0xBcD4EbBb964182ffC5EA03FF70761770a326Ccf1` |
 | SessionEscrowV1 | `0x132212B78C4a7A3F19DE1BF63f119848c765c1d2` |
+| LyricsEngagementV1 | `0x6C832a6Cb9F360f81D697Bed66250Dc361386EB4` |
+| FollowV1 | `0x3F32cF9e70EF69DFFed74Dfe07034cb03cF726cb` |
 
 Internal (deployed by factory constructor):
 | SimpleAccountFactory | `0x48833641e079936664df306e64a160256520a33F` |
@@ -194,26 +199,56 @@ contracts/megaeth/
 │   ├── RegistryV1.sol         # Name NFT registry (native ETH)
 │   ├── RecordsV1.sol          # ENS record storage
 │   ├── Resolver.sol           # CCIP-Read resolver
+│   ├── ProfileV1.sol          # Legacy profile (deprecated)
 │   ├── ProfileV2.sol          # Social profile (packed enums, unified language model)
 │   ├── ScrobbleV3.sol         # Track registry + scrobble events (sponsor-gated)
 │   ├── ScrobbleV4.sol         # Track registry + scrobble events (AA-gated)
 │   ├── PlaylistV1.sol         # Event-sourced playlists
-│   └── aa/
-│       ├── IHeavenAccountFactory.sol  # Minimal factory interface
-│       ├── HeavenAccountFactory.sol   # SimpleAccountFactory v0.7 wrapper
-│       ├── HeavenPaymaster.sol        # VerifyingPaymaster v0.7 wrapper
-│       └── AccountBinding.sol         # Shared onlyAccountOf modifier
+│   ├── ContentRegistry.sol    # Filecoin content pointers + access control
+│   ├── EngagementV1.sol       # Engagement (deprecated, see V2)
+│   ├── EngagementV2.sol       # Likes, comments, translations, flags, reveals
+│   ├── PostsV1.sol            # Social posts
+│   ├── FollowV1.sol           # Social follow graph (sponsor-gated)
+│   ├── LyricsEngagementV1.sol # Song lyrics translation persistence
+│   ├── SessionEscrowV1.sol    # Voice session escrow
+│   ├── VerificationMirror.sol # Self.xyz verification mirror from Celo
+│   ├── aa/
+│   │   ├── IHeavenAccountFactory.sol  # Minimal factory interface
+│   │   ├── HeavenAccountFactory.sol   # SimpleAccountFactory v0.7 wrapper
+│   │   ├── HeavenPaymaster.sol        # VerifyingPaymaster v0.7 wrapper
+│   │   └── AccountBinding.sol         # Shared onlyAccountOf modifier
+│   └── efp/
+│       ├── EFPListRecords.sol         # EFP list records
+│       ├── interfaces/
+│       │   └── IEFPListRecords.sol    # EFP list records interface
+│       └── lib/
+│           └── ENSReverseClaimer.sol  # ENS reverse claimer
 ├── script/
-│   ├── DeployHeaven.s.sol     # Deploy script (registry/records/profile)
-│   ├── DeployScrobbleV3.s.sol # Deploy ScrobbleV3
-│   ├── DeployPlaylistV1.s.sol # Deploy PlaylistV1
-│   └── DeployAA.s.sol         # Deploy AA stack (factory/paymaster/ScrobbleV4)
+│   ├── DeployHeaven.s.sol              # Deploy script (registry/records/profile)
+│   ├── DeployRecordsV1.s.sol           # Deploy RecordsV1
+│   ├── DeployProfileV2.s.sol           # Deploy ProfileV2
+│   ├── DeployScrobbleV3.s.sol          # Deploy ScrobbleV3
+│   ├── DeployScrobbleV4.s.sol          # Deploy ScrobbleV4
+│   ├── DeployPlaylistV1.s.sol          # Deploy PlaylistV1
+│   ├── DeployContentRegistry.s.sol     # Deploy ContentRegistry
+│   ├── DeployEngagementV1.s.sol        # Deploy EngagementV1
+│   ├── DeployEngagementV2.s.sol        # Deploy EngagementV2
+│   ├── DeployPostsV1.s.sol             # Deploy PostsV1
+│   ├── DeployFollowV1.s.sol            # Deploy FollowV1
+│   ├── DeployLyricsEngagementV1.s.sol  # Deploy LyricsEngagementV1
+│   ├── DeploySessionEscrow.s.sol       # Deploy SessionEscrowV1
+│   ├── DeployVerificationMirror.s.sol  # Deploy VerificationMirror
+│   ├── DeployEFPListRecords.s.sol      # Deploy EFP list records
+│   ├── DeployAA.s.sol                  # Deploy AA stack (factory/paymaster/ScrobbleV4)
+│   └── SeedProfiles.s.sol             # Seed test profiles
 ├── test/
 │   ├── RegistryV1.t.sol       # Primary name + transfer clearing tests
+│   ├── ProfileV1.t.sol        # Legacy profile tests
 │   ├── ProfileV2.t.sol        # Profile sig verification + replay + gas tests
 │   ├── ScrobbleV3.t.sol       # Track registry + scrobble tests
 │   ├── ScrobbleV4.t.sol       # AA-gated scrobble + factory binding tests
 │   ├── PlaylistV1.t.sol       # Playlist CRUD + tombstone tests
+│   ├── FollowV1.t.sol         # Follow/unfollow + batch + counts tests
 │   └── SessionEscrowV1.t.sol  # Session escrow tests
 ├── foundry.toml
 ├── remappings.txt

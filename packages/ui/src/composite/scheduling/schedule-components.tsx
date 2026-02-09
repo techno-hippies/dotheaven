@@ -130,20 +130,20 @@ export const SlotItem: Component<SlotItemProps> = (props) => {
           <span class="text-base font-medium text-[var(--text-primary)]">
             {formatSlotTime(props.slot.startTime)}
           </span>
-          <span class="text-sm text-[var(--text-muted)]">
+          <span class="text-base text-[var(--text-muted)]">
             {props.slot.durationMins}min
           </span>
         </div>
         <div class="flex items-center gap-3 mt-0.5">
-          <span class={cn('text-sm', statusColor())}>
+          <span class={cn('text-base', statusColor())}>
             {statusLabel()}
           </span>
           <Show when={props.slot.status === 'open'}>
-            <span class="text-sm text-[var(--text-secondary)]">
+            <span class="text-base text-[var(--text-secondary)]">
               {props.slot.priceEth} ETH
             </span>
           </Show>
-          <span class="text-sm text-[var(--text-muted)]">
+          <span class="text-base text-[var(--text-muted)]">
             in {formatTimeUntil(props.slot.startTime)}
           </span>
         </div>
@@ -180,18 +180,18 @@ export const RequestItem: Component<RequestItemProps> = (props) => {
           <span class="text-base font-medium text-[var(--text-primary)]">
             {props.request.guestName || `${props.request.guestAddress.slice(0, 6)}...${props.request.guestAddress.slice(-4)}`}
           </span>
-          <span class="text-sm font-medium text-[oklch(0.65_0.18_15)]">
+          <span class="text-base font-medium text-[oklch(0.65_0.18_15)]">
             {props.request.amountEth} ETH
           </span>
         </div>
         <div class="flex items-center gap-3 mt-0.5">
-          <span class="text-sm text-[var(--text-secondary)]">
+          <span class="text-base text-[var(--text-secondary)]">
             {formatSlotTime(props.request.windowStart)} – {formatSlotTime(props.request.windowEnd)}
           </span>
-          <span class="text-sm text-[var(--text-muted)]">
+          <span class="text-base text-[var(--text-muted)]">
             {props.request.durationMins}min
           </span>
-          <span class="text-sm text-[var(--text-muted)]">
+          <span class="text-base text-[var(--text-muted)]">
             expires {formatTimeUntil(props.request.expiry)}
           </span>
         </div>

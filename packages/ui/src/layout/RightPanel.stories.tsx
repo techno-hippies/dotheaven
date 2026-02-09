@@ -93,16 +93,16 @@ export const WithComments: Story = {
           <div class="flex gap-3">
             <Avatar size="sm" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop" />
             <div>
-              <p class="text-sm font-medium text-[var(--text-primary)]">vitalik.eth</p>
-              <p class="text-sm text-[var(--text-secondary)]">This track is fire! 🔥</p>
+              <p class="text-base font-medium text-[var(--text-primary)]">vitalik.eth</p>
+              <p class="text-base text-[var(--text-secondary)]">This track is fire! 🔥</p>
               <p class="text-xs text-[var(--text-muted)]">2m ago</p>
             </div>
           </div>
           <div class="flex gap-3">
             <Avatar size="sm" />
             <div>
-              <p class="text-sm font-medium text-[var(--text-primary)]">alice.heaven</p>
-              <p class="text-sm text-[var(--text-secondary)]">Been on repeat all day</p>
+              <p class="text-base font-medium text-[var(--text-primary)]">alice.heaven</p>
+              <p class="text-base text-[var(--text-secondary)]">Been on repeat all day</p>
               <p class="text-xs text-[var(--text-muted)]">15m ago</p>
             </div>
           </div>
@@ -122,7 +122,7 @@ export const QueuePanel: Story = {
           <div class="flex items-center gap-3 p-2 bg-[var(--bg-highlight)] rounded-md">
             <div class="w-10 h-10 bg-[var(--bg-elevated)] rounded" />
             <div class="flex-1 min-w-0">
-              <p class="text-sm font-medium text-[var(--text-primary)] truncate">Neon Dreams</p>
+              <p class="text-base font-medium text-[var(--text-primary)] truncate">Neon Dreams</p>
               <p class="text-xs text-[var(--text-secondary)] truncate">Synthwave Collective</p>
             </div>
           </div>
@@ -133,7 +133,7 @@ export const QueuePanel: Story = {
             <div class="flex items-center gap-3 p-2 rounded-md hover:bg-[var(--bg-highlight)] transition-colors">
               <div class="w-10 h-10 bg-[var(--bg-elevated)] rounded" />
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-medium text-[var(--text-primary)] truncate">Midnight City</p>
+                <p class="text-base font-medium text-[var(--text-primary)] truncate">Midnight City</p>
                 <p class="text-xs text-[var(--text-secondary)] truncate">M83</p>
               </div>
             </div>
@@ -151,7 +151,7 @@ export const Empty: Story = {
         <div class="w-16 h-16 bg-[var(--bg-highlight)] rounded-full flex items-center justify-center mb-4">
           <QueueIcon />
         </div>
-        <p class="text-[var(--text-secondary)] text-sm">Nothing playing</p>
+        <p class="text-[var(--text-secondary)] text-base">Nothing playing</p>
         <p class="text-[var(--text-muted)] text-xs mt-1">Select a track to start listening</p>
       </div>
     </RightPanel>

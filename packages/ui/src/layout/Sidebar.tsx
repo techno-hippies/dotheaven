@@ -46,7 +46,7 @@ export const SidebarSection: Component<SidebarSectionProps> = (props) => {
         <div class="flex items-center justify-between px-3 py-3">
           <span
             class={cn(
-              'text-[var(--text-secondary)] text-sm font-semibold flex items-center gap-2',
+              'text-[var(--text-secondary)] text-base font-semibold flex items-center gap-2',
               props.onTitleClick && 'cursor-pointer hover:text-[var(--text-primary)] transition-colors',
             )}
             onClick={() => props.onTitleClick?.()}

@@ -89,14 +89,14 @@ export const WithBodyContent: Story = {
             <div class="flex items-center gap-3 p-3 bg-[var(--bg-elevated)] rounded-md">
               <div class="w-12 h-12 bg-[var(--bg-highlight)] rounded-md" />
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-medium text-[var(--text-primary)] truncate">
+                <p class="text-base font-medium text-[var(--text-primary)] truncate">
                   Midnight Dreams
                 </p>
                 <p class="text-xs text-[var(--text-secondary)]">Artist Name</p>
               </div>
             </div>
             <div class="space-y-2">
-              <label class="text-sm font-medium text-[var(--text-primary)]">
+              <label class="text-base font-medium text-[var(--text-primary)]">
                 Share via
               </label>
               <div class="flex gap-2">
@@ -127,7 +127,7 @@ export const Controlled: Story = {
             Close Dialog
           </Button>
         </div>
-        <p class="text-sm text-[var(--text-secondary)]">
+        <p class="text-base text-[var(--text-secondary)]">
           Dialog is currently: {open() ? 'Open' : 'Closed'}
         </p>
         <Dialog open={open()} onOpenChange={setOpen}>
@@ -168,7 +168,7 @@ export const LongContent: Story = {
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
-          <div class="space-y-4 text-sm text-[var(--text-primary)]">
+          <div class="space-y-4 text-base text-[var(--text-primary)]">
             <section>
               <h3 class="font-semibold mb-2">1. Acceptance of Terms</h3>
               <p class="text-[var(--text-secondary)]">
@@ -343,7 +343,7 @@ export const AddToPlaylistDialog: Story = {
                   >
                     <AlbumCover size="sm" icon="playlist" />
                     <div class="flex-1 min-w-0">
-                      <p class="text-[var(--text-primary)] text-sm truncate">{pl.name}</p>
+                      <p class="text-[var(--text-primary)] text-base truncate">{pl.name}</p>
                       <p class="text-[var(--text-muted)] text-xs">{pl.trackCount} songs</p>
                     </div>
                     {adding() === pl.id && (
@@ -381,7 +381,7 @@ export const AddToPlaylistLoading: Story = {
               </div>
               <span class="text-[var(--text-primary)] font-medium">Create New Playlist</span>
             </button>
-            <div class="px-3 py-4 flex items-center justify-center gap-2 text-[var(--text-muted)] text-sm">
+            <div class="px-3 py-4 flex items-center justify-center gap-2 text-[var(--text-muted)] text-base">
               <Spinner size="sm" />
               <span>Loading playlists...</span>
             </div>
@@ -413,7 +413,7 @@ export const AddToPlaylistEmpty: Story = {
               </div>
               <span class="text-[var(--text-primary)] font-medium">Create New Playlist</span>
             </button>
-            <div class="px-3 py-4 text-center text-[var(--text-muted)] text-sm">
+            <div class="px-3 py-4 text-center text-[var(--text-muted)] text-base">
               No playlists yet. Create one above.
             </div>
           </div>

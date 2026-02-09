@@ -1,4 +1,4 @@
-import { type Component, splitProps } from 'solid-js'
+import { type Component, type JSX, splitProps, Show } from 'solid-js'
 import { TextField as KobalteTextField } from '@kobalte/core/text-field'
 import { cn } from '../lib/classnames'
 
@@ -31,6 +31,10 @@ export interface TextFieldProps {
   class?: string
   /** Additional class for input element */
   inputClass?: string
+  /** Leading icon element */
+  icon?: JSX.Element
+  /** KeyDown event handler */
+  onKeyDown?: (e: KeyboardEvent) => void
 }
 
 /**
@@ -51,6 +55,9 @@ export const TextField: Component<TextFieldProps> = (props) => {
     'description',
     'errorMessage',
     'validationState',
+    'icon',
+    'onKeyDown',
+    'placeholder',
   ])
 
   return (
@@ -60,32 +67,59 @@ export const TextField: Component<TextFieldProps> = (props) => {
       {...others}
     >
       {local.label && (
-        <KobalteTextField.Label class="text-sm font-medium text-[var(--text-primary)]">
+        <KobalteTextField.Label class="text-base font-medium text-[var(--text-primary)]">
           {local.label}
         </KobalteTextField.Label>
       )}
 
-      <KobalteTextField.Input
-        class={cn(
-          'px-4 py-2.5 rounded-full bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base',
-          'placeholder:text-[var(--text-muted)] outline-none',
-          'border border-transparent',
-          'focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20',
-          'transition-colors',
-          'disabled:opacity-50 disabled:cursor-not-allowed',
-          'data-[invalid]:border-[var(--accent-coral)] data-[invalid]:focus:ring-[var(--accent-coral)]/20',
-          local.inputClass
-        )}
-      />
+      <Show
+        when={local.icon}
+        fallback={
+          <KobalteTextField.Input
+            placeholder={local.placeholder}
+            onKeyDown={local.onKeyDown}
+            class={cn(
+              'h-12 px-4 rounded-full bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base',
+              'placeholder:text-[var(--text-muted)] outline-none',
+              'border border-[var(--border-default)]',
+              'focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20',
+              'transition-colors',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+              'data-[invalid]:border-[var(--accent-coral)] data-[invalid]:focus:ring-[var(--accent-coral)]/20',
+              local.inputClass
+            )}
+          />
+        }
+      >
+        <div
+          class={cn(
+            'flex items-center gap-2 h-12 px-4 rounded-full bg-[var(--bg-highlight)]',
+            'border border-[var(--border-default)] transition-colors',
+            'focus-within:border-[var(--accent-blue)] focus-within:ring-2 focus-within:ring-[var(--accent-blue)]/20',
+          )}
+        >
+          <span class="flex-shrink-0 text-[var(--text-muted)]">{local.icon}</span>
+          <KobalteTextField.Input
+            placeholder={local.placeholder}
+            onKeyDown={local.onKeyDown}
+            class={cn(
+              'flex-1 bg-transparent text-[var(--text-primary)] text-base',
+              'placeholder:text-[var(--text-muted)] outline-none',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+              local.inputClass
+            )}
+          />
+        </div>
+      </Show>
 
       {local.description && (
-        <KobalteTextField.Description class="text-sm text-[var(--text-secondary)]">
+        <KobalteTextField.Description class="text-base text-[var(--text-secondary)]">
           {local.description}
         </KobalteTextField.Description>
       )}
 
       {local.errorMessage && (
-        <KobalteTextField.ErrorMessage class="text-sm text-[var(--accent-coral)]">
+        <KobalteTextField.ErrorMessage class="text-base text-[var(--accent-coral)]">
           {local.errorMessage}
         </KobalteTextField.ErrorMessage>
       )}
@@ -118,6 +152,7 @@ export const TextArea: Component<TextAreaProps> = (props) => {
     'autoResize',
     'submitOnEnter',
     'onKeyDown',
+    'placeholder',
   ])
 
   return (
@@ -127,12 +162,13 @@ export const TextArea: Component<TextAreaProps> = (props) => {
       {...others}
     >
       {local.label && (
-        <KobalteTextField.Label class="text-sm font-medium text-[var(--text-primary)]">
+        <KobalteTextField.Label class="text-base font-medium text-[var(--text-primary)]">
           {local.label}
         </KobalteTextField.Label>
       )}
 
       <KobalteTextField.TextArea
+        placeholder={local.placeholder}
         autoResize={local.autoResize}
         submitOnEnter={local.submitOnEnter}
         onKeyDown={local.onKeyDown}
@@ -149,13 +185,13 @@ export const TextArea: Component<TextAreaProps> = (props) => {
       />
 
       {local.description && (
-        <KobalteTextField.Description class="text-sm text-[var(--text-secondary)]">
+        <KobalteTextField.Description class="text-base text-[var(--text-secondary)]">
           {local.description}
         </KobalteTextField.Description>
       )}
 
       {local.errorMessage && (
-        <KobalteTextField.ErrorMessage class="text-sm text-[var(--accent-coral)]">
+        <KobalteTextField.ErrorMessage class="text-base text-[var(--accent-coral)]">
           {local.errorMessage}
         </KobalteTextField.ErrorMessage>
       )}

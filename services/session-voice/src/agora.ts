@@ -1,47 +1,70 @@
 /**
  * Agora Token Generation
+ *
+ * Supports two TTL modes:
+ * - Booked sessions: 3600s (1 hour, no renewal needed)
+ * - Free rooms: 90s (short-lived, requires renewal every 45s)
  */
 
 import { RtcTokenBuilder, RtcRole } from 'agora-token'
-import { config } from './config.js'
+import { TOKEN_TTL_SECONDS } from './config'
 
-/**
- * Generate deterministic UID from wallet address
- * Uses last 4 bytes of address as uint32
- */
+/** Deterministic UID from wallet address (last 4 bytes as uint32) */
 export function addressToUid(address: string): number {
-  // Take last 8 hex chars (4 bytes) and convert to number
   const hex = address.slice(-8)
-  return parseInt(hex, 16) % 0xFFFFFFFF // uint32 range
+  return parseInt(hex, 16) % 0xFFFFFFFF
 }
 
-/**
- * Generate channel name from booking ID
- */
-export function getChannel(bookingId: string | bigint): string {
-  return `heaven-${config.chainId}-${bookingId}`
+/** Channel name for booked sessions */
+export function getBookedChannel(chainId: string, bookingId: string | bigint): string {
+  return `heaven-${chainId}-${bookingId}`
 }
 
-/**
- * Generate Agora RTC token for a user joining a session
- */
+/** Channel name for free rooms */
+export function getFreeChannel(roomId: string): string {
+  return `heaven-free-${roomId}`
+}
+
+/** Generate Agora RTC token with custom TTL */
 export function generateToken(
-  bookingId: string | bigint,
-  userAddress: string
-): { channel: string; token: string; uid: number } {
-  const channel = getChannel(bookingId)
-  const uid = addressToUid(userAddress)
-  const expirationTime = Math.floor(Date.now() / 1000) + config.tokenExpirySeconds
+  appId: string,
+  appCertificate: string,
+  channel: string,
+  uid: number,
+  ttlSeconds: number,
+): { token: string; expiresInSeconds: number } {
+  const now = Math.floor(Date.now() / 1000)
+  const expirationTime = now + ttlSeconds
 
   const token = RtcTokenBuilder.buildTokenWithUid(
-    config.agoraAppId,
-    config.agoraAppCertificate,
+    appId,
+    appCertificate,
     channel,
     uid,
     RtcRole.PUBLISHER,
     expirationTime,
-    expirationTime // privilege expiration
+    expirationTime,
   )
 
-  return { channel, token, uid }
+  return { token, expiresInSeconds: ttlSeconds }
+}
+
+/** Generate short-lived token for free rooms (90s TTL) */
+export function generateShortToken(
+  appId: string,
+  appCertificate: string,
+  channel: string,
+  uid: number,
+): { token: string; expiresInSeconds: number } {
+  return generateToken(appId, appCertificate, channel, uid, TOKEN_TTL_SECONDS)
+}
+
+/** Generate long-lived token for booked sessions (1h TTL) */
+export function generateBookedToken(
+  appId: string,
+  appCertificate: string,
+  channel: string,
+  uid: number,
+): { token: string; expiresInSeconds: number } {
+  return generateToken(appId, appCertificate, channel, uid, 3600)
 }

@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { StyleSheet, Text, View, ActivityIndicator, Alert } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Fingerprint, User, Key, SignIn, SignOut, CloudArrowUp } from 'phosphor-react-native';
 import { useAuth } from '../providers/AuthProvider';
 import { usePlayer } from '../providers/PlayerProvider';
+import { colors, spacing } from '../lib/theme';
+import { Button } from '../ui';
 
 export const ProfileScreen: React.FC = () => {
+  const insets = useSafeAreaInsets();
   const { isAuthenticated, isLoading, pkpInfo, register, authenticate, logout } = useAuth();
   const { pendingScrobbles, flushScrobbles } = usePlayer();
   const [actionLoading, setActionLoading] = useState(false);
@@ -51,8 +55,8 @@ export const ProfileScreen: React.FC = () => {
 
   if (isLoading) {
     return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#8fb8e0" />
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color={colors.accentBlue} />
       </View>
     );
   }
@@ -63,7 +67,7 @@ export const ProfileScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <Text style={styles.headerTitle}>Profile</Text>
       </View>
 
@@ -71,7 +75,7 @@ export const ProfileScreen: React.FC = () => {
         <View style={styles.content}>
           {/* Avatar */}
           <View style={styles.avatar}>
-            <Ionicons name="person" size={40} color="#7878a0" />
+            <User size={40} color={colors.textMuted} />
           </View>
 
           {/* PKP info */}
@@ -87,62 +91,72 @@ export const ProfileScreen: React.FC = () => {
           </View>
 
           {pendingScrobbles > 0 && (
-            <TouchableOpacity
-              style={styles.flushButton}
+            <Button
+              variant="default"
+              size="md"
+              fullWidth
+              style={styles.actionButton}
               onPress={handleFlush}
               disabled={actionLoading}
+              leftIcon={<CloudArrowUp size={18} color={colors.white} weight="fill" />}
             >
-              <Ionicons name="cloud-upload" size={18} color="#1a1625" />
-              <Text style={styles.flushButtonText}>Submit Scrobbles</Text>
-            </TouchableOpacity>
+              Submit Scrobbles
+            </Button>
           )}
 
           {/* Logout */}
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={18} color="#f0f0f5" />
-            <Text style={styles.logoutButtonText}>Sign Out</Text>
-          </TouchableOpacity>
+          <Button
+            variant="secondary"
+            size="md"
+            fullWidth
+            style={styles.actionButton}
+            onPress={handleLogout}
+            leftIcon={<SignOut size={18} color={colors.textPrimary} />}
+          >
+            Sign Out
+          </Button>
         </View>
       ) : (
         <View style={styles.content}>
           <View style={styles.avatar}>
-            <Ionicons name="finger-print" size={48} color="#7878a0" />
+            <Fingerprint size={48} color={colors.textMuted} weight="light" />
           </View>
 
-          <Text style={styles.welcomeTitle}>Welcome to Heaven</Text>
+          <Text style={styles.welcomeTitle}>Your Profile</Text>
           <Text style={styles.welcomeSubtitle}>
-            Sign in with a passkey to enable scrobbling. Your music listening is recorded on-chain.
+            Sign up to create your profile and connect with others.
           </Text>
 
-          <TouchableOpacity
-            style={styles.registerButton}
+          <Button
+            variant="default"
+            size="md"
+            fullWidth
+            style={styles.actionButton}
             onPress={handleRegister}
             disabled={actionLoading}
+            loading={actionLoading}
+            leftIcon={<Key size={18} color={colors.white} weight="fill" />}
           >
-            {actionLoading ? (
-              <ActivityIndicator size="small" color="#1a1625" />
-            ) : (
-              <>
-                <Ionicons name="key" size={18} color="#1a1625" />
-                <Text style={styles.registerButtonText}>Create Account</Text>
-              </>
-            )}
-          </TouchableOpacity>
+            Sign Up
+          </Button>
 
-          <TouchableOpacity
-            style={styles.loginButton}
+          <Button
+            variant="secondary"
+            size="md"
+            fullWidth
+            style={styles.actionButton}
             onPress={handleAuthenticate}
             disabled={actionLoading}
+            leftIcon={<SignIn size={18} color={colors.textPrimary} />}
           >
-            <Ionicons name="log-in-outline" size={18} color="#f0f0f5" />
-            <Text style={styles.loginButtonText}>I have an account</Text>
-          </TouchableOpacity>
+            I have an account
+          </Button>
         </View>
       )}
 
       {actionLoading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#8fb8e0" />
+          <ActivityIndicator size="large" color={colors.accentBlue} />
           <Text style={styles.loadingText}>Processing...</Text>
         </View>
       )}
@@ -153,20 +167,25 @@ export const ProfileScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1625',
+    backgroundColor: colors.bgPage,
+  },
+  centered: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
-    backgroundColor: '#1f1b2e',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.headerPaddingHorizontal,
+    paddingBottom: spacing.headerPaddingBottom,
     borderBottomWidth: 1,
-    borderBottomColor: '#2d2645',
+    borderBottomColor: colors.borderSubtle,
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#f0f0f5',
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.textPrimary,
   },
   content: {
     flex: 1,
@@ -178,20 +197,20 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#252139',
+    backgroundColor: colors.bgElevated,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
   },
   label: {
     fontSize: 13,
-    color: '#7878a0',
+    color: colors.textMuted,
     marginBottom: 4,
   },
   address: {
     fontSize: 14,
     fontFamily: 'monospace',
-    color: '#b8b8d0',
+    color: colors.textSecondary,
     marginBottom: 24,
   },
   statsRow: {
@@ -202,94 +221,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
     paddingVertical: 16,
-    backgroundColor: '#1f1b2e',
-    borderRadius: 12,
+    backgroundColor: colors.bgSurface,
+    borderRadius: 8,
   },
   statValue: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#f0f0f5',
+    color: colors.textPrimary,
   },
   statLabel: {
     fontSize: 12,
-    color: '#7878a0',
+    color: colors.textMuted,
     marginTop: 4,
   },
-  flushButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    backgroundColor: '#8fb8e0',
-    marginBottom: 12,
-  },
-  flushButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1a1625',
-  },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    backgroundColor: '#2d2645',
-    marginTop: 20,
-  },
-  logoutButtonText: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#f0f0f5',
+  actionButton: {
+    width: '100%',
+    marginTop: 12,
   },
   welcomeTitle: {
-    fontSize: 22,
-    fontWeight: '600',
-    color: '#f0f0f5',
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.textPrimary,
     marginBottom: 8,
   },
   welcomeSubtitle: {
-    fontSize: 14,
-    color: '#7878a0',
+    fontSize: 16,
+    color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 22,
     marginBottom: 32,
-  },
-  registerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 12,
-    backgroundColor: '#8fb8e0',
-    width: '100%',
-    marginBottom: 12,
-  },
-  registerButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1a1625',
-  },
-  loginButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 12,
-    backgroundColor: '#2d2645',
-    width: '100%',
-  },
-  loginButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#f0f0f5',
   },
   loadingOverlay: {
     position: 'absolute',
@@ -297,13 +257,13 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(26, 22, 37, 0.9)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#f0f0f5',
+    color: colors.textPrimary,
   },
 });

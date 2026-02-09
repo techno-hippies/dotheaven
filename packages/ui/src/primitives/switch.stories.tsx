@@ -53,7 +53,7 @@ export const Controlled: StoryObj = {
           checked={checked()}
           onChange={setChecked}
         />
-        <p class="text-sm text-[var(--text-secondary)]">
+        <p class="text-base text-[var(--text-secondary)]">
           Dark mode is {checked() ? 'enabled' : 'disabled'}
         </p>
       </div>

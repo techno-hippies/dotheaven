@@ -263,10 +263,10 @@ export const SchedulePage: Component = () => {
       <Show when={view() === 'upcoming'}>
         <div class="flex justify-end px-4 pt-3">
           <Button
-            variant="ghost"
-            size="sm"
+            variant="secondary"
             icon={<CalendarBlank />}
             onClick={() => navigate(SCHEDULE_AVAILABILITY)}
+            class="h-12"
           >
             Availability
           </Button>
@@ -276,7 +276,7 @@ export const SchedulePage: Component = () => {
       <div class="w-full max-w-4xl mx-auto px-4 py-6">
         {/* Error toast */}
         <Show when={txError()}>
-          <div class="mb-4 px-4 py-3 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center justify-between">
+          <div class="mb-4 px-4 py-3 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-base flex items-center justify-between">
             <span>{txError()}</span>
             <button onClick={() => setTxError(null)} class="text-red-300 hover:text-red-200 ml-4">
               Dismiss
@@ -324,13 +324,13 @@ export const SchedulePage: Component = () => {
                     <div class="flex items-center gap-2">
                       <button
                         onClick={() => p2pVoice.toggleMute()}
-                        class="px-3 py-1.5 text-sm bg-[--bg-highlight] hover:bg-[--bg-highlight-hover] rounded-md transition-colors"
+                        class="px-3 py-1.5 text-base bg-[--bg-highlight] hover:bg-[--bg-highlight-hover] rounded-md transition-colors"
                       >
                         {p2pVoice.isMuted() ? 'Unmute' : 'Mute'}
                       </button>
                       <button
                         onClick={handleLeaveSession}
-                        class="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors"
+                        class="px-3 py-1.5 text-base bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors"
                       >
                         Leave
                       </button>
@@ -490,10 +490,10 @@ export const ScheduleAvailabilityPage: Component = () => {
         <span class="flex-1 text-base font-semibold text-[var(--text-primary)]">
           Availability
           <Show when={!scheduleAccepting()}>
-            <span class="text-sm font-normal text-[var(--text-muted)] ml-2">(paused)</span>
+            <span class="text-base font-normal text-[var(--text-muted)] ml-2">(paused)</span>
           </Show>
         </span>
-        <span class="text-sm text-[var(--text-muted)] mr-1 hidden sm:inline">Accepting</span>
+        <span class="text-base text-[var(--text-muted)] mr-1 hidden sm:inline">Accepting</span>
         <Switch
           checked={scheduleAccepting()}
           onChange={handleToggleAccepting}
@@ -503,7 +503,7 @@ export const ScheduleAvailabilityPage: Component = () => {
       <div class={`flex-1 overflow-y-auto transition-opacity ${!scheduleAccepting() ? 'opacity-60' : ''}`}>
         <div class="w-full max-w-4xl mx-auto px-4 py-6">
           <Show when={!scheduleAccepting()}>
-            <div class="mb-4 px-4 py-3 rounded-md bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-sm">
+            <div class="mb-4 px-4 py-3 rounded-md bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-base">
               Bookings are paused. Toggle the switch above to accept new bookings.
             </div>
           </Show>
@@ -522,7 +522,7 @@ export const ScheduleAvailabilityPage: Component = () => {
 
       {/* Bottom-right error toast */}
       <Show when={txError()}>
-        <div class="fixed bottom-4 right-4 z-50 px-4 py-3 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-3 shadow-lg backdrop-blur-sm max-w-sm">
+        <div class="fixed bottom-4 right-4 z-50 px-4 py-3 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-base flex items-center gap-3 shadow-lg backdrop-blur-sm max-w-sm">
           <span class="flex-1">{txError()}</span>
           <button onClick={() => setTxError(null)} class="text-red-300 hover:text-red-200 flex-shrink-0">
             Dismiss

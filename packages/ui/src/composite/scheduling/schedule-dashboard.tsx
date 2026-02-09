@@ -206,7 +206,7 @@ export const ScheduleDashboard: Component<ScheduleDashboardProps> = (props) => {
                 <div class="text-xs text-[var(--text-muted)] mb-1">Base Price</div>
                 <div class="flex items-baseline gap-1.5">
                   <span class="text-2xl font-bold text-[var(--text-primary)]">{displayPrice()}</span>
-                  <span class="text-sm font-medium text-[var(--text-muted)]">ETH</span>
+                  <span class="text-base font-medium text-[var(--text-muted)]">ETH</span>
                 </div>
               </div>
               <IconButton
@@ -226,7 +226,7 @@ export const ScheduleDashboard: Component<ScheduleDashboardProps> = (props) => {
           <div class="text-xs text-[var(--text-muted)] mb-2">Base Price</div>
           <div class="flex items-center gap-3">
             <TextField value={priceInput()} onChange={setPriceInput} placeholder="0.01" inputClass="w-24" />
-            <span class="text-sm text-[var(--text-muted)]">ETH</span>
+            <span class="text-base text-[var(--text-muted)]">ETH</span>
             <div class="flex items-center gap-2 ml-auto">
               <Button onClick={() => setEditingPrice(false)} variant="ghost" size="sm">
                 Cancel
@@ -251,7 +251,7 @@ export const ScheduleDashboard: Component<ScheduleDashboardProps> = (props) => {
           <IconButton onClick={() => setWeekOffset(w => w - 1)} variant="soft" size="sm" aria-label="Previous week">
             <ChevronLeftIcon />
           </IconButton>
-          <span class="text-sm font-semibold text-[var(--text-primary)]">{weekLabel()}</span>
+          <span class="text-base font-semibold text-[var(--text-primary)]">{weekLabel()}</span>
           <IconButton onClick={() => setWeekOffset(w => w + 1)} variant="soft" size="sm" aria-label="Next week">
             <ChevronRightIcon />
           </IconButton>
@@ -300,7 +300,7 @@ export const ScheduleDashboard: Component<ScheduleDashboardProps> = (props) => {
       </div>
 
       {/* ── Day Label ───────────────────────────────────────── */}
-      <div class="text-sm font-semibold text-[var(--text-primary)]">
+      <div class="text-base font-semibold text-[var(--text-primary)]">
         {selectedDateLabel()}
       </div>
 
@@ -324,11 +324,11 @@ export const ScheduleDashboard: Component<ScheduleDashboardProps> = (props) => {
                   onClick={() => handleSlotClick(slot.hour, slot.min)}
                   disabled={isBooked()}
                   class={cn(
-                    'flex items-center justify-between px-4 py-3 rounded-lg text-sm font-medium transition-all border',
+                    'flex items-center justify-between px-4 py-3 rounded-lg text-base font-medium transition-all border',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-page)]',
                     isSelected() && 'bg-[var(--accent-blue)] border-[var(--accent-blue)] text-white',
-                    isBooked() && 'bg-[var(--bg-highlight)] border-[var(--bg-highlight)] text-[var(--text-secondary)] cursor-not-allowed',
-                    !isSelected() && !isBooked() && 'bg-[var(--bg-surface)] border-[var(--bg-highlight)] text-[var(--text-secondary)] hover:border-[var(--accent-blue)]/50 hover:bg-[var(--bg-elevated)] cursor-pointer'
+                    isBooked() && 'bg-[var(--bg-highlight)] border-[var(--border-subtle)] text-[var(--text-secondary)] cursor-not-allowed',
+                    !isSelected() && !isBooked() && 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--accent-blue)]/50 hover:bg-[var(--bg-elevated)] cursor-pointer'
                   )}
                 >
                   <span>{slot.label}</span>
@@ -338,7 +338,7 @@ export const ScheduleDashboard: Component<ScheduleDashboardProps> = (props) => {
                     </div>
                   </Show>
                   <Show when={isBooked()}>
-                    <span class="text-sm text-[var(--text-muted)]">Booked</span>
+                    <span class="text-base text-[var(--text-muted)]">Booked</span>
                   </Show>
                   <Show when={!isSelected() && !isBooked()}>
                     <div class="w-5 h-5 rounded-full border-2 border-[var(--bg-highlight-hover)]" />

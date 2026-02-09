@@ -78,7 +78,7 @@ export function Select<T extends SelectOption = SelectOption>(props: SelectProps
         <KobalteSelect.Item
           item={itemProps.item}
           class={cn(
-            'flex items-center justify-between gap-2 px-3 py-2.5 text-base rounded-md cursor-pointer outline-none',
+            'flex items-center justify-between gap-2 px-3 py-2.5 text-base cursor-pointer outline-none',
             'text-[var(--text-primary)]',
             'data-[highlighted]:bg-[var(--bg-highlight-hover)]',
             'data-[disabled]:opacity-50 data-[disabled]:cursor-not-allowed'
@@ -97,13 +97,13 @@ export function Select<T extends SelectOption = SelectOption>(props: SelectProps
       <div class={cn('relative', local.class)}>
         <KobalteSelect.Trigger
           class={cn(
-            'flex items-center justify-between gap-2 w-full h-11 px-4 rounded-full',
+            'flex items-center justify-between gap-2 w-full h-12 px-4 rounded-full',
             'bg-[var(--bg-highlight)] text-base',
-            'border-2 transition-colors',
+            'border border-[var(--border-default)] transition-colors',
             'focus:outline-none',
             local.error
               ? 'border-[var(--accent-coral)]'
-              : 'border-transparent focus:border-[var(--accent-blue)]/50',
+              : 'focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20',
             local.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
             'data-[placeholder-shown]:text-[var(--text-muted)]'
           )}
@@ -125,13 +125,13 @@ export function Select<T extends SelectOption = SelectOption>(props: SelectProps
         <KobalteSelect.Content
           class={cn(
             'z-50 min-w-[var(--kb-popper-anchor-width)] mt-1',
-            'bg-[var(--bg-surface)] rounded-md border border-[var(--bg-highlight)]',
+            'bg-[var(--bg-surface)] rounded-md border border-[var(--border-subtle)]',
             'shadow-xl overflow-hidden',
             'animate-in fade-in-0 zoom-in-95',
             'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95'
           )}
         >
-          <KobalteSelect.Listbox class="py-1 max-h-64 overflow-y-auto" />
+          <KobalteSelect.Listbox class="max-h-64 overflow-y-auto" />
         </KobalteSelect.Content>
       </KobalteSelect.Portal>
     </KobalteSelect>

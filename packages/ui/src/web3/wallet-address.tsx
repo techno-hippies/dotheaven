@@ -26,7 +26,7 @@ export const WalletAddress: Component<WalletAddressProps> = (props) => {
   return (
     <div class={cn('flex flex-col gap-2', props.class)}>
       {props.showLabel && (
-        <label class="text-sm text-[var(--text-muted)] font-medium">
+        <label class="text-base text-[var(--text-muted)] font-medium">
           Wallet Address
         </label>
       )}
@@ -36,14 +36,14 @@ export const WalletAddress: Component<WalletAddressProps> = (props) => {
           value={props.address}
           readOnly
           class={cn(
-            'w-full bg-[var(--bg-elevated)] text-[var(--text-primary)] rounded-md font-mono transition-colors',
+            'w-full bg-[var(--bg-elevated)] text-[var(--text-primary)] rounded-full font-mono transition-colors',
             'border border-transparent hover:border-[var(--bg-highlight-hover)] focus:border-[var(--accent-blue)] focus:outline-none',
             props.variant === 'compact'
-              ? 'text-sm pl-3 pr-12 py-2.5'
-              : 'text-base pl-4 pr-14 py-3'
+              ? 'text-base pl-5 pr-14 py-2.5'
+              : 'text-base pl-6 pr-16 py-3'
           )}
         />
-        <div class="absolute right-1">
+        <div class="absolute right-2">
           <IconButton
             onClick={handleCopy}
             variant="soft"

@@ -23,15 +23,24 @@ dotheaven/
 │   │   │   ├── pages/         # Route pages
 │   │   │   └── providers/     # Context providers (Auth, XMTP, Wallet)
 │   │   └── src-tauri/         # Tauri Rust backend (native libxmtp)
+│   └── react-native/     # React Native app (Expo, Android)
 ├── packages/
 │   ├── ui/                # Shared UI components + Storybook
 │   ├── core/              # Core business logic (playlists, routes)
 │   └── platform/          # Platform-specific utilities
-├── contracts/             # Smart contracts
+├── contracts/
+│   ├── megaeth/           # MegaETH contracts (Foundry) — main chain
+│   ├── celo/              # Celo Sepolia contracts (Self.xyz verifier)
+│   └── base/              # Base contracts (ContentAccessMirror)
 ├── subgraphs/             # Goldsky subgraph definitions
 ├── services/
-│   ├── aa-gateway/        # AA Gateway + Alto bundler (ERC-4337)
-│   └── alto/              # Pimlico Alto bundler (git submodule)
+│   ├── aa-gateway/        # AA Gateway (ERC-4337 paymaster + UserOp relay)
+│   ├── alto/              # Pimlico Alto bundler (git submodule)
+│   ├── heaven-api/        # Cloudflare Worker API (photos, meals, claims, names)
+│   ├── heaven-images/     # Cloudflare Worker for image watermarking
+│   ├── heaven-resolver/   # MusicBrainz proxy + image rehosting
+│   ├── session-voice/     # Voice rooms (Agora + Durable Objects)
+│   └── lit-relayer/       # Lit PKP minting relayer (Vercel)
 └── lit-actions/           # Lit Protocol actions
 ```
 
@@ -82,8 +91,8 @@ bun check            # Type check all packages
 - **AA client** (`apps/frontend/src/lib/aa-client.ts`): Builds ERC-4337 UserOps targeting ScrobbleV4. PKP signs `userOpHash`, gateway adds paymaster signature, bundler (Alto) submits to EntryPoint
 - **ScrobbleV4 contract**: `0xBcD4EbBb964182ffC5EA03FF70761770a326Ccf1` on MegaETH (chain 6343). AA-enabled — `onlyAccountOf(user)` gating via factory-derived SimpleAccount. Stores `uint32 durationSec` per track.
 - **ScrobbleV3 contract**: `0x144c450cd5B641404EEB5D5eD523399dD94049E0` on MegaETH (chain 6343). Legacy sponsor-gated version — still deployed, used by playlists Lit Action for track registration
-- **Subgraph**: Goldsky `dotheaven-activity/12.0.0` indexes `TrackRegistered` + `TrackCoverSet` + `Scrobbled` + `PostCreated` + `ContentRegistered` + `TranslationAdded` + `Liked` + `Unliked` + `CommentAdded` + `Flagged` events from ScrobbleV3, ScrobbleV4, PostsV1, and EngagementV2
-- **Frontend**: `ScrobblesPage` fetches from subgraph, displays verified/unidentified status with cover art
+- **Subgraph**: Goldsky `dotheaven-activity/14.0.0` indexes `TrackRegistered` + `TrackCoverSet` + `Scrobbled` + `PostCreated` + `ContentRegistered` + `TranslationAdded` + `Liked` + `Unliked` + `CommentAdded` + `Flagged` + `LyricsTranslationAdded` + `Followed` + `Unfollowed` events from ScrobbleV3, ScrobbleV4, PostsV1, EngagementV2, LyricsEngagementV1, and FollowV1
+- **Frontend**: Profile page fetches scrobble history from subgraph, displays verified/unidentified status with cover art
 - **Cover art pipeline** (Tauri): Rust extracts cover from audio tags → Tauri reads bytes → base64 sent via AA → cached in local SQLite → displayed via `heaven.myfilebase.com` dedicated gateway with image optimization params
 - **Auto-refresh**: After scrobble, `queryClient.invalidateQueries(['scrobbles'])` refreshes profile. Waits for cover TX confirmation before invalidating.
 - **MBID extraction**: Rust `music_db.rs` reads MusicBrainz recording ID from tags via lofty
@@ -117,7 +126,7 @@ bun check            # Type check all packages
   - `apps/frontend/src/pages/ProfilePage.tsx` — dialog + polling wiring in `MyProfilePage`
   - `packages/ui/src/composite/profile/verify-identity-dialog.tsx` — QR code dialog
   - `packages/ui/src/composite/profile/verification-badge.tsx` — verified/unverified badge
-  - `contracts/celo/src/SelfProfileVerifier.sol` — Celo verifier (stores nationality + age)
+  - `contracts/celo/src/SelfProfileVerifier.sol` — Celo verifier (stores nationality + verifiedAt)
   - `contracts/megaeth/src/VerificationMirror.sol` — MegaETH mirror
   - `lit-actions/features/verification/self-verify-mirror-v1.js` — Celo→MegaETH sync
 
@@ -141,7 +150,7 @@ bun check            # Type check all packages
 - **Key files**:
   - `apps/frontend/src/lib/heaven/registry.ts` — `getAddr()`, `getPrimaryName()`, `getPrimaryNode()`, `computeNode()`
   - `apps/frontend/src/pages/ProfilePage.tsx` — `PublicProfilePage`, `MyProfilePage`, `parseProfileId()`, `resolveProfileId()`
-  - `packages/ui/src/composite/profile-info-section.tsx` — edit-only sections gated on `isOwnProfile`
+  - `packages/ui/src/composite/profile/profile-info-section.tsx` — edit-only sections gated on `isOwnProfile`
 
 ### Profile (On-chain via ProfileV2 + RecordsV1)
 - **ProfileV2 contract**: `0xa31545D33f6d656E62De67fd020A26608d4601E5` on MegaETH (chain 6343)
@@ -193,7 +202,7 @@ bun check            # Type check all packages
   4. Photo posts also register on Story Protocol (text posts skip Story)
 - **Language detection**: LLM safety check doubles as language detector. Language stored in IPFS metadata, used by frontend to show/hide "Translate" button (`postLang !== userLang`)
 - **Translation pipeline**: User signs EIP-191, Lit Action calls LLM for translation, sponsor PKP broadcasts `EngagementV2.translateFor()`. Translations stored as events (no storage cost)
-- **Data source**: `dotheaven-activity/12.0.0` subgraph indexes `PostCreated` + `TranslationAdded` events
+- **Data source**: `dotheaven-activity/14.0.0` subgraph indexes `PostCreated` + `TranslationAdded` events
 - **Feed resolution**: Each post resolves author name/avatar via heaven name lookup + RecordsV1, fetches text/photos from IPFS metadata
 - **Compose**: `ComposeBox` (desktop inline) / `ComposeDrawer` (mobile FAB) — currently stubbed (`console.log`), not yet wired to Lit Action
 - **Key files**:
@@ -204,8 +213,27 @@ bun check            # Type check all packages
   - `lit-actions/features/social/post-register-v1.js` — post creation action
   - `lit-actions/features/social/post-translate-v1.js` — translation action
 
+### Social Follow (FollowV1)
+- **FollowV1 contract**: `0x3F32cF9e70EF69DFFed74Dfe07034cb03cF726cb` on MegaETH (chain 6343)
+- **Lit Action**: `follow-v1.js` — sponsor PKP broadcasts `followFor()`/`unfollowFor()` gaslessly
+- **On-chain state**: `follows(a,b)` mapping, `followerCount`/`followingCount` counters — readable via RPC
+- **Subgraph**: `Follow` + `UserFollowStats` entities in `dotheaven-activity/14.0.0` — used for follower/following list pages
+- **Frontend service** (`apps/frontend/src/lib/heaven/follow.ts`):
+  - `getFollowState(viewer, target)` — RPC: `follows(viewer, target)`
+  - `getFollowCounts(address)` — RPC: `followerCount()` + `followingCount()`
+  - `toggleFollow(target, action, ...)` — Lit Action mutation
+  - `fetchFollowers(address)` / `fetchFollowing(address)` — subgraph queries for list pages
+- **Profile integration**: `PublicProfilePage` shows follow button + counts; `MyProfilePage` shows own counts
+- **List pages**: `/u/:id/followers` and `/u/:id/following` — uses `FollowList` component with `MediaRow`, resolves names/avatars/nationality flags
+- **Key files**:
+  - `apps/frontend/src/lib/heaven/follow.ts` — service layer (RPC + subgraph + Lit Action)
+  - `apps/frontend/src/pages/FollowListPage.tsx` — follower/following list page
+  - `apps/frontend/src/pages/ProfilePage.tsx` — follow button + count wiring
+  - `packages/ui/src/composite/follow/follow-list.tsx` — presentational FollowList component
+  - `lit-actions/features/social/follow-v1.js` — follow Lit Action
+
 ### Community Homepage
-- **Community page** (`App.tsx`): Community member discovery using `CommunityFeed` component
+- **Community page** (route: `/search`, component: `App.tsx`): Community member discovery using `CommunityFeed` component
 - **Data source**: `dotheaven-profiles` subgraph indexes ProfileV2 events, denormalizes all enums for filtering
 - **Tabs**: All (everyone) / Nearby (same `locationCityId`)
 - **Resolution**: Each profile card resolves heaven name + avatar + bio via RPC (getPrimaryName, getTextRecord, resolveAvatarUri)
@@ -219,7 +247,7 @@ Three Goldsky subgraphs on MegaETH testnet (3-slot limit):
 
 | Subgraph | Version | Indexes | Source Dir |
 |----------|---------|---------|------------|
-| `dotheaven-activity` | 12.0.0 | ScrobbleV3 + ScrobbleV4 + PostsV1 + ContentRegistry + EngagementV2 | `subgraphs/activity-feed/` |
+| `dotheaven-activity` | 14.0.0 | ScrobbleV3 + ScrobbleV4 + PostsV1 + ContentRegistry + EngagementV2 + LyricsEngagementV1 + FollowV1 | `subgraphs/activity-feed/` |
 | `dotheaven-profiles` | 1.0.0 | ProfileV2 | `subgraphs/profiles/` |
 | `dotheaven-playlists` | 1.0.0 | PlaylistV1 | `subgraphs/playlist-feed/` |
 
@@ -227,7 +255,7 @@ API base: `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/
 
 Deploy: `cd subgraphs/<dir> && npx graph codegen && npx graph build && goldsky subgraph deploy <name>/<version>`
 
-**Note**: `dotheaven-content` was merged into `dotheaven-activity` v7.0.0. ScrobbleV4 was added in v11.0.0. EngagementV2 (translations, likes, comments, flags) was added in v12.0.0.
+**Note**: `dotheaven-content` was merged into `dotheaven-activity` v7.0.0. ScrobbleV4 was added in v11.0.0. EngagementV2 (translations, likes, comments, flags) was added in v12.0.0. LyricsEngagementV1 (song lyrics translations) was added in v13.0.0. FollowV1 (social follow graph) was added in v14.0.0.
 
 ### Local Music Library (Tauri-only)
 - **Rust SQLite backend** (`src-tauri/src/music_db.rs`): rusqlite + lofty + walkdir
@@ -253,20 +281,27 @@ Deploy: `cd subgraphs/<dir> && npx graph codegen && npx graph build && goldsky s
 ## Key Routes
 ```
 /                      # Home (social feed — posts with translation)
-/community             # Community discovery
-/chat/ai/:personalityId  # AI chat (Scarlett) - has voice call
-/chat/:username        # XMTP peer-to-peer chat
+/search                # Community discovery (CommunityFeed)
+/chat/ai/:personality  # AI chat (Scarlett) - has voice call
+/chat/:peer            # XMTP peer-to-peer chat
 /wallet                # Wallet page
-/music                 # Music library (local/cloud/shared tabs)
-/music/:tab            # Music library specific tab
+/music                 # Music library (redirects to default tab)
+/music/:tab            # Music library specific tab (local/cloud/shared/publish)
 /playlist/:id          # Playlist page
+/artist/:mbid          # Artist page (MusicBrainz)
+/album/:mbid           # Album page (MusicBrainz)
 /post/:id              # Single post detail view
 /u/:id                 # Public profile (address, heaven name, ENS, or HNS)
+/u/:id/followers       # Follower list
+/u/:id/following       # Following list
 /profile               # Own profile (edit mode)
 /schedule              # Schedule / booking page
 /schedule/availability # Schedule availability editor
 /settings              # Settings page
+/auth                  # Authentication (standalone, no shell)
+/onboarding            # Onboarding flow (standalone, no shell)
 /c/:token              # Claim profile (standalone, no shell)
+/room/:roomId          # Live voice room (standalone, no shell)
 ```
 
 ### Music Metadata & Artist/Album Pages
@@ -293,32 +328,43 @@ VITE_HEAVEN_IMAGES_URL   # Heaven Images service for watermarking
 VITE_AA_GATEWAY_URL      # AA Gateway URL (default: http://127.0.0.1:3337)
 VITE_AA_GATEWAY_KEY      # AA Gateway API key (optional, for protected endpoints)
 VITE_RESOLVER_URL        # Heaven Resolver (MusicBrainz proxy + image rehosting)
+VITE_SESSION_VOICE_URL   # Session Voice worker URL (voice rooms)
+VITE_LIT_SPONSORSHIP_API_URL  # Lit relayer URL (PKP minting)
+VITE_SELF_VERIFIER_CELO  # SelfProfileVerifier contract address (Celo Sepolia)
+VITE_VERIFICATION_MIRROR_MEGAETH  # VerificationMirror contract address (MegaETH)
 ```
 
-## Color Scheme (Heaven Dark Theme)
+## Color Scheme (Heaven Dark Theme — Catppuccin Mocha)
 
-### Visual Hierarchy
+### Visual Hierarchy (backgrounds)
 ```
---bg-page:           #1a1625  (darkest - main background)
---bg-surface:        #1f1b2e  (sidebar/panels)
---bg-elevated:       #252139  (avatars/album covers)
---bg-highlight:      #2d2645  (active/selected states)
---bg-highlight-hover:#342d52  (hover states)
+--bg-page:           #171717  (darkest — main background)
+--bg-surface:        #1c1c1c  (sidebar/panels)
+--bg-elevated:       #262626  (avatars, album covers, card fills)
+--bg-highlight:      #262626  (active/selected states — NEVER use for borders)
+--bg-highlight-hover:#303030  (hover states)
 ```
+
+### Border Colors (IMPORTANT)
+```
+--border-default: #404040  (inputs, buttons, prominent borders)
+--border-subtle:  #363636  (dividers, card edges, container borders, list separators)
+```
+**Rule**: NEVER use `--bg-highlight` (`#262626`) as a border/divider color — it's the same shade as `--bg-elevated` and invisible against most backgrounds. Always use `--border-subtle` for structural borders/dividers and `--border-default` for input fields.
 
 ### Text Colors
 ```
---text-primary:   #f0f0f5  (primary text)
---text-secondary: #b8b8d0  (secondary text)
---text-muted:     #7878a0  (muted text)
+--text-primary:   #fafafa  (primary text)
+--text-secondary: #d4d4d4  (secondary text)
+--text-muted:     #a3a3a3  (muted text)
 ```
 
 ### Accent Colors
 ```
---accent-blue:       oklch(0.65 0.12 240)   (pastel blue)
---accent-blue-hover: oklch(0.70 0.14 240)   (lighter blue)
---accent-purple:     oklch(0.60 0.15 290)   (soft purple)
---accent-coral:      oklch(0.65 0.18 15)    (warm coral)
+--accent-blue:       #89b4fa   (catppuccin blue)
+--accent-blue-hover: #b4befe   (catppuccin lavender)
+--accent-purple:     #cba6f7   (catppuccin mauve)
+--accent-coral:      #fab387   (catppuccin peach)
 ```
 
 ## Design Guidelines
@@ -357,7 +403,7 @@ Available components:
 - `Avatar`, `AlbumCover` - Profile/media images
 - `ListItem` - Sidebar items, lists
 - `Header`, `Sidebar`, `RightPanel`, `AppShell` - Layout
-- `MusicPlayer`, `Scrubber`, `NowPlaying` - Media controls
+- `MiniPlayer`, `SidePlayer`, `Scrubber` - Media controls
 - `CommentItem` - Comments/threads
 
 Check `packages/ui/src/` (primitives, composite, layout) before building new components.
@@ -371,7 +417,7 @@ Check `packages/ui/src/` (primitives, composite, layout) before building new com
 ### Contrast Rules
 Keep proper visual hierarchy to ensure hover states are visible:
 ```
-surface (#1f1b2e) → elevated (#252139) → highlight (#2d2645) → hover (#342d52)
+page (#171717) → surface (#1c1c1c) → elevated (#262626) → highlight (#262626) → hover (#303030)
 ```
 
 Never use the same background color for content and its hover state.

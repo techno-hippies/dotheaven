@@ -92,7 +92,7 @@ export const MediumSize: Story = {
 export const AllLevels: StoryObj = {
   render: () => (
     <div class="flex flex-col gap-3">
-      <h3 class="text-sm font-semibold text-[var(--text-muted)] mb-1">
+      <h3 class="text-base font-semibold text-[var(--text-muted)] mb-1">
         All Proficiency Levels
       </h3>
       <div class="flex flex-col gap-2">

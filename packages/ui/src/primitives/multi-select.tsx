@@ -90,7 +90,7 @@ export const MultiSelect: Component<MultiSelectProps> = (props) => {
         </KobalteSelect.Trigger>
 
         <KobalteSelect.Portal>
-          <KobalteSelect.Content class="bg-[var(--bg-surface)] rounded-md border border-[var(--bg-highlight)] shadow-lg max-h-[300px] overflow-y-auto z-50">
+          <KobalteSelect.Content class="bg-[var(--bg-surface)] rounded-md border border-[var(--border-subtle)] shadow-lg max-h-[300px] overflow-y-auto z-50">
             <KobalteSelect.Listbox />
           </KobalteSelect.Content>
         </KobalteSelect.Portal>
@@ -104,7 +104,7 @@ export const MultiSelect: Component<MultiSelectProps> = (props) => {
               <button
                 type="button"
                 onClick={(e) => handleRemove(value, e)}
-                class="h-11 px-4 rounded-full bg-[var(--accent-blue)]/15 border-2 border-[var(--accent-blue)] text-[var(--accent-blue)] text-sm font-medium flex items-center gap-2 hover:bg-[var(--accent-blue)]/25 transition-colors cursor-pointer"
+                class="h-11 px-4 rounded-full bg-[var(--accent-blue)]/15 border-2 border-[var(--accent-blue)] text-[var(--accent-blue)] text-base font-medium flex items-center gap-2 hover:bg-[var(--accent-blue)]/25 transition-colors cursor-pointer"
               >
                 <span>{getLabel(value)}</span>
                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 256 256">

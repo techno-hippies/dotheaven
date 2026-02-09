@@ -198,6 +198,7 @@ export const AuthPage: Component = () => {
         authMethod={authMethod()}
         error={error()}
         logoSrc={`${import.meta.env.BASE_URL}images/heaven.png`}
+        tagline="Karaoke to learn a language, make friends, and date."
         onSignIn={performSignIn}
         onRegister={performRegister}
         onConnectWallet={performConnectWallet}

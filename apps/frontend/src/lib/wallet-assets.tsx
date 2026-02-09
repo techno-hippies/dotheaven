@@ -53,7 +53,6 @@ export interface AssetConfig {
   chainBadge: () => JSX.Element
   isNative: boolean
   tokenAddress?: string
-  unitSymbol: string
   priceUsd: number
 }
 
@@ -67,7 +66,7 @@ export const ASSET_CONFIGS: AssetConfig[] = [
     icon: FilecoinIcon,
     chainBadge: FilecoinIcon,
     isNative: true,
-    unitSymbol: 'FIL',
+
     priceUsd: 5,
   },
   {
@@ -80,7 +79,7 @@ export const ASSET_CONFIGS: AssetConfig[] = [
     chainBadge: FilecoinIcon,
     isNative: false,
     tokenAddress: '0x80B98d3aa09ffff255c3ba4A241111Ff1262F045',
-    unitSymbol: 'USDFC',
+
     priceUsd: 1,
   },
   {
@@ -92,7 +91,7 @@ export const ASSET_CONFIGS: AssetConfig[] = [
     icon: EthereumIcon,
     chainBadge: EthereumIcon,
     isNative: true,
-    unitSymbol: 'ETH',
+
     priceUsd: 3090,
   },
   {
@@ -104,7 +103,7 @@ export const ASSET_CONFIGS: AssetConfig[] = [
     icon: EthereumIcon,
     chainBadge: MegaETHIcon,
     isNative: true,
-    unitSymbol: 'ETH',
+
     priceUsd: 3090,
   },
   {
@@ -117,7 +116,7 @@ export const ASSET_CONFIGS: AssetConfig[] = [
     chainBadge: MegaETHIcon,
     isNative: false,
     tokenAddress: '0xFAfDdbb3FC7688494971a79cc65DCa3EF82079E7',
-    unitSymbol: 'USDM',
+
     priceUsd: 1,
   },
 ]

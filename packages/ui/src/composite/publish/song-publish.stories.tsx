@@ -10,7 +10,6 @@ import {
 const defaultFormData: SongFormData = {
   title: '',
   artist: '',
-  album: '',
   genre: '',
   primaryLanguage: '',
   secondaryLanguage: '',
@@ -18,8 +17,7 @@ const defaultFormData: SongFormData = {
   coverFile: null,
   audioFile: null,
   instrumentalFile: null,
-  previewStart: 0,
-  previewEnd: 30,
+  canvasFile: null,
   license: 'non-commercial',
   revShare: 10,
   mintingFee: '0',
@@ -29,7 +27,6 @@ const defaultFormData: SongFormData = {
 const filledFormData: SongFormData = {
   title: 'Midnight in Seoul',
   artist: 'YUNA',
-  album: 'Neon Dreams',
   genre: 'kpop',
   primaryLanguage: 'ko',
   secondaryLanguage: 'en',
@@ -57,8 +54,7 @@ Dancing through the city lights`,
   coverFile: null,
   audioFile: null,
   instrumentalFile: null,
-  previewStart: 45,
-  previewEnd: 75,
+  canvasFile: null,
   license: 'commercial-remix',
   revShare: 15,
   mintingFee: '0',
@@ -67,101 +63,84 @@ Dancing through the city lights`,
 
 const meta: Meta = {
   title: 'Publish/SongPublishForm',
-  parameters: { layout: 'centered' },
-  decorators: [
-    (Story) => (
-      <div style={{ width: '520px', background: 'var(--bg-page)', padding: '24px', 'border-radius': '6px' }}>
-        <Story />
-      </div>
-    ),
-  ],
+  parameters: { layout: 'fullscreen' },
 }
 
 export default meta
 
-// ── Static step stories ────────────────────────────────────────────
+// ── Step 1: Song ──────────────────────────────────────────────────
 
-export const UploadEmpty: StoryObj = {
-  name: '1. Upload (Empty)',
+export const SongEmpty: StoryObj = {
+  name: '1. Song (Empty)',
   render: () => (
     <SongPublishForm
-      step="upload"
+      step="song"
       formData={defaultFormData}
       onFormChange={() => {}}
       onNext={() => alert('Next')}
       onBack={() => {}}
       onPublish={() => {}}
-      copyrightCheck={{ status: 'idle' }}
     />
   ),
 }
 
-export const UploadChecking: StoryObj = {
-  name: '1b. Upload (Checking)',
+export const SongFilled: StoryObj = {
+  name: '1b. Song (Filled)',
   render: () => (
     <SongPublishForm
-      step="upload"
-      formData={{ ...defaultFormData, audioFile: new File([''], 'song.mp3', { type: 'audio/mpeg' }) }}
-      onFormChange={() => {}}
-      onNext={() => {}}
-      onBack={() => {}}
-      onPublish={() => {}}
-      copyrightCheck={{ status: 'checking' }}
-    />
-  ),
-}
-
-export const UploadClear: StoryObj = {
-  name: '1c. Upload (Clear)',
-  render: () => (
-    <SongPublishForm
-      step="upload"
-      formData={{ ...defaultFormData, audioFile: new File([''], 'midnight-seoul.mp3', { type: 'audio/mpeg' }) }}
-      onFormChange={() => {}}
-      onNext={() => alert('Next')}
-      onBack={() => {}}
-      onPublish={() => {}}
-      copyrightCheck={{ status: 'clear' }}
-    />
-  ),
-}
-
-export const UploadWithInstrumental: StoryObj = {
-  name: '1c2. Upload (With Instrumental)',
-  render: () => (
-    <SongPublishForm
-      step="upload"
+      step="song"
       formData={{
-        ...defaultFormData,
+        ...filledFormData,
         audioFile: new File([''], 'midnight-seoul.mp3', { type: 'audio/mpeg' }),
-        instrumentalFile: new File([''], 'midnight-seoul-instrumental.mp3', { type: 'audio/mpeg' }),
+        instrumentalFile: new File([''], 'midnight-seoul-inst.mp3', { type: 'audio/mpeg' }),
       }}
       onFormChange={() => {}}
       onNext={() => alert('Next')}
       onBack={() => {}}
       onPublish={() => {}}
-      copyrightCheck={{ status: 'clear' }}
     />
   ),
 }
 
-export const UploadMatch: StoryObj = {
-  name: '1d. Upload (Copyright Match)',
+// ── Step 2: Canvas ────────────────────────────────────────────────
+
+export const CanvasEmpty: StoryObj = {
+  name: '2. Canvas (Empty)',
   render: () => (
     <SongPublishForm
-      step="upload"
-      formData={{ ...defaultFormData, audioFile: new File([''], 'stolen-song.mp3', { type: 'audio/mpeg' }) }}
+      step="canvas"
+      formData={{ ...filledFormData }}
       onFormChange={() => {}}
-      onNext={() => {}}
-      onBack={() => {}}
+      onNext={() => alert('Next')}
+      onBack={() => alert('Back')}
+      onSkip={() => alert('Skip')}
       onPublish={() => {}}
-      copyrightCheck={{ status: 'match', matchInfo: '"Shape of You" by Ed Sheeran (AcoustID 98% match)' }}
     />
   ),
 }
 
+export const CanvasWithVideo: StoryObj = {
+  name: '2b. Canvas (With Video)',
+  render: () => (
+    <SongPublishForm
+      step="canvas"
+      formData={{
+        ...filledFormData,
+        canvasFile: new File([''], 'canvas-loop.mp4', { type: 'video/mp4' }),
+      }}
+      onFormChange={() => {}}
+      onNext={() => alert('Next')}
+      onBack={() => alert('Back')}
+      onSkip={() => alert('Skip')}
+      onPublish={() => {}}
+    />
+  ),
+}
+
+// ── Step 3: Details ───────────────────────────────────────────────
+
 export const DetailsEmpty: StoryObj = {
-  name: '2. Details (Empty)',
+  name: '3. Details (Empty)',
   render: () => (
     <SongPublishForm
       step="details"
@@ -175,7 +154,7 @@ export const DetailsEmpty: StoryObj = {
 }
 
 export const DetailsFilled: StoryObj = {
-  name: '2b. Details (Filled)',
+  name: '3b. Details (K-Pop Bilingual)',
   render: () => (
     <SongPublishForm
       step="details"
@@ -188,33 +167,7 @@ export const DetailsFilled: StoryObj = {
   ),
 }
 
-export const LyricsEmpty: StoryObj = {
-  name: '3. Lyrics (Empty)',
-  render: () => (
-    <SongPublishForm
-      step="lyrics"
-      formData={defaultFormData}
-      onFormChange={() => {}}
-      onNext={() => alert('Next')}
-      onBack={() => alert('Back')}
-      onPublish={() => {}}
-    />
-  ),
-}
-
-export const LyricsFilled: StoryObj = {
-  name: '3b. Lyrics (K-Pop Bilingual)',
-  render: () => (
-    <SongPublishForm
-      step="lyrics"
-      formData={filledFormData}
-      onFormChange={() => {}}
-      onNext={() => alert('Next')}
-      onBack={() => alert('Back')}
-      onPublish={() => {}}
-    />
-  ),
-}
+// ── Step 4: License & Publish ─────────────────────────────────────
 
 export const LicenseNonCommercial: StoryObj = {
   name: '4. License (Non-Commercial)',
@@ -223,9 +176,9 @@ export const LicenseNonCommercial: StoryObj = {
       step="license"
       formData={{ ...filledFormData, license: 'non-commercial', attestation: false }}
       onFormChange={() => {}}
-      onNext={() => alert('Next')}
+      onNext={() => {}}
       onBack={() => alert('Back')}
-      onPublish={() => {}}
+      onPublish={() => alert('Publish!')}
     />
   ),
 }
@@ -237,20 +190,6 @@ export const LicenseCommercialRemix: StoryObj = {
       step="license"
       formData={filledFormData}
       onFormChange={() => {}}
-      onNext={() => alert('Review')}
-      onBack={() => alert('Back')}
-      onPublish={() => {}}
-    />
-  ),
-}
-
-export const Review: StoryObj = {
-  name: '5. Review',
-  render: () => (
-    <SongPublishForm
-      step="review"
-      formData={filledFormData}
-      onFormChange={() => {}}
       onNext={() => {}}
       onBack={() => alert('Back')}
       onPublish={() => alert('Publish!')}
@@ -258,8 +197,10 @@ export const Review: StoryObj = {
   ),
 }
 
+// ── Terminal states ───────────────────────────────────────────────
+
 export const Publishing25: StoryObj = {
-  name: '6a. Publishing (25%)',
+  name: '5a. Publishing (25%)',
   render: () => (
     <SongPublishForm
       step="publishing"
@@ -274,7 +215,7 @@ export const Publishing25: StoryObj = {
 }
 
 export const Publishing70: StoryObj = {
-  name: '6b. Publishing (70%)',
+  name: '5b. Publishing (70%)',
   render: () => (
     <SongPublishForm
       step="publishing"
@@ -289,7 +230,7 @@ export const Publishing70: StoryObj = {
 }
 
 export const Success: StoryObj = {
-  name: '7. Success',
+  name: '6. Success',
   render: () => (
     <SongPublishForm
       step="success"
@@ -310,7 +251,7 @@ export const Success: StoryObj = {
 }
 
 export const Error: StoryObj = {
-  name: '8. Error',
+  name: '7. Error',
   render: () => (
     <SongPublishForm
       step="error"
@@ -329,22 +270,15 @@ export const Error: StoryObj = {
 export const Interactive: StoryObj = {
   name: 'Interactive Demo',
   render: () => {
-    const [step, setStep] = createSignal<PublishStep>('upload')
+    const [step, setStep] = createSignal<PublishStep>('song')
     const [formData, setFormData] = createSignal<SongFormData>({ ...defaultFormData })
-    const [copyrightCheck, setCopyrightCheck] = createSignal<SongPublishFormProps['copyrightCheck']>({ status: 'idle' })
     const [progress, setProgress] = createSignal(0)
 
     const handleFormChange = (data: Partial<SongFormData>) => {
       setFormData((prev) => ({ ...prev, ...data }))
-
-      // Simulate AcoustID check when audio file is selected
-      if (data.audioFile) {
-        setCopyrightCheck({ status: 'checking' })
-        setTimeout(() => setCopyrightCheck({ status: 'clear' }), 1500)
-      }
     }
 
-    const steps: PublishStep[] = ['upload', 'details', 'lyrics', 'license', 'review']
+    const steps: PublishStep[] = ['song', 'canvas', 'details', 'license']
 
     const handleNext = () => {
       const idx = steps.indexOf(step())
@@ -352,9 +286,14 @@ export const Interactive: StoryObj = {
     }
 
     const handleBack = () => {
-      if (step() === 'error') { setStep('review'); return }
+      if (step() === 'error') { setStep('license'); return }
       const idx = steps.indexOf(step())
       if (idx > 0) setStep(steps[idx - 1])
+    }
+
+    const handleSkip = () => {
+      // Canvas skip goes to details
+      if (step() === 'canvas') setStep('details')
     }
 
     const handlePublish = () => {
@@ -380,9 +319,9 @@ export const Interactive: StoryObj = {
         onFormChange={handleFormChange}
         onNext={handleNext}
         onBack={handleBack}
+        onSkip={handleSkip}
         onPublish={handlePublish}
-        onDone={() => { setStep('upload'); setFormData({ ...defaultFormData }); setCopyrightCheck({ status: 'idle' }) }}
-        copyrightCheck={copyrightCheck()}
+        onDone={() => { setStep('song'); setFormData({ ...defaultFormData }) }}
         progress={progress()}
         result={{
           ipId: '0xabcdef1234567890abcdef1234567890abcdef12',

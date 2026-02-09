@@ -47,7 +47,6 @@ export const ProfileWalletTab: Component<{ address: string }> = (props) => {
         chainBadge: <config.chainBadge />,
         balance: data ? num.toFixed(4) : '—',
         balanceUSD: data ? `$${usd.toFixed(2)}` : '$—',
-        amount: data ? `${num.toFixed(4)} ${config.unitSymbol}` : `— ${config.unitSymbol}`,
       }
     })
 

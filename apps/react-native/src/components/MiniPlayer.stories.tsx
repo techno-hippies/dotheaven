@@ -1,7 +1,8 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { MusicNotes, Play, Pause, SkipForward } from 'phosphor-react-native';
+import { colors } from '../lib/theme';
 import type { MusicTrack } from '../services/music-scanner';
 
 // Standalone presentational version of MiniPlayer for Storybook
@@ -23,7 +24,7 @@ const MiniPlayerDisplay: React.FC<MiniPlayerDisplayProps> = ({ track, isPlaying,
       <View style={styles.content}>
         <View style={styles.info}>
           <View style={styles.albumArt}>
-            <Ionicons name="musical-notes" size={20} color="#7878a0" />
+            <MusicNotes size={20} color={colors.textMuted} />
           </View>
           <View style={styles.textContainer}>
             <Text style={styles.title} numberOfLines={1}>{track.title}</Text>
@@ -32,10 +33,14 @@ const MiniPlayerDisplay: React.FC<MiniPlayerDisplayProps> = ({ track, isPlaying,
         </View>
         <View style={styles.controls}>
           <TouchableOpacity style={styles.playButton}>
-            <Ionicons name={isPlaying ? 'pause' : 'play'} size={24} color="#f0f0f5" />
+            {isPlaying ? (
+              <Pause size={22} color={colors.textPrimary} weight="fill" />
+            ) : (
+              <Play size={22} color={colors.textPrimary} weight="fill" />
+            )}
           </TouchableOpacity>
           <TouchableOpacity style={styles.skipButton}>
-            <Ionicons name="play-forward" size={20} color="#b8b8d0" />
+            <SkipForward size={20} color={colors.textSecondary} weight="fill" />
           </TouchableOpacity>
         </View>
       </View>
@@ -44,17 +49,17 @@ const MiniPlayerDisplay: React.FC<MiniPlayerDisplayProps> = ({ track, isPlaying,
 };
 
 const styles = StyleSheet.create({
-  container: { backgroundColor: '#252139', borderTopWidth: 1, borderTopColor: '#2d2645' },
-  progressBar: { height: 2, backgroundColor: '#1a1625' },
-  progressFill: { height: 2, backgroundColor: '#8fb8e0' },
+  container: { backgroundColor: colors.bgElevated, borderTopWidth: 1, borderTopColor: colors.borderSubtle },
+  progressBar: { height: 2, backgroundColor: colors.bgPage },
+  progressFill: { height: 2, backgroundColor: colors.accentBlue },
   content: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8 },
   info: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  albumArt: { width: 40, height: 40, borderRadius: 8, backgroundColor: '#1f1b2e', alignItems: 'center', justifyContent: 'center' },
+  albumArt: { width: 40, height: 40, borderRadius: 8, backgroundColor: colors.bgSurface, alignItems: 'center', justifyContent: 'center' },
   textContainer: { flex: 1, marginLeft: 10 },
-  title: { fontSize: 14, fontWeight: '600', color: '#f0f0f5' },
-  artist: { fontSize: 12, color: '#b8b8d0', marginTop: 1 },
+  title: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
+  artist: { fontSize: 12, color: colors.textSecondary, marginTop: 1 },
   controls: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  playButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#2d2645', alignItems: 'center', justifyContent: 'center' },
+  playButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bgHighlight, alignItems: 'center', justifyContent: 'center' },
   skipButton: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
 });
 

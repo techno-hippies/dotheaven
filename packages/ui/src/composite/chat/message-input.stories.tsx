@@ -59,7 +59,7 @@ export const Controlled: Story = {
         />
         {lastSent() && (
           <div class="p-4 bg-[var(--bg-surface)] rounded-md">
-            <p class="text-sm text-[var(--text-secondary)] mb-1">Last sent message:</p>
+            <p class="text-base text-[var(--text-secondary)] mb-1">Last sent message:</p>
             <p class="text-base text-[var(--text-primary)]">{lastSent()}</p>
           </div>
         )}
@@ -186,15 +186,15 @@ export const MultipleInputs: Story = {
   render: () => (
     <div class="space-y-6">
       <div>
-        <p class="text-sm text-[var(--text-secondary)] mb-2">Chat 1</p>
+        <p class="text-base text-[var(--text-secondary)] mb-2">Chat 1</p>
         <MessageInput placeholder="Message alice.eth..." />
       </div>
       <div>
-        <p class="text-sm text-[var(--text-secondary)] mb-2">Chat 2</p>
+        <p class="text-base text-[var(--text-secondary)] mb-2">Chat 2</p>
         <MessageInput placeholder="Message bob.eth..." />
       </div>
       <div>
-        <p class="text-sm text-[var(--text-secondary)] mb-2">Disabled</p>
+        <p class="text-base text-[var(--text-secondary)] mb-2">Disabled</p>
         <MessageInput placeholder="This chat is disabled" disabled />
       </div>
     </div>

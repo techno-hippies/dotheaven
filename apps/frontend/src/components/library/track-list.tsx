@@ -46,7 +46,7 @@ export const TrackList: Component<TrackListProps> = (props) => {
   return (
     <div class={cn('px-8 pb-8', props.class)}>
       {/* Table Header */}
-      <div class="grid grid-cols-[48px_minmax(200px,4fr)_minmax(120px,2fr)_minmax(120px,1fr)_80px_48px] gap-4 px-4 py-2 border-b border-[var(--border-subtle)] text-sm text-[var(--text-muted)] font-medium">
+      <div class="grid grid-cols-[48px_minmax(200px,4fr)_minmax(120px,2fr)_minmax(120px,1fr)_80px_48px] gap-4 px-4 py-2 border-b border-[var(--border-subtle)] text-base text-[var(--text-muted)] font-medium">
         <div class="text-center">#</div>
         <div>Title</div>
         <div>Album</div>
@@ -96,24 +96,24 @@ export const TrackList: Component<TrackListProps> = (props) => {
                   <div class="text-[var(--text-primary)] font-medium truncate">
                     {track.title}
                   </div>
-                  <div class="text-sm text-[var(--text-secondary)] truncate">
+                  <div class="text-base text-[var(--text-secondary)] truncate">
                     {track.artist}
                   </div>
                 </div>
               </div>
 
               {/* Album */}
-              <div class="flex items-center text-sm text-[var(--text-secondary)] truncate">
+              <div class="flex items-center text-base text-[var(--text-secondary)] truncate">
                 {track.album}
               </div>
 
               {/* Date Added */}
-              <div class="flex items-center text-sm text-[var(--text-secondary)]">
+              <div class="flex items-center text-base text-[var(--text-secondary)]">
                 {track.dateAdded}
               </div>
 
               {/* Duration */}
-              <div class="flex items-center justify-center text-sm text-[var(--text-secondary)]">
+              <div class="flex items-center justify-center text-base text-[var(--text-secondary)]">
                 {track.duration}
               </div>
 

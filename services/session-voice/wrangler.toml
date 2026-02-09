@@ -1,0 +1,33 @@
+name = "session-voice"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "session-voice"
+database_id = "PLACEHOLDER"
+
+[durable_objects]
+bindings = [
+  { name = "ROOM_DO", class_name = "RoomDO" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["RoomDO"]
+
+[vars]
+ENVIRONMENT = "development"
+RPC_URL = "https://carrot.megaeth.com/rpc"
+ESCROW_ADDRESS = "0x132212B78C4a7A3F19DE1BF63f119848c765c1d2"
+REGISTRY_ADDRESS = "0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2"
+VERIFICATION_MIRROR_ADDRESS = "0xb0864603A4d6b62eACB53fbFa32E7665BADCc7Fb"
+CHAIN_ID = "6343"
+
+# Secrets (set via wrangler secret put):
+# AGORA_APP_ID
+# AGORA_APP_CERTIFICATE
+# JWT_SECRET
+# ORACLE_PRIVATE_KEY
+# ORACLE_SERVICE_TOKEN

@@ -75,7 +75,7 @@ const PlatformButton: Component<{ platform: PlatformOption }> = (props) => (
       {props.platform.icon()}
     </span>
     <div class="flex flex-col min-w-0">
-      <span class="text-sm font-medium text-[var(--text-primary)]">{props.platform.label}</span>
+      <span class="text-base font-medium text-[var(--text-primary)]">{props.platform.label}</span>
       <span class="text-xs text-[var(--text-muted)]">{props.platform.sublabel}</span>
     </div>
     <span class="ml-auto text-[var(--text-muted)]">

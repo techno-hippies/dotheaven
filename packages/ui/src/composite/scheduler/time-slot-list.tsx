@@ -79,7 +79,7 @@ export const TimeSlotList: Component<TimeSlotListProps> = (props) => {
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface)]',
                     isSelected
                       ? 'bg-[var(--accent-blue)] border-[var(--accent-blue)] text-white hover:bg-[var(--accent-blue-hover)]'
-                      : 'bg-[var(--bg-elevated)] border-[var(--bg-highlight)] text-[var(--text-primary)] hover:border-[var(--accent-blue)] hover:bg-[var(--bg-highlight)]'
+                      : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--accent-blue)] hover:bg-[var(--bg-highlight)]'
                   )}
                 >
                   {formatTimeShort(slot.startTime)}

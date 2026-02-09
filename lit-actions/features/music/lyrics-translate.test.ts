@@ -89,22 +89,26 @@ async function main() {
 
   const sourceLanguage = "Japanese";
   const targetLanguages = ["zh", "es", "ko"];
+  // Use a dummy ipId for testing (any valid checksummed address)
+  const ipId = "0x0000000000000000000000000000000000000001";
 
   console.log(`\n   Lyrics:        ${lyricsText.split("\n").length} lines`);
   console.log(`   Source:        ${sourceLanguage}`);
   console.log(`   Targets:       ${targetLanguages.join(", ")}`);
+  console.log(`   IP ID:         ${ipId}`);
 
-  // Build signature
+  // Build signature — must match action's format: heaven:translate:${ipId}:${lyricsHash}:...
   const timestamp = Date.now();
   const nonce = Math.floor(Math.random() * 1000000).toString();
   const lyricsHash = await sha256Hex(new TextEncoder().encode(lyricsText));
   const langsStr = [...targetLanguages].sort().join(",");
-  const message = `heaven:translate:${lyricsHash}:${sourceLanguage}:${langsStr}:${timestamp}:${nonce}`;
+  const message = `heaven:translate:${ipId}:${lyricsHash}:${sourceLanguage}:${langsStr}:${timestamp}:${nonce}`;
   const signature = await wallet.signMessage(message);
 
   // Build jsParams
   let jsParams: any = {
     userPkpPublicKey,
+    ipId,
     lyricsText,
     sourceLanguage,
     targetLanguages,

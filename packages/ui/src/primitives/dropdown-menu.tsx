@@ -55,7 +55,7 @@ export const DropdownMenuSubContent: Component<
   return (
     <KobalteDropdownMenu.SubContent
       class={cn(
-        'min-w-[180px] bg-[var(--bg-surface)] rounded-md shadow-lg border border-[var(--bg-highlight)] overflow-hidden',
+        'min-w-[180px] bg-[var(--bg-surface)] rounded-md shadow-lg border border-[var(--border-subtle)] overflow-hidden',
         'animate-in fade-in-0 zoom-in-95',
         'origin-[var(--kb-menu-content-transform-origin)]',
         local.class
@@ -73,7 +73,7 @@ export const DropdownMenuContent: Component<
     <KobalteDropdownMenu.Portal>
       <KobalteDropdownMenu.Content
         class={cn(
-          'min-w-[180px] bg-[var(--bg-surface)] rounded-md shadow-lg border border-[var(--bg-highlight)] z-50 overflow-hidden',
+          'min-w-[180px] bg-[var(--bg-surface)] rounded-md shadow-lg border border-[var(--border-subtle)] z-50 overflow-hidden',
           'animate-in fade-in-0 zoom-in-95',
           'origin-[var(--kb-menu-content-transform-origin)]',
           local.class

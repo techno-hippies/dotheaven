@@ -320,7 +320,7 @@ function langToBytes2(lang: string): string {
 }
 
 // bytes2 hex → 2-char code (uppercase for nationality, lowercase for language)
-function bytes2ToCode(hex: string, uppercase = false): string | undefined {
+export function bytes2ToCode(hex: string, uppercase = false): string | undefined {
   if (!hex || hex === '0x0000') return undefined
   const n = parseInt(hex, 16)
   if (!n) return undefined

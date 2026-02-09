@@ -142,14 +142,14 @@ export const VerifyIdentityDialog: Component<VerifyIdentityDialogProps> = (props
               </Show>
 
               <div class="text-center space-y-2">
-                <p class="text-sm text-[var(--text-secondary)]">
+                <p class="text-base text-[var(--text-secondary)]">
                   Open the <span class="font-medium text-[var(--text-primary)]">Self</span> app on your phone and scan this code
                 </p>
                 <a
                   href="https://self.xyz"
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="text-sm text-[var(--accent-blue)] hover:text-[var(--accent-blue-hover)] transition-colors"
+                  class="text-base text-[var(--accent-blue)] hover:text-[var(--accent-blue-hover)] transition-colors"
                 >
                   Don't have the app? Download Self
                 </a>
@@ -163,7 +163,7 @@ export const VerifyIdentityDialog: Component<VerifyIdentityDialogProps> = (props
                 <p class="text-base text-[var(--text-secondary)]">
                   Complete verification in the Self app
                 </p>
-                <div class="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                <div class="flex items-center gap-2 text-base text-[var(--text-muted)]">
                   <div class="w-2 h-2 rounded-full bg-[var(--accent-blue)] animate-pulse" />
                   Listening for on-chain confirmation
                 </div>
@@ -187,7 +187,7 @@ export const VerifyIdentityDialog: Component<VerifyIdentityDialogProps> = (props
                 <p class="text-lg font-medium text-[var(--text-primary)]">
                   Identity Verified
                 </p>
-                <p class="text-sm text-[var(--text-secondary)] text-center">
+                <p class="text-base text-[var(--text-secondary)] text-center">
                   Your profile now shows a verified badge
                 </p>
               </div>
@@ -201,7 +201,7 @@ export const VerifyIdentityDialog: Component<VerifyIdentityDialogProps> = (props
                 <p class="text-base text-[var(--text-primary)]">
                   Something went wrong
                 </p>
-                <p class="text-sm text-[var(--text-muted)] text-center max-w-xs">
+                <p class="text-base text-[var(--text-muted)] text-center max-w-xs">
                   {props.errorMessage ?? 'Please try again'}
                 </p>
               </div>

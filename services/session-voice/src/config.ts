@@ -1,37 +1,15 @@
-/**
- * Session Voice Service Configuration
- */
+/** Session Voice — locked parameters */
 
-function requireEnv(key: string): string {
-  const value = process.env[key]
-  if (!value) throw new Error(`Missing required env: ${key}`)
-  return value
-}
-
-export const config = {
-  port: parseInt(process.env.PORT || '3338', 10),
-
-  // Agora
-  agoraAppId: requireEnv('AGORA_APP_ID'),
-  agoraAppCertificate: requireEnv('AGORA_APP_CERTIFICATE'),
-
-  // Chain
-  rpcUrl: process.env.RPC_URL || 'https://carrot.megaeth.com/rpc',
-  chainId: 6343,
-  escrowAddress: process.env.ESCROW_ADDRESS || '0x132212B78C4a7A3F19DE1BF63f119848c765c1d2',
-
-  // Oracle (optional - only needed for attestation)
-  oraclePrivateKey: process.env.ORACLE_PRIVATE_KEY || null,
-
-  // JWT
-  jwtSecret: requireEnv('JWT_SECRET'),
-
-  // Session config
-  tokenExpirySeconds: 3600, // 1 hour Agora tokens
-  joinWindowBeforeMinutes: 5, // Can join 5 mins before start
-
-  // Dev/testing
-  mockEscrow: process.env.MOCK_ESCROW === '1',
-  mockHost: (process.env.MOCK_HOST || '0x0000000000000000000000000000000000000000'),
-  mockGuest: (process.env.MOCK_GUEST || '0x0000000000000000000000000000000000000000'),
-}
+export const BASE_GRANT_SECONDS = 1800
+export const CELO_BONUS_SECONDS = 1800
+export const TOKEN_TTL_SECONDS = 90
+export const TOKEN_RENEW_AFTER_SECONDS = 45
+export const HEARTBEAT_INTERVAL_SECONDS = 30
+export const JOIN_MIN_SECONDS = 90
+export const RENEW_MIN_SECONDS = 90
+export const ROOM_CAPACITY_FREE = 6
+export const ROOM_CAPACITY_BOOKED = 2
+export const CREDITS_LOW_THRESHOLD = 300
+export const JOIN_WINDOW_BEFORE_MINUTES = 5
+export const JWT_EXPIRY_SECONDS = 3600
+export const NONCE_TTL_SECONDS = 300

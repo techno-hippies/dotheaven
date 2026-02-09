@@ -4,15 +4,13 @@
  */
 
 import type { Track } from '@heaven/ui'
+import { SUBGRAPH_ACTIVITY } from '@heaven/core'
 import { normalizeArtistName, normalizeArtistVariants, splitArtistNames, artistMatchesTarget, payloadToMbid } from './artist'
 
 // ── Config ──────────────────────────────────────────────────────────
 
 const RESOLVER_URL =
   import.meta.env.VITE_RESOLVER_URL || 'https://heaven-resolver-production.deletion-backup782.workers.dev'
-
-const GOLDSKY_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/12.0.0/gn'
 
 const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
 
@@ -184,7 +182,7 @@ export async function fetchAlbumTracks(
     }
   }`
 
-  const res = await fetch(GOLDSKY_ENDPOINT, {
+  const res = await fetch(SUBGRAPH_ACTIVITY, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),
@@ -255,7 +253,7 @@ async function fetchAlbumRanking(
         scrobbles { id }
       }
     }`
-    const res = await fetch(GOLDSKY_ENDPOINT, {
+    const res = await fetch(SUBGRAPH_ACTIVITY, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),

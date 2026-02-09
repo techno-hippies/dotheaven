@@ -2,20 +2,23 @@
  * Lyrics Translate v1
  *
  * Batch-translate lyrics into multiple target languages in parallel.
- * Each translation is uploaded to IPFS as a JSON file.
+ * Each translation is uploaded to IPFS as a JSON file, then persisted
+ * on-chain via LyricsEngagementV1.translateLyricsFor() on MegaETH.
  *
  * Designed to be called after song-publish (or anytime later) to add
  * additional language translations for a song's lyrics.
  *
  * Flow:
- * 1. Verify EIP-191 signature over lyrics hash + languages
+ * 1. Verify EIP-191 signature over ipId + lyrics hash + languages
  * 2. Decrypt 2 API keys (Filebase, OpenRouter)
  * 3. Translate lyrics into all target languages (parallel)
  * 4. Upload each translation JSON to Filebase IPFS
- * 5. Return map of { languageCode: CID }
+ * 5. Broadcast translateLyricsFor() for each translation via sponsor PKP
+ * 6. Return map of { languageCode: { cid, text, txHash } }
  *
  * Required jsParams:
  * - userPkpPublicKey: User's PKP public key
+ * - ipId: Story Protocol IP Asset address (the song being translated)
  * - lyricsText: Plain text lyrics (\n separated lines)
  * - sourceLanguage: e.g. "Japanese", "English"
  * - targetLanguages: Array of language codes, e.g. ["zh", "es", "ko"]
@@ -30,12 +33,31 @@
  * - openrouterPlaintextKey: Dev override
  * - translationModel: Override LLM model (default: google/gemini-2.5-flash-lite-preview-09-2025)
  *
- * Returns: { success, version, user, translations: { [langCode]: { cid, text } }, errors: { [langCode]: string } }
+ * Returns: { success, version, user, translations: { [langCode]: { cid, text, txHash } }, errors: { [langCode]: string } }
  */
 
 let ethersLib = globalThis.ethers;
 if (!ethersLib) ethersLib = require("ethers");
 const ethers = ethersLib;
+
+// ============================================================
+// CONSTANTS
+// ============================================================
+
+const MEGA_RPC_URL = "https://carrot.megaeth.com/rpc";
+const MEGA_CHAIN_ID = 6343;
+const MEGA_GAS_PRICE = "1000000";
+const MEGA_GAS_LIMIT = "500000";
+
+const LYRICS_ENGAGEMENT_V1 = "0x6C832a6Cb9F360f81D697Bed66250Dc361386EB4";
+
+const SPONSOR_PKP_PUBLIC_KEY =
+  "044615ca5ec3bfec5f5306f62ccc1a398cbd7e9cc53ac0e715b27ba81272e7397b185aa6f43c9bb2f0d9c489d30478cec9310685cd3a33922c0d12417b6375bc08";
+const SPONSOR_PKP_ADDRESS = "0x089fc7801D8f7D487765343a7946b1b97A7d29D4";
+
+const LYRICS_ENGAGEMENT_ABI = [
+  "function translateLyricsFor(address translator, address ipId, bytes2 langCode, string cid, bytes32 textHash, uint32 byteLen)",
+];
 
 // ============================================================
 // HELPERS
@@ -44,6 +66,16 @@ const ethers = ethersLib;
 const must = (v, label) => {
   if (v === undefined || v === null) throw new Error(`${label} is required`);
   return v;
+};
+
+const strip0x = (v) => (String(v || "").startsWith("0x") ? String(v).slice(2) : String(v));
+
+const toBigNumber = (value, label) => {
+  try {
+    return ethers.BigNumber.from(value);
+  } catch (e) {
+    throw new Error(`Invalid ${label}: ${value}`);
+  }
 };
 
 // ============================================================
@@ -64,6 +96,11 @@ function bytesToHex(bytes) {
 async function sha256Hex(message) {
   const encoder = new TextEncoder();
   const hash = await sha256Bytes(encoder.encode(message));
+  return bytesToHex(hash);
+}
+
+async function sha256HexBytes(data) {
+  const hash = await sha256Bytes(data);
   return bytesToHex(hash);
 }
 
@@ -209,6 +246,105 @@ async function translateLyrics(openRouterKey, model, lyricsText, sourceLanguage,
 }
 
 // ============================================================
+// LANG CODE HELPER
+// ============================================================
+
+/**
+ * Convert ISO 639-1 string to bytes2, e.g. "zh" -> "0x7a68"
+ */
+function langToBytes2(lang) {
+  if (!lang || lang.length !== 2) throw new Error(`Invalid lang code: ${lang}`);
+  const a = lang.charCodeAt(0);
+  const b = lang.charCodeAt(1);
+  return "0x" + a.toString(16).padStart(2, "0") + b.toString(16).padStart(2, "0");
+}
+
+// ============================================================
+// ON-CHAIN BROADCAST HELPER
+// ============================================================
+
+const parseRunOnce = (result, stepName) => {
+  if (!result) throw new Error(`${stepName}: runOnce returned null`);
+  const parsed = typeof result === "string" ? JSON.parse(result) : result;
+  if (parsed?.error) throw new Error(`${stepName}: ${parsed.error}`);
+  return parsed;
+};
+
+/**
+ * Broadcast a single translateLyricsFor() call via sponsor PKP.
+ * Returns { txHash } or { broadcastError }.
+ */
+async function broadcastTranslation(translator, ipId, langCode, cid, textHash, byteLen, sigName) {
+  const iface = new ethers.utils.Interface(LYRICS_ENGAGEMENT_ABI);
+  const calldata = iface.encodeFunctionData("translateLyricsFor", [
+    ethers.utils.getAddress(translator),
+    ethers.utils.getAddress(ipId),
+    langToBytes2(langCode),
+    cid,
+    textHash,
+    byteLen,
+  ]);
+
+  // Get nonce
+  const paramsJson = await Lit.Actions.runOnce(
+    { waitForResponse: true, name: `getNonce_${langCode}` },
+    async () => {
+      const provider = new ethers.providers.JsonRpcProvider(MEGA_RPC_URL);
+      const nonce = await provider.getTransactionCount(SPONSOR_PKP_ADDRESS, "pending");
+      return JSON.stringify({ nonce: nonce.toString() });
+    }
+  );
+  const params = parseRunOnce(paramsJson, `nonce_${langCode}`);
+
+  const unsignedTx = {
+    type: 0,
+    chainId: MEGA_CHAIN_ID,
+    nonce: toBigNumber(params.nonce, "nonce"),
+    to: LYRICS_ENGAGEMENT_V1,
+    data: calldata,
+    gasLimit: toBigNumber(MEGA_GAS_LIMIT, "gasLimit"),
+    gasPrice: toBigNumber(MEGA_GAS_PRICE, "gasPrice"),
+    value: 0,
+  };
+
+  const txHashToSign = ethers.utils.keccak256(ethers.utils.serializeTransaction(unsignedTx));
+  const sigResult = await Lit.Actions.signAndCombineEcdsa({
+    toSign: Array.from(ethers.utils.arrayify(txHashToSign)),
+    publicKey: SPONSOR_PKP_PUBLIC_KEY,
+    sigName,
+  });
+  const sigStr = String(sigResult || "").trim();
+  if (sigStr.startsWith("[ERROR]")) throw new Error(`Sponsor signing failed: ${sigStr}`);
+
+  const sigObj = JSON.parse(sigStr);
+  let v = Number(sigObj.recid ?? sigObj.recoveryId ?? sigObj.v);
+  if (v === 0 || v === 1) v += 27;
+  const sig = ethers.utils.joinSignature({
+    r: `0x${strip0x(sigObj.r)}`,
+    s: `0x${strip0x(sigObj.s)}`,
+    v,
+  });
+
+  const signedTx = ethers.utils.serializeTransaction(unsignedTx, sig);
+
+  const broadcastResult = await Lit.Actions.runOnce(
+    { waitForResponse: true, name: `broadcast_${langCode}` },
+    async () => {
+      try {
+        const provider = new ethers.providers.JsonRpcProvider(MEGA_RPC_URL);
+        const txResp = await provider.sendTransaction(signedTx);
+        const receipt = await txResp.wait(1);
+        return JSON.stringify({ txHash: receipt.transactionHash, status: receipt.status });
+      } catch (err) {
+        return JSON.stringify({ broadcastError: err?.reason || err?.message || String(err) });
+      }
+    }
+  );
+
+  return parseRunOnce(broadcastResult, `broadcast_${langCode}`);
+}
+
+// ============================================================
 // MAIN
 // ============================================================
 
@@ -216,6 +352,7 @@ const main = async () => {
   try {
     const {
       userPkpPublicKey,
+      ipId,
       lyricsText,
       sourceLanguage,
       targetLanguages,
@@ -230,6 +367,7 @@ const main = async () => {
     } = jsParams || {};
 
     must(userPkpPublicKey, "userPkpPublicKey");
+    must(ipId, "ipId");
     must(lyricsText, "lyricsText");
     must(sourceLanguage, "sourceLanguage");
     must(targetLanguages, "targetLanguages");
@@ -247,6 +385,9 @@ const main = async () => {
     const userAddress = ethers.utils.computeAddress(userPkpPublicKey);
     const model = translationModel || "google/gemini-2.5-flash-lite-preview-09-2025";
 
+    // Validate ipId is a valid address
+    const ipIdAddress = ethers.utils.getAddress(ipId);
+
     // ========================================
     // STEP 1: Validate request freshness
     // ========================================
@@ -260,7 +401,7 @@ const main = async () => {
     // ========================================
     const lyricsHash = await sha256Hex(lyricsText);
     const langsStr = targetLanguages.sort().join(",");
-    const message = `heaven:translate:${lyricsHash}:${sourceLanguage}:${langsStr}:${timestamp}:${nonce}`;
+    const message = `heaven:translate:${ipIdAddress}:${lyricsHash}:${sourceLanguage}:${langsStr}:${timestamp}:${nonce}`;
     const recovered = ethers.utils.verifyMessage(message, signature);
     if (recovered.toLowerCase() !== userAddress.toLowerCase()) {
       throw new Error("Invalid signature: recovered address does not match user PKP");
@@ -297,13 +438,22 @@ const main = async () => {
               "application/json",
               `translation-${lang}-${prefix}.json`
             );
-            return { lang, cid, text };
+            // Compute textHash (SHA-256 of translated text bytes)
+            const textBytes = new TextEncoder().encode(text);
+            const textHash = "0x" + await sha256HexBytes(textBytes);
+            const byteLen = textBytes.length;
+            return { lang, cid, text, textHash, byteLen };
           })
         );
 
         for (const r of results) {
           if (r.status === "fulfilled") {
-            translations[r.value.lang] = { cid: r.value.cid, text: r.value.text };
+            translations[r.value.lang] = {
+              cid: r.value.cid,
+              text: r.value.text,
+              textHash: r.value.textHash,
+              byteLen: r.value.byteLen,
+            };
           } else {
             const lang = targetLanguages[results.indexOf(r)];
             errors[lang] = r.reason?.message || String(r.reason);
@@ -316,12 +466,53 @@ const main = async () => {
 
     const parsed = JSON.parse(resultJson);
 
+    // ========================================
+    // STEP 5: Broadcast on-chain (sequentially to avoid nonce conflicts)
+    // ========================================
+    const onchainResults = {};
+    const langs = Object.keys(parsed.translations);
+
+    for (let i = 0; i < langs.length; i++) {
+      const lang = langs[i];
+      const t = parsed.translations[lang];
+      try {
+        const result = await broadcastTranslation(
+          userAddress,
+          ipIdAddress,
+          lang,
+          t.cid,
+          t.textHash,
+          t.byteLen,
+          `sponsorLyricsSig_${lang}`
+        );
+        if (result.broadcastError) {
+          onchainResults[lang] = { error: result.broadcastError };
+        } else {
+          onchainResults[lang] = { txHash: result.txHash };
+        }
+      } catch (err) {
+        onchainResults[lang] = { error: err?.message || String(err) };
+      }
+    }
+
+    // Merge txHash into translations
+    const finalTranslations = {};
+    for (const lang of langs) {
+      finalTranslations[lang] = {
+        cid: parsed.translations[lang].cid,
+        text: parsed.translations[lang].text,
+        txHash: onchainResults[lang]?.txHash || null,
+        onchainError: onchainResults[lang]?.error || null,
+      };
+    }
+
     Lit.Actions.setResponse({
       response: JSON.stringify({
         success: true,
         version: "lyrics-translate-v1",
         user: userAddress,
-        translations: parsed.translations,
+        ipId: ipIdAddress,
+        translations: finalTranslations,
         errors: parsed.errors,
       }),
     });

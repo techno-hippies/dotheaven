@@ -1,0 +1,22 @@
+{
+  "ciphertext": "lEFce2z3gv//R4Pp2RIW/5PtB8sJWgvaGl9KdVLk3AORYCqvWERRfi85ibC42MxPu0escNQcyJvy97PleJskEhvlLPPa20LbWtArwXeqvfNKjWEikOi4hCK2UpN9GMwU7UDbSwuND1FxF2v437mdAoLjta6sSAx3tg/7MFPKSP67cVgRwocXvsZctvuaXthdaHoOwXyQiJrEA+QC",
+  "dataToEncryptHash": "2ca783d51c4bfd1a8b80e1c8aee5e94d3f17c3089f8bca45e48d40b3435ae092",
+  "accessControlConditions": [
+    {
+      "conditionType": "evmBasic",
+      "contractAddress": "",
+      "standardContractType": "",
+      "chain": "ethereum",
+      "method": "",
+      "parameters": [
+        ":currentActionIpfsId"
+      ],
+      "returnValueTest": {
+        "comparator": "=",
+        "value": "QmSiC1nV5hu248sipLjukDuH3sDAV31F6S3RqRLfrQmZa6"
+      }
+    }
+  ],
+  "encryptedAt": "2026-02-07T16:33:38.777Z",
+  "cid": "QmSiC1nV5hu248sipLjukDuH3sDAV31F6S3RqRLfrQmZa6"
+}

@@ -40,13 +40,13 @@ export const SingleSelection: Story = {
     const [selected, setSelected] = createSignal('')
     return (
       <div class="flex flex-col gap-4 w-96">
-        <label class="text-sm font-medium text-[var(--text-secondary)]">Gender</label>
+        <label class="text-base font-medium text-[var(--text-secondary)]">Gender</label>
         <PillGroup
           options={GENDER_OPTIONS}
           value={selected()}
           onChange={(val) => setSelected(selected() === val ? '' : val)}
         />
-        <p class="text-sm text-[var(--text-muted)]">
+        <p class="text-base text-[var(--text-muted)]">
           Selected: {selected() || 'none'}
         </p>
       </div>
@@ -69,7 +69,7 @@ export const MultipleSelection: Story = {
 
     return (
       <div class="flex flex-col gap-4 w-[500px]">
-        <label class="text-sm font-medium text-[var(--text-secondary)]">
+        <label class="text-base font-medium text-[var(--text-secondary)]">
           Music Genres (select multiple)
         </label>
         <PillGroup
@@ -78,7 +78,7 @@ export const MultipleSelection: Story = {
           onChange={handleChange}
           multiple
         />
-        <p class="text-sm text-[var(--text-muted)]">
+        <p class="text-base text-[var(--text-muted)]">
           Selected: {selected().length ? selected().join(', ') : 'none'}
         </p>
       </div>

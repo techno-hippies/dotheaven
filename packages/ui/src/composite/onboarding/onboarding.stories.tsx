@@ -1,9 +1,8 @@
 import type { Meta, StoryObj } from 'storybook-solidjs'
-import { createSignal } from 'solid-js'
 import { OnboardingNameStep } from './onboarding-name-step'
 import { OnboardingAvatarStep } from './onboarding-avatar-step'
 import { OnboardingBasicsStep } from './onboarding-basics-step'
-import { OnboardingMusicStep, POPULAR_ARTISTS, type OnboardingArtist } from './onboarding-music-step'
+import { OnboardingMusicStep } from './onboarding-music-step'
 import { Stepper } from '../../primitives/stepper'
 
 const meta = {
@@ -118,49 +117,34 @@ export const MusicStep: StoryObj<typeof meta> = {
   name: 'Music Step',
   render: () => (
     <FullPageStep
-      title="Connect Your Spotify"
-      subtitle="Get matched with candidates who listen to the same music as you."
+      title="Your music taste"
+      subtitle="Pick some artists you love. This helps us personalize your experience."
       stepIndex={2}
     >
       <OnboardingMusicStep
         claimedName="alice"
+        initialMode="manual"
         onContinue={(data) => console.log('Music:', data)}
       />
     </FullPageStep>
   ),
 }
 
-export const MusicStepSpotifyConnected: StoryObj<typeof meta> = {
-  name: 'Music Step (Spotify Connected)',
-  render: () => {
-    const spotifyArtists: OnboardingArtist[] = [
-      { mbid: '164f0d73-1234-4e2c-8743-d77bf2191051', name: 'Kanye West', genres: ['Hip-Hop'] },
-      { mbid: '73e5e69d-3554-40d8-8571-ac1fca428388', name: 'The Weeknd', genres: ['R&B'] },
-      { mbid: 'b071f9fa-14b0-4217-8e97-eb41da73f598', name: 'Frank Ocean', genres: ['R&B', 'Alt'] },
-      { mbid: 'a466c2a2-6517-42fb-a160-1087c3bafd9f', name: 'Tyler, the Creator', genres: ['Hip-Hop'] },
-      { mbid: 'e0140a67-e4d1-4f13-8a01-364355f95571', name: 'Kendrick Lamar', genres: ['Hip-Hop'] },
-      { mbid: '9efff43b-3b29-4082-824e-bc82f646f93d', name: 'Daft Punk', genres: ['Electronic'] },
-      { mbid: 'b8a7c51f-362c-4dcb-a259-bc6f0d2e85ff', name: 'Drake', genres: ['Hip-Hop', 'R&B'] },
-      { mbid: '8538e728-ca0b-4321-b7e5-cff6565dd4c0', name: 'Depeche Mode', genres: ['Electronic'] },
-      { mbid: 'f27ec8db-af05-4f36-916e-3571f4e088df', name: 'Michael Jackson', genres: ['Pop'] },
-    ]
-    return (
-      <FullPageStep
-        title="Connect Your Spotify"
-        subtitle="Get matched with candidates who listen to the same music as you."
-        stepIndex={2}
-      >
-        <OnboardingMusicStep
-          claimedName="alice"
-          onConnectSpotify={async () => {
-            await new Promise((r) => setTimeout(r, 1000))
-            return spotifyArtists
-          }}
-          onContinue={(data) => console.log('Music:', data)}
-        />
-      </FullPageStep>
-    )
-  },
+export const MusicStepManualPicker: StoryObj<typeof meta> = {
+  name: 'Music Step (Manual Picker)',
+  render: () => (
+    <FullPageStep
+      title="Your music taste"
+      subtitle="Pick some artists you love. This helps us personalize your experience."
+      stepIndex={2}
+    >
+      <OnboardingMusicStep
+        claimedName="alice"
+        initialMode="manual"
+        onContinue={(data) => console.log('Music:', data)}
+      />
+    </FullPageStep>
+  ),
 }
 
 export const MusicStepWithError: StoryObj<typeof meta> = {

@@ -104,7 +104,7 @@ export const Interactive: Story = {
           Reset
         </Button>
 
-        <p class="text-[var(--text-secondary)] text-sm">
+        <p class="text-[var(--text-secondary)] text-base">
           Step {currentStep()} of {totalSteps}
         </p>
       </div>

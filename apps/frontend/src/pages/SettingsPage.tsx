@@ -138,7 +138,7 @@ export const SettingsPage: Component = () => {
           {/* Expanded identity toggle */}
           <Show when={identityOpen() && showIdentityToggle()}>
             <div class="mt-4 rounded-md bg-[var(--bg-surface)] px-4 py-4">
-              <p class="text-sm text-[var(--text-secondary)] mb-3">
+              <p class="text-base text-[var(--text-secondary)] mb-3">
                 Choose which name to display on your posts.
               </p>
               <Switch

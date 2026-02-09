@@ -1,6 +1,7 @@
 import { type Component, createSignal, splitProps } from 'solid-js'
 import { cn } from '../../lib/classnames'
 import { IconButton } from '../../primitives/icon-button'
+import { TextField } from '../../primitives/text-field'
 
 const SendIcon = () => (
   <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
@@ -77,14 +78,13 @@ export const MessageInput: Component<MessageInputProps> = (props) => {
       )}
       {...others}
     >
-      <input
-        type="text"
+      <TextField
         placeholder={local.placeholder || 'Type a message...'}
         value={currentValue()}
-        onInput={(e) => setValue(e.currentTarget.value)}
+        onChange={setValue}
         onKeyDown={handleKeyDown}
         disabled={local.disabled}
-        class="flex-1 bg-[var(--bg-elevated)] text-base text-[var(--text-primary)] placeholder:text-[var(--text-muted)] px-4 py-3 rounded-full border-none outline-none focus:ring-2 focus:ring-[var(--accent-blue)]/50"
+        class="flex-1"
       />
       <IconButton
         variant="send"

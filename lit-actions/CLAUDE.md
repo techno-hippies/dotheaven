@@ -12,11 +12,15 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 - **Content access v1**: Grant/revoke access on ContentRegistry. Sponsor PKP pays gas.
 - **Link EOA v1**: Link PKP to EOA on ContentAccessMirror for shared content access.
 - **Post register v1**: Unified post registration for text AND photo posts. Text posts: AI safety check (includes language detection) + metadata upload + MegaETH mirror (no Story). Photo posts: metadata upload + Story IP + MegaETH mirror. Supports attribution for shared content. Pre-signed signature support for test/frontend flexibility.
+- **Follow v1**: Follow/unfollow a user on-chain via FollowV1 on MegaETH. Sponsor PKP pays gas. EIP-191 sig verification with timestamp freshness check.
 
-### Future (not yet wired to frontend)
+### Active (wired via song-publish.ts)
 - **Song publish**: Upload audio/preview/cover/metadata to IPFS, align lyrics (ElevenLabs), translate lyrics (OpenRouter) — all in one action with 3 encrypted keys
 - **Lyrics translate**: Batch-translate lyrics into multiple target languages in parallel, upload each to IPFS — separate action callable anytime after publish
 - **Story IP registration**: Sponsor PKP mints NFT + registers IP Asset + attaches PIL license on Story Protocol (gasless for user)
+
+### Not yet wired to frontend
+- **Self verify mirror**: Celo→MegaETH verification sync (frontend calls directly via verification.ts, not via action-cids.ts)
 
 ### Retired
 - **Scrobble submit V3**: Replaced by ERC-4337 Account Abstraction (ScrobbleV4 contract + AA gateway). Source kept for reference.
@@ -38,34 +42,28 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 | Avatar Upload | `features/profile/avatar-upload-v1.js` | `QmTWwoC5...` |
 | Content Register v1 | `features/music/content-register-v1.js` | `QmchDhdr...` |
 | Content Access v1 | `features/music/content-access-v1.js` | `QmXnhhG1...` |
-| Link EOA v1 | `features/music/link-eoa-v1.js` | `QmYPeQEp...` |
+| Link EOA v1 | `features/profile/link-eoa-v1.js` | `QmYPeQEp...` |
 | Post Register v1 | `features/social/post-register-v1.js` | `QmQ3sz9g...` |
 | Post Translate v1 | `features/social/post-translate-v1.js` | `QmWAGjKK...` |
+| Track Cover v4 | `features/music/track-cover-v4.js` | `QmSVssbA...` |
+| Follow v1 | `features/social/follow-v1.js` | `QmPccpeq...` |
+| Song Publish | `features/music/song-publish-v1.js` | `Qmc2zDSs...` |
+| Lyrics Translate | `features/music/lyrics-translate-v1.js` | `Qmdf2HHL...` |
+| Story Register Sponsor | `features/music/story-register-sponsor-v1.js` | `QmRKjHrJ...` |
 
-### Future (in `setup.ts` but not in `action-cids.ts`)
+### In setup.ts but not in action-cids.ts
 
 | Action | File | Notes |
 |--------|------|-------|
-| Song Publish | `features/music/song-publish-v1.js` | Not wired to frontend yet |
-| Lyrics Translate | `features/music/lyrics-translate-v1.js` | Not wired to frontend yet |
-| Story Register Sponsor | `features/music/story-register-sponsor-v1.js` | Not wired to frontend yet |
-| Self Verify Mirror | `features/verification/self-verify-mirror-v1.js` | Not wired to frontend yet |
+| Self Verify Mirror | `features/verification/self-verify-mirror-v1.js` | Called directly from verification.ts |
 
 
 ## TODO
 
-### Frontend Integration
-- [ ] Song upload flow: frontend calls songUpload Lit Action, receives CIDs
-- [ ] After upload: frontend calls storyRegisterSponsor with metadata CIDs from upload step
-- [ ] Wire up EIP-712 signing in frontend AuthContext/wallet provider
-- [ ] Display ipId + tokenId + license info after registration
-
 ### Production
-- [ ] Deploy all actions on `naga-test` (requires tstLPX)
 - [ ] Deploy own SPG NFT collection on Story mainnet (chainId 1514)
 - [ ] Update contract addresses for mainnet (all constants in story-register-sponsor)
 - [ ] Fund production sponsor PKP with mainnet IP tokens
-- [ ] Test full song-upload → story-register pipeline end-to-end
 
 ## Architecture
 
@@ -133,18 +131,20 @@ Client                      Lit Action                  Story Aeneid
 | RecordsV1 | `0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3` |
 | PostsV1 | `0xFe674F421c2bBB6D664c7F5bc0D5A0204EE0bFA6` |
 | EngagementV2 | `0xAF769d204e51b64D282083Eb0493F6f37cd93138` |
+| LyricsEngagementV1 | `0x6C832a6Cb9F360f81D697Bed66250Dc361386EB4` |
+| FollowV1 | `0x3F32cF9e70EF69DFFed74Dfe07034cb03cF726cb` |
 
 ## Subgraphs (Goldsky)
 
 | Subgraph | Version | Endpoint |
 |----------|---------|----------|
-| `dotheaven-activity` | 12.0.0 | `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/12.0.0/gn` |
+| `dotheaven-activity` | 14.0.0 | `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/14.0.0/gn` |
 | `dotheaven-profiles` | 1.0.0 | `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-profiles/1.0.0/gn` |
 | `dotheaven-playlists` | 1.0.0 | `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-playlists/1.0.0/gn` |
 
 Network: `megaeth-testnet-v2` (Goldsky identifier)
 
-- `dotheaven-activity` indexes ScrobbleV3 + ScrobbleV4 + PostsV1 + ContentRegistry + EngagementV2 events
+- `dotheaven-activity` indexes ScrobbleV3 + ScrobbleV4 + PostsV1 + ContentRegistry + EngagementV2 + LyricsEngagementV1 + FollowV1 events
 - `dotheaven-profiles` indexes ProfileV2 `ProfileUpserted` events
 - `dotheaven-playlists` indexes PlaylistV1 events
 
@@ -175,11 +175,13 @@ bun scripts/setup.ts postTranslateV1      # Deploy post translate action
 bun scripts/setup.ts songPublish           # Deploy song publish action (future)
 bun scripts/setup.ts lyricsTranslate       # Deploy lyrics translate action (future)
 bun scripts/setup.ts storyRegisterSponsor  # Deploy story register action (future)
+bun scripts/setup.ts followV1              # Deploy follow action
 bun scripts/deploy-spg-nft.ts             # Deploy own SPG NFT collection
 bun scripts/verify.ts                      # Verify all actions configured
 
 # Tests (co-located with actions in feature folders)
 bun features/music/song-publish.test.ts             # Test song publish
+bun features/music/song-publish-instrumental.test.ts # Test instrumental song publish
 bun features/music/lyrics-translate.test.ts         # Test batch lyrics translation
 bun features/music/story-register-sponsor.test.ts   # Test Story registration
 bun features/music/playlist-v1.test.ts          # Test playlist CRUD
@@ -188,6 +190,7 @@ bun features/profile/heaven-set-profile.test.ts     # Test profile write
 bun features/profile/heaven-set-records.test.ts     # Test records write
 bun features/social/post-register.test.ts            # Test post registration + language detection
 bun features/social/post-translate.test.ts          # Test post translation
+bun features/social/follow.test.ts                  # Test follow/unfollow
 bun features/verification/self-verify-mirror.test.ts # Test verification mirror
 
 # Data scripts (operational, not tests)
@@ -221,12 +224,16 @@ lit-actions/
 │   │   ├── heaven-set-records.test.ts
 │   │   ├── avatar-upload-v1.js        # IPFS upload with anime style enforcement
 │   │   ├── avatar-upload.test.ts
-│   │   └── avatar-style-check.test.ts
+│   │   ├── avatar-style-check.test.ts
+│   │   ├── link-eoa-v1.js             # Link PKP to EOA
+│   │   └── link-eoa.test.ts
 │   ├── social/                        # Posts and engagement
 │   │   ├── post-register-v1.js        # Unified text + photo post registration
 │   │   ├── post-translate-v1.js       # LLM translation → EngagementV2
 │   │   ├── post-register.test.ts
-│   │   └── post-translate.test.ts
+│   │   ├── post-translate.test.ts
+│   │   ├── follow-v1.js               # Follow/unfollow via FollowV1
+│   │   └── follow.test.ts
 │   ├── music/                         # Playlists, publishing, content, covers
 │   │   ├── playlist-v1.js             # Event-sourced playlist operations
 │   │   ├── playlist-v1.test.ts
@@ -236,10 +243,10 @@ lit-actions/
 │   │   ├── content-access.test.ts
 │   │   ├── content-upload.test.ts
 │   │   ├── content-decrypt.test.ts
-│   │   ├── link-eoa-v1.js             # Link PKP to EOA
 │   │   ├── track-cover-v4.js          # Track cover art management
 │   │   ├── song-publish-v1.js         # Upload + alignment + translation
 │   │   ├── song-publish.test.ts
+│   │   ├── song-publish-instrumental.test.ts
 │   │   ├── lyrics-translate-v1.js     # Batch multi-language translation
 │   │   ├── lyrics-translate.test.ts
 │   │   ├── story-register-sponsor-v1.js # Gasless Story IP registration
@@ -257,7 +264,12 @@ lit-actions/
 │   ├── add-permission.ts              # Add PKP permission for CID
 │   ├── mint-pkp.ts                    # Mint new PKP with EOA ownership
 │   ├── deploy-spg-nft.ts              # Deploy SPG NFT collection on Story
-│   └── verify.ts                      # Verify configuration
+│   ├── verify.ts                      # Verify configuration
+│   ├── batch-permit.ts                # Batch permit PKP actions
+│   ├── deposit-payment.ts             # Deposit payment for Lit usage
+│   ├── check-permissions.ts           # Check PKP action permissions
+│   ├── add-auth-method.ts             # Add auth method to PKP
+│   └── check-payment.ts              # Check Lit payment balance
 ├── tests/shared/                      # Shared test infrastructure
 │   ├── env.ts                         # Network detection + config loading
 │   └── pkp-signer.test.ts             # PKP signing utilities test
@@ -273,9 +285,9 @@ lit-actions/
 
 ### Song Publish (EIP-191)
 ```
-message = `heaven:publish:${audioHash}:${previewHash}:${coverHash}:${instrumentalHash}:${songMetadataHash}:${ipaMetadataHash}:${nftMetadataHash}:${lyricsHash}:${sourceLanguage}:${targetLanguage}:${timestamp}:${nonce}`
+message = `heaven:publish:${audioHash}:${coverHash}:${instrumentalHash}:${canvasHash || ''}:${songMetadataHash}:${ipaMetadataHash}:${nftMetadataHash}:${lyricsHash}:${sourceLanguage}:${targetLanguage}:${timestamp}:${nonce}`
 ```
-`instrumentalHash` = SHA-256 hex of instrumental audio bytes. Action fetches content, re-hashes, verifies signature recovers to user's address. All metadata, lyrics, language params, and instrumental are authenticated. `instrumentalUrl` is required — uploaded to IPFS and `instrumentalCID` returned.
+Action fetches content, re-hashes, verifies signature recovers to user's address. All metadata, lyrics, language params, instrumental, and optional canvas are authenticated. `instrumentalUrl` is required. `canvasUrl` is optional (video/mp4 or video/webm, max 30MB) — if provided, uploaded to IPFS and `canvasCID` returned.
 
 ### Post Register (EIP-191)
 ```
@@ -295,9 +307,9 @@ message = `heaven:translate-post:${postId}:${textHash}:${targetLang}:${timestamp
 
 ### Lyrics Translate (EIP-191)
 ```
-message = `heaven:translate:${lyricsHash}:${sourceLanguage}:${sortedLangs}:${timestamp}:${nonce}`
+message = `heaven:translate:${ipId}:${lyricsHash}:${sourceLanguage}:${sortedLangs}:${timestamp}:${nonce}`
 ```
-Languages are sorted alphabetically before joining with commas.
+`ipId` = Story Protocol IP Asset address (checksummed). Languages are sorted alphabetically before joining with commas. After IPFS upload, sponsor PKP broadcasts `LyricsEngagementV1.translateLyricsFor()` on MegaETH for each language. On-chain persistence is best-effort — IPFS CIDs are always returned even if broadcast fails.
 
 ### Story Registration (EIP-712)
 ```
@@ -320,6 +332,12 @@ updateMeta: heaven:playlist:updateMeta:${playlistId}:${payloadHash}:${timestamp}
 delete:     heaven:playlist:delete:${playlistId}:${timestamp}:${nonce}
 ```
 `payloadHash` = SHA-256 of `JSON.stringify(payload)` where payload varies by operation. `nonce` = on-chain `PlaylistV1.userNonces(user)` (monotonic, consumed via `consumeNonce()` for replay protection). Action verifies signature matches user PKP address, then sponsor PKP broadcasts to PlaylistV1 on MegaETH (chain 6343). Contract at `0xF0337C4A335cbB3B31c981945d3bE5B914F7B329`.
+
+### Follow (EIP-191)
+```
+message = `heaven:follow:${checksumTarget}:${action}:${timestamp}:${nonce}`
+```
+`action` = `"follow"` or `"unfollow"`. `checksumTarget` = checksum-formatted target address. Action verifies signature matches user PKP, validates timestamp freshness (5 min), then sponsor PKP broadcasts `followFor()` or `unfollowFor()` on MegaETH (chain 6343). FollowV1 contract address set in action constant.
 
 ### Heaven Claim Name (EIP-191)
 ```

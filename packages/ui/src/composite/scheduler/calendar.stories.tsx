@@ -100,7 +100,7 @@ export const Default: Story = {
           />
         </div>
         <div class="w-[400px] p-4 bg-[var(--bg-elevated)] rounded-lg">
-          <p class="text-sm text-[var(--text-secondary)]">
+          <p class="text-base text-[var(--text-secondary)]">
             Selected date: <span class="font-semibold text-[var(--text-primary)]">{selectedDate() || 'None'}</span>
           </p>
         </div>
@@ -140,7 +140,7 @@ export const WithDateRange: Story = {
           />
         </div>
         <div class="w-[400px] p-4 bg-[var(--bg-elevated)] rounded-lg">
-          <p class="text-sm text-[var(--text-secondary)]">
+          <p class="text-base text-[var(--text-secondary)]">
             Selected date: <span class="font-semibold text-[var(--text-primary)]">{selectedDate()}</span>
           </p>
           <p class="text-xs text-[var(--text-muted)] mt-2">
@@ -203,10 +203,10 @@ export const KeyboardNavigation: Story = {
           />
         </div>
         <div class="w-[400px] p-4 bg-[var(--bg-elevated)] rounded-lg">
-          <p class="text-sm text-[var(--text-secondary)] mb-3">
+          <p class="text-base text-[var(--text-secondary)] mb-3">
             Selected date: <span class="font-semibold text-[var(--text-primary)]">{selectedDate() || 'None'}</span>
           </p>
-          <h3 class="text-sm font-semibold text-[var(--text-primary)] mb-2">Keyboard Navigation</h3>
+          <h3 class="text-base font-semibold text-[var(--text-primary)] mb-2">Keyboard Navigation</h3>
           <ul class="text-xs text-[var(--text-secondary)] space-y-1">
             <li><kbd class="px-1 py-0.5 bg-[var(--bg-highlight)] rounded text-[var(--text-primary)]">Arrow Keys</kbd> - Navigate dates</li>
             <li><kbd class="px-1 py-0.5 bg-[var(--bg-highlight)] rounded text-[var(--text-primary)]">Space</kbd> / <kbd class="px-1 py-0.5 bg-[var(--bg-highlight)] rounded text-[var(--text-primary)]">Enter</kbd> - Select date</li>

@@ -109,13 +109,13 @@ const DrawerContent: ParentComponent<DrawerContentProps> = (props) => {
             // Side-specific styles
             isHorizontal() ? [
               'h-full w-[280px] max-w-[85vw]',
-              side() === 'left' && 'rounded-r-xl border-r border-[var(--bg-highlight)]',
-              side() === 'right' && 'rounded-l-xl border-l border-[var(--bg-highlight)]',
+              side() === 'left' && 'rounded-r-xl border-r border-[var(--border-subtle)]',
+              side() === 'right' && 'rounded-l-xl border-l border-[var(--border-subtle)]',
             ] : [
               'w-full sm:max-w-lg',
               'max-h-[94vh]',
               'rounded-t-xl',
-              'border-t border-x border-[var(--bg-highlight)]',
+              'border-t border-x border-[var(--border-subtle)]',
               'pb-safe',
               'transition-[bottom] duration-200 ease-out',
             ],
@@ -212,7 +212,7 @@ const DrawerTitle: ParentComponent<{ class?: string }> = (props) => {
 
 const DrawerDescription: ParentComponent<{ class?: string }> = (props) => {
   return (
-    <Drawer.Description class={cn('text-sm text-[var(--text-muted)]', props.class)}>
+    <Drawer.Description class={cn('text-base text-[var(--text-muted)]', props.class)}>
       {props.children}
     </Drawer.Description>
   )

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Audio, type AVPlaybackStatus } from 'expo-av';
 import { ScrobbleEngine } from '../services/scrobble-engine';
 import type { ReadyScrobble } from '../services/scrobble-engine';
@@ -10,10 +10,9 @@ import type { MusicTrack } from '../services/music-scanner';
 const SESSION_KEY = 'local';
 const TICK_INTERVAL_MS = 15_000;
 
-interface PlayerContextValue {
+interface PlayerCoreContextValue {
   currentTrack: MusicTrack | null;
   isPlaying: boolean;
-  progress: { position: number; duration: number };
   queue: MusicTrack[];
   queueIndex: number;
   pendingScrobbles: number;
@@ -25,10 +24,16 @@ interface PlayerContextValue {
   flushScrobbles: () => Promise<void>;
 }
 
-const PlayerContext = createContext<PlayerContextValue | null>(null);
+interface PlayerProgressState {
+  position: number;
+  duration: number;
+}
+
+const PlayerCoreContext = createContext<PlayerCoreContextValue | null>(null);
+const PlayerProgressContext = createContext<PlayerProgressState | null>(null);
 
 export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { bridge, isReady: bridgeReady } = useLitBridge();
+  const { bridge } = useLitBridge();
   const { isAuthenticated, pkpInfo, createAuthContext } = useAuth();
 
   const [currentTrack, setCurrentTrack] = useState<MusicTrack | null>(null);
@@ -36,11 +41,14 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [queueIndex, setQueueIndex] = useState(0);
   const [pendingScrobbles, setPendingScrobbles] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [progress, setProgress] = useState({ position: 0, duration: 0 });
+  const [progress, setProgress] = useState<PlayerProgressState>({ position: 0, duration: 0 });
 
   const soundRef = useRef<Audio.Sound | null>(null);
   const engineRef = useRef<ScrobbleEngine | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isPlayingRef = useRef(false);
+  const togglingRef = useRef(false);
+  const switchingTrackRef = useRef(false);
   const queueStateRef = useRef({ queue: [] as MusicTrack[], index: 0 });
   const pendingRef = useRef<ReadyScrobble[]>([]);
   // Refs to access current auth state from within the engine callback
@@ -54,6 +62,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     authRef.current = { bridge, isAuthenticated, pkpPubkey: pkpInfo?.pubkey ?? null, createAuthContext };
   }, [bridge, isAuthenticated, pkpInfo, createAuthContext]);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
 
   // Initialize audio mode and scrobble engine
   useEffect(() => {
@@ -112,6 +124,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const onPlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
     if (!status.isLoaded) return;
 
+    isPlayingRef.current = status.isPlaying;
     setIsPlaying(status.isPlaying);
     setProgress({
       position: (status.positionMillis || 0) / 1000,
@@ -133,29 +146,51 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, []);
 
   const loadAndPlay = useCallback(async (track: MusicTrack, index: number) => {
-    // Unload previous
-    if (soundRef.current) {
-      await soundRef.current.unloadAsync();
+    if (switchingTrackRef.current) return;
+    switchingTrackRef.current = true;
+
+    try {
+      // Update UI state immediately so mini player feels responsive.
+      setCurrentTrack(track);
+      setQueueIndex(index);
+      setIsPlaying(true);
+      setProgress({ position: 0, duration: track.duration ?? 0 });
+      isPlayingRef.current = true;
+
+      // Feed scrobble engine
+      engineRef.current?.onMetadata(SESSION_KEY, {
+        artist: track.artist,
+        title: track.title,
+        album: track.album || null,
+        durationMs: track.duration ? track.duration * 1000 : null,
+      });
+
+      // Detach and defer previous unload so the next track can start sooner.
+      const previousSound = soundRef.current;
       soundRef.current = null;
+      if (previousSound) {
+        try {
+          previousSound.setOnPlaybackStatusUpdate(null);
+        } catch (err) {
+          console.warn('[Player] Failed to detach previous callback:', err);
+        }
+      }
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: track.uri },
+        { shouldPlay: true, progressUpdateIntervalMillis: 500 },
+        onPlaybackStatusUpdate,
+      );
+      soundRef.current = sound;
+
+      if (previousSound) {
+        void previousSound.unloadAsync().catch((err) => {
+          console.warn('[Player] Failed to unload previous sound:', err);
+        });
+      }
+    } finally {
+      switchingTrackRef.current = false;
     }
-
-    setCurrentTrack(track);
-    setQueueIndex(index);
-
-    // Feed scrobble engine
-    engineRef.current?.onMetadata(SESSION_KEY, {
-      artist: track.artist,
-      title: track.title,
-      album: track.album || null,
-      durationMs: track.duration ? track.duration * 1000 : null,
-    });
-
-    const { sound } = await Audio.Sound.createAsync(
-      { uri: track.uri },
-      { shouldPlay: true, progressUpdateIntervalMillis: 500 },
-      onPlaybackStatusUpdate,
-    );
-    soundRef.current = sound;
   }, [onPlaybackStatusUpdate]);
 
   const playTrack = useCallback(async (track: MusicTrack, allTracks: MusicTrack[]) => {
@@ -165,14 +200,34 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [loadAndPlay]);
 
   const togglePlayPause = useCallback(async () => {
-    if (!soundRef.current) return;
-    const status = await soundRef.current.getStatusAsync();
-    if (!status.isLoaded) return;
+    const sound = soundRef.current;
+    if (!sound || togglingRef.current) return;
 
-    if (status.isPlaying) {
-      await soundRef.current.pauseAsync();
-    } else {
-      await soundRef.current.playAsync();
+    togglingRef.current = true;
+    const nextIsPlaying = !isPlayingRef.current;
+    isPlayingRef.current = nextIsPlaying;
+    setIsPlaying(nextIsPlaying);
+
+    try {
+      if (nextIsPlaying) {
+        await sound.playAsync();
+      } else {
+        await sound.pauseAsync();
+      }
+    } catch (err) {
+      console.error('[Player] Failed to toggle playback:', err);
+      try {
+        const status = await sound.getStatusAsync();
+        if (status.isLoaded) {
+          isPlayingRef.current = status.isPlaying;
+          setIsPlaying(status.isPlaying);
+        }
+      } catch {
+        isPlayingRef.current = false;
+        setIsPlaying(false);
+      }
+    } finally {
+      togglingRef.current = false;
     }
   }, []);
 
@@ -211,30 +266,51 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [bridge, pkpInfo, createAuthContext]);
 
+  const coreValue = useMemo<PlayerCoreContextValue>(() => ({
+    currentTrack,
+    isPlaying,
+    queue,
+    queueIndex,
+    pendingScrobbles,
+    playTrack,
+    togglePlayPause,
+    skipNext,
+    skipPrevious,
+    seekTo,
+    flushScrobbles,
+  }), [
+    currentTrack,
+    isPlaying,
+    queue,
+    queueIndex,
+    pendingScrobbles,
+    playTrack,
+    togglePlayPause,
+    skipNext,
+    skipPrevious,
+    seekTo,
+    flushScrobbles,
+  ]);
+
+  const progressValue = useMemo<PlayerProgressState>(() => progress, [progress]);
+
   return (
-    <PlayerContext.Provider
-      value={{
-        currentTrack,
-        isPlaying,
-        progress,
-        queue,
-        queueIndex,
-        pendingScrobbles,
-        playTrack,
-        togglePlayPause,
-        skipNext,
-        skipPrevious,
-        seekTo,
-        flushScrobbles,
-      }}
-    >
-      {children}
-    </PlayerContext.Provider>
+    <PlayerCoreContext.Provider value={coreValue}>
+      <PlayerProgressContext.Provider value={progressValue}>
+        {children}
+      </PlayerProgressContext.Provider>
+    </PlayerCoreContext.Provider>
   );
 };
 
-export const usePlayer = (): PlayerContextValue => {
-  const ctx = useContext(PlayerContext);
+export const usePlayer = (): PlayerCoreContextValue => {
+  const ctx = useContext(PlayerCoreContext);
   if (!ctx) throw new Error('usePlayer must be used within PlayerProvider');
+  return ctx;
+};
+
+export const usePlayerProgress = (): PlayerProgressState => {
+  const ctx = useContext(PlayerProgressContext);
+  if (!ctx) throw new Error('usePlayerProgress must be used within PlayerProvider');
   return ctx;
 };

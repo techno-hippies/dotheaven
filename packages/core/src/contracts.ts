@@ -59,10 +59,13 @@ export const CONTENT_REGISTRY = '0x9ca08C2D2170A43ecfA12AB35e06F2E1cEEB4Ef2'
 /** ContentAccessMirror — EOA-linked access grants */
 export const CONTENT_ACCESS_MIRROR = '0xd4D3baB38a11D72e36F49a73D50Dbdc3c1Aa4e9A'
 
-// ── Posts ──────────────────────────────────────────────────────────
+// ── Social ─────────────────────────────────────────────────────────
 
 /** PostsV1 — Social posts */
 export const POSTS_V1 = '0xFe674F421c2bBB6D664c7F5bc0D5A0204EE0bFA6'
+
+/** FollowV1 — Social follow graph */
+export const FOLLOW_V1 = '0x3F32cF9e70EF69DFFed74Dfe07034cb03cF726cb'
 
 // ── Escrow ─────────────────────────────────────────────────────────
 
@@ -73,6 +76,19 @@ export const SESSION_ESCROW_V1 = '0x132212B78C4a7A3F19DE1BF63f119848c765c1d2'
 
 /** Heaven parent node: namehash("heaven.hnsbridge.eth") */
 export const HEAVEN_NODE = '0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27'
+
+// ── Subgraph Endpoints (Goldsky) ─────────────────────────────────────
+
+const GOLDSKY_BASE = 'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs'
+
+/** Activity subgraph — posts, scrobbles, engagement, content, follows */
+export const SUBGRAPH_ACTIVITY = `${GOLDSKY_BASE}/dotheaven-activity/14.0.0/gn`
+
+/** Profiles subgraph — ProfileV2 events (denormalized enums) */
+export const SUBGRAPH_PROFILES = `${GOLDSKY_BASE}/dotheaven-profiles/1.0.0/gn`
+
+/** Playlists subgraph — PlaylistV1 events */
+export const SUBGRAPH_PLAYLISTS = `${GOLDSKY_BASE}/dotheaven-playlists/1.0.0/gn`
 
 // ── Celo (Self.xyz verification) ───────────────────────────────────
 

@@ -16,6 +16,9 @@ export * from './download-dialog'
 // Feed - Social feed posts
 export * from './feed'
 
+// Follow - Follower/following lists
+export * from './follow'
+
 // Media - Music/audio playback
 export * from './media'
 
@@ -27,6 +30,9 @@ export * from './profile'
 
 // Publish - Song publishing flow
 export * from './publish'
+
+// Room - Live voice room UI
+export * from './room'
 
 // Scheduler - Booking calendar (external-facing)
 export * from './scheduler'

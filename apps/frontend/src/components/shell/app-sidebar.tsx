@@ -16,7 +16,7 @@ import {
   CreateDialog,
 } from '@heaven/ui'
 import {
-  HOME, PROFILE, WALLET, SCHEDULE, COMMUNITY, CHAT, SETTINGS,
+  HOME, PROFILE, WALLET, SCHEDULE, SEARCH, CHAT, SETTINGS,
   musicTab, playlist,
 } from '@heaven/core'
 import { AppLogo } from './header'
@@ -285,7 +285,7 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
         {/* Main navigation */}
         <nav class={`flex flex-col gap-1 ${props.compact ? 'items-center' : ''}`}>
           <NavItem icon={HomeIcon} label="Home" path={HOME} active={isActive(HOME)} onClick={() => navigate(HOME)} compact={props.compact} />
-          <NavItem icon={SearchIcon} label="Community" path={COMMUNITY} active={isActive(COMMUNITY)} onClick={() => navigate(COMMUNITY)} compact={props.compact} />
+          <NavItem icon={SearchIcon} label="Search" path={SEARCH} active={isActive(SEARCH)} onClick={() => navigate(SEARCH)} compact={props.compact} />
           <NavItem icon={ChatCircleIcon} label="Messages" path={CHAT} active={location.pathname.startsWith(CHAT)} onClick={() => navigate(CHAT)} badge={unreadMessageCount()} compact={props.compact} />
           <NavItem icon={WalletIcon} label="Wallet" path={WALLET} active={isActive(WALLET)} onClick={() => navigate(WALLET)} compact={props.compact} />
           <NavItem icon={CalendarIcon} label="Schedule" path={SCHEDULE} active={isActive(SCHEDULE)} onClick={() => navigate(SCHEDULE)} compact={props.compact} />
@@ -309,7 +309,7 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
           </div>
 
           <div class={`flex flex-col ${props.compact ? 'gap-1.5 items-center' : 'gap-0.5'}`}>
-            {/* System collections (Local, Cloud, Shared) */}
+            {/* System collections (Local, Cloud, Shared With Me) */}
             <Show when={platform.isTauri}>
               <Show when={props.compact} fallback={
                 <button
@@ -322,7 +322,7 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
                   </div>
                   <div class="flex flex-col min-w-0 text-left">
                     <span class="text-base text-[var(--text-primary)] whitespace-nowrap">Local</span>
-                    <span class="text-sm text-[var(--text-muted)] whitespace-nowrap">{localTrackCount().toLocaleString()} songs</span>
+                    <span class="text-base text-[var(--text-muted)] whitespace-nowrap">{localTrackCount().toLocaleString()} songs</span>
                   </div>
                 </button>
               }>
@@ -348,7 +348,7 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
                 </div>
                 <div class="flex flex-col min-w-0 text-left">
                   <span class="text-base text-[var(--text-primary)] whitespace-nowrap">Cloud</span>
-                  <span class="text-sm text-[var(--text-muted)] whitespace-nowrap">{cloudTrackCount()} songs</span>
+                  <span class="text-base text-[var(--text-muted)] whitespace-nowrap">{cloudTrackCount()} songs</span>
                 </div>
               </button>
             }>
@@ -372,8 +372,8 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
                   <ShareIcon />
                 </div>
                 <div class="flex flex-col min-w-0 text-left">
-                  <span class="text-base text-[var(--text-primary)] whitespace-nowrap">Shared</span>
-                  <span class="text-sm text-[var(--text-muted)] whitespace-nowrap">{sharedTrackCount()} songs</span>
+                  <span class="text-base text-[var(--text-primary)] whitespace-nowrap">Shared With Me</span>
+                  <span class="text-base text-[var(--text-muted)] whitespace-nowrap">{sharedTrackCount()} songs</span>
                 </div>
               </button>
             }>
@@ -381,7 +381,7 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
                 type="button"
                 class={`w-11 h-11 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--bg-highlight-hover)] transition-colors ${isActive(musicTab('shared')) ? 'ring-1 ring-[var(--accent-blue)]' : ''}`}
                 onClick={() => navigate(musicTab('shared'))}
-                title="Shared"
+                title="Shared With Me"
               >
                 <ShareIcon />
               </button>

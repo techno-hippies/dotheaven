@@ -12,14 +12,12 @@
  * 5. All users see the cached translation for that language going forward
  */
 
+import { SUBGRAPH_ACTIVITY } from '@heaven/core'
 import { getLitClient } from '../lit/client'
 import { POST_TRANSLATE_V1_CID } from '../lit/action-cids'
 import type { PKPAuthContext } from '../lit/types'
 import { getPrimaryName } from './registry'
 import { resolveAvatarUri } from './avatar-resolver'
-
-const ACTIVITY_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/12.0.0/gn'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -114,7 +112,7 @@ export async function fetchFeedPosts(opts: {
     }
   }`
 
-  const res = await fetch(ACTIVITY_ENDPOINT, {
+  const res = await fetch(SUBGRAPH_ACTIVITY, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),
@@ -151,7 +149,7 @@ export async function fetchPost(postId: string): Promise<FeedPostData | null> {
     }
   }`
 
-  const res = await fetch(ACTIVITY_ENDPOINT, {
+  const res = await fetch(SUBGRAPH_ACTIVITY, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),
@@ -183,7 +181,7 @@ export async function fetchPostComments(postId: string): Promise<Array<{
     }
   }`
 
-  const res = await fetch(ACTIVITY_ENDPOINT, {
+  const res = await fetch(SUBGRAPH_ACTIVITY, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),

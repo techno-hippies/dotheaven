@@ -14,6 +14,7 @@ export { ProgressBar, type ProgressBarProps } from './progress'
 export { Collapsible, CollapsibleTrigger, CollapsibleContent, type CollapsibleProps, type CollapsibleTriggerProps, type CollapsibleContentProps } from './collapsible'
 export { Checkbox, type CheckboxProps } from './checkbox'
 export { Switch, type SwitchProps } from './switch'
+export { RadioGroup, type RadioGroupProps, type RadioGroupOption } from './radio-group'
 export {
   Drawer,
   DrawerTrigger,
@@ -60,3 +61,5 @@ export {
 } from './dropdown-menu'
 export { Tabs, type TabsProps, type TabItem } from './tabs'
 export { LanguageChip, type LanguageChipProps } from './language-chip'
+export { FileField, type FileFieldProps, type FileRejection, type Details as FileFieldDetails } from './file-field'
+export { EmojiReactionPicker, type EmojiReactionPickerProps } from './emoji-reaction-picker'

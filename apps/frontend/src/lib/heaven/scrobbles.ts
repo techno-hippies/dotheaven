@@ -1,5 +1,5 @@
 import type { Track } from '@heaven/ui'
-import { MEGAETH_RPC, SCROBBLE_V3, SCROBBLE_V4 } from '@heaven/core'
+import { MEGAETH_RPC, SCROBBLE_V3, SCROBBLE_V4, SUBGRAPH_ACTIVITY } from '@heaven/core'
 import { payloadToMbid } from './artist'
 
 /**
@@ -12,9 +12,6 @@ import { payloadToMbid } from './artist'
  *
  * Each Scrobble has a `track` relation with the full metadata.
  */
-
-const GOLDSKY_ENDPOINT =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/12.0.0/gn'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -79,7 +76,7 @@ export async function fetchScrobbleEntries(
     }
   }`
 
-  const res = await fetch(GOLDSKY_ENDPOINT, {
+  const res = await fetch(SUBGRAPH_ACTIVITY, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),
@@ -285,7 +282,7 @@ export async function fetchUploadedContent(
     }
   }`
 
-  const contentRes = await fetch(GOLDSKY_ENDPOINT, {
+  const contentRes = await fetch(SUBGRAPH_ACTIVITY, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query: contentQuery }),
@@ -316,7 +313,7 @@ export async function fetchUploadedContent(
     }
   }`
 
-  const trackRes = await fetch(GOLDSKY_ENDPOINT, {
+  const trackRes = await fetch(SUBGRAPH_ACTIVITY, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query: trackQuery }),
@@ -407,7 +404,7 @@ export async function fetchSharedContent(
     }
   }`
 
-  const grantRes = await fetch(GOLDSKY_ENDPOINT, {
+  const grantRes = await fetch(SUBGRAPH_ACTIVITY, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query: grantQuery }),
@@ -447,7 +444,7 @@ export async function fetchSharedContent(
     }
   }`
 
-  const trackRes = await fetch(GOLDSKY_ENDPOINT, {
+  const trackRes = await fetch(SUBGRAPH_ACTIVITY, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query: trackQuery }),

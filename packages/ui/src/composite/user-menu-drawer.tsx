@@ -29,7 +29,7 @@ export const UserMenuDrawer: Component<UserMenuDrawerProps> = (props) => {
             <span class="text-base font-semibold text-[var(--text-primary)] truncate">
               {props.displayName}
             </span>
-            <span class="text-sm text-[var(--text-muted)] truncate">
+            <span class="text-base text-[var(--text-muted)] truncate">
               {props.username}
             </span>
           </div>

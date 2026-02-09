@@ -155,7 +155,7 @@ export const SchedulerCalendar: Component<CalendarProps> = (props) => {
                               <Calendar.CellTrigger
                                 day={day}
                                 class={cn(
-                                  'w-full aspect-square flex flex-col items-center justify-center rounded-lg text-sm font-medium transition-all',
+                                  'w-full aspect-square flex flex-col items-center justify-center rounded-lg text-base font-medium transition-all',
                                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface)]',
                                   isSelected
                                     ? 'bg-[var(--accent-blue)] text-white hover:bg-[var(--accent-blue-hover)]'

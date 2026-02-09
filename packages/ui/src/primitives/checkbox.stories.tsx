@@ -53,7 +53,7 @@ export const Controlled: StoryObj = {
           checked={checked()}
           onChange={setChecked}
         />
-        <p class="text-sm text-[var(--text-secondary)]">
+        <p class="text-base text-[var(--text-secondary)]">
           Terms {checked() ? 'accepted' : 'not accepted'}
         </p>
       </div>
@@ -65,7 +65,7 @@ export const MultipleCheckboxes: StoryObj = {
   name: 'Multiple Checkboxes',
   render: () => (
     <div class="flex flex-col gap-3">
-      <div class="text-sm font-medium text-[var(--text-primary)] mb-1">Select your interests:</div>
+      <div class="text-base font-medium text-[var(--text-primary)] mb-1">Select your interests:</div>
       <Checkbox label="Music" />
       <Checkbox label="Movies" />
       <Checkbox label="Sports" />

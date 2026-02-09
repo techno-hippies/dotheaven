@@ -30,6 +30,7 @@ import {
   registerHeavenName,
   setProfile,
   setTextRecord,
+  setTextRecords,
   uploadAvatar,
   computeNode,
 } from '../lib/heaven'
@@ -42,6 +43,16 @@ import {
 } from '../lib/camp-spotify'
 
 type OnboardingStep = 'name' | 'basics' | 'music' | 'avatar' | 'complete'
+
+const MUSIC_RECORD_KEY = 'heaven.music.v1'
+const MUSIC_COUNT_RECORD_KEY = 'heaven.music.count'
+
+type MusicPreferencesV1 = {
+  version: 1
+  source: 'spotify' | 'manual'
+  updatedAt: number
+  artistMbids: string[]
+}
 
 export const OnboardingPage: Component = () => {
   const auth = useAuth()
@@ -204,6 +215,23 @@ export const OnboardingPage: Component = () => {
 
   // ── Music step handlers ────────────────────────────────────────
 
+  function buildMusicPreferencesPayload(data: OnboardingMusicData): MusicPreferencesV1 {
+    const artistMbids = Array.from(
+      new Set(
+        data.artists
+          .map((artist) => artist.mbid?.trim())
+          .filter((mbid): mbid is string => Boolean(mbid)),
+      ),
+    )
+
+    return {
+      version: 1,
+      source: data.spotifyConnected ? 'spotify' : 'manual',
+      updatedAt: Math.floor(Date.now() / 1000),
+      artistMbids,
+    }
+  }
+
   // Build a PKP signer adapter for Camp SDK
   function buildPkpSigner() {
     const addr = address()
@@ -279,14 +307,41 @@ export const OnboardingPage: Component = () => {
     setMusicSubmitting(true)
     setMusicError(null)
     try {
-      // Store selected artists in localStorage for now
-      // TODO: Persist to on-chain profile or RecordsV1 text record
       if (data.artists.length > 0) {
-        const artistMbids = data.artists.map((a) => a.mbid)
+        const musicPayload = buildMusicPreferencesPayload(data)
+        const artistMbids = musicPayload.artistMbids
+
+        const name = claimedName()
+        const pkp = auth.pkpInfo()
+
+        let persisted = false
+        if (name && pkp && artistMbids.length > 0) {
+          const authContext = await auth.getAuthContext()
+          const node = computeNode(name)
+          const recordResult = await setTextRecords(
+            node,
+            [MUSIC_RECORD_KEY, MUSIC_COUNT_RECORD_KEY],
+            [JSON.stringify(musicPayload), String(artistMbids.length)],
+            pkp.publicKey,
+            authContext,
+          )
+          if (recordResult.success) {
+            persisted = true
+            console.log('[Onboarding] Music preferences saved to RecordsV1:', recordResult.txHash)
+          } else {
+            console.warn('[Onboarding] Failed to persist music records:', recordResult.error)
+          }
+        }
+
+        // Keep local cache as a fallback/read-optimistic source.
         try {
           localStorage.setItem('heaven:favoriteArtists', JSON.stringify(artistMbids))
+          localStorage.setItem('heaven:favoriteArtistsV1', JSON.stringify(musicPayload))
         } catch { /* ignore */ }
-        console.log('[Onboarding] Music preferences saved:', data.artists.length, 'artists')
+
+        if (!persisted) {
+          console.log('[Onboarding] Music preferences cached locally:', artistMbids.length, 'artists')
+        }
       }
       setStep('avatar')
     } catch (err) {
@@ -395,7 +450,7 @@ export const OnboardingPage: Component = () => {
           fallback={
             <div class="flex flex-col items-center gap-3">
               <div class="w-6 h-6 border-2 border-[var(--text-muted)] border-t-transparent rounded-full animate-spin" />
-              <p class="text-sm text-[var(--text-secondary)]">Checking your profile...</p>
+              <p class="text-base text-[var(--text-secondary)]">Checking your profile...</p>
             </div>
           }
         >
