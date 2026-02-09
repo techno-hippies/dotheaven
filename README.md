@@ -11,13 +11,14 @@ A sovereign social network where users karaoke, share and release music, and mak
 | | English | 中文 |
 |---|---|---|
 | **Music Streaming** | Cross-device music streaming from your local library | 跨设备播放本地音乐库 |
-| **Music Publishing** | Upload, encrypt, and share original music | 上传、加密和分享原创音乐 |
+| **Scrobbling** | On-chain listening history — verified plays written directly to MegaETH | 链上听歌记录——已验证的播放直接写入 MegaETH |
+| **Music Publishing** | Publish original music to IPFS with [Story Protocol](https://story.foundation) IP licensing (non-commercial, commercial use, or commercial remix with configurable royalties) | 将原创音乐发布至 IPFS，通过 [Story Protocol](https://story.foundation) 进行知识产权授权（非商业、商业使用或商业混音，可配置版税） |
 | **Karaoke Sessions** | Schedule and pay creators for live karaoke sessions | 预约并支付创作者的卡拉OK现场演出 |
 | **Social Feed** | Post updates with automatic translation across languages | 发布动态，支持多语言自动翻译 |
 | **Encrypted Messaging** | Private peer-to-peer encrypted DMs | 端到端加密的私人消息 |
 | **Wallet** | Send and receive assets across Ethereum | 在以太坊网络上发送和接收资产 |
 | **Playlists** | Create and share playlists as NFTs (ERC-721) | 创建并分享播放列表（ERC-721 NFT） |
-| **Identity** | Passkey login, on-chain profiles, `.heaven` name NFTs | 通行密钥登录、链上个人资料、`.heaven` 域名 NFT |
+| **Identity** | Passkey or EOA login — every user gets a [Lit PKP](https://litprotocol.com) wallet. On-chain profiles, `.heaven` name NFTs (resolvable via [Handshake](https://handshake.org) DNS) | 通行密钥或 EOA 登录——每个用户获得一个 [Lit PKP](https://litprotocol.com) 钱包。链上个人资料、`.heaven` 域名 NFT（通过 [Handshake](https://handshake.org) DNS 可解析） |
 | **Verification** | Zero-knowledge passport verification (18+, nationality) | 零知识护照验证（18岁以上、国籍） |
 
 ## Apps / 应用
@@ -58,8 +59,8 @@ dotheaven/
 ├── subgraphs/             # Goldsky indexers (activity, profiles, playlists)
 │                          # Goldsky 索引器（动态、个人资料、播放列表）
 ├── services/
-│   ├── aa-gateway/        # ERC-4337 account abstraction gateway
-│   │                      # ERC-4337 账户抽象网关
+│   ├── aa-gateway/        # ERC-4337 account abstraction gateway (EigenCloud TEE)
+│   │                      # ERC-4337 账户抽象网关（EigenCloud TEE）
 │   ├── alto/              # Pimlico Alto bundler
 │   │                      # Pimlico Alto 打包器
 │   ├── heaven-api/        # API worker (photos, claims, names)
@@ -83,14 +84,15 @@ dotheaven/
 | [MegaETH](https://megaeth.com) | Core blockchain — all social, music, and identity contracts / 核心区块链——所有社交、音乐和身份合约 |
 | [Celo](https://celo.org) | ZK identity verification via Self.xyz (18+, nationality) / 通过 Self.xyz 进行零知识身份验证 |
 | [Base](https://base.org) | Content access mirror (Lit Protocol doesn't natively support MegaETH yet) / 内容访问镜像（Lit Protocol 尚不原生支持 MegaETH） |
-| [Lit Protocol](https://litprotocol.com) | Passkey wallets (PKPs), encryption, gasless transaction signing / 通行密钥钱包、加密、无 Gas 交易签名 |
+| [Lit Protocol](https://litprotocol.com) | PKP wallets (passkey or EOA auth → PKP), encryption, gasless transaction signing / PKP 钱包（通行密钥或 EOA 认证 → PKP）、加密、无 Gas 交易签名 |
 | [XMTP](https://xmtp.org) | End-to-end encrypted peer-to-peer messaging / 端到端加密的点对点消息 |
 | [Filecoin](https://filecoin.io) | Encrypted file storage for music and media / 加密音乐和媒体文件存储 |
 | [Filecoin Beam](https://filbeam.io) | Incentivized data delivery for Filecoin content / Filecoin 内容的激励数据分发 |
 | [Story Protocol](https://story.foundation) | IP assignment and licensing for songs / 歌曲的知识产权归属和授权 |
 | [IPFS](https://ipfs.tech) (via [Filebase](https://filebase.com)) | Off-chain metadata, cover art, post content / 链下元数据、封面、帖子内容 |
 | [Agora](https://agora.io) | WebRTC voice calls and live rooms / WebRTC 语音通话和直播房间 |
-| [ERC-4337](https://eips.ethereum.org/EIPS/eip-4337) | Account abstraction — gasless UX via paymaster / 账户抽象——通过 Paymaster 实现无 Gas 体验 |
+| [ERC-4337](https://eips.ethereum.org/EIPS/eip-4337) | Account abstraction — gasless UX via paymaster (contracts from [eth-infinitism](https://github.com/eth-infinitism/account-abstraction) v0.7, bundled by [Pimlico Alto](https://github.com/pimlicolabs/alto), gateway hosted on [EigenCloud TEE](https://eigencloud.com)) / 账户抽象——通过 Paymaster 实现无 Gas 体验（合约来自 [eth-infinitism](https://github.com/eth-infinitism/account-abstraction) v0.7，由 [Pimlico Alto](https://github.com/pimlicolabs/alto) 打包，网关托管于 [EigenCloud TEE](https://eigencloud.com)） |
+| [Handshake](https://handshake.org) | Decentralized DNS — `.heaven` TLD resolves user profiles via HNS bridge / 去中心化 DNS——`.heaven` 顶级域名通过 HNS 桥接解析用户资料 |
 
 ## Smart Contracts / 智能合约
 
