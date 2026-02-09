@@ -3,6 +3,7 @@ import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { User } from 'phosphor-react-native';
 import { colors } from '../lib/theme';
+import { Avatar } from '../ui';
 
 interface MobileHeaderProps {
   avatarUrl?: string;
@@ -19,14 +20,18 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
   return (
     <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
       {/* Left: avatar button */}
-      <TouchableOpacity style={styles.avatarButton} onPress={onAvatarPress} activeOpacity={0.7}>
-        {avatarUrl ? (
-          <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-        ) : (
-          <View style={styles.avatarFallback}>
-            <User size={20} color={colors.textMuted} weight={isAuthenticated ? 'fill' : 'regular'} />
-          </View>
-        )}
+      <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.7}>
+        <Avatar
+          src={avatarUrl}
+          size="sm"
+          fallbackIcon={
+            <User
+              size={20}
+              color={colors.textMuted}
+              weight={isAuthenticated ? 'fill' : 'regular'}
+            />
+          }
+        />
       </TouchableOpacity>
 
       {/* Center: Heaven logo */}
@@ -51,28 +56,11 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
     minHeight: 56,
   },
-  avatarButton: {
-    width: 36,
-    height: 36,
-  },
-  avatarImage: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-  },
-  avatarFallback: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.bgElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   logo: {
     height: 28,
     width: 56,
   },
   spacer: {
-    width: 36,
+    width: 32,
   },
 });

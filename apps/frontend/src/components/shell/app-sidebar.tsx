@@ -10,7 +10,6 @@ import {
   DialogBody,
   DialogFooter,
   DialogTitle,
-  DialogDescription,
   DialogCloseButton,
   DownloadDialog,
   CreateDialog,
@@ -19,6 +18,7 @@ import {
   HOME, PROFILE, WALLET, SCHEDULE, SEARCH, CHAT, SETTINGS,
   musicTab, playlist,
 } from '@heaven/core'
+import { useI18n } from '@heaven/i18n/solid'
 import { AppLogo } from './header'
 import {
   HomeIcon, ChatCircleIcon, UserIcon, SearchIcon,
@@ -40,6 +40,7 @@ import { setCoverCache, setCoverCacheById } from '../../lib/cover-cache'
 import { readCoverBase64 } from '../../lib/cover-image'
 
 export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
+  const { t } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
   const platform = usePlatform()
@@ -284,19 +285,19 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
 
         {/* Main navigation */}
         <nav class={`flex flex-col gap-1 ${props.compact ? 'items-center' : ''}`}>
-          <NavItem icon={HomeIcon} label="Home" path={HOME} active={isActive(HOME)} onClick={() => navigate(HOME)} compact={props.compact} />
-          <NavItem icon={SearchIcon} label="Search" path={SEARCH} active={isActive(SEARCH)} onClick={() => navigate(SEARCH)} compact={props.compact} />
-          <NavItem icon={ChatCircleIcon} label="Messages" path={CHAT} active={location.pathname.startsWith(CHAT)} onClick={() => navigate(CHAT)} badge={unreadMessageCount()} compact={props.compact} />
-          <NavItem icon={WalletIcon} label="Wallet" path={WALLET} active={isActive(WALLET)} onClick={() => navigate(WALLET)} compact={props.compact} />
-          <NavItem icon={CalendarIcon} label="Schedule" path={SCHEDULE} active={isActive(SCHEDULE)} onClick={() => navigate(SCHEDULE)} compact={props.compact} />
-          <NavItem icon={UserIcon} label="Profile" path={PROFILE} active={isActive(PROFILE)} onClick={() => navigate(PROFILE)} compact={props.compact} />
+          <NavItem icon={HomeIcon} label={t('nav.home')} path={HOME} active={isActive(HOME)} onClick={() => navigate(HOME)} compact={props.compact} />
+          <NavItem icon={SearchIcon} label={t('nav.search')} path={SEARCH} active={isActive(SEARCH)} onClick={() => navigate(SEARCH)} compact={props.compact} />
+          <NavItem icon={ChatCircleIcon} label={t('nav.messages')} path={CHAT} active={location.pathname.startsWith(CHAT)} onClick={() => navigate(CHAT)} badge={unreadMessageCount()} compact={props.compact} />
+          <NavItem icon={WalletIcon} label={t('nav.wallet')} path={WALLET} active={isActive(WALLET)} onClick={() => navigate(WALLET)} compact={props.compact} />
+          <NavItem icon={CalendarIcon} label={t('nav.schedule')} path={SCHEDULE} active={isActive(SCHEDULE)} onClick={() => navigate(SCHEDULE)} compact={props.compact} />
+          <NavItem icon={UserIcon} label={t('nav.profile')} path={PROFILE} active={isActive(PROFILE)} onClick={() => navigate(PROFILE)} compact={props.compact} />
         </nav>
 
         {/* Music section - unified library + playlists */}
         <div class="mt-6 -mx-3 px-3 border-t border-[var(--border-subtle)] pt-4">
           <div class="flex items-center justify-between px-3 mb-2 min-h-10">
             <Show when={!props.compact}>
-              <span class="text-base text-[var(--text-muted)] font-medium whitespace-nowrap">Music</span>
+              <span class="text-base text-[var(--text-muted)] font-medium whitespace-nowrap">{t('nav.music')}</span>
               <IconButton
                 variant="soft"
                 size="md"
@@ -321,8 +322,8 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
                     <FolderIcon />
                   </div>
                   <div class="flex flex-col min-w-0 text-left">
-                    <span class="text-base text-[var(--text-primary)] whitespace-nowrap">Local</span>
-                    <span class="text-base text-[var(--text-muted)] whitespace-nowrap">{localTrackCount().toLocaleString()} songs</span>
+                    <span class="text-base text-[var(--text-primary)] whitespace-nowrap">{t('music.local')}</span>
+                    <span class="text-base text-[var(--text-muted)] whitespace-nowrap">{t('music.songs', { count: localTrackCount().toLocaleString() })}</span>
                   </div>
                 </button>
               }>
@@ -330,7 +331,7 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
                   type="button"
                   class={`w-11 h-11 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--bg-highlight-hover)] transition-colors ${isActive(musicTab('local')) ? 'ring-1 ring-[var(--accent-blue)]' : ''}`}
                   onClick={() => navigate(musicTab('local'))}
-                  title="Local"
+                  title={t('music.local')}
                 >
                   <FolderIcon />
                 </button>
@@ -347,8 +348,8 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
                   <CloudIcon />
                 </div>
                 <div class="flex flex-col min-w-0 text-left">
-                  <span class="text-base text-[var(--text-primary)] whitespace-nowrap">Cloud</span>
-                  <span class="text-base text-[var(--text-muted)] whitespace-nowrap">{cloudTrackCount()} songs</span>
+                  <span class="text-base text-[var(--text-primary)] whitespace-nowrap">{t('music.cloud')}</span>
+                  <span class="text-base text-[var(--text-muted)] whitespace-nowrap">{t('music.songs', { count: cloudTrackCount() })}</span>
                 </div>
               </button>
             }>
@@ -356,7 +357,7 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
                 type="button"
                 class={`w-11 h-11 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--bg-highlight-hover)] transition-colors ${isActive(musicTab('cloud')) ? 'ring-1 ring-[var(--accent-blue)]' : ''}`}
                 onClick={() => navigate(musicTab('cloud'))}
-                title="Cloud"
+                title={t('music.cloud')}
               >
                 <CloudIcon />
               </button>
@@ -372,8 +373,8 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
                   <ShareIcon />
                 </div>
                 <div class="flex flex-col min-w-0 text-left">
-                  <span class="text-base text-[var(--text-primary)] whitespace-nowrap">Shared With Me</span>
-                  <span class="text-base text-[var(--text-muted)] whitespace-nowrap">{sharedTrackCount()} songs</span>
+                  <span class="text-base text-[var(--text-primary)] whitespace-nowrap">{t('music.shared')}</span>
+                  <span class="text-base text-[var(--text-muted)] whitespace-nowrap">{t('music.songs', { count: sharedTrackCount() })}</span>
                 </div>
               </button>
             }>
@@ -381,7 +382,7 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
                 type="button"
                 class={`w-11 h-11 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--bg-highlight-hover)] transition-colors ${isActive(musicTab('shared')) ? 'ring-1 ring-[var(--accent-blue)]' : ''}`}
                 onClick={() => navigate(musicTab('shared'))}
-                title="Shared With Me"
+                title={t('music.shared')}
               >
                 <ShareIcon />
               </button>
@@ -406,7 +407,7 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
         <div class={`mt-auto pt-3 flex flex-col gap-1 ${props.compact ? 'items-center' : ''}`}>
           <NavItem
             icon={DownloadIcon}
-            label="Download"
+            label={t('nav.download')}
             path=""
             active={false}
             onClick={() => setDownloadOpen(true)}
@@ -414,7 +415,7 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
           />
           <NavItem
             icon={GearIcon}
-            label="Settings"
+            label={t('nav.settings')}
             path={SETTINGS}
             active={isActive(SETTINGS)}
             onClick={() => navigate(SETTINGS)}
@@ -438,10 +439,7 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
       <Dialog open={createPlaylistOpen()} onOpenChange={setCreatePlaylistOpen}>
         <DialogContent class="max-w-md">
           <DialogHeader>
-            <DialogTitle>Create Playlist</DialogTitle>
-            <DialogDescription>
-              Create a new on-chain playlist.
-            </DialogDescription>
+            <DialogTitle>{t('music.createPlaylist')}</DialogTitle>
           </DialogHeader>
           <DialogBody>
             <input
@@ -451,7 +449,7 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleCreatePlaylist()
               }}
-              placeholder="Playlist name"
+              placeholder={t('music.playlistName')}
               class="w-full px-4 py-2.5 rounded-md bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
               autofocus
             />
@@ -459,11 +457,11 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
           <DialogFooter>
             <DialogCloseButton
               as={(props: Record<string, unknown>) => (
-                <Button {...props} variant="secondary">Cancel</Button>
+                <Button {...props} variant="secondary">{t('common.cancel')}</Button>
               )}
             />
             <Button disabled={!newPlaylistName().trim() || creatingPlaylist()} onClick={handleCreatePlaylist}>
-              {creatingPlaylist() ? 'Creating...' : 'Create'}
+              {creatingPlaylist() ? `${t('common.create')}...` : t('common.create')}
             </Button>
           </DialogFooter>
         </DialogContent>

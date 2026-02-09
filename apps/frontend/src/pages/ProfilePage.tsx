@@ -4,6 +4,7 @@ import { useNavigate, useParams } from '@solidjs/router'
 import { createQuery } from '@tanstack/solid-query'
 import { ProfilePage, type ProfileTab, type ProfileScrobble } from '../components/profile'
 import { useAuth } from '../providers'
+import { useI18n } from '@heaven/i18n/solid'
 import { openAuthDialog } from '../lib/auth-dialog'
 import { fetchScrobbleEntries, getProfile, setProfile, setTextRecord, setTextRecords, computeNode, checkNameAvailable, registerHeavenName, getEnsProfile, getPrimaryName, getVerificationStatus, buildSelfVerifyLink, syncVerificationToMegaEth, getHostBasePrice, getHostOpenSlots, getSlot, SlotStatus } from '../lib/heaven'
 import {
@@ -25,6 +26,7 @@ import { ProfileSkeleton } from './ProfileSkeleton'
 
 export const MyProfilePage: Component = () => {
   const auth = useAuth()
+  const { t } = useI18n()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = createSignal<ProfileTab>('posts')
   const [heavenName, setHeavenName] = createSignal<string | null>(localStorage.getItem('heaven:username'))
@@ -278,7 +280,7 @@ export const MyProfilePage: Component = () => {
       artist: e.artist,
       album: e.album,
       trackId: e.trackId,
-      timestamp: formatTimeAgo(e.playedAt),
+      timestamp: formatTimeAgo(e.playedAt, t),
       coverUrl: isValidCid(e.coverCid)
         ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
         : undefined,
@@ -292,7 +294,7 @@ export const MyProfilePage: Component = () => {
     if (hn) return hn
     const ens = ensQuery.data
     if (ens?.name) return ens.name
-    return 'My Profile'
+    return t('profile.myProfile')
   }
 
   const handleName = () => {
@@ -359,7 +361,7 @@ export const MyProfilePage: Component = () => {
       draft.telegram !== undefined
     )
     if (wantsRecords && !username) {
-      throw new Error('Claim a Heaven name before editing your profile.')
+      throw new Error(t('profile.claimNameFirst'))
     }
 
     let updatedAvatar = false
@@ -532,10 +534,10 @@ export const MyProfilePage: Component = () => {
               </svg>
             </div>
             <div class="text-center">
-              <h2 class="text-2xl font-bold text-[var(--text-primary)] mb-2">Your Profile</h2>
-              <p class="text-base text-[var(--text-secondary)] mb-6">Sign up to create your profile and connect with others.</p>
+              <h2 class="text-2xl font-bold text-[var(--text-primary)] mb-2">{t('profile.yourProfile')}</h2>
+              <p class="text-base text-[var(--text-secondary)] mb-6">{t('profile.signUpPrompt')}</p>
               <Button size="lg" onClick={() => openAuthDialog()}>
-                Sign Up
+                {t('auth.signUp')}
               </Button>
             </div>
           </div>
@@ -599,6 +601,7 @@ export const MyProfilePage: Component = () => {
 
 export const PublicProfilePage: Component = () => {
   const params = useParams()
+  const { t } = useI18n()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = createSignal<ProfileTab>('posts')
 
@@ -771,7 +774,7 @@ export const PublicProfilePage: Component = () => {
       artist: e.artist,
       album: e.album,
       trackId: e.trackId,
-      timestamp: formatTimeAgo(e.playedAt),
+      timestamp: formatTimeAgo(e.playedAt, t),
       coverUrl: isValidCid(e.coverCid)
         ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
         : undefined,
@@ -789,7 +792,7 @@ export const PublicProfilePage: Component = () => {
     if (resolved?.address) {
       return `${resolved.address.slice(0, 6)}...${resolved.address.slice(-4)}`
     }
-    return 'Profile'
+    return t('nav.profile')
   }
 
   const handleName = () => {
@@ -819,8 +822,8 @@ export const PublicProfilePage: Component = () => {
         fallback={
           <div class="min-h-screen bg-[var(--bg-page)] flex items-center justify-center px-6">
             <div class="text-center text-[var(--text-secondary)]">
-              <div class="text-xl font-semibold text-[var(--text-primary)] mb-2">Profile not found</div>
-              <div class="text-base">{(resolvedQuery.error as Error | undefined)?.message || 'Unable to resolve this profile.'}</div>
+              <div class="text-xl font-semibold text-[var(--text-primary)] mb-2">{t('profile.notFound')}</div>
+              <div class="text-base">{(resolvedQuery.error as Error | undefined)?.message || t('profile.unableToResolve')}</div>
             </div>
           </div>
         }

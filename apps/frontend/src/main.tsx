@@ -10,6 +10,7 @@ import { HashRouter, Route } from '@solidjs/router'
 import { QueryClient, QueryClientProvider } from '@tanstack/solid-query'
 import { PlatformProvider, platform } from 'virtual:heaven-platform'
 import { AuthProvider, WalletProvider, XMTPProvider, PlayerProvider } from './providers'
+import { I18nProvider } from '@heaven/i18n/solid'
 import {
   HOME, AUTH, ONBOARDING, PROFILE, WALLET, SCHEDULE, SCHEDULE_AVAILABILITY, SEARCH, SETTINGS,
   MUSIC, CHAT, ROUTE_PARAMS,
@@ -82,6 +83,7 @@ maybeRedirectHandshakeProfile()
 render(
   () => (
     <QueryClientProvider client={queryClient}>
+    <I18nProvider>
     <PlatformProvider platform={platform}>
       <AuthProvider>
         <WalletProvider>
@@ -124,6 +126,7 @@ render(
         </WalletProvider>
       </AuthProvider>
     </PlatformProvider>
+    </I18nProvider>
     </QueryClientProvider>
   ),
   root

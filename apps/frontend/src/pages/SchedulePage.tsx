@@ -16,6 +16,7 @@ import { createQuery } from '@tanstack/solid-query'
 import { useNavigate } from '@solidjs/router'
 import { SCHEDULE_AVAILABILITY } from '@heaven/core'
 import { useAuth } from '../providers/AuthContext'
+import { useI18n } from '@heaven/i18n/solid'
 import {
   getUserBookings,
   getHostBasePrice,
@@ -90,6 +91,7 @@ interface BookingWithMeta {
 
 export const SchedulePage: Component = () => {
   const auth = useAuth()
+  const { t } = useI18n()
   const navigate = useNavigate()
 
   // Initialize session service for direct PKP transactions
@@ -268,7 +270,7 @@ export const SchedulePage: Component = () => {
             onClick={() => navigate(SCHEDULE_AVAILABILITY)}
             class="h-12"
           >
-            Availability
+            {t('schedule.availability')}
           </Button>
         </div>
       </Show>
@@ -279,7 +281,7 @@ export const SchedulePage: Component = () => {
           <div class="mb-4 px-4 py-3 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-base flex items-center justify-between">
             <span>{txError()}</span>
             <button onClick={() => setTxError(null)} class="text-red-300 hover:text-red-200 ml-4">
-              Dismiss
+              {t('schedule.dismiss')}
             </button>
           </div>
         </Show>
@@ -290,7 +292,7 @@ export const SchedulePage: Component = () => {
             when={!loading()}
             fallback={
               <div class="flex items-center justify-center py-12">
-                <div class="text-[--text-muted]">Loading schedule...</div>
+                <div class="text-[--text-muted]">{t('schedule.loadingSchedule')}</div>
               </div>
             }
           >
@@ -316,9 +318,9 @@ export const SchedulePage: Component = () => {
                   <div class="flex items-center justify-between">
                     <div class="flex items-center gap-3">
                       <div class="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
-                      <span class="text-[--text-primary]">In call</span>
+                      <span class="text-[--text-primary]">{t('schedule.inCall')}</span>
                       <Show when={p2pVoice.peerConnected()}>
-                        <span class="text-[--text-secondary]">• Peer connected</span>
+                        <span class="text-[--text-secondary]">• {t('schedule.peerConnected')}</span>
                       </Show>
                     </div>
                     <div class="flex items-center gap-2">
@@ -326,13 +328,13 @@ export const SchedulePage: Component = () => {
                         onClick={() => p2pVoice.toggleMute()}
                         class="px-3 py-1.5 text-base bg-[--bg-highlight] hover:bg-[--bg-highlight-hover] rounded-md transition-colors"
                       >
-                        {p2pVoice.isMuted() ? 'Unmute' : 'Mute'}
+                        {p2pVoice.isMuted() ? t('schedule.unmute') : t('schedule.mute')}
                       </button>
                       <button
                         onClick={handleLeaveSession}
                         class="px-3 py-1.5 text-base bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors"
                       >
-                        Leave
+                        {t('schedule.leave')}
                       </button>
                     </div>
                   </div>
@@ -350,6 +352,7 @@ export const SchedulePage: Component = () => {
 
 export const ScheduleAvailabilityPage: Component = () => {
   const auth = useAuth()
+  const { t } = useI18n()
   const navigate = useNavigate()
 
   onMount(() => {
@@ -488,12 +491,12 @@ export const ScheduleAvailabilityPage: Component = () => {
           <ChevronLeft class="w-5 h-5" />
         </IconButton>
         <span class="flex-1 text-base font-semibold text-[var(--text-primary)]">
-          Availability
+          {t('schedule.availability')}
           <Show when={!scheduleAccepting()}>
-            <span class="text-base font-normal text-[var(--text-muted)] ml-2">(paused)</span>
+            <span class="text-base font-normal text-[var(--text-muted)] ml-2">{t('schedule.paused')}</span>
           </Show>
         </span>
-        <span class="text-base text-[var(--text-muted)] mr-1 hidden sm:inline">Accepting</span>
+        <span class="text-base text-[var(--text-muted)] mr-1 hidden sm:inline">{t('schedule.accepting')}</span>
         <Switch
           checked={scheduleAccepting()}
           onChange={handleToggleAccepting}
@@ -504,7 +507,7 @@ export const ScheduleAvailabilityPage: Component = () => {
         <div class="w-full max-w-4xl mx-auto px-4 py-6">
           <Show when={!scheduleAccepting()}>
             <div class="mb-4 px-4 py-3 rounded-md bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-base">
-              Bookings are paused. Toggle the switch above to accept new bookings.
+              {t('schedule.bookingsPaused')}
             </div>
           </Show>
           <ScheduleDashboard
@@ -525,7 +528,7 @@ export const ScheduleAvailabilityPage: Component = () => {
         <div class="fixed bottom-4 right-4 z-50 px-4 py-3 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-base flex items-center gap-3 shadow-lg backdrop-blur-sm max-w-sm">
           <span class="flex-1">{txError()}</span>
           <button onClick={() => setTxError(null)} class="text-red-300 hover:text-red-200 flex-shrink-0">
-            Dismiss
+            {t('schedule.dismiss')}
           </button>
         </div>
       </Show>

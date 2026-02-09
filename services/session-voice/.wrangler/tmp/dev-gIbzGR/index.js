@@ -25711,9 +25711,14 @@ roomRoutes.post("/token/renew", async (c) => {
 });
 roomRoutes.get("/active", async (c) => {
   const rows = await c.env.DB.prepare(
-    `SELECT r.room_id, r.host_wallet, r.created_at, r.metadata_json,
-            (SELECT COUNT(*) FROM room_participants rp WHERE rp.room_id = r.room_id AND rp.left_at_epoch IS NULL) as participant_count
+    `SELECT r.room_id, r.host_wallet, r.created_at, r.metadata_json, rc.participant_count
      FROM rooms r
+     JOIN (
+       SELECT room_id, COUNT(*) as participant_count
+       FROM room_participants
+       WHERE left_at_epoch IS NULL
+       GROUP BY room_id
+     ) rc ON rc.room_id = r.room_id
      WHERE r.status = 'active'
        AND r.room_type = 'free'
        AND (json_extract(r.metadata_json, '$.visibility') = 'open' OR r.metadata_json IS NULL)
@@ -26635,7 +26640,38 @@ var RoomDO = class {
   }
   /** Alarm handler — runs every 30s to meter all participants */
   async alarm() {
-    if (!this.room || this.participants.size === 0) return;
+    if (!this.room) return;
+    if (this.participants.size === 0) {
+      await this.env.DB.batch([
+        this.env.DB.prepare(
+          "UPDATE rooms SET status = 'closed', closed_at = ? WHERE room_id = ? AND status = 'active'"
+        ).bind((/* @__PURE__ */ new Date()).toISOString(), this.room.roomId),
+        // Also mark any phantom D1 participants as left
+        this.env.DB.prepare(
+          "UPDATE room_participants SET left_at_epoch = ? WHERE room_id = ? AND left_at_epoch IS NULL"
+        ).bind(Math.floor(Date.now() / 1e3), this.room.roomId)
+      ]);
+      await this.state.storage.deleteAlarm();
+      return;
+    }
+    const now = Math.floor(Date.now() / 1e3);
+    const staleThreshold = HEARTBEAT_INTERVAL_SECONDS * 3;
+    for (const [connId, p] of this.participants) {
+      if (now - p.lastMeteredAtEpoch > staleThreshold) {
+        this.participants.delete(connId);
+        await this.env.DB.prepare(
+          "UPDATE room_participants SET left_at_epoch = ?, debited_seconds = ? WHERE connection_id = ?"
+        ).bind(now, p.debitedSeconds, connId).run();
+      }
+    }
+    if (this.participants.size === 0) {
+      await this.env.DB.prepare(
+        "UPDATE rooms SET status = 'closed', closed_at = ? WHERE room_id = ? AND status = 'active'"
+      ).bind((/* @__PURE__ */ new Date()).toISOString(), this.room.roomId).run();
+      await this.persistParticipants();
+      await this.state.storage.deleteAlarm();
+      return;
+    }
     for (const p of this.participants.values()) {
       await this.meterParticipant(p);
     }

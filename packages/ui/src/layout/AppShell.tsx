@@ -51,10 +51,7 @@ export const AppShell: Component<AppShellProps> = (props) => {
         </Show>
 
         {/* Main Content */}
-        <main class={cn(
-          "flex-1 overflow-hidden",
-          !isMobile() && "border-t border-[var(--border-subtle)]"
-        )}>
+        <main class="flex-1 overflow-hidden">
           {props.children}
         </main>
 

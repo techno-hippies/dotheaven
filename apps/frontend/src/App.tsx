@@ -15,10 +15,12 @@ import {
   type CommunityFilters,
 } from '@heaven/ui'
 import type { CommunityCardProps } from '@heaven/ui'
+import { useI18n } from '@heaven/i18n/solid'
 import { useAuth } from './providers'
 import { fetchCommunityMembers, fetchUserLocationCityId, getProfile, type CommunityMember } from './lib/heaven'
 
 export const App: Component = () => {
+  const { t } = useI18n()
   const auth = useAuth()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams<{ q?: string }>()
@@ -133,7 +135,7 @@ export const App: Component = () => {
         <TextField
           value={searchQuery()}
           onChange={handleSearch}
-          placeholder="Search people, songs, rooms..."
+          placeholder={t('community.searchPlaceholder')}
           icon={<MagnifyingGlass class="w-4 h-4" />}
           class="flex-1"
         />
@@ -144,7 +146,7 @@ export const App: Component = () => {
             onClick={() => setFilterOpen(true)}
             class="h-12"
           >
-            Filter
+            {t('common.filter')}
           </Button>
           <Show when={activeFilterCount() > 0}>
             <span class="absolute -top-0.5 -right-1.5 w-4 h-4 bg-[var(--accent-coral)] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
@@ -155,12 +157,24 @@ export const App: Component = () => {
       </div>
       <CommunityFeed
         members={members()}
+        isLoading={membersQuery.isPending}
       />
       <CommunityFilterDialog
         open={filterOpen()}
         onOpenChange={setFilterOpen}
         filters={filters()}
         onFiltersChange={setFilters}
+        labels={{
+          filterMembers: t('community.filterMembers'),
+          gender: t('community.gender'),
+          any: t('common.any'),
+          nativeLanguage: t('community.nativeLanguage'),
+          learningLanguage: t('community.learningLanguage'),
+          sameCity: t('community.sameCity'),
+          verified: t('community.verified'),
+          reset: t('common.reset'),
+          apply: t('common.apply'),
+        }}
       />
     </div>
   )

@@ -30,7 +30,7 @@ export const Switch: Component<SwitchProps> = (props) => {
       <KSwitch.Control
         class={cn(
           'relative w-10 h-6 rounded-full transition-colors',
-          'bg-[var(--bg-highlight)]',
+          'bg-[var(--border-default)]',
           'group-data-[checked]:bg-[var(--accent-blue)]',
           'group-data-[disabled]:opacity-50 group-data-[disabled]:cursor-not-allowed',
         )}
@@ -49,7 +49,7 @@ export const Switch: Component<SwitchProps> = (props) => {
           </KSwitch.Label>
         )}
         {local.description && (
-          <KSwitch.Description class="text-xs text-[var(--text-muted)]">
+          <KSwitch.Description class="text-sm text-[var(--text-muted)]">
             {local.description}
           </KSwitch.Description>
         )}

@@ -24,6 +24,7 @@ import {
 import type { OnboardingBasicsData, OnboardingMusicData, OnboardingArtist } from '@heaven/ui'
 import { HOME } from '@heaven/core'
 import { useAuth } from '../providers'
+import { useI18n } from '@heaven/i18n/solid'
 import { useOnboardingStatus } from '../hooks/useOnboardingStatus'
 import {
   checkNameAvailable,
@@ -56,6 +57,7 @@ type MusicPreferencesV1 = {
 
 export const OnboardingPage: Component = () => {
   const auth = useAuth()
+  const { t } = useI18n()
   const navigate = useNavigate()
   const address = () => auth.pkpAddress()
   const onboarding = useOnboardingStatus(address)
@@ -147,12 +149,12 @@ export const OnboardingPage: Component = () => {
         setStep('basics')
         return true
       } else {
-        setClaimError(result.error || 'Registration failed. Please try again.')
+        setClaimError(result.error || t('onboarding.registrationFailed'))
         return false
       }
     } catch (err) {
       console.error('[Onboarding] Claim error:', err)
-      setClaimError(err instanceof Error ? err.message : 'Registration failed. Please try again.')
+      setClaimError(err instanceof Error ? err.message : t('onboarding.registrationFailed'))
       return false
     } finally {
       setClaiming(false)
@@ -206,7 +208,7 @@ export const OnboardingPage: Component = () => {
       setStep('music')
     } catch (err) {
       console.error('[Onboarding] Basics save error:', err)
-      setBasicsError(err instanceof Error ? err.message : 'Failed to save profile. Please try again.')
+      setBasicsError(err instanceof Error ? err.message : t('onboarding.failedToSave'))
       return false
     } finally {
       setBasicsSubmitting(false)
@@ -272,13 +274,13 @@ export const OnboardingPage: Component = () => {
         // Auto-continue with the fetched artists
         await handleMusicContinue({ artists, spotifyConnected: true })
       } else {
-        setMusicError('No artists found from your Spotify. Pick some below instead.')
+        setMusicError(t('onboarding.noSpotifyArtists'))
         clearSpotifyCallback()
       }
     } catch (err) {
       console.error('[Onboarding] Spotify callback error:', err)
       setMusicError(
-        err instanceof Error ? err.message : 'Failed to import Spotify artists. Pick some below instead.',
+        err instanceof Error ? err.message : t('onboarding.spotifyImportFailed'),
       )
       clearSpotifyCallback()
     } finally {
@@ -296,7 +298,7 @@ export const OnboardingPage: Component = () => {
       return null
     } catch (err) {
       console.error('[Onboarding] Spotify connect error:', err)
-      setMusicError('Failed to connect Spotify. You can pick artists manually below.')
+      setMusicError(t('onboarding.spotifyConnectFailed'))
       return null
     } finally {
       setConnectingSpotify(false)
@@ -346,7 +348,7 @@ export const OnboardingPage: Component = () => {
       setStep('avatar')
     } catch (err) {
       console.error('[Onboarding] Music save error:', err)
-      setMusicError(err instanceof Error ? err.message : 'Failed to save. Please try again.')
+      setMusicError(err instanceof Error ? err.message : t('onboarding.failedToSave'))
       return false
     } finally {
       setMusicSubmitting(false)
@@ -396,9 +398,9 @@ export const OnboardingPage: Component = () => {
       const msg = err instanceof Error ? err.message : String(err)
       // Detect 413 / payload-too-large (can surface as CORS error on 413 responses)
       if (msg.includes('413') || msg.includes('access control') || msg.includes('Too Large')) {
-        setAvatarError('Image is too large. Please try a smaller photo.')
+        setAvatarError(t('onboarding.imageTooLarge'))
       } else {
-        setAvatarError(msg || 'Failed to upload avatar. Please try again.')
+        setAvatarError(msg || t('onboarding.failedToSave'))
       }
       return false
     } finally {
@@ -432,7 +434,7 @@ export const OnboardingPage: Component = () => {
       setTimeout(() => navigate(HOME, { replace: true }), 1200)
     } catch (err) {
       console.error('[Onboarding] Avatar import error:', err)
-      setAvatarError(err instanceof Error ? err.message : 'Failed to set avatar. Please try again.')
+      setAvatarError(err instanceof Error ? err.message : t('onboarding.failedToSave'))
       return false
     } finally {
       setAvatarUploading(false)
@@ -450,7 +452,7 @@ export const OnboardingPage: Component = () => {
           fallback={
             <div class="flex flex-col items-center gap-3">
               <div class="w-6 h-6 border-2 border-[var(--text-muted)] border-t-transparent rounded-full animate-spin" />
-              <p class="text-base text-[var(--text-secondary)]">Checking your profile...</p>
+              <p class="text-base text-[var(--text-secondary)]">{t('onboarding.checkingProfile')}</p>
             </div>
           }
         >
@@ -467,10 +469,10 @@ export const OnboardingPage: Component = () => {
                 </div>
                 <Stepper steps={4} currentStep={0} class="mb-6" />
                 <h1 class="text-2xl font-bold text-[var(--text-primary)] text-center mb-1">
-                  Choose your name
+                  {t('onboarding.chooseName.title')}
                 </h1>
                 <p class="text-[var(--text-secondary)] text-center mb-8">
-                  This is your identity on Heaven. It's how people find and message you.
+                  {t('onboarding.chooseName.description')}
                 </p>
                 <OnboardingNameStep
                   class="gap-6"
@@ -494,10 +496,10 @@ export const OnboardingPage: Component = () => {
                 </div>
                 <Stepper steps={4} currentStep={1} class="mb-6" />
                 <h1 class="text-2xl font-bold text-[var(--text-primary)] text-center mb-1">
-                  A bit about you
+                  {t('onboarding.basics.title')}
                 </h1>
                 <p class="text-[var(--text-secondary)] text-center mb-8">
-                  Helps us match your timezone and language preferences.
+                  {t('onboarding.basics.description')}
                 </p>
                 <OnboardingBasicsStep
                   claimedName={claimedName()}
@@ -520,10 +522,10 @@ export const OnboardingPage: Component = () => {
                 </div>
                 <Stepper steps={4} currentStep={2} class="mb-6" />
                 <h1 class="text-2xl font-bold text-[var(--text-primary)] text-center mb-1">
-                  Your music taste
+                  {t('onboarding.music.title')}
                 </h1>
                 <p class="text-[var(--text-secondary)] text-center mb-8">
-                  Pick some artists you love. This helps us personalize your experience.
+                  {t('onboarding.music.description')}
                 </p>
                 <OnboardingMusicStep
                   claimedName={claimedName()}
@@ -548,12 +550,12 @@ export const OnboardingPage: Component = () => {
                 </div>
                 <Stepper steps={4} currentStep={3} class="mb-6" />
                 <h1 class="text-2xl font-bold text-[var(--text-primary)] text-center mb-1">
-                  Add a profile photo
+                  {t('onboarding.avatar.title')}
                 </h1>
                 <p class="text-[var(--text-secondary)] text-center mb-8">
                   {claimedName()
-                    ? `Looking good, ${claimedName()}.heaven. Add a photo so people recognize you.`
-                    : 'Help people recognize you.'}
+                    ? t('onboarding.avatar.lookingGoodDescription', { name: claimedName() })
+                    : t('onboarding.avatar.helpRecognize')}
                 </p>
                 <OnboardingAvatarStep
                   claimedName={claimedName()}
@@ -573,9 +575,9 @@ export const OnboardingPage: Component = () => {
                     <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" />
                   </svg>
                 </div>
-                <h1 class="text-2xl font-bold text-[var(--text-primary)]">You're all set!</h1>
+                <h1 class="text-2xl font-bold text-[var(--text-primary)]">{t('onboarding.allSet')}</h1>
                 <p class="text-[var(--text-secondary)]">
-                  Welcome to Heaven, {claimedName()}.heaven
+                  {t('onboarding.welcomeUser', { name: claimedName() })}
                 </p>
               </div>
             </Match>

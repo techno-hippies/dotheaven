@@ -14,7 +14,6 @@ import {
   Button,
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogBody,
   Drawer,
   DrawerContent,
@@ -22,6 +21,7 @@ import {
   Wallet,
   useIsMobile,
 } from '@heaven/ui'
+import { useI18n } from '@heaven/i18n/solid'
 import { useAuth } from '../../providers'
 
 export interface AuthDialogProps {
@@ -30,6 +30,7 @@ export interface AuthDialogProps {
 }
 
 export const AuthDialog: Component<AuthDialogProps> = (props) => {
+  const { t } = useI18n()
   const auth = useAuth()
   const isMobile = useIsMobile()
 
@@ -74,9 +75,9 @@ export const AuthDialog: Component<AuthDialogProps> = (props) => {
         alt="Heaven"
         class="w-16 h-16 object-contain mb-4"
       />
-      <p class="text-xl font-semibold text-[var(--text-primary)]">Welcome to Heaven</p>
+      <p class="text-xl font-semibold text-[var(--text-primary)]">{t('auth.welcomeTitle')}</p>
       <p class="text-base text-[var(--text-secondary)] mt-2">
-        Karaoke to learn a language, make friends, and date.
+        {t('auth.welcomeSubtitle')}
       </p>
     </div>
   )
@@ -107,14 +108,14 @@ export const AuthDialog: Component<AuthDialogProps> = (props) => {
             size="lg"
             onClick={hasError() ? handleRetry : handleSignIn}
           >
-            {hasError() ? 'Try Again' : 'Sign In'}
+            {hasError() ? t('common.retry') : t('auth.signIn')}
           </Button>
           <Button
             variant="default"
             size="lg"
             onClick={handleRegister}
           >
-            New Account
+            {t('auth.newAccount')}
           </Button>
         </div>
 
@@ -123,7 +124,7 @@ export const AuthDialog: Component<AuthDialogProps> = (props) => {
             <div class="w-full border-t border-[var(--border-subtle)]" />
           </div>
           <div class="relative flex justify-center text-base">
-            <span class="bg-[var(--bg-surface)] px-3 text-[var(--text-muted)]">or</span>
+            <span class="bg-[var(--bg-surface)] px-3 text-[var(--text-muted)]">{t('common.or')}</span>
           </div>
         </div>
 
@@ -134,7 +135,7 @@ export const AuthDialog: Component<AuthDialogProps> = (props) => {
           icon={<Wallet class="w-5 h-5" />}
           onClick={handleConnectWallet}
         >
-          Connect Wallet
+          {t('auth.connectWallet')}
         </Button>
       </Show>
     </div>
@@ -144,12 +145,12 @@ export const AuthDialog: Component<AuthDialogProps> = (props) => {
     <Show
       when={isMobile()}
       fallback={
-        // Desktop: Dialog
+        // Desktop: Dialog — centered layout (no DialogHeader to avoid close-button offset)
         <Dialog open={props.open} onOpenChange={props.onOpenChange}>
           <DialogContent class="max-w-md">
-            <DialogHeader>
+            <div class="p-6 pb-2">
               {headerContent()}
-            </DialogHeader>
+            </div>
             <DialogBody class="pb-6">{bodyContent()}</DialogBody>
           </DialogContent>
         </Dialog>

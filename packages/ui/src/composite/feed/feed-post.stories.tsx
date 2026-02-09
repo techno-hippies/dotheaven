@@ -55,6 +55,9 @@ export const TextOnly: Story = {
     ...author,
     ...engagement,
     text: 'Just discovered this amazing album. The production quality is insane, every track flows into the next perfectly. Highly recommend giving it a full listen with headphones.',
+    postLang: 'ja',
+    userLang: 'en',
+    onTranslate: (lang: string) => console.log('translate to:', lang),
   },
 }
 

@@ -48,6 +48,12 @@ export interface SidePlayerProps {
   onSearchChange?: (query: string) => void
   /** Callback when search is submitted (Enter key) */
   onSearchSubmit?: (query: string) => void
+  /** Placeholder text for search field */
+  searchPlaceholder?: string
+  /** Fallback text when no track is playing */
+  noTrackText?: string
+  /** Fallback text when artist is unknown */
+  unknownArtistText?: string
 }
 
 /**
@@ -74,7 +80,7 @@ export const SidePlayer: Component<SidePlayerProps> = (props) => {
             onKeyDown={(e) => {
               if (e.key === 'Enter') props.onSearchSubmit?.(props.searchQuery ?? '')
             }}
-            placeholder="Search songs, people, rooms..."
+            placeholder={props.searchPlaceholder ?? "Search songs, people, rooms..."}
             icon={<MagnifyingGlass class="w-4 h-4" />}
           />
         </div>
@@ -106,7 +112,7 @@ export const SidePlayer: Component<SidePlayerProps> = (props) => {
       <div class="px-4 pt-4 pb-2">
         <div class="flex items-center gap-2">
           <h3 class="text-lg font-semibold text-[var(--text-primary)] truncate flex-1 min-w-0">
-            {props.title || 'No track playing'}
+            {props.title || props.noTrackText || 'No track playing'}
           </h3>
           <Show when={props.menuActions && props.track}>
             <DropdownMenu>
@@ -148,7 +154,7 @@ export const SidePlayer: Component<SidePlayerProps> = (props) => {
           when={props.onArtistClick}
           fallback={
             <p class="text-base text-[var(--text-secondary)] truncate">
-              {props.artist || 'Unknown artist'}
+              {props.artist || props.unknownArtistText || 'Unknown artist'}
             </p>
           }
         >
@@ -157,7 +163,7 @@ export const SidePlayer: Component<SidePlayerProps> = (props) => {
             class="text-base text-[var(--text-secondary)] truncate hover:text-[var(--accent-blue)] hover:underline cursor-pointer transition-colors text-left w-full"
             onClick={props.onArtistClick}
           >
-            {props.artist || 'Unknown artist'}
+            {props.artist || props.unknownArtistText || 'Unknown artist'}
           </button>
         </Show>
       </div>

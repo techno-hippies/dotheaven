@@ -76,7 +76,7 @@ export const RadioGroup: Component<RadioGroupProps> = (props) => {
                   {option.label}
                 </KRadioGroup.ItemLabel>
                 {option.description && (
-                  <KRadioGroup.ItemDescription class="text-xs text-[var(--text-muted)]">
+                  <KRadioGroup.ItemDescription class="text-sm text-[var(--text-muted)]">
                     {option.description}
                   </KRadioGroup.ItemDescription>
                 )}
@@ -86,7 +86,7 @@ export const RadioGroup: Component<RadioGroupProps> = (props) => {
         </For>
       </div>
       {local.description && (
-        <KRadioGroup.Description class="text-xs text-[var(--text-muted)]">
+        <KRadioGroup.Description class="text-sm text-[var(--text-muted)]">
           {local.description}
         </KRadioGroup.Description>
       )}

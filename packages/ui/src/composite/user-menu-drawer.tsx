@@ -12,6 +12,9 @@ export interface UserMenuDrawerProps {
   onProfile?: () => void
   onSettings?: () => void
   onLogout?: () => void
+  profileLabel?: string
+  settingsLabel?: string
+  logOutLabel?: string
 }
 
 export const UserMenuDrawer: Component<UserMenuDrawerProps> = (props) => {
@@ -46,7 +49,7 @@ export const UserMenuDrawer: Component<UserMenuDrawerProps> = (props) => {
             }}
           >
             <User class="w-5 h-5" />
-            <span class="text-base font-medium">Profile</span>
+            <span class="text-base font-medium">{props.profileLabel ?? 'Profile'}</span>
           </button>
 
           <button
@@ -58,7 +61,7 @@ export const UserMenuDrawer: Component<UserMenuDrawerProps> = (props) => {
             }}
           >
             <Gear class="w-5 h-5" />
-            <span class="text-base font-medium">Settings</span>
+            <span class="text-base font-medium">{props.settingsLabel ?? 'Settings'}</span>
           </button>
 
           <button
@@ -70,7 +73,7 @@ export const UserMenuDrawer: Component<UserMenuDrawerProps> = (props) => {
             }}
           >
             <SignOut class="w-5 h-5" />
-            <span class="text-base font-medium">Log Out</span>
+            <span class="text-base font-medium">{props.logOutLabel ?? 'Log Out'}</span>
           </button>
         </div>
       </DrawerContent>

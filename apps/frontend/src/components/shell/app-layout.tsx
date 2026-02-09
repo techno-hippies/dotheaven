@@ -14,6 +14,7 @@ import { useLocation, useNavigate } from '@solidjs/router'
 import {
   HOME, WALLET, SCHEDULE, CHAT, SEARCH, MUSIC, ONBOARDING, SETTINGS,
 } from '@heaven/core'
+import { useI18n } from '@heaven/i18n/solid'
 import { useAuth } from '../../providers'
 import { useOnboardingStatus } from '../../hooks/useOnboardingStatus'
 import {
@@ -99,6 +100,7 @@ import { usePlayer } from '../../providers'
 import { usePlaylistDialog, buildMenuActions, useArtistNavigation } from '../../hooks/useTrackListActions'
 
 export const AppLayout: ParentComponent = (props) => {
+  const { t } = useI18n()
   const auth = useAuth()
   const player = usePlayer()
   const location = useLocation()
@@ -176,13 +178,13 @@ export const AppLayout: ParentComponent = (props) => {
   }
 
   // Mobile footer tabs
-  const mobileFooterTabs: MobileFooterTab[] = [
-    { id: 'home', icon: <HomeIcon />, activeIcon: <HomeFillIcon />, label: 'Home' },
-    { id: 'search', icon: <SearchIcon />, activeIcon: <SearchFillIcon />, label: 'Search' },
-    { id: 'music', icon: <MusicIcon />, activeIcon: <MusicFillIcon />, label: 'Music' },
-    { id: 'chat', icon: <ChatIcon />, activeIcon: <ChatFillIcon />, label: 'Chat' },
-    { id: 'schedule', icon: <CalendarIcon />, activeIcon: <CalendarFillIcon />, label: 'Schedule' },
-    { id: 'wallet', icon: <WalletIcon />, activeIcon: <WalletFillIcon />, label: 'Wallet' },
+  const mobileFooterTabs = (): MobileFooterTab[] => [
+    { id: 'home', icon: <HomeIcon />, activeIcon: <HomeFillIcon />, label: t('nav.home') },
+    { id: 'search', icon: <SearchIcon />, activeIcon: <SearchFillIcon />, label: t('nav.search') },
+    { id: 'music', icon: <MusicIcon />, activeIcon: <MusicFillIcon />, label: t('nav.music') },
+    { id: 'chat', icon: <ChatIcon />, activeIcon: <ChatFillIcon />, label: t('nav.chat') },
+    { id: 'schedule', icon: <CalendarIcon />, activeIcon: <CalendarFillIcon />, label: t('nav.schedule') },
+    { id: 'wallet', icon: <WalletIcon />, activeIcon: <WalletFillIcon />, label: t('nav.wallet') },
   ]
 
   // Determine active tab from current route
@@ -249,6 +251,9 @@ export const AppLayout: ParentComponent = (props) => {
                 searchQuery={!location.pathname.startsWith(SEARCH) ? searchQuery() : undefined}
                 onSearchChange={!location.pathname.startsWith(SEARCH) ? setSearchQuery : undefined}
                 onSearchSubmit={(q) => { navigate(`${SEARCH}?q=${encodeURIComponent(q)}`); setSearchQuery('') }}
+                searchPlaceholder={t('community.searchPlaceholder')}
+                noTrackText={t('music.noTrack')}
+                unknownArtistText={t('music.unknownArtist')}
               />
             </RightPanel>
           }
@@ -268,7 +273,7 @@ export const AppLayout: ParentComponent = (props) => {
           mobileFooter={
             <Show when={showMobileNav()}>
               <MobileFooter
-                tabs={mobileFooterTabs}
+                tabs={mobileFooterTabs()}
                 activeTab={activeTab()}
                 onTabPress={handleTabPress}
               />
@@ -291,6 +296,10 @@ export const AppLayout: ParentComponent = (props) => {
             onOpenChange={setUserMenuOpen}
             isAuthenticated={auth.isAuthenticated()}
             avatarUrl={cachedAvatarUrl()}
+            settingsLabel={t('nav.settings')}
+            walletLabel={t('nav.wallet')}
+            logOutLabel={t('auth.logOut')}
+            githubLabel={t('menu.github')}
             displayName={mobileDisplayName()}
             username={mobileUsername()}
             logoSrc={`${import.meta.env.BASE_URL}images/heaven.png`}

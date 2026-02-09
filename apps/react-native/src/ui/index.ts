@@ -7,3 +7,4 @@ export { Avatar, type AvatarProps, type AvatarSize } from './Avatar';
 export { Card, type CardProps } from './Card';
 export { Spinner, type SpinnerProps } from './Spinner';
 export { Divider, type DividerProps } from './Divider';
+export { TabBar, type Tab } from './TabBar';

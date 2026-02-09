@@ -11,7 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { User, Gear, SignOut, SignIn, Key } from 'phosphor-react-native';
 import { colors } from '../lib/theme';
-import { Button } from '../ui';
+import { Avatar, Button } from '../ui';
 
 const DRAWER_WIDTH = Math.min(280, Dimensions.get('window').width * 0.85);
 
@@ -102,13 +102,7 @@ export const SideMenuDrawer: React.FC<SideMenuDrawerProps> = ({
         {/* User info */}
         {isAuthenticated && displayName ? (
           <View style={styles.userRow}>
-            {avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarFallback}>
-                <User size={20} color={colors.textMuted} />
-              </View>
-            )}
+            <Avatar src={avatarUrl} size="sm" />
             <View style={styles.userInfo}>
               <Text style={styles.displayName} numberOfLines={1}>{displayName}</Text>
               {username ? (
@@ -231,19 +225,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderSubtle,
-  },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-  },
-  avatarFallback: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.bgElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   userInfo: {
     flex: 1,

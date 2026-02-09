@@ -9,13 +9,18 @@
 
 import { createPublicClient, http, parseAbi, keccak256, encodePacked, toBytes, defineChain } from 'viem';
 import type { LitBridge } from '../services/LitBridge';
+import {
+  MEGA_RPC,
+  REGISTRY_V1,
+  RECORDS_V1,
+  PROFILE_V2,
+  HEAVEN_NODE,
+  ZERO_HASH,
+} from './heaven-constants';
 
 // ── Contract addresses (from @heaven/core) ─────────────────────────
 
-export const REGISTRY_V1 = '0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2' as const;
-export const RECORDS_V1 = '0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3' as const;
-export const PROFILE_V2 = '0xa31545D33f6d656E62De67fd020A26608d4601E5' as const;
-export const HEAVEN_NODE = '0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27' as const;
+export { REGISTRY_V1, RECORDS_V1, PROFILE_V2, HEAVEN_NODE };
 
 // ── Lit Action CIDs ────────────────────────────────────────────────
 
@@ -30,7 +35,7 @@ const megaTestnetV2 = defineChain({
   name: 'Mega Testnet V2',
   nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
   rpcUrls: {
-    default: { http: ['https://carrot.megaeth.com/rpc'] },
+    default: { http: [MEGA_RPC] },
   },
   contracts: {
     multicall3: {
@@ -206,8 +211,6 @@ export async function setProfile(
     }
     languagesPacked = packed.toString();
   }
-
-  const ZERO_HASH = '0x0000000000000000000000000000000000000000000000000000000000000000';
 
   const profileInput = {
     profileVersion: 2,

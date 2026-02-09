@@ -5,18 +5,19 @@
 
 import { createPublicClient, http, parseAbi } from 'viem';
 import { NativeModules, Platform } from 'react-native';
+import {
+  MEGA_RPC,
+  IPFS_GATEWAY,
+  REGISTRY_V1,
+  RECORDS_V1,
+  ZERO_HASH,
+  resolveIpfsOrHttpUri,
+} from './heaven-constants';
 
 // ── Constants ─────────────────────────────────────────────────────
 
 const ACTIVITY_ENDPOINT =
   'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/14.0.0/gn';
-
-const IPFS_GATEWAY = 'https://heaven.myfilebase.com/ipfs/';
-
-const REGISTRY_V1 = '0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2' as const;
-const RECORDS_V1 = '0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3' as const;
-
-const MEGA_RPC = 'https://carrot.megaeth.com/rpc';
 
 const registryAbi = parseAbi([
   'function primaryName(address) external view returns (string label, bytes32 parentNode)',
@@ -189,7 +190,7 @@ async function resolveAuthor(addr: `0x${string}`): Promise<{
           functionName: 'primaryNode',
           args: [addr],
         });
-        if (node && node !== ('0x' + '0'.repeat(64))) {
+        if (node && node !== ZERO_HASH) {
           const avatar = await client.readContract({
             address: RECORDS_V1,
             abi: recordsAbi,
@@ -212,10 +213,7 @@ async function resolveAuthor(addr: `0x${string}`): Promise<{
 }
 
 function resolveAvatarUri(uri: string): string | undefined {
-  if (!uri) return undefined;
-  if (uri.startsWith('ipfs://')) return `${IPFS_GATEWAY}${uri.slice(7)}`;
-  if (uri.startsWith('http://') || uri.startsWith('https://')) return uri;
-  return undefined;
+  return resolveIpfsOrHttpUri(uri);
 }
 
 // ── IPFS metadata ─────────────────────────────────────────────────
@@ -230,9 +228,13 @@ interface IPFSMetadata {
 }
 
 async function fetchIPFSMetadata(ipfsHash: string): Promise<IPFSMetadata | null> {
-  const res = await fetch(`${IPFS_GATEWAY}${ipfsHash}`);
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    const res = await fetch(`${IPFS_GATEWAY}${ipfsHash}`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────

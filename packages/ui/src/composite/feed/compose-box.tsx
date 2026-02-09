@@ -48,6 +48,7 @@ interface SongPickerProps {
   songs: PublishedSong[]
   onSelect: (song: PublishedSong) => void
   onPublishNew: () => void
+  publishNewLabel?: string
   children: any
 }
 
@@ -75,7 +76,7 @@ const SongPicker: Component<SongPickerProps> = (props) => (
       </Show>
       <DropdownMenuItem onSelect={() => props.onPublishNew()} class="text-[var(--accent-blue)]">
         <Plus class="w-4 h-4" />
-        Publish new song
+        {props.publishNewLabel ?? 'Publish new song'}
       </DropdownMenuItem>
     </DropdownMenuContent>
   </DropdownMenu>
@@ -149,6 +150,10 @@ export interface ComposeBoxProps {
   class?: string
   /** Max number of image attachments (default: 4) */
   maxMedia?: number
+  /** i18n: Post button label (default: "Post") */
+  postLabel?: string
+  /** i18n: "Publish new song" label (default: "Publish new song") */
+  publishNewSongLabel?: string
 }
 
 export const ComposeBox: Component<ComposeBoxProps> = (props) => {
@@ -192,7 +197,7 @@ export const ComposeBox: Component<ComposeBoxProps> = (props) => {
   })
 
   return (
-    <div class={cn('flex gap-3 p-4 border-b border-[var(--border-subtle)]', props.class)}>
+    <div class={cn('flex gap-3 p-4', props.class)}>
       <Avatar src={props.avatarUrl} size="md" />
       <div class="flex-1 flex flex-col gap-2">
         <div
@@ -244,6 +249,7 @@ export const ComposeBox: Component<ComposeBoxProps> = (props) => {
               songs={props.publishedSongs ?? []}
               onSelect={(s) => setSong(s)}
               onPublishNew={() => props.onPublishSong?.()}
+              publishNewLabel={props.publishNewSongLabel}
             >
               <IconButton
                 variant="soft"
@@ -260,7 +266,7 @@ export const ComposeBox: Component<ComposeBoxProps> = (props) => {
             disabled={!text().trim() && files().length === 0 && !song()}
             onClick={handlePost}
           >
-            Post
+            {props.postLabel ?? 'Post'}
           </Button>
         </div>
       </div>
@@ -309,6 +315,10 @@ export interface ComposeDrawerProps {
   onPublishSong?: () => void
   /** Max number of image attachments (default: 4) */
   maxMedia?: number
+  /** i18n: Post button label (default: "Post") */
+  postLabel?: string
+  /** i18n: "Publish new song" label (default: "Publish new song") */
+  publishNewSongLabel?: string
 }
 
 export const ComposeDrawer: Component<ComposeDrawerProps> = (props) => {
@@ -401,6 +411,7 @@ export const ComposeDrawer: Component<ComposeDrawerProps> = (props) => {
               songs={props.publishedSongs ?? []}
               onSelect={(s) => setSong(s)}
               onPublishNew={() => props.onPublishSong?.()}
+              publishNewLabel={props.publishNewSongLabel}
             >
               <IconButton
                 variant="soft"
@@ -417,7 +428,7 @@ export const ComposeDrawer: Component<ComposeDrawerProps> = (props) => {
             disabled={!text().trim() && files().length === 0 && !song()}
             onClick={handlePost}
           >
-            Post
+            {props.postLabel ?? 'Post'}
           </Button>
         </div>
       </DrawerContent>

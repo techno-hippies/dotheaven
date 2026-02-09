@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs'
 import { createSignal } from 'solid-js'
 import { RoomPanel, type RoomPanelProps } from './room-panel'
 import { RoomParticipants } from './room-participants'
-import { CreateRoomDrawer } from './create-room-drawer'
+import { CreateRoomDrawer, CreateRoomModal } from './create-room-drawer'
 import { Button } from '../../primitives/button'
 
 const meta: Meta = {
@@ -243,6 +243,25 @@ export const CreateRoom: StoryObj = {
           <Button variant="default" onClick={() => setOpen(true)}>Create a Room</Button>
         </div>
         <CreateRoomDrawer
+          open={open()}
+          onOpenChange={setOpen}
+          onGoLive={(opts) => console.log('Go Live:', opts)}
+        />
+      </div>
+    )
+  },
+}
+
+export const CreateRoomDesktop: StoryObj = {
+  name: 'Create Room Dialog (Desktop)',
+  render: () => {
+    const [open, setOpen] = createSignal(true)
+    return (
+      <div style={{ width: '600px', height: '500px', position: 'relative', background: 'var(--bg-page)' }}>
+        <div class="p-4">
+          <Button variant="default" onClick={() => setOpen(true)}>Create a Room</Button>
+        </div>
+        <CreateRoomModal
           open={open()}
           onOpenChange={setOpen}
           onGoLive={(opts) => console.log('Go Live:', opts)}

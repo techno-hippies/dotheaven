@@ -343,7 +343,44 @@ export class RoomDO implements DurableObject {
 
   /** Alarm handler — runs every 30s to meter all participants */
   async alarm(): Promise<void> {
-    if (!this.room || this.participants.size === 0) return
+    if (!this.room) return
+
+    // Close room if empty (handles disconnects without /leave)
+    if (this.participants.size === 0) {
+      await this.env.DB.batch([
+        this.env.DB.prepare(
+          "UPDATE rooms SET status = 'closed', closed_at = ? WHERE room_id = ? AND status = 'active'",
+        ).bind(new Date().toISOString(), this.room.roomId),
+        // Also mark any phantom D1 participants as left
+        this.env.DB.prepare(
+          'UPDATE room_participants SET left_at_epoch = ? WHERE room_id = ? AND left_at_epoch IS NULL',
+        ).bind(Math.floor(Date.now() / 1000), this.room.roomId),
+      ])
+      await this.state.storage.deleteAlarm()
+      return
+    }
+
+    // Evict stale participants (no heartbeat for 3+ intervals = 90s)
+    const now = Math.floor(Date.now() / 1000)
+    const staleThreshold = HEARTBEAT_INTERVAL_SECONDS * 3
+    for (const [connId, p] of this.participants) {
+      if (now - p.lastMeteredAtEpoch > staleThreshold) {
+        this.participants.delete(connId)
+        await this.env.DB.prepare(
+          'UPDATE room_participants SET left_at_epoch = ?, debited_seconds = ? WHERE connection_id = ?',
+        ).bind(now, p.debitedSeconds, connId).run()
+      }
+    }
+
+    // If eviction emptied the room, close it
+    if (this.participants.size === 0) {
+      await this.env.DB.prepare(
+        "UPDATE rooms SET status = 'closed', closed_at = ? WHERE room_id = ? AND status = 'active'",
+      ).bind(new Date().toISOString(), this.room.roomId).run()
+      await this.persistParticipants()
+      await this.state.storage.deleteAlarm()
+      return
+    }
 
     for (const p of this.participants.values()) {
       await this.meterParticipant(p)

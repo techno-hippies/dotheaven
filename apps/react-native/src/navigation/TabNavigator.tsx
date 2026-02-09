@@ -7,6 +7,7 @@ import { MusicScreen } from '../screens/MusicScreen';
 import { ChatScreen } from '../screens/ChatScreen';
 import { ScheduleScreen } from '../screens/ScheduleScreen';
 import { WalletScreen } from '../screens/WalletScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
 import { BottomTabBar, type TabItem } from '../components/BottomTabBar';
 import { MiniPlayer } from '../components/MiniPlayer';
 import { SideMenuDrawer } from '../components/SideMenuDrawer';
@@ -29,6 +30,7 @@ export const DrawerContext = React.createContext<{ open: () => void }>({ open: (
 
 export const TabNavigator: React.FC = () => {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const { isAuthenticated, isNewUser, pkpInfo, logout, register, authenticate, completeOnboarding } = useAuth();
 
   const openDrawer = useCallback(() => setDrawerOpen(true), []);
@@ -72,7 +74,15 @@ export const TabNavigator: React.FC = () => {
           onLogout={logout}
           onSignUp={register}
           onSignIn={authenticate}
+          onSettings={() => setSettingsOpen(true)}
         />
+
+        {/* Settings overlay */}
+        {settingsOpen && (
+          <View style={StyleSheet.absoluteFill}>
+            <SettingsScreen onBack={() => setSettingsOpen(false)} />
+          </View>
+        )}
 
         {/* Onboarding overlay — shown after registration */}
         {isNewUser && (

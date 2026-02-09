@@ -1,4 +1,5 @@
 import type { ProfileInput } from '@heaven/ui'
+import type { TranslationKey } from '@heaven/i18n'
 import { isAddress, zeroAddress } from 'viem'
 import { computeNode, getTextRecord, getAddr, resolveEnsName, getPrimaryName, resolveAvatarUri, resolveIpfsUri } from '../lib/heaven'
 
@@ -21,13 +22,20 @@ export type ResolvedProfileId = {
 
 // ── Helpers ──
 
-export function formatTimeAgo(ts: number): string {
+export function formatTimeAgo(ts: number, t?: (key: TranslationKey, ...args: any[]) => string): string {
   const now = Math.floor(Date.now() / 1000)
   const diff = now - ts
-  if (diff < 60) return 'just now'
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`
+  if (t) {
+    if (diff < 60) return t('time.justNow')
+    if (diff < 3600) return t('time.minutesAgo', { count: Math.floor(diff / 60) })
+    if (diff < 86400) return t('time.hoursAgo', { count: Math.floor(diff / 3600) })
+    if (diff < 604800) return t('time.daysAgo', { count: Math.floor(diff / 86400) })
+  } else {
+    if (diff < 60) return 'just now'
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+    if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`
+  }
   return new Date(ts * 1000).toLocaleDateString()
 }
 

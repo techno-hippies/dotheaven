@@ -5,14 +5,17 @@ import { createQuery, useQueryClient } from '@tanstack/solid-query'
 import { PostDetailView, type CommentItemProps, ShareViaChatDialog, type ShareRecipient } from '@heaven/ui'
 import { post as postRoute } from '@heaven/core'
 import { useAuth, useXMTP } from '../providers'
+import { useI18n } from '@heaven/i18n/solid'
+import type { TranslationKey } from '@heaven/i18n'
 import { fetchPost, fetchPostComments, translatePost, getUserLang, type FeedPostData } from '../lib/heaven/posts'
+import { openAuthDialog } from '../lib/auth-dialog'
 
-function timeAgo(ts: number): string {
+function timeAgo(ts: number, t: (key: TranslationKey, ...args: any[]) => string): string {
   const diff = Math.floor(Date.now() / 1000) - ts
-  if (diff < 60) return 'just now'
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`
+  if (diff < 60) return t('time.justNow')
+  if (diff < 3600) return t('time.minutesAgo', { count: Math.floor(diff / 60) })
+  if (diff < 86400) return t('time.hoursAgo', { count: Math.floor(diff / 3600) })
+  if (diff < 604800) return t('time.daysAgo', { count: Math.floor(diff / 86400) })
   return new Date(ts * 1000).toLocaleDateString()
 }
 
@@ -21,6 +24,7 @@ export const PostPage: Component = () => {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const auth = useAuth()
+  const { t } = useI18n()
   const xmtp = useXMTP()
   const [isTranslating, setIsTranslating] = createSignal(false)
   const [shareDialogOpen, setShareDialogOpen] = createSignal(false)
@@ -42,11 +46,23 @@ export const PostPage: Component = () => {
     staleTime: 30_000,
   }))
 
+  /** Wraps a callback so it opens the auth dialog if not logged in */
+  const authGuard = (fn: () => void) => () => {
+    if (!auth.isAuthenticated()) {
+      openAuthDialog()
+      return
+    }
+    fn()
+  }
+
   const handleTranslate = async (targetLang: string) => {
     const p = postQuery.data
     const addr = auth.pkpAddress()
     const pkpInfo = auth.pkpInfo()
-    if (!p?.text || !addr || !pkpInfo) return
+    if (!p?.text || !addr || !pkpInfo) {
+      openAuthDialog()
+      return
+    }
 
     setIsTranslating(true)
     try {
@@ -111,13 +127,17 @@ export const PostPage: Component = () => {
       authorName: p.authorName,
       authorHandle: p.authorHandle,
       authorAvatarUrl: p.authorAvatarUrl,
-      timestamp: timeAgo(p.blockTimestamp),
+      timestamp: timeAgo(p.blockTimestamp, t),
       text: p.text,
       media: p.photoUrls?.length
         ? { type: 'photo' as const, items: p.photoUrls.map((url) => ({ url })) }
         : undefined,
       likes: p.likeCount,
       comments: p.commentCount,
+      onLike: authGuard(() => { /* TODO: wire to EngagementV2 like */ }),
+      onComment: authGuard(() => { /* TODO: wire to comment flow */ }),
+      onRepost: authGuard(() => { /* TODO: wire to repost */ }),
+      onQuote: authGuard(() => { /* TODO: wire to quote compose */ }),
       translations: p.translations,
       userLang,
       postLang: p.language,
@@ -141,7 +161,7 @@ export const PostPage: Component = () => {
       children: (
         <div>
           <p class="text-base text-[var(--text-primary)]">{c.text}</p>
-          <span class="text-xs text-[var(--text-muted)]">{timeAgo(c.blockTimestamp)}</span>
+          <span class="text-xs text-[var(--text-muted)]">{timeAgo(c.blockTimestamp, t)}</span>
         </div>
       ) as JSX.Element,
     }))
@@ -153,7 +173,7 @@ export const PostPage: Component = () => {
         when={postProps()}
         fallback={
           <div class="flex items-center justify-center h-full text-[var(--text-muted)]">
-            {postQuery.isLoading ? 'Loading...' : 'Post not found'}
+            {postQuery.isLoading ? t('common.loading') : t('feed.postNotFound')}
           </div>
         }
       >

@@ -23,6 +23,11 @@ export interface SideMenuDrawerProps {
   onLogout?: () => void
   /** Extra nav items to render above the bottom section */
   extraItems?: JSX.Element
+  /** i18n label overrides */
+  settingsLabel?: string
+  walletLabel?: string
+  logOutLabel?: string
+  githubLabel?: string
 }
 
 export const SideMenuDrawer: Component<SideMenuDrawerProps> = (props) => {
@@ -47,7 +52,7 @@ export const SideMenuDrawer: Component<SideMenuDrawerProps> = (props) => {
               onClick={() => props.onOpenChange(false)}
             >
               <GithubLogo class="w-5 h-5" />
-              <span class="text-base font-medium">GitHub</span>
+              <span class="text-base font-medium">{props.githubLabel ?? 'GitHub'}</span>
             </a>
 
             {/* Log out (authenticated only) */}
@@ -58,7 +63,7 @@ export const SideMenuDrawer: Component<SideMenuDrawerProps> = (props) => {
                 onClick={() => handleNav(props.onLogout)}
               >
                 <SignOut class="w-5 h-5" />
-                <span class="text-base font-medium">Log Out</span>
+                <span class="text-base font-medium">{props.logOutLabel ?? 'Log Out'}</span>
               </button>
             </Show>
           </div>
@@ -110,7 +115,7 @@ export const SideMenuDrawer: Component<SideMenuDrawerProps> = (props) => {
             onClick={() => handleNav(props.onSettings)}
           >
             <Gear class="w-5 h-5" />
-            <span class="text-base font-medium">Settings</span>
+            <span class="text-base font-medium">{props.settingsLabel ?? 'Settings'}</span>
           </button>
 
           <button
@@ -119,7 +124,7 @@ export const SideMenuDrawer: Component<SideMenuDrawerProps> = (props) => {
             onClick={() => handleNav(props.onWallet)}
           >
             <Wallet class="w-5 h-5" />
-            <span class="text-base font-medium">Wallet</span>
+            <span class="text-base font-medium">{props.walletLabel ?? 'Wallet'}</span>
           </button>
 
           {props.extraItems}

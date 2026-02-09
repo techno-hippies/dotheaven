@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native';
 import { MusicNote, DotsThree } from 'phosphor-react-native';
 import { colors } from '../lib/theme';
 import type { MusicTrack } from '../services/music-scanner';
@@ -20,11 +20,15 @@ export const TrackItem: React.FC<TrackItemProps> = ({ track, isActive, isPlaying
     >
       {/* Album cover placeholder */}
       <View style={styles.albumCover}>
-        <MusicNote
-          size={20}
-          color={isActive ? colors.accentBlue : colors.textMuted}
-          weight={isPlaying ? 'fill' : 'regular'}
-        />
+        {track.artworkUri ? (
+          <Image source={{ uri: track.artworkUri }} style={styles.albumArtImage} />
+        ) : (
+          <MusicNote
+            size={20}
+            color={isActive ? colors.accentBlue : colors.textMuted}
+            weight={isPlaying ? 'fill' : 'regular'}
+          />
+        )}
       </View>
 
       {/* Title + Artist */}
@@ -64,6 +68,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+  },
+  albumArtImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
   },
   info: {
     flex: 1,

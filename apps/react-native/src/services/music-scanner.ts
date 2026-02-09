@@ -1,5 +1,6 @@
 import * as MediaLibrary from 'expo-media-library';
 import * as DocumentPicker from 'expo-document-picker';
+import { Platform } from 'react-native';
 
 export interface MusicTrack {
   id: string;
@@ -9,30 +10,105 @@ export interface MusicTrack {
   duration: number; // seconds
   uri: string;
   filename: string;
+  artworkUri?: string;
+}
+
+const PERMISSION_TIMEOUT_MS = 10000;
+const PAGE_TIMEOUT_MS = 15000;
+const MAX_SCAN_PAGES = 500;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
+}
+
+/**
+ * Request audio permission through expo-media-library.
+ * This keeps permissions and media queries on the same native module path.
+ */
+async function requestAudioPermission(): Promise<boolean> {
+  if (Platform.OS === 'android') {
+    const current = await withTimeout(
+      MediaLibrary.getPermissionsAsync(false, ['audio']),
+      PERMISSION_TIMEOUT_MS,
+      'Media permission check',
+    );
+    if (current.granted) return true;
+
+    const requested = await withTimeout(
+      MediaLibrary.requestPermissionsAsync(false, ['audio']),
+      PERMISSION_TIMEOUT_MS,
+      'Media permission request',
+    );
+    return requested.granted;
+  }
+
+  const current = await withTimeout(
+    MediaLibrary.getPermissionsAsync(),
+    PERMISSION_TIMEOUT_MS,
+    'Media permission check',
+  );
+  if (current.granted) return true;
+  const requested = await withTimeout(
+    MediaLibrary.requestPermissionsAsync(),
+    PERMISSION_TIMEOUT_MS,
+    'Media permission request',
+  );
+  return requested.granted;
 }
 
 /**
  * Scan device media library for audio files.
  */
 export async function scanMediaLibrary(): Promise<MusicTrack[]> {
-  const { status } = await MediaLibrary.requestPermissionsAsync();
-  if (status !== 'granted') {
+  console.log('[music-scanner] starting scanMediaLibrary');
+  const granted = await requestAudioPermission();
+  console.log('[music-scanner] permission granted:', granted);
+  if (!granted) {
     throw new Error('Media library permission denied');
   }
 
   const tracks: MusicTrack[] = [];
   let hasMore = true;
   let after: string | undefined;
+  let page = 0;
+  const seenCursors = new Set<string | undefined>();
 
   while (hasMore) {
-    const result = await MediaLibrary.getAssetsAsync({
-      mediaType: MediaLibrary.MediaType.audio,
-      first: 100,
-      after,
-      sortBy: [MediaLibrary.SortBy.default],
-    });
+    if (seenCursors.has(after)) {
+      console.warn('[music-scanner] duplicate cursor detected, stopping to avoid infinite loop');
+      break;
+    }
+    seenCursors.add(after);
+    page++;
+    const result = await withTimeout(
+      MediaLibrary.getAssetsAsync({
+        mediaType: MediaLibrary.MediaType.audio,
+        first: 100,
+        after,
+        sortBy: [MediaLibrary.SortBy.default],
+      }),
+      PAGE_TIMEOUT_MS,
+      `Media page ${page} fetch`,
+    );
 
     for (const asset of result.assets) {
+      const artworkUri =
+        Platform.OS === 'android' && asset.albumId
+          ? `content://media/external/audio/albumart/${asset.albumId}`
+          : undefined;
+
       tracks.push({
         id: asset.id,
         title: extractTitle(asset.filename),
@@ -41,13 +117,26 @@ export async function scanMediaLibrary(): Promise<MusicTrack[]> {
         duration: asset.duration,
         uri: asset.uri,
         filename: asset.filename,
+        artworkUri,
       });
     }
 
+    const nextCursor = result.endCursor ?? undefined;
+    if (result.hasNextPage && nextCursor === after) {
+      console.warn('[music-scanner] unchanged cursor with hasNextPage=true, stopping loop');
+      break;
+    }
+
     hasMore = result.hasNextPage;
-    after = result.endCursor;
+    after = nextCursor;
+
+    if (page >= MAX_SCAN_PAGES) {
+      console.warn('[music-scanner] max pages reached, stopping scan');
+      break;
+    }
   }
 
+  console.log('[music-scanner] done, total tracks:', tracks.length);
   return tracks;
 }
 

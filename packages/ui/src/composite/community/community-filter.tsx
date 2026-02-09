@@ -46,24 +46,27 @@ export interface CommunityFilterProps {
   onFiltersChange: (filters: CommunityFilters) => void
   /** Count of active filters */
   activeCount?: number
+  /** i18n labels */
+  labels?: {
+    filterMembers?: string
+    gender?: string
+    any?: string
+    nativeLanguage?: string
+    learningLanguage?: string
+    sameCity?: string
+    verified?: string
+    reset?: string
+    apply?: string
+  }
 }
-
-/** Gender options with "Any" prepended */
-const GENDER_FILTER_OPTIONS: SelectOption[] = [
-  { value: '', label: 'Any' },
-  ...GENDER_OPTIONS,
-]
-
-/** Language options with "Any" prepended */
-const LANGUAGE_FILTER_OPTIONS: SelectOption[] = [
-  { value: '', label: 'Any' },
-  ...LEARNING_LANGUAGE_OPTIONS,
-]
 
 /**
  * CommunityFilterDialog — responsive filter UI for community member discovery.
  */
 export const CommunityFilterDialog: Component<CommunityFilterProps> = (props) => {
+  const anyLabel = () => props.labels?.any ?? 'Any'
+  const genderFilterOptions = (): SelectOption[] => [{ value: '', label: anyLabel() }, ...GENDER_OPTIONS]
+  const languageFilterOptions = (): SelectOption[] => [{ value: '', label: anyLabel() }, ...LEARNING_LANGUAGE_OPTIONS]
   const isMobile = useIsMobile()
 
   // Local state for pending changes
@@ -101,46 +104,46 @@ export const CommunityFilterDialog: Component<CommunityFilterProps> = (props) =>
       {/* Gender */}
       <div class="flex flex-col gap-2">
         <label class="text-base font-medium text-[var(--text-secondary)]">
-          Gender
+          {props.labels?.gender ?? 'Gender'}
         </label>
         <Select
-          options={GENDER_FILTER_OPTIONS}
-          value={GENDER_FILTER_OPTIONS.find((o) => o.value === (localFilters().gender ?? '')) ?? GENDER_FILTER_OPTIONS[0]}
+          options={genderFilterOptions()}
+          value={genderFilterOptions().find((o) => o.value === (localFilters().gender ?? '')) ?? genderFilterOptions()[0]}
           onChange={(opt) => setLocalFilters((f) => ({ ...f, gender: opt?.value || undefined }))}
-          placeholder="Any"
+          placeholder={anyLabel()}
         />
       </div>
 
       {/* Native Language */}
       <div class="flex flex-col gap-2">
         <label class="text-base font-medium text-[var(--text-secondary)]">
-          Native Language
+          {props.labels?.nativeLanguage ?? 'Native Language'}
         </label>
         <Select
-          options={LANGUAGE_FILTER_OPTIONS}
-          value={LANGUAGE_FILTER_OPTIONS.find((o) => o.value === (localFilters().nativeLanguage ?? '')) ?? LANGUAGE_FILTER_OPTIONS[0]}
+          options={languageFilterOptions()}
+          value={languageFilterOptions().find((o) => o.value === (localFilters().nativeLanguage ?? '')) ?? languageFilterOptions()[0]}
           onChange={(opt) => setLocalFilters((f) => ({ ...f, nativeLanguage: opt?.value || undefined }))}
-          placeholder="Any"
+          placeholder={anyLabel()}
         />
       </div>
 
       {/* Learning Language */}
       <div class="flex flex-col gap-2">
         <label class="text-base font-medium text-[var(--text-secondary)]">
-          Learning Language
+          {props.labels?.learningLanguage ?? 'Learning Language'}
         </label>
         <Select
-          options={LANGUAGE_FILTER_OPTIONS}
-          value={LANGUAGE_FILTER_OPTIONS.find((o) => o.value === (localFilters().learningLanguage ?? '')) ?? LANGUAGE_FILTER_OPTIONS[0]}
+          options={languageFilterOptions()}
+          value={languageFilterOptions().find((o) => o.value === (localFilters().learningLanguage ?? '')) ?? languageFilterOptions()[0]}
           onChange={(opt) => setLocalFilters((f) => ({ ...f, learningLanguage: opt?.value || undefined }))}
-          placeholder="Any"
+          placeholder={anyLabel()}
         />
       </div>
 
       {/* Same City */}
       <div class="flex items-center justify-between py-2">
         <label class="text-base font-medium text-[var(--text-secondary)]">
-          Same City
+          {props.labels?.sameCity ?? 'Same City'}
         </label>
         <Switch
           checked={localFilters().sameCity ?? false}
@@ -151,7 +154,7 @@ export const CommunityFilterDialog: Component<CommunityFilterProps> = (props) =>
       {/* Verified */}
       <div class="flex items-center justify-between py-2">
         <label class="text-base font-medium text-[var(--text-secondary)]">
-          Verified
+          {props.labels?.verified ?? 'Verified'}
         </label>
         <Switch
           checked={localFilters().verified ?? false}
@@ -170,7 +173,7 @@ export const CommunityFilterDialog: Component<CommunityFilterProps> = (props) =>
           class="flex-1"
           onClick={handleReset}
         >
-          Reset
+          {props.labels?.reset ?? 'Reset'}
         </Button>
       </Show>
       <Button
@@ -178,7 +181,7 @@ export const CommunityFilterDialog: Component<CommunityFilterProps> = (props) =>
         class="flex-1"
         onClick={handleApply}
       >
-        Apply
+        {props.labels?.apply ?? 'Apply'}
       </Button>
     </div>
   )
@@ -191,7 +194,7 @@ export const CommunityFilterDialog: Component<CommunityFilterProps> = (props) =>
         <Dialog open={props.open} onOpenChange={handleOpenChange}>
           <DialogContent class="max-w-sm">
             <DialogHeader>
-              <DialogTitle>Filter Members</DialogTitle>
+              <DialogTitle>{props.labels?.filterMembers ?? 'Filter Members'}</DialogTitle>
             </DialogHeader>
             <DialogBody>
               {filterContent()}
@@ -212,7 +215,7 @@ export const CommunityFilterDialog: Component<CommunityFilterProps> = (props) =>
         >
           <div class="pt-4 pb-2">
             <h2 class="text-lg font-semibold text-[var(--text-primary)] text-center">
-              Filter Members
+              {props.labels?.filterMembers ?? 'Filter Members'}
             </h2>
           </div>
           {filterContent()}

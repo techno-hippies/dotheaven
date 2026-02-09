@@ -21,6 +21,8 @@ export interface LiveRoomsRowProps {
   createAvatarUrl?: string
   /** Max live rooms to display (default 5). Create card doesn't count. */
   maxVisible?: number
+  /** i18n: label for the create-room card (default: "Your room") */
+  createRoomLabel?: string
 }
 
 const DEFAULT_MAX_VISIBLE = 5
@@ -33,7 +35,7 @@ export const LiveRoomsRow: Component<LiveRoomsRowProps> = (props) => {
 
   return (
     <Show when={shouldShow()}>
-      <div class="flex gap-2.5 pr-4 py-3 overflow-x-auto scrollbar-none">
+      <div class="flex gap-2.5 px-4 py-3 overflow-x-auto scrollbar-none">
         {/* Create room card */}
         <Show when={props.onCreateRoom}>
           <button
@@ -58,7 +60,7 @@ export const LiveRoomsRow: Component<LiveRoomsRowProps> = (props) => {
 
             {/* Bottom label — same position as host name on room cards */}
             <div class="absolute bottom-0 left-0 right-0 p-2.5 flex flex-col items-start">
-              <p class="text-sm font-semibold text-[var(--text-primary)]">Your room</p>
+              <p class="text-sm font-semibold text-[var(--text-primary)]">{props.createRoomLabel ?? 'Your room'}</p>
             </div>
           </button>
         </Show>

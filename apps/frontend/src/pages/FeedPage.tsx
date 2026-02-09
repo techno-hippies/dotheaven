@@ -1,20 +1,25 @@
 import type { Component } from 'solid-js'
 import { createSignal, createMemo, createEffect, For, Show } from 'solid-js'
 import { createQuery, useQueryClient } from '@tanstack/solid-query'
-import { FeedPost, type FeedPostProps, type FeedPostMedia, Avatar, ComposeBox, ComposeFab, ComposeDrawer, useIsMobile, type ProfileInput, ShareViaChatDialog, type ShareRecipient, LiveRoomsRow, type LiveRoom } from '@heaven/ui'
+import { FeedPost, type FeedPostProps, type FeedPostMedia, Avatar, ComposeBox, ComposeFab, ComposeDrawer, useIsMobile, type ProfileInput, ShareViaChatDialog, type ShareRecipient, LiveRoomsRow, type LiveRoom, CreateRoomModal, type CreateRoomOptions } from '@heaven/ui'
 import { useNavigate } from '@solidjs/router'
 import { post, room } from '@heaven/core'
+import { useI18n } from '@heaven/i18n/solid'
+import type { TranslationKey } from '@heaven/i18n'
 import { useAuth, useXMTP } from '../providers'
 import { openUserMenu } from '../lib/user-menu'
 import { fetchFeedPosts, translatePost, getUserLang, type FeedPostData } from '../lib/heaven/posts'
+import { getPrimaryNamesBatch, getTextRecordsBatch } from '../lib/heaven/registry'
+import { resolveAvatarUri } from '../lib/heaven/avatar-resolver'
+import { openAuthDialog } from '../lib/auth-dialog'
 import { useActiveRooms } from '../lib/voice/useActiveRooms'
 
-function timeAgo(ts: number): string {
+function timeAgo(ts: number, t: <K extends TranslationKey>(key: K, ...args: any[]) => string): string {
   const diff = Math.floor(Date.now() / 1000) - ts
-  if (diff < 60) return 'just now'
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`
+  if (diff < 60) return t('time.justNow')
+  if (diff < 3600) return t('time.minutesAgo', { count: Math.floor(diff / 60) })
+  if (diff < 86400) return t('time.hoursAgo', { count: Math.floor(diff / 3600) })
+  if (diff < 604800) return t('time.daysAgo', { count: Math.floor(diff / 86400) })
   return new Date(ts * 1000).toLocaleDateString()
 }
 
@@ -23,6 +28,8 @@ function postDataToProps(
   userLang: string,
   onTranslate: (postId: string, text: string, targetLang: string) => void,
   translatingPostId: string | null,
+  authGuard: (fn: () => void) => () => void,
+  t: <K extends TranslationKey>(key: K, ...args: any[]) => string,
 ): FeedPostProps {
   const media: FeedPostMedia | undefined = p.photoUrls?.length
     ? { type: 'photo', items: p.photoUrls.map((url) => ({ url })) }
@@ -32,11 +39,15 @@ function postDataToProps(
     authorName: p.authorName,
     authorHandle: p.authorHandle,
     authorAvatarUrl: p.authorAvatarUrl,
-    timestamp: timeAgo(p.blockTimestamp),
+    timestamp: timeAgo(p.blockTimestamp, t),
     text: p.text,
     media,
     likes: p.likeCount,
     comments: p.commentCount,
+    onLike: authGuard(() => { /* TODO: wire to EngagementV2 like */ }),
+    onComment: authGuard(() => { /* TODO: wire to comment flow */ }),
+    onRepost: authGuard(() => { /* TODO: wire to repost */ }),
+    onQuote: authGuard(() => { /* TODO: wire to quote compose */ }),
     translations: p.translations,
     userLang,
     postLang: p.language,
@@ -52,12 +63,14 @@ function postDataToProps(
 }
 
 export const FeedPage: Component = () => {
+  const { t } = useI18n()
   const isMobile = useIsMobile()
   const auth = useAuth()
   const xmtp = useXMTP()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [composeOpen, setComposeOpen] = createSignal(false)
+  const [createRoomOpen, setCreateRoomOpen] = createSignal(false)
   const [translatingPostId, setTranslatingPostId] = createSignal<string | null>(null)
   const [shareDialogOpen, setShareDialogOpen] = createSignal(false)
   const [sharePostId, setSharePostId] = createSignal<string | null>(null)
@@ -67,19 +80,59 @@ export const FeedPage: Component = () => {
 
   // Active voice rooms
   const activeRooms = useActiveRooms()
-  const liveRooms = createMemo<LiveRoom[]>(() =>
-    activeRooms.rooms().map((r) => ({
-      id: r.room_id,
-      hostName: `${r.host_wallet.slice(0, 6)}...${r.host_wallet.slice(-4)}`,
-      participantCount: r.participant_count,
-    }))
-  )
-  const showLiveRoomsLoading = createMemo(
-    () => activeRooms.isLoading() && liveRooms().length === 0,
-  )
-  const showLiveRoomsError = createMemo(
-    () => !activeRooms.isLoading() && !!activeRooms.error() && liveRooms().length === 0,
-  )
+
+  // Resolve heaven names + avatars for room hosts
+  const hostWallets = createMemo(() => {
+    const wallets = activeRooms.rooms().map((r) => r.host_wallet as `0x${string}`)
+    return [...new Set(wallets)]
+  })
+
+  const [hostInfo, setHostInfo] = createSignal<Map<string, { name: string; avatar?: string }>>(new Map())
+
+  createEffect(() => {
+    const wallets = hostWallets()
+    if (wallets.length === 0) return
+
+    getPrimaryNamesBatch(wallets).then(async (names) => {
+      const info = new Map<string, { name: string; avatar?: string }>()
+
+      // Fetch avatars for hosts that have heaven names
+      const avatarRequests = names
+        .filter((n) => n.node)
+        .map((n) => ({ node: n.node!, key: 'avatar' }))
+
+      const avatarResults = avatarRequests.length > 0
+        ? await getTextRecordsBatch(avatarRequests).catch(() => [] as { node: string; key: string; value: string }[])
+        : []
+
+      const avatarByNode = new Map(avatarResults.map((r) => [r.node, r.value]))
+
+      for (const n of names) {
+        const truncated = `${n.address.slice(0, 6)}...${n.address.slice(-4)}`
+        const label = n.label || truncated
+        const rawAvatar = n.node ? avatarByNode.get(n.node) : undefined
+        const avatar = rawAvatar ? await resolveAvatarUri(rawAvatar).catch(() => undefined) : undefined
+        info.set(n.address.toLowerCase(), { name: label, avatar: avatar ?? undefined })
+      }
+
+      setHostInfo(info)
+    }).catch((err) => {
+      if (import.meta.env.DEV) console.warn('[Feed] Failed to resolve room hosts:', err)
+    })
+  })
+
+  const liveRooms = createMemo<LiveRoom[]>(() => {
+    const info = hostInfo()
+    return activeRooms.rooms().map((r) => {
+      const host = info.get(r.host_wallet.toLowerCase())
+      return {
+        id: r.room_id,
+        hostName: host?.name ?? `${r.host_wallet.slice(0, 6)}...${r.host_wallet.slice(-4)}`,
+        hostAvatarUrl: host?.avatar,
+        participantCount: r.participant_count,
+      }
+    })
+  })
 
   createEffect(() => {
     const err = activeRooms.error()
@@ -107,6 +160,15 @@ export const FeedPage: Component = () => {
     return undefined
   })
 
+  /** Wraps a callback so it opens the auth dialog if not logged in */
+  const authGuard = (fn: () => void) => () => {
+    if (!auth.isAuthenticated()) {
+      openAuthDialog()
+      return
+    }
+    fn()
+  }
+
   const handlePost = (text: string, media?: File[]) => {
     console.log('Post:', text, media?.length ? `(${media.length} files)` : '')
     // TODO: wire to Lit Action post pipeline
@@ -115,7 +177,10 @@ export const FeedPage: Component = () => {
   const handleTranslate = async (postId: string, text: string, targetLang: string) => {
     const addr = auth.pkpAddress()
     const pkpInfo = auth.pkpInfo()
-    if (!addr || !pkpInfo) return
+    if (!addr || !pkpInfo) {
+      openAuthDialog()
+      return
+    }
 
     setTranslatingPostId(postId)
     try {
@@ -187,11 +252,13 @@ export const FeedPage: Component = () => {
 
   const posts = () => postsQuery.data ?? []
 
+  const cardClass = () => !isMobile() ? 'bg-[var(--bg-surface)] rounded-xl' : ''
+
   return (
     <div class="h-full overflow-y-auto">
-      <header>
-        {/* Mobile: avatar (left) + logo (center) row */}
-        <Show when={isMobile()}>
+      {/* Mobile: avatar (left) + logo (center) row */}
+      <Show when={isMobile()}>
+        <header>
           <div class="relative flex items-center justify-center h-14">
             <Show when={auth.isAuthenticated()}>
               <button
@@ -208,62 +275,84 @@ export const FeedPage: Component = () => {
               class="h-7"
             />
           </div>
-        </Show>
-      </header>
+        </header>
+      </Show>
 
-      {/* Live rooms row */}
-      <Show when={showLiveRoomsLoading()}>
-        <div class="px-5 py-2 text-sm text-[var(--text-muted)]">
-          Loading live rooms...
+      {/* Feed content — centered card column on desktop, full-bleed on mobile */}
+      <div class={!isMobile() ? 'py-4 px-4 flex flex-col gap-3' : ''}>
+        {/* Live rooms row */}
+        <div class={cardClass()}>
+          <LiveRoomsRow
+            rooms={liveRooms()}
+            onRoomClick={(roomId) => navigate(room(roomId))}
+            onCreateRoom={() => setCreateRoomOpen(true)}
+            createAvatarUrl={cachedAvatarUrl()}
+            createRoomLabel={t('room.yourRoom')}
+          />
         </div>
-      </Show>
-      <Show when={showLiveRoomsError()}>
-        <div class="px-5 py-2 text-sm text-[var(--text-muted)]">
-          Live rooms are temporarily unavailable.
-        </div>
-      </Show>
-      <LiveRoomsRow
-        rooms={liveRooms()}
-        onRoomClick={(roomId) => navigate(room(roomId))}
-        onCreateRoom={() => navigate(room('new'))}
-        createAvatarUrl={cachedAvatarUrl()}
-      />
 
-      {/* Desktop: inline compose box at top */}
-      <Show when={!isMobile()}>
-        <ComposeBox avatarUrl={cachedAvatarUrl()} onPost={handlePost} />
-      </Show>
-
-      <Show
-        when={!postsQuery.isLoading}
-        fallback={
-          <div class="flex items-center justify-center py-12 text-[var(--text-muted)]">
-            Loading posts...
+        {/* Desktop: inline compose box at top */}
+        <Show when={!isMobile()}>
+          <div class={cardClass()}>
+            <ComposeBox
+              avatarUrl={cachedAvatarUrl()}
+              onPost={handlePost}
+              placeholder={t('feed.compose')}
+              postLabel={t('common.post')}
+              publishNewSongLabel={t('feed.publishNewSong')}
+            />
           </div>
-        }
-      >
+        </Show>
+
         <Show
-          when={posts().length > 0}
+          when={!postsQuery.isLoading}
           fallback={
             <div class="flex items-center justify-center py-12 text-[var(--text-muted)]">
-              No posts yet. Be the first to post!
+              {t('feed.loadingPosts')}
             </div>
           }
         >
-          <div class="divide-y divide-[var(--border-subtle)]">
-            <For each={posts()}>
-              {(p) => (
-                <FeedPost
-                  {...postDataToProps(p, userLang, handleTranslate, translatingPostId())}
-                  onPostClick={() => navigate(post(p.postId))}
-                  onCopyLink={() => handleCopyLink(p.postId)}
-                  onSendViaChat={() => handleOpenShareDialog(p.postId)}
-                />
-              )}
-            </For>
-          </div>
+          <Show
+            when={posts().length > 0}
+            fallback={
+              <div class="flex items-center justify-center py-12 text-[var(--text-muted)]">
+                {t('feed.noPosts')}
+              </div>
+            }
+          >
+            <Show
+              when={!isMobile()}
+              fallback={
+                <div class="divide-y divide-[var(--border-subtle)]">
+                  <For each={posts()}>
+                    {(p) => (
+                      <FeedPost
+                        {...postDataToProps(p, userLang, handleTranslate, translatingPostId(), authGuard, t)}
+                        onPostClick={() => navigate(post(p.postId))}
+                        onCopyLink={() => handleCopyLink(p.postId)}
+                        onSendViaChat={() => handleOpenShareDialog(p.postId)}
+                      />
+                    )}
+                  </For>
+                </div>
+              }
+            >
+              <For each={posts()}>
+                {(p) => (
+                  <div class="bg-[var(--bg-surface)] rounded-xl">
+                    <FeedPost
+                      {...postDataToProps(p, userLang, handleTranslate, translatingPostId(), authGuard, t)}
+                      onPostClick={() => navigate(post(p.postId))}
+                      onCopyLink={() => handleCopyLink(p.postId)}
+                      onSendViaChat={() => handleOpenShareDialog(p.postId)}
+                    />
+                  </div>
+                )}
+              </For>
+            </Show>
+          </Show>
         </Show>
-      </Show>
+      </div>
 
       {/* Mobile: FAB + compose drawer */}
       <Show when={isMobile()}>
@@ -273,6 +362,9 @@ export const FeedPage: Component = () => {
           onOpenChange={setComposeOpen}
           avatarUrl={cachedAvatarUrl()}
           onPost={handlePost}
+          placeholder={t('feed.compose')}
+          postLabel={t('common.post')}
+          publishNewSongLabel={t('feed.publishNewSong')}
         />
       </Show>
 
@@ -283,6 +375,30 @@ export const FeedPage: Component = () => {
         recipients={shareRecipients()}
         onSend={handleShareSend}
         isSending={isSending()}
+      />
+
+      {/* Create room modal */}
+      <CreateRoomModal
+        open={createRoomOpen()}
+        onOpenChange={setCreateRoomOpen}
+        onGoLive={(opts: CreateRoomOptions) => {
+          if (!auth.isAuthenticated()) {
+            openAuthDialog()
+            return
+          }
+          navigate(room('new') + `?visibility=${opts.visibility}&ai_enabled=${opts.aiEnabled}`)
+        }}
+        labels={{
+          createRoom: t('room.createRoom'),
+          visibility: t('room.visibility'),
+          open: t('room.open'),
+          openDescription: t('room.openDescription'),
+          private: t('room.private'),
+          privateDescription: t('room.privateDescription'),
+          aiAssistant: t('room.aiAssistant'),
+          aiDescription: t('room.aiDescription'),
+          create: t('common.create'),
+        }}
       />
     </div>
   )
