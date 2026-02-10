@@ -86,6 +86,7 @@ export const ShareContentDialog: Component<ShareContentDialogProps> = (props) =>
       const result = await manageAccess('grant', authContext, pkp.publicKey, {
         contentId: props.contentId,
         grantee: addr,
+        eoaAddress: auth.eoaAddress() || undefined,
       })
 
       setTxHash(result.txHash)

@@ -8,7 +8,7 @@ import { useI18n } from '@heaven/i18n/solid'
 import type { TranslationKey } from '@heaven/i18n'
 import { useAuth, useXMTP } from '../providers'
 import { openUserMenu } from '../lib/user-menu'
-import { fetchFeedPosts, translatePost, likePost, getUserLang, batchGetLikedStates, type FeedPostData } from '../lib/heaven/posts'
+import { fetchFeedPosts, translatePost, likePost, flagPost, getUserLang, batchGetLikedStates, type FeedPostData } from '../lib/heaven/posts'
 import { getPrimaryNamesBatch, getTextRecordsBatch } from '../lib/heaven/registry'
 import { resolveAvatarUri } from '../lib/heaven/avatar-resolver'
 import { openAuthDialog } from '../lib/auth-dialog'
@@ -34,6 +34,7 @@ function postDataToProps(
     isLiked?: boolean
     onLike: (postId: string) => void
     onComment: (postId: string) => void
+    onReportPost: (postId: string) => void
   },
 ): FeedPostProps {
   const media: FeedPostMedia | undefined = p.photoUrls?.length
@@ -54,6 +55,7 @@ function postDataToProps(
     onComment: authGuard(() => opts.onComment(p.postId)),
     onRepost: authGuard(() => { /* TODO: wire to repost */ }),
     onQuote: authGuard(() => { /* TODO: wire to quote compose */ }),
+    onReportPost: authGuard(() => opts.onReportPost(p.postId)),
     translations: p.translations,
     userLang,
     postLang: p.language,
@@ -283,6 +285,19 @@ export const FeedPage: Component = () => {
     navigate(post(postId))
   }
 
+  const handleReport = async (postId: string) => {
+    const addr = auth.pkpAddress()
+    const pkpInfo = auth.pkpInfo()
+    if (!addr || !pkpInfo) return
+
+    try {
+      const authContext = await auth.getAuthContext()
+      await flagPost(postId, 0, (msg) => auth.signMessage(msg), authContext, pkpInfo.publicKey)
+    } catch (err) {
+      console.error('Report failed:', err)
+    }
+  }
+
   // Map XMTP conversations to share recipients
   const shareRecipients = createMemo<ShareRecipient[]>(() =>
     xmtp.conversations().map((c) => ({
@@ -401,6 +416,7 @@ export const FeedPage: Component = () => {
                         isLiked: likedStates().get(p.postId),
                         onLike: handleLike,
                         onComment: handleComment,
+                        onReportPost: handleReport,
                       })}
                         onPostClick={() => navigate(post(p.postId))}
                         onCopyLink={() => handleCopyLink(p.postId)}
@@ -419,6 +435,7 @@ export const FeedPage: Component = () => {
                         isLiked: likedStates().get(p.postId),
                         onLike: handleLike,
                         onComment: handleComment,
+                        onReportPost: handleReport,
                       })}
                       onPostClick={() => navigate(post(p.postId))}
                       onCopyLink={() => handleCopyLink(p.postId)}

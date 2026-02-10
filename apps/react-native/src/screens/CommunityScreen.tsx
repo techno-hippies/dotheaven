@@ -47,6 +47,7 @@ export const CommunityScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <MobileHeader
+        title="Community"
         isAuthenticated={isAuthenticated}
         onAvatarPress={drawer.open}
       />

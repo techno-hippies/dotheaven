@@ -1,20 +1,32 @@
-[13:34:45.263] [INFO] storybook v10.2.1
-[13:34:45.878] [DEBUG] Getting package.json info for /media/t42/th42/Code/dotheaven/packages/ui/package.json...
-[13:34:45.975] [DEBUG] Serving static files from packages/ui/public at /
-[13:34:45.978] [INFO] Starting...
-[13:34:45.992] [WARN] unable to find package.json for @kobalte/core
-[13:34:46.490] [ERROR] [38;2;241;97;97mError: Build failed with 2 errors:
-.storybook/manager.ts:1:23: ERROR: Could not resolve "@storybook/manager-api"
-.storybook/manager.ts:2:23: ERROR: Could not resolve "@storybook/theming"[39m
-    at failureErrorWithLog (/media/t42/th42/Code/dotheaven/node_modules/.bun/esbuild@0.27.2/node_modules/esbuild/lib/main.js:1467:15)
-    at /media/t42/th42/Code/dotheaven/node_modules/.bun/esbuild@0.27.2/node_modules/esbuild/lib/main.js:926:25
-    at runOnEndCallbacks (/media/t42/th42/Code/dotheaven/node_modules/.bun/esbuild@0.27.2/node_modules/esbuild/lib/main.js:1307:45)
-    at buildResponseToResult (/media/t42/th42/Code/dotheaven/node_modules/.bun/esbuild@0.27.2/node_modules/esbuild/lib/main.js:924:7)
-    at /media/t42/th42/Code/dotheaven/node_modules/.bun/esbuild@0.27.2/node_modules/esbuild/lib/main.js:951:16
-    at responseCallbacks.<computed> (/media/t42/th42/Code/dotheaven/node_modules/.bun/esbuild@0.27.2/node_modules/esbuild/lib/main.js:603:9)
-    at handleIncomingPacket (/media/t42/th42/Code/dotheaven/node_modules/.bun/esbuild@0.27.2/node_modules/esbuild/lib/main.js:658:12)
-    at Socket.readFromStdout (/media/t42/th42/Code/dotheaven/node_modules/.bun/esbuild@0.27.2/node_modules/esbuild/lib/main.js:581:7)
-    at Socket.emit (node:events:518:28)
-    at addChunk (node:internal/streams/readable:561:12)
-[13:34:46.496] [WARN] Broken build, fix the error above.
+[11:06:42.345] [INFO] storybook v10.2.1
+[11:06:42.901] [DEBUG] Getting package.json info for /media/t42/th42/Code/dotheaven/packages/ui/package.json...
+[11:06:42.983] [DEBUG] Serving static files from packages/ui/public at /
+[11:06:42.987] [INFO] Starting...
+[11:06:43.004] [WARN] unable to find package.json for @kobalte/core
+[11:06:43.604] [DEBUG] Starting preview..
+[11:06:43.616] [WARN] 🚨 Unable to index ./src/composite/media/discover-page.stories.tsx:
+  SyntaxError: Identifier 'AlbumCover' has already been declared. (13:9)
+    at constructor (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+114516c10a374cf0/node_modules/storybook/dist/_node-chunks/chunk-FLT5MUVI.js:12175:21)
+    at Parser.raise (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+114516c10a374cf0/node_modules/storybook/dist/_node-chunks/chunk-FLT5MUVI.js:16355:71)
+    at TypeScriptScopeHandler.declareName (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+114516c10a374cf0/node_modules/storybook/dist/_node-chunks/chunk-FLT5MUVI.js:15175:51)
+    at Parser.declareNameFromIdentifier (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+114516c10a374cf0/node_modules/storybook/dist/_node-chunks/chunk-FLT5MUVI.js:17009:20)
+    at Parser.checkIdentifier (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+114516c10a374cf0/node_modules/storybook/dist/_node-chunks/chunk-FLT5MUVI.js:17006:126)
+    at Parser.checkLVal (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+114516c10a374cf0/node_modules/storybook/dist/_node-chunks/chunk-FLT5MUVI.js:16973:16)
+    at Parser.finishImportSpecifier (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+114516c10a374cf0/node_modules/storybook/dist/_node-chunks/chunk-FLT5MUVI.js:20980:21)
+    at Parser.parseImportSpecifier (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+114516c10a374cf0/node_modules/storybook/dist/_node-chunks/chunk-FLT5MUVI.js:21065:21)
+    at Parser.parseImportSpecifier (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+114516c10a374cf0/node_modules/storybook/dist/_node-chunks/chunk-FLT5MUVI.js:18590:220)
+    at Parser.parseNamedImportSpecifiers (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+114516c10a374cf0/node_modules/storybook/dist/_node-chunks/chunk-FLT5MUVI.js:21048:38)
+[11:06:43.622] [ERROR] Failed to build the preview
+[11:06:43.623] [ERROR] Error: Unable to index ./src/composite/media/discover-page.stories.tsx
+    at _StoryIndexGenerator.getIndexAndStats (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+114516c10a374cf0/node_modules/storybook/dist/core-server/index.js:6082:15)
+    at async _StoryIndexGenerator.getIndex (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+114516c10a374cf0/node_modules/storybook/dist/core-server/index.js:6071:13)
+    at async getOptimizeDeps (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/@storybook+builder-vite@10.2.1+bb6b5c67d08e2ef2/node_modules/@storybook/builder-vite/dist/index.js:1845:15)
+    at async createViteServer (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/@storybook+builder-vite@10.2.1+bb6b5c67d08e2ef2/node_modules/@storybook/builder-vite/dist/index.js:1871:19)
+    at async Module.start (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/@storybook+builder-vite@10.2.1+bb6b5c67d08e2ef2/node_modules/@storybook/builder-vite/dist/index.js:1906:17)
+    at async storybookDevServer (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+114516c10a374cf0/node_modules/storybook/dist/core-server/index.js:7207:83)
+    at async buildOrThrow (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+114516c10a374cf0/node_modules/storybook/dist/core-server/index.js:4504:12)
+    at async buildDevStandalone (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+114516c10a374cf0/node_modules/storybook/dist/core-server/index.js:7577:66)
+    at async withTelemetry (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+114516c10a374cf0/node_modules/storybook/dist/_node-chunks/chunk-KNMEGL7N.js:218:12)
+    at async dev (file:///media/t42/th42/Code/dotheaven/node_modules/.bun/storybook@10.2.1+114516c10a374cf0/node_modules/storybook/dist/bin/core.js:2734:3)
+[11:06:43.626] [WARN] Broken build, fix the error above.
 You may need to refresh the browser.

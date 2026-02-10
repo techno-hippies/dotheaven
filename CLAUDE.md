@@ -37,7 +37,6 @@ dotheaven/
 │   ├── aa-gateway/        # AA Gateway (ERC-4337 paymaster + UserOp relay)
 │   ├── alto/              # Pimlico Alto bundler (git submodule)
 │   ├── heaven-api/        # Cloudflare Worker API (photos, meals, claims, names)
-│   ├── heaven-images/     # Cloudflare Worker for image watermarking
 │   ├── heaven-resolver/   # MusicBrainz proxy + image rehosting
 │   ├── session-voice/     # Voice rooms (Agora + Durable Objects)
 │   └── lit-relayer/       # Lit PKP minting relayer (Vercel)
@@ -59,6 +58,53 @@ bun check            # Type check all packages
 - User signs in with passkey → gets a PKP wallet address
 - PKP can sign messages for XMTP and other services
 - See `apps/frontend/src/providers/AuthContext.tsx`
+
+#### Lit Network Switching (naga-dev ↔ naga-test)
+Two Lit networks are supported. **Switching is a single env var change:**
+
+```bash
+# In apps/frontend/.env:
+VITE_LIT_NETWORK=naga-test   # (default) — stable, requires tstLPX tokens
+VITE_LIT_NETWORK=naga-dev    # free but less stable (can have 500 errors)
+```
+
+**How it works:**
+- `config.ts` reads `VITE_LIT_NETWORK` → selects network object, auth service URL
+- `action-cids.ts` embeds both CID maps (mirroring `lit-actions/cids/dev.json` and `test.json`) → selects correct CIDs per network
+- Every CID is also individually overrideable via `VITE_*_CID` env vars
+- Backend scripts use `LIT_NETWORK` env var: `LIT_NETWORK=naga-test bun scripts/setup.ts <action>`
+- Relayer (`services/lit-relayer`) reads `LIT_NETWORK` on Vercel
+
+**Per-network infrastructure:**
+
+| | naga-dev | naga-test |
+|--|----------|-----------|
+| Cost | Free | Requires tstLPX |
+| Stability | Flaky (500 errors) | Stable |
+| CID file | `lit-actions/cids/dev.json` | `lit-actions/cids/test.json` |
+| PKP file | `lit-actions/output/pkp-naga-dev.json` | `lit-actions/output/pkp-naga-test.json` |
+| Keys dir | `lit-actions/keys/dev/` | `lit-actions/keys/test/` |
+| Sponsor PKP | `0x089fc7801D8f7D487765343a7946b1b97A7d29D4` | `0x7222c04A7C626261D2255Cc40e6Be8BB4Aa8e171` |
+| Deployer EOA | `0x9456aec64179FE39a1d0a681de7613d5955E75D3` | (same) |
+
+**naga-test payment management:**
+```bash
+cd lit-actions
+# Check balance
+LIT_NETWORK=naga-test bun scripts/check-payment.ts
+# Deposit tstLPX (after funding deployer EOA from faucet)
+LIT_NETWORK=naga-test bun scripts/deposit-payment.ts 5
+# Fund deployer EOA: https://chronicle-yellowstone-faucet.getlit.dev/
+# Address: 0x9456aec64179FE39a1d0a681de7613d5955E75D3
+```
+
+**After deploying a new action**, update the CID in `action-cids.ts`'s `CID_MAP` for the deployed network to match the value in `lit-actions/cids/*.json`.
+
+**Key files**:
+- `apps/frontend/src/lib/lit/config.ts` — network object + auth service URL (reads `VITE_LIT_NETWORK`)
+- `apps/frontend/src/lib/lit/action-cids.ts` — dual CID maps + per-CID env overrides
+- `apps/frontend/src/lib/lit/signer-pkp.ts` — PKP signer (reads sponsor PKP from config)
+- `services/lit-relayer/` — Vercel-deployed relayer (reads `LIT_NETWORK` env var)
 
 ### Messaging (XMTP)
 - **Peer-to-peer encrypted messaging** via XMTP protocol
@@ -191,10 +237,10 @@ bun check            # Type check all packages
   - `packages/ui/src/data/tags.ts` — tag dictionary + pack/unpack helpers
   - `subgraphs/profiles/` — subgraph definition (schema, mapping, ABI)
 
-### Social Feed (Posts + Translation)
+### Social Feed (Posts + Engagement)
 - **PostsV1 contract**: `0xFe674F421c2bBB6D664c7F5bc0D5A0204EE0bFA6` on MegaETH (chain 6343)
 - **EngagementV2 contract**: `0xAF769d204e51b64D282083Eb0493F6f37cd93138` on MegaETH (chain 6343)
-- **Lit Actions**: `post-register-v1.js` (create posts), `post-translate-v1.js` (translate posts)
+- **Lit Actions**: `post-register-v1.js` (create posts), `post-translate-v1.js` (translate), `like-v1.js` (like/unlike), `comment-v1.js` (comment), `flag-v1.js` (report/flag)
 - **Post creation pipeline**:
   1. Text safety check via OpenRouter LLM — returns `{ safe, isAdult, lang }` (ISO 639-1 language code)
   2. Metadata uploaded to IPFS (Filebase) with `language` field
@@ -202,16 +248,24 @@ bun check            # Type check all packages
   4. Photo posts also register on Story Protocol (text posts skip Story)
 - **Language detection**: LLM safety check doubles as language detector. Language stored in IPFS metadata, used by frontend to show/hide "Translate" button (`postLang !== userLang`)
 - **Translation pipeline**: User signs EIP-191, Lit Action calls LLM for translation, sponsor PKP broadcasts `EngagementV2.translateFor()`. Translations stored as events (no storage cost)
-- **Data source**: `dotheaven-activity/14.0.0` subgraph indexes `PostCreated` + `TranslationAdded` events
+- **Engagement pipeline** (all gasless via sponsor PKP, all auth-gated):
+  - **Like/unlike**: `likePost()` → Lit Action → `EngagementV2.likeFor()`/`unlikeFor()`. Optimistic UI toggle (heart fills red, count ±1, reverts on failure). Liked state fetched via `liked(bytes32,address)` RPC on page load.
+  - **Comment**: FeedPage navigates to PostPage; PostPage `handleSubmitComment()` → Lit Action → `EngagementV2.commentFor()`. Refreshes comments query + increments count on success.
+  - **Report/flag**: `flagPost(reason=0)` → Lit Action → `EngagementV2.flagFor()`. Triggered from three-dot menu "Report Post".
+  - **Repost/quote**: TODO — not yet wired
+- **Data source**: `dotheaven-activity/14.0.0` subgraph indexes `PostCreated` + `TranslationAdded` + `Liked` + `Unliked` + `CommentAdded` + `Flagged` events
 - **Feed resolution**: Each post resolves author name/avatar via heaven name lookup + RecordsV1, fetches text/photos from IPFS metadata
 - **Compose**: `ComposeBox` (desktop inline) / `ComposeDrawer` (mobile FAB) — currently stubbed (`console.log`), not yet wired to Lit Action
 - **Key files**:
-  - `apps/frontend/src/pages/FeedPage.tsx` — feed with TanStack Query, translation support
-  - `apps/frontend/src/pages/PostPage.tsx` — single post detail view
-  - `apps/frontend/src/lib/heaven/posts.ts` — subgraph queries, IPFS metadata fetch, translation via Lit Action
-  - `packages/ui/src/composite/feed/feed-post.tsx` — FeedPost component with `postLang` / `needsTranslation()` logic
+  - `apps/frontend/src/pages/FeedPage.tsx` — feed with TanStack Query, engagement (like/comment/report/translate), optimistic liked state
+  - `apps/frontend/src/pages/PostPage.tsx` — single post detail view with like, comment submit, report, translate
+  - `apps/frontend/src/lib/heaven/posts.ts` — subgraph queries, IPFS metadata fetch, engagement service functions (`likePost`, `commentPost`, `flagPost`, `translatePost`), RPC liked-state queries (`getHasLiked`, `batchGetLikedStates`)
+  - `packages/ui/src/composite/feed/feed-post.tsx` — FeedPost component with `isLiked`, `postLang` / `needsTranslation()` logic
   - `lit-actions/features/social/post-register-v1.js` — post creation action
   - `lit-actions/features/social/post-translate-v1.js` — translation action
+  - `lit-actions/features/social/like-v1.js` — like/unlike action
+  - `lit-actions/features/social/comment-v1.js` — comment action
+  - `lit-actions/features/social/flag-v1.js` — flag/report action
 
 ### Social Follow (FollowV1)
 - **FollowV1 contract**: `0x3F32cF9e70EF69DFFed74Dfe07034cb03cF726cb` on MegaETH (chain 6343)
@@ -321,10 +375,10 @@ Deploy: `cd subgraphs/<dir> && npx graph codegen && npx graph build && goldsky s
 
 ## Environment Variables
 ```bash
+VITE_LIT_NETWORK         # Lit network: "naga-test" (default) or "naga-dev"
 VITE_CHAT_WORKER_URL     # Cloudflare Worker for AI chat
 VITE_AGORA_APP_ID        # Agora RTC app ID for voice calls
 VITE_MEDIA_WORKER_URL    # Media Worker for photo upload + AI conversion
-VITE_HEAVEN_IMAGES_URL   # Heaven Images service for watermarking
 VITE_AA_GATEWAY_URL      # AA Gateway URL (default: http://127.0.0.1:3337)
 VITE_AA_GATEWAY_KEY      # AA Gateway API key (optional, for protected endpoints)
 VITE_RESOLVER_URL        # Heaven Resolver (MusicBrainz proxy + image rehosting)
@@ -332,6 +386,7 @@ VITE_SESSION_VOICE_URL   # Session Voice worker URL (voice rooms)
 VITE_LIT_SPONSORSHIP_API_URL  # Lit relayer URL (PKP minting)
 VITE_SELF_VERIFIER_CELO  # SelfProfileVerifier contract address (Celo Sepolia)
 VITE_VERIFICATION_MIRROR_MEGAETH  # VerificationMirror contract address (MegaETH)
+# Individual CID overrides: VITE_PLAYLIST_V1_CID, VITE_HEAVEN_CLAIM_NAME_CID, etc.
 ```
 
 ## Color Scheme (Heaven Dark Theme — Catppuccin Mocha)
@@ -386,6 +441,15 @@ VITE_VERIFICATION_MIRROR_MEGAETH  # VerificationMirror contract address (MegaETH
 | **Drawers** | `rounded-t-xl` | Top corners only |
 
 **Rule of thumb**: Interactive elements (buttons, chips, input fields, selects) are `rounded-full`. Textareas are `rounded-2xl`. Containers (cards, dialogs, dropdowns) are `rounded-md`.
+
+### Icons (IMPORTANT — No Inline SVGs)
+- **All icons live in `packages/ui/src/icons/index.tsx`** — NEVER add inline `<svg>` elements in components
+- **To use an icon**: `import { Heart, Plus } from '@heaven/ui/icons'` (or `'../../icons'` within the UI package)
+- **To add a new icon**: Add it to `packages/ui/src/icons/index.tsx` following the existing pattern (256x256 viewBox, `currentColor` fill, `Component<IconProps>`)
+- **Phosphor source**: Copy SVG paths from `/media/t42/th42/Code/phosphor-icons/public/assets/phosphor.iconjar/icons/` — use the regular weight (`icon-name.svg`) or fill weight (`icon-name-fill.svg`)
+- **Naming**: Regular = `IconName`, Fill = `IconNameFill` (e.g., `Heart` / `HeartFill`)
+- **Sizing**: Icons accept a `class` prop — use Tailwind classes like `class="w-5 h-5"` at the call site
+- **Exceptions**: Custom multi-color SVGs (e.g. verification badges), animated spinners, and blockchain logos may remain inline
 
 ### IconButton Standard
 - **Always use `IconButton`** for icon-only buttons — never raw `<button>` with inline icon

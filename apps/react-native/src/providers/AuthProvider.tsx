@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
 import { useLitBridge } from './LitProvider';
@@ -68,6 +68,27 @@ function normalizePkpInfo(raw: unknown): PKPInfo {
   };
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object' && typeof (error as any).message === 'string') {
+    return (error as any).message;
+  }
+  return String(error);
+}
+
+function isStaleAuthContextError(error: unknown): boolean {
+  const message = getErrorMessage(error).toLowerCase();
+  return (
+    message.includes('no auth context') ||
+    message.includes('invalidauthsig') ||
+    message.includes('auth_sig passed is invalid') ||
+    message.includes("can't get auth context") ||
+    message.includes('signature error') ||
+    message.includes('session expired')
+  );
+}
+
 interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -77,6 +98,8 @@ interface AuthContextValue {
   register: () => Promise<void>;
   authenticate: () => Promise<void>;
   createAuthContext: () => Promise<any>;
+  /** Sign an arbitrary message using the PKP. Returns hex-encoded signature. */
+  signMessage: (message: string) => Promise<string>;
   completeOnboarding: () => void;
   logout: () => Promise<void>;
 }
@@ -89,6 +112,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [authData, setAuthData] = useState<AuthData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isNewUser, setIsNewUser] = useState(false);
+  const authContextCacheRef = useRef<{
+    pkpPubkey: string;
+    authMethodId: string;
+    accessToken?: string;
+    authContext: any;
+  } | null>(null);
 
   // Restore persisted auth on mount + check onboarding status
   useEffect(() => {
@@ -124,6 +153,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     })();
   }, []);
 
+  useEffect(() => {
+    const cached = authContextCacheRef.current;
+    if (!cached || !pkpInfo || !authData) {
+      authContextCacheRef.current = null;
+      return;
+    }
+    if (
+      cached.pkpPubkey !== pkpInfo.pubkey ||
+      cached.authMethodId !== authData.authMethodId ||
+      cached.accessToken !== authData.accessToken
+    ) {
+      authContextCacheRef.current = null;
+    }
+  }, [pkpInfo?.pubkey, authData?.authMethodId, authData?.accessToken]);
+
   const persistAuth = async (pkp: PKPInfo | null, auth: AuthData | null) => {
     if (pkp) {
       await AsyncStorage.setItem(STORAGE_KEY_PKP, JSON.stringify(normalizeBigInts(pkp)));
@@ -152,6 +196,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const pkp = normalizePkpInfo(result.pkpInfo);
       const auth = normalizeAuthData(result.authData);
 
+      authContextCacheRef.current = null;
       setPkpInfo(pkp);
       setAuthData(auth);
       await persistAuth(pkp, auth);
@@ -174,6 +219,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }, 120000);
 
       const auth = normalizeAuthData(result);
+      authContextCacheRef.current = null;
       setAuthData(auth);
 
       // Look up PKPs for this auth
@@ -197,9 +243,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [bridge, isReady]);
 
-  const createAuthCtx = useCallback(async () => {
+  const createAuthCtxInternal = useCallback(async (forceRefresh: boolean = false) => {
     if (!bridge || !isReady || !authData || !pkpInfo) {
       throw new Error('Not authenticated');
+    }
+
+    const cached = authContextCacheRef.current;
+    if (
+      !forceRefresh &&
+      cached &&
+      cached.pkpPubkey === pkpInfo.pubkey &&
+      cached.authMethodId === authData.authMethodId &&
+      cached.accessToken === authData.accessToken
+    ) {
+      return cached.authContext;
     }
 
     const result = await bridge.sendRequest('createAuthContext', {
@@ -216,14 +273,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       },
     }, 120000);
 
+    if (!result?.authContext) {
+      throw new Error('Auth context creation returned no authContext');
+    }
+
+    authContextCacheRef.current = {
+      pkpPubkey: pkpInfo.pubkey,
+      authMethodId: authData.authMethodId,
+      accessToken: authData.accessToken,
+      authContext: result.authContext,
+    };
+
     return result.authContext;
   }, [bridge, isReady, authData, pkpInfo]);
+
+  const createAuthCtx = useCallback(async () => {
+    return createAuthCtxInternal(false);
+  }, [createAuthCtxInternal]);
+
+  const signMessage = useCallback(async (message: string): Promise<string> => {
+    if (!bridge || !isReady || !pkpInfo) {
+      throw new Error('Not authenticated or Lit engine not ready');
+    }
+
+    const signWithContext = async (authContext: any) =>
+      bridge.sendRequest('signMessage', {
+        message,
+        publicKey: pkpInfo.pubkey,
+        authContext,
+      }, 60000);
+
+    let authCtx = await createAuthCtxInternal(false);
+    let result: any;
+
+    try {
+      result = await signWithContext(authCtx);
+    } catch (error) {
+      if (!isStaleAuthContextError(error)) {
+        throw error;
+      }
+
+      authContextCacheRef.current = null;
+      authCtx = await createAuthCtxInternal(true);
+      result = await signWithContext(authCtx);
+    }
+
+    if (!result?.signature) {
+      throw new Error('No signature returned from PKP signer');
+    }
+
+    return result.signature;
+  }, [bridge, isReady, pkpInfo, createAuthCtxInternal]);
 
   const completeOnboarding = useCallback(() => {
     setIsNewUser(false);
   }, []);
 
   const logout = useCallback(async () => {
+    authContextCacheRef.current = null;
     setPkpInfo(null);
     setAuthData(null);
     setIsNewUser(false);
@@ -241,6 +348,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         register,
         authenticate,
         createAuthContext: createAuthCtx,
+        signMessage,
         completeOnboarding,
         logout,
       }}

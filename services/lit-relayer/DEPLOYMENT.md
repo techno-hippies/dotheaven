@@ -22,7 +22,7 @@ Create `.env` in `services/lit-relayer/`:
 
 ```bash
 LIT_RELAYER_PRIVATE_KEY=0x...
-LIT_NETWORK=naga-dev
+LIT_NETWORK=naga-test   # or naga-dev (free but less stable)
 ```
 
 ### 3. Install Vercel CLI

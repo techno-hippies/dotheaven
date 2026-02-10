@@ -8,22 +8,22 @@ import {
   View,
 } from 'react-native';
 import { MobileHeader } from '../components/MobileHeader';
+import { LiveRoomsRow, type LiveRoom } from '../components/LiveRoomsRow';
 import { FeedPost } from '../components/FeedPost';
 import { useAuth } from '../providers/AuthProvider';
 import { DrawerContext } from '../navigation/TabNavigator';
 import { fetchFeedPosts, timeAgo, type FeedPostData } from '../lib/posts';
 import { colors } from '../lib/theme';
-import { TabBar } from '../ui';
-
-type FeedTab = 'foryou' | 'following';
 
 export const FeedScreen: React.FC = () => {
   const { isAuthenticated } = useAuth();
   const drawer = useContext(DrawerContext);
-  const [activeTab, setActiveTab] = useState<FeedTab>('foryou');
   const [posts, setPosts] = useState<FeedPostData[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // TODO: fetch live rooms from backend
+  const [liveRooms] = useState<LiveRoom[]>([]);
 
   const loadPosts = useCallback(async () => {
     try {
@@ -51,17 +51,9 @@ export const FeedScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <MobileHeader
+        title="Home"
         isAuthenticated={isAuthenticated}
         onAvatarPress={drawer.open}
-      />
-
-      <TabBar
-        tabs={[
-          { key: 'foryou', label: 'For you' },
-          { key: 'following', label: 'Following' },
-        ]}
-        activeTab={activeTab}
-        onTabPress={(key) => setActiveTab(key as FeedTab)}
       />
 
       {/* Posts */}
@@ -87,6 +79,14 @@ export const FeedScreen: React.FC = () => {
             />
           }
         >
+          {/* Live rooms row */}
+          <LiveRoomsRow
+            rooms={liveRooms}
+            onCreateRoom={() => console.log('[FeedScreen] Create room')}
+            onRoomPress={(id) => console.log('[FeedScreen] Join room:', id)}
+          />
+          {(liveRooms.length > 0 || true) && <View style={styles.separator} />}
+
           {posts.map((post) => (
             <FeedPost
               key={post.postId}
@@ -124,6 +124,10 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: colors.textMuted,
+  },
+  separator: {
+    height: 1,
+    backgroundColor: colors.borderSubtle,
   },
   listContent: {
     paddingBottom: 140,

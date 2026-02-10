@@ -2,7 +2,8 @@ import type { Component } from 'solid-js'
 import { createMemo, createEffect, onMount } from 'solid-js'
 import { createStore } from 'solid-js/store'
 import { createQuery } from '@tanstack/solid-query'
-import { WalletAssets, type ConnectedWallet } from '@heaven/ui'
+import { WalletAssets, PageHeader, type ConnectedWallet } from '@heaven/ui'
+import { useI18n } from '@heaven/i18n/solid'
 import { useAuth } from '../providers'
 import { getEnsProfile } from '../lib/heaven/avatar-resolver'
 import {
@@ -312,8 +313,11 @@ export const WalletPage: Component = () => {
     }))
   )
 
+  const { t } = useI18n()
+
   return (
     <div class="h-full overflow-y-auto">
+      <PageHeader title={t('nav.wallet')} />
       <WalletAssets
         address={auth.pkpAddress() || '0x0000000000000000000000000000000000000000'}
         totalBalance={auth.isAuthenticated() ? totalBalanceUSD() : '$0.00'}

@@ -19,6 +19,7 @@ import {
   Avatar,
   useIsMobile,
 } from '@heaven/ui'
+import { Phone, MicrophoneIcon, MicrophoneSlash, PhoneDisconnect, ChevronLeft } from '@heaven/ui/icons'
 import { CHAT } from '@heaven/core'
 import { useAuth } from '../providers'
 import { useVoice, type VoiceState } from '../lib/voice'
@@ -48,39 +49,6 @@ interface Message {
   timestamp: Date
 }
 
-// =============================================================================
-// Icons
-// =============================================================================
-
-const PhoneIcon = () => (
-  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
-    <path d="M222.37,158.46l-47.11-21.11-.13-.06a16,16,0,0,0-15.17,1.4,8.12,8.12,0,0,0-.75.56L134.87,160c-15.42-7.49-31.34-23.29-38.83-38.51l20.78-24.71c.2-.25.39-.5.57-.77a16,16,0,0,0,1.32-15.06l0-.12L97.54,33.64a16,16,0,0,0-16.62-9.52A56.26,56.26,0,0,0,32,80c0,79.4,64.6,144,144,144a56.26,56.26,0,0,0,55.88-48.92A16,16,0,0,0,222.37,158.46Z" />
-  </svg>
-)
-
-const MicIcon = () => (
-  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
-    <path d="M128,176a48.05,48.05,0,0,0,48-48V64a48,48,0,0,0-96,0v64A48.05,48.05,0,0,0,128,176ZM96,64a32,32,0,0,1,64,0v64a32,32,0,0,1-64,0Zm40,143.6V240a8,8,0,0,1-16,0V207.6A80.11,80.11,0,0,1,48,128a8,8,0,0,1,16,0,64,64,0,0,0,128,0,8,8,0,0,1,16,0A80.11,80.11,0,0,1,136,207.6Z" />
-  </svg>
-)
-
-const MicOffIcon = () => (
-  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
-    <path d="M213.92,210.62l-160-176A8,8,0,1,0,42.08,45.38L80,87.09V128a48,48,0,0,0,73.91,40.4l10.88,12A64,64,0,0,1,64,128a8,8,0,0,0-16,0,80.11,80.11,0,0,0,72,79.6V240a8,8,0,0,0,16,0V207.6a79.84,79.84,0,0,0,39.63-15.31l26.45,29.09a8,8,0,1,0,11.84-10.76ZM128,160a32,32,0,0,1-32-32V104.69l46.92,51.62A32,32,0,0,1,128,160Zm32-32a8,8,0,0,1-1.59,4.78,8,8,0,0,1-11.48,1.64,8,8,0,0,1-1.64-11.48A8,8,0,0,1,160,128Zm8,0a8,8,0,0,0,16,0,64.07,64.07,0,0,0-56-63.49V40a8,8,0,0,0-16,0V64.51a64.33,64.33,0,0,0-22.19,6.57,8,8,0,0,0,7.88,13.92A48.2,48.2,0,0,1,128,80a48.05,48.05,0,0,1,48,48Z" />
-  </svg>
-)
-
-const EndCallIcon = () => (
-  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
-    <path d="M231.59,90.13C175.44,34,80.56,34,24.41,90.13c-13,13-20.41,34.15-20.41,58.14,0,20.57,7.71,38.93,21.74,51.74a8,8,0,0,0,5.54,2.23,8,8,0,0,0,5.53-2.23L80,156.83a8,8,0,0,0,0-11.31A120.23,120.23,0,0,1,63,123.05a8,8,0,0,0,4-6.91V88.86a135.75,135.75,0,0,1,122,0v27.28a8,8,0,0,0,4,6.91,120.23,120.23,0,0,1-17,22.47,8,8,0,0,0,0,11.31l43.17,43.18a8,8,0,0,0,5.53,2.23,8,8,0,0,0,5.54-2.23c14-12.81,21.74-31.17,21.74-51.74C252,124.28,244.59,103.13,231.59,90.13Z" />
-  </svg>
-)
-
-const ChevronLeftIcon = () => (
-  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
-    <path d="M165.66,202.34a8,8,0,0,1-11.32,11.32l-80-80a8,8,0,0,1,0-11.32l80-80a8,8,0,0,1,11.32,11.32L91.31,128Z" />
-  </svg>
-)
 
 const formatDuration = (seconds: number): string => {
   const mins = Math.floor(seconds / 60)
@@ -315,7 +283,7 @@ export const AIChatPage: Component = () => {
   return (
     <div class="h-full flex flex-col">
       {/* Chat header */}
-      <div class="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)]">
+      <div class="flex items-center justify-between px-4 h-16 border-b border-[var(--border-subtle)] flex-shrink-0">
             <div class="flex items-center gap-3">
               {/* Back button on mobile */}
               <Show when={isMobile()}>
@@ -325,7 +293,7 @@ export const AIChatPage: Component = () => {
                   aria-label="Back to messages"
                   onClick={() => navigate(CHAT)}
                 >
-                  <ChevronLeftIcon />
+                  <ChevronLeft class="w-5 h-5" />
                 </IconButton>
               </Show>
               <div class="relative">
@@ -338,12 +306,12 @@ export const AIChatPage: Component = () => {
                 </Show>
               </div>
               <div>
-                <h2 class="text-lg font-semibold text-[var(--text-primary)]">{p.name}</h2>
                 <Show
                   when={isCallActive()}
-                  fallback={<p class="text-base text-[var(--text-muted)]">AI Assistant</p>}
+                  fallback={<span class="text-base font-semibold text-[var(--text-primary)]">{p.name}</span>}
                 >
-                  <p class="text-base text-[var(--accent-purple)]">
+                  <span class="text-base font-semibold text-[var(--text-primary)]">{p.name}</span>
+                  <p class="text-sm text-[var(--accent-purple)]">
                     {voiceState() === 'connecting' && 'Connecting...'}
                     {voiceState() === 'connected' && formatDuration(voiceDuration())}
                     {voiceState() === 'error' && 'Connection failed'}
@@ -363,7 +331,7 @@ export const AIChatPage: Component = () => {
                   aria-label="Start voice call"
                   onClick={handleStartCall}
                 >
-                  <PhoneIcon />
+                  <Phone class="w-5 h-5" />
                 </IconButton>
               }
             >
@@ -376,8 +344,8 @@ export const AIChatPage: Component = () => {
                     onClick={handleToggleMute}
                     class={voiceMuted() ? 'text-[var(--accent-coral)]' : ''}
                   >
-                    <Show when={voiceMuted()} fallback={<MicIcon />}>
-                      <MicOffIcon />
+                    <Show when={voiceMuted()} fallback={<MicrophoneIcon class="w-5 h-5" />}>
+                      <MicrophoneSlash class="w-5 h-5" />
                     </Show>
                   </IconButton>
                 </Show>
@@ -388,7 +356,7 @@ export const AIChatPage: Component = () => {
                   onClick={handleEndCall}
                   class="bg-[var(--accent-coral)]/20 text-[var(--accent-coral)] hover:bg-[var(--accent-coral)]/30"
                 >
-                  <EndCallIcon />
+                  <PhoneDisconnect class="w-5 h-5" />
                 </IconButton>
               </div>
             </Show>

@@ -1,7 +1,7 @@
 import { type Component, Show, For, createMemo, createSignal, createEffect, createResource } from 'solid-js'
 import { useParams } from '@solidjs/router'
 import { createQuery } from '@tanstack/solid-query'
-import { TrackList, IconButton } from '@heaven/ui'
+import { TrackList, IconButton, PageHero } from '@heaven/ui'
 import {
   Globe,
   Database,
@@ -181,58 +181,52 @@ export const ArtistPage: Component = () => {
           return (
             <div class="h-full overflow-y-auto">
               <div class="pb-4">
-                <div class="relative overflow-hidden h-[280px] md:h-[420px]">
-                  {/* Show skeleton while rehosting, then show image */}
-                  <Show when={!rehostedImageUrl.loading && heroImageSrc()} fallback={
-                    <div class="absolute inset-0 bg-[var(--bg-elevated)] animate-pulse" />
-                  }>
-                    {(src) => (
-                      <img
-                        src={src()}
-                        alt={artist().name}
-                        class="absolute inset-0 w-full h-full object-cover"
-                        referrerpolicy="no-referrer"
-                        crossorigin="anonymous"
-                        onError={() => {
-                          const next = heroImageIndex() + 1
-                          if (next < heroImageCandidates().length) setHeroImageIndex(next)
-                        }}
-                      />
-                    )}
-                  </Show>
-                  <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/20" />
-                  <div class="absolute inset-x-0 bottom-0 p-4 md:p-8">
-                    <h1 class="text-4xl md:text-7xl font-black text-white leading-none tracking-tight">
-                      {artist().name}
-                    </h1>
-                    <div class="mt-3 md:mt-4 flex items-end justify-between gap-3 flex-wrap">
-                      <div class="text-base md:text-base text-white/95">
-                        {uniqueListeners().toLocaleString()} listeners
+                <PageHero
+                  title={artist().name}
+                  background={
+                    <Show when={!rehostedImageUrl.loading && heroImageSrc()} fallback={
+                      <div class="absolute inset-0 bg-[var(--bg-elevated)] animate-pulse" />
+                    }>
+                      {(src) => (
+                        <img
+                          src={src()}
+                          alt={artist().name}
+                          class="absolute inset-0 w-full h-full object-cover"
+                          referrerpolicy="no-referrer"
+                          crossorigin="anonymous"
+                          onError={() => {
+                            const next = heroImageIndex() + 1
+                            if (next < heroImageCandidates().length) setHeroImageIndex(next)
+                          }}
+                        />
+                      )}
+                    </Show>
+                  }
+                  subtitle={<>{uniqueListeners().toLocaleString()} listeners</>}
+                  actions={
+                    <Show when={linkEntries().length > 0}>
+                      <div class="flex flex-wrap gap-1">
+                        <For each={linkEntries()}>
+                          {([key, url]) => {
+                            const Icon = getLinkIcon(key)!
+                            return (
+                              <a
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={linkLabel(key)}
+                              >
+                                <IconButton variant="soft" size="md" aria-label={linkLabel(key)}>
+                                  <Icon class="w-5 h-5" />
+                                </IconButton>
+                              </a>
+                            )
+                          }}
+                        </For>
                       </div>
-                      <Show when={linkEntries().length > 0}>
-                        <div class="flex flex-wrap gap-1">
-                          <For each={linkEntries()}>
-                            {([key, url]) => {
-                              const Icon = getLinkIcon(key)!
-                              return (
-                                <a
-                                  href={url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title={linkLabel(key)}
-                                >
-                                  <IconButton variant="soft" size="md" aria-label={linkLabel(key)}>
-                                    <Icon class="w-5 h-5" />
-                                  </IconButton>
-                                </a>
-                              )
-                            }}
-                          </For>
-                        </div>
-                      </Show>
-                    </div>
-                  </div>
-                </div>
+                    </Show>
+                  }
+                />
               </div>
 
               {/* Track list */}

@@ -98,6 +98,7 @@ export const Default: StoryObj = {
           currentBalance="$5.00"
           daysRemaining={1250}
           balanceNum={5}
+          monthlyCost="$0.12"
           loading={false}
           onDeposit={(amount) => { console.log('Deposit:', amount); setAddFundsOpen(false) }}
         />
@@ -135,6 +136,7 @@ export const LowBalance: StoryObj = {
           currentBalance="$0.08"
           daysRemaining={5}
           balanceNum={0.08}
+          monthlyCost="$0.12"
           loading={false}
           onDeposit={(amount) => { console.log('Deposit:', amount); setAddFundsOpen(false) }}
         />
@@ -163,6 +165,7 @@ export const StorageCardLowBalance: StoryObj = {
           currentBalance="$0.08"
           daysRemaining={5}
           balanceNum={0.08}
+          monthlyCost="$0.12"
           loading={false}
           onDeposit={(amount) => { console.log('Deposit:', amount); setAddFundsOpen(false) }}
         />
@@ -207,6 +210,7 @@ export const Mobile: StoryObj = {
           currentBalance="$5.00"
           daysRemaining={1250}
           balanceNum={5}
+          monthlyCost="$0.12"
           loading={false}
           onDeposit={(amount) => { console.log('Deposit:', amount); setAddFundsOpen(false) }}
         />
@@ -242,6 +246,7 @@ export const FirstTime: StoryObj = {
           currentBalance="$0.00"
           daysRemaining={null}
           balanceNum={0}
+          monthlyCost="$0.00"
           loading={false}
           onDeposit={(amount) => { console.log('Deposit:', amount); setAddFundsOpen(false) }}
         />
@@ -281,6 +286,7 @@ export const AddFundsOpen: StoryObj = {
           currentBalance="$5.00"
           daysRemaining={1250}
           balanceNum={5}
+          monthlyCost="$0.12"
           loading={false}
           onDeposit={(amount) => { console.log('Deposit:', amount); setOpen(false) }}
         />
@@ -302,6 +308,7 @@ export const AddFundsLoading: StoryObj = {
           currentBalance="$0.08"
           daysRemaining={5}
           balanceNum={0.08}
+          monthlyCost="$0.12"
           loading={true}
           onDeposit={() => {}}
         />

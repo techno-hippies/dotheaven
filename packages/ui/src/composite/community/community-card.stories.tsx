@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { CommunityCard } from './community-card'
 
 const meta: Meta<typeof CommunityCard> = {
-  title: 'Search/CommunityCard',
+  title: 'Community/CommunityCard',
   component: CommunityCard,
   parameters: { layout: 'centered' },
   decorators: [

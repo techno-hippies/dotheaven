@@ -91,7 +91,13 @@ export async function registerHeavenName(
   authContext: PKPAuthContext,
   pkpPublicKey: string,
 ): Promise<RegisterResult> {
-  const litClient = await getLitClient()
+  // Overall timeout to prevent indefinite hanging
+  const timeoutPromise = new Promise<RegisterResult>((_, reject) =>
+    setTimeout(() => reject(new Error('Registration timed out after 90 seconds. Lit network may be experiencing issues. Please try again.')), 90000)
+  )
+
+  const registerPromise = (async () => {
+    const litClient = await getLitClient()
 
   const timestamp = Date.now()
   const nonce = Math.floor(Math.random() * 1_000_000_000)
@@ -101,29 +107,99 @@ export async function registerHeavenName(
   // because it works with both WebAuthn and EOA auth contexts.
   const { signMessageWithPKP } = await import('../lit/signer-pkp')
   const message = `heaven:register:${label}:${recipientAddress}:${timestamp}:${nonce}`
+  const { computeAddress } = await import('ethers')
+  const pkpAddress = computeAddress(pkpPublicKey).toLowerCase() as `0x${string}`
   const signature = await signMessageWithPKP(
-    { publicKey: pkpPublicKey, ethAddress: recipientAddress, tokenId: '' },
+    { publicKey: pkpPublicKey, ethAddress: pkpAddress, tokenId: '' },
     authContext,
     message,
   )
 
-  // Must use ipfsId (not inline code) so Lit nodes can verify the action
-  // is permitted to sign with the sponsor PKP
-  const result = await litClient.executeJs({
-    ipfsId: HEAVEN_CLAIM_NAME_CID,
-    authContext,
-    jsParams: {
-      recipient: recipientAddress,
-      label,
-      userPkpPublicKey: pkpPublicKey,
-      timestamp,
-      nonce,
-      signature,
-    },
-  })
+  const claimCidCandidates = [HEAVEN_CLAIM_NAME_CID]
+  const isRetryableLitNodeFault = (message: string): boolean => {
+    const msg = message.toLowerCase()
+    return (
+      msg.includes('nodesystemfault') ||
+      msg.includes('nodeunknownerror') ||
+      msg.includes('ecdsa signing failed') ||
+      msg.includes('could not delete file') ||
+      msg.includes('/presigns/') ||
+      msg.includes('.cbor') ||
+      msg.includes('500') ||
+      msg.includes('internal server error') ||
+      msg.includes('request timeout') ||
+      msg.includes('timed out')
+    )
+  }
+  const isScopeError = (message: string): boolean => {
+    const msg = message.toLowerCase()
+    return msg.includes('nodeauthsigscopetoolimited') || msg.includes('required scope [1]')
+  }
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-  const response = JSON.parse(result.response as string)
-  return response as RegisterResult
+  let lastError = 'Claim action failed'
+  for (const cid of claimCidCandidates) {
+    const maxAttemptsPerCid = 4
+    for (let attempt = 1; attempt <= maxAttemptsPerCid; attempt++) {
+      try {
+        if (import.meta.env.DEV) {
+          console.log('[HeavenRegistry] registerHeavenName executeJs', {
+            cid,
+            attempt,
+            label,
+            recipientAddress,
+          })
+        }
+        const result = await litClient.executeJs({
+          ipfsId: cid,
+          authContext,
+          jsParams: {
+            recipient: recipientAddress,
+            label,
+            userPkpPublicKey: pkpPublicKey,
+            timestamp,
+            nonce,
+            signature,
+          },
+        })
+
+        const response = JSON.parse(result.response as string) as RegisterResult
+        if (response.success) return response
+
+        const err = String(response.error || 'Unknown claim error')
+        lastError = err
+        if (isRetryableLitNodeFault(err) && attempt < maxAttemptsPerCid) {
+          await sleep(400 * attempt)
+          continue
+        }
+        if (isScopeError(err)) {
+          // Try next CID candidate
+          break
+        }
+        return response
+      } catch (error) {
+        const err = error instanceof Error ? error.message : String(error)
+        lastError = err
+        if (import.meta.env.DEV) {
+          console.warn(`[HeavenRegistry] registerHeavenName error (attempt ${attempt}/${maxAttemptsPerCid}):`, err)
+        }
+        if (isRetryableLitNodeFault(err) && attempt < maxAttemptsPerCid) {
+          await sleep(400 * attempt)
+          continue
+        }
+        if (isScopeError(err)) {
+          // Try next CID candidate
+          break
+        }
+        return { success: false, error: err }
+      }
+    }
+  }
+
+  return { success: false, error: lastError }
+  })()
+
+  return Promise.race([registerPromise, timeoutPromise])
 }
 
 /**

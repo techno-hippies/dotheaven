@@ -8,19 +8,17 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Fingerprint, Key, SignIn, CloudArrowUp } from 'phosphor-react-native';
+import { Fingerprint, Key, SignIn } from 'phosphor-react-native';
 import { useAuth } from '../providers/AuthProvider';
-import { usePlayer } from '../providers/PlayerProvider';
 import { colors, spacing, fontSize } from '../lib/theme';
-import { Button, Card, Spinner } from '../ui';
+import { Button, Spinner } from '../ui';
 import { ProfileHeader } from '../components/ProfileHeader';
+import { ProfileAbout } from '../components/ProfileAbout';
 import { useProfile } from '../hooks/useProfile';
 
 export const ProfileScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const { isAuthenticated, isLoading: authLoading, pkpInfo, register, authenticate } = useAuth();
-  const { pendingScrobbles, flushScrobbles } = usePlayer();
-
   const [actionLoading, setActionLoading] = useState(false);
   const { profile, profileLoading, refreshing, refresh } = useProfile({
     isAuthenticated,
@@ -46,18 +44,6 @@ export const ProfileScreen: React.FC = () => {
       Alert.alert('Success', 'Signed in!');
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Authentication failed');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleFlush = async () => {
-    setActionLoading(true);
-    try {
-      await flushScrobbles();
-      Alert.alert('Done', 'Scrobbles submitted!');
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Flush failed');
     } finally {
       setActionLoading(false);
     }
@@ -150,28 +136,8 @@ export const ProfileScreen: React.FC = () => {
             nationalityCode={profile?.nationalityCode}
           />
 
-          {/* Scrobble stats */}
-          {pendingScrobbles > 0 ? (
-            <Card title="Music" style={styles.section}>
-              <View style={styles.cardContent}>
-                <View style={styles.statRow}>
-                  <Text style={styles.statLabel}>Pending scrobbles</Text>
-                  <Text style={styles.statValue}>{pendingScrobbles}</Text>
-                </View>
-                <Button
-                  variant="default"
-                  size="md"
-                  fullWidth
-                  onPress={handleFlush}
-                  disabled={actionLoading}
-                  leftIcon={<CloudArrowUp size={18} color={colors.white} weight="fill" />}
-                  style={styles.submitButton}
-                >
-                  Submit Scrobbles
-                </Button>
-              </View>
-            </Card>
-          ) : null}
+          {profile ? <ProfileAbout profile={profile} /> : null}
+
         </ScrollView>
       )}
     </View>
@@ -231,29 +197,5 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingHorizontal: 24,
     gap: 12,
-  },
-  section: {
-    marginHorizontal: 16,
-    marginTop: 16,
-  },
-  cardContent: {
-    padding: 16,
-  },
-  statRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  statLabel: {
-    fontSize: fontSize.base,
-    color: colors.textSecondary,
-  },
-  statValue: {
-    fontSize: fontSize.xl,
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  submitButton: {
-    marginTop: 12,
   },
 });

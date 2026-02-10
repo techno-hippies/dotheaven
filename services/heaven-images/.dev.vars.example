@@ -1,8 +1,0 @@
-# Filebase API key (format: accessKey:secretKey)
-FILEBASE_API_KEY=your_access_key:your_secret_key
-
-# OpenRouter API key (for safety check)
-OPENROUTER_API_KEY=sk-or-v1-xxx
-
-# FAL.ai API key (for anime conversion)
-FAL_API_KEY=xxx

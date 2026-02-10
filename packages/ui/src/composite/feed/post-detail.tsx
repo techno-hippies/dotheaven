@@ -2,7 +2,8 @@ import type { Component } from 'solid-js'
 import { createSignal, Show, For } from 'solid-js'
 import { cn } from '../../lib/classnames'
 import { IconButton } from '../../primitives/icon-button'
-import { ChevronLeft } from '../../icons'
+import { ChevronLeft, PaperPlaneTilt } from '../../icons'
+import { PageHeader } from '../shared/page-header'
 import { FeedPost, type FeedPostProps } from './feed-post'
 import { CommentItem, type CommentItemProps, CommentSection } from './comment-item'
 
@@ -14,11 +15,7 @@ export interface PostDetailViewProps {
   onSubmitComment?: (text: string) => void
 }
 
-const SendIcon = () => (
-  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
-    <path d="M227.32,28.68a16,16,0,0,0-15.66-4.08l-.15,0L19.57,82.84a16,16,0,0,0-2.49,29.8L102,154l41.3,84.87A15.86,15.86,0,0,0,157.74,248q.69,0,1.38-.06a15.88,15.88,0,0,0,14-11.51l58.2-191.94c0-.05,0-.1,0-.15A16,16,0,0,0,227.32,28.68ZM157.83,231.85l-.05.14,0-.07-40.06-82.3,48-48a8,8,0,0,0-11.31-11.31l-48,48L24.08,98.25l-.07,0,.14,0L216,40Z" />
-  </svg>
-)
+const SendIcon = () => <PaperPlaneTilt class="w-5 h-5" />
 
 export const PostDetailView: Component<PostDetailViewProps> = (props) => {
   const [commentText, setCommentText] = createSignal('')
@@ -39,18 +36,15 @@ export const PostDetailView: Component<PostDetailViewProps> = (props) => {
 
   return (
     <div class={cn('flex flex-col h-full', props.class)}>
-      {/* Sticky header */}
-      <div class="flex items-center gap-3 px-4 h-14 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] flex-shrink-0">
-        <IconButton
-          variant="soft"
-          size="md"
-          aria-label="Back"
-          onClick={props.onBack}
-        >
-          <ChevronLeft class="w-5 h-5" />
-        </IconButton>
-        <span class="text-base font-semibold text-[var(--text-primary)]">Post</span>
-      </div>
+      <PageHeader
+        compact
+        title="Post"
+        leftSlot={
+          <IconButton variant="soft" size="md" aria-label="Back" onClick={props.onBack}>
+            <ChevronLeft class="w-5 h-5" />
+          </IconButton>
+        }
+      />
 
       {/* Scrollable content */}
       <div class="flex-1 overflow-y-auto">

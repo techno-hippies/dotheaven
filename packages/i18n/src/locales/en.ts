@@ -220,6 +220,7 @@ const en = {
   "music.cloud": "Cloud",
   "music.shared": "Shared With Me",
   "music.library": "Library",
+  "music.discover": "Discover",
   "music.trending": "Trending",
   "music.newReleases": "New Releases",
   "music.recentlyPlayed": "Recently Played",

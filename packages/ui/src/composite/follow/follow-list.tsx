@@ -2,6 +2,7 @@ import { type Component, Show, For } from 'solid-js'
 import { Avatar } from '../../primitives/avatar'
 import { Button } from '../../primitives/button'
 import { IconButton } from '../../primitives/icon-button'
+import { PageHeader } from '../shared/page-header'
 import { MediaRow } from '../shared/media-row'
 import { ChevronLeft } from '../../icons'
 
@@ -27,20 +28,17 @@ export interface FollowListProps {
 export const FollowList: Component<FollowListProps> = (props) => {
   return (
     <div class="flex flex-col h-full">
-      {/* Sticky header */}
-      <div class="flex items-center gap-3 px-4 h-14 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] flex-shrink-0">
-        <Show when={props.onBack}>
-          <IconButton
-            variant="soft"
-            size="md"
-            onClick={() => props.onBack?.()}
-            aria-label="Back"
-          >
-            <ChevronLeft class="w-5 h-5" />
-          </IconButton>
-        </Show>
-        <span class="text-base font-semibold text-[var(--text-primary)]">{props.title}</span>
-      </div>
+      <PageHeader
+        compact
+        title={props.title}
+        leftSlot={
+          <Show when={props.onBack}>
+            <IconButton variant="soft" size="md" onClick={() => props.onBack?.()} aria-label="Back">
+              <ChevronLeft class="w-5 h-5" />
+            </IconButton>
+          </Show>
+        }
+      />
 
       {/* Scrollable list */}
       <div class="flex-1 overflow-y-auto">

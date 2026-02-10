@@ -59,14 +59,42 @@ export async function signMessageWithPKP(
       });
     })();`
 
-    const result = await litClient.executeJs({
-      code: litActionCode,
-      authContext: authContext,
-      jsParams: {
-        message,
-        publicKey: pkpInfo.publicKey,
-      },
-    })
+    const isRetryableNodeFault = (errorMessage: string): boolean => {
+      const msg = errorMessage.toLowerCase()
+      return (
+        msg.includes('nodesystemfault') ||
+        msg.includes('nodeunknownerror') ||
+        msg.includes('ecdsa signing failed') ||
+        msg.includes('could not delete file') ||
+        msg.includes('/presigns/') ||
+        msg.includes('.cbor')
+      )
+    }
+    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+    let result: any
+    const maxAttempts = 4
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        result = await litClient.executeJs({
+          code: litActionCode,
+          authContext: authContext,
+          jsParams: {
+            message,
+            publicKey: pkpInfo.publicKey,
+          },
+        })
+        break
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error)
+        if (attempt < maxAttempts && isRetryableNodeFault(errMsg)) {
+          console.warn(`[PKPSigner] Transient Lit node fault, retrying (${attempt}/${maxAttempts})`)
+          await sleep(350 * attempt)
+          continue
+        }
+        throw error
+      }
+    }
 
     if (IS_DEV) console.log('[PKPSigner] Sign result:', result)
 

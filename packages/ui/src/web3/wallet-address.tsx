@@ -2,6 +2,7 @@ import type { Component } from 'solid-js'
 import { createSignal } from 'solid-js'
 import { cn } from '../lib/classnames'
 import { IconButton } from '../primitives/icon-button'
+import { Check, Copy } from '../icons'
 
 export interface WalletAddressProps {
   class?: string
@@ -51,14 +52,9 @@ export const WalletAddress: Component<WalletAddressProps> = (props) => {
             aria-label={copied() ? 'Copied!' : 'Copy address'}
           >
             {copied() ? (
-              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M20 6L9 17l-5-5" />
-              </svg>
+              <Check class="w-5 h-5" />
             ) : (
-              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" />
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-              </svg>
+              <Copy class="w-5 h-5" />
             )}
           </IconButton>
         </div>

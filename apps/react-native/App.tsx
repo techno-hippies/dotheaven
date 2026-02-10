@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { LitProvider } from './src/providers/LitProvider';
 import { AuthProvider } from './src/providers/AuthProvider';
 import { PlayerProvider } from './src/providers/PlayerProvider';
+import { XMTPProvider } from './src/providers/XMTPProvider';
 import { TabNavigator } from './src/navigation/TabNavigator';
 import { colors } from './src/lib/theme';
 
@@ -32,14 +33,16 @@ export default function App() {
     <SafeAreaProvider>
       <LitProvider debug>
         <AuthProvider>
-          <PlayerProvider>
-            <NavigationContainer theme={DarkTheme}>
-              <View style={{ flex: 1, backgroundColor: colors.bgPage }}>
-                <TabNavigator />
-              </View>
-            </NavigationContainer>
-            <StatusBar style="light" />
-          </PlayerProvider>
+          <XMTPProvider>
+            <PlayerProvider>
+              <NavigationContainer theme={DarkTheme}>
+                <View style={{ flex: 1, backgroundColor: colors.bgPage }}>
+                  <TabNavigator />
+                </View>
+              </NavigationContainer>
+              <StatusBar style="light" />
+            </PlayerProvider>
+          </XMTPProvider>
         </AuthProvider>
       </LitProvider>
     </SafeAreaProvider>

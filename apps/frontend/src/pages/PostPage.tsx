@@ -7,7 +7,7 @@ import { post as postRoute } from '@heaven/core'
 import { useAuth, useXMTP } from '../providers'
 import { useI18n } from '@heaven/i18n/solid'
 import type { TranslationKey } from '@heaven/i18n'
-import { fetchPost, fetchPostComments, translatePost, likePost, commentPost, getUserLang, getHasLiked, type FeedPostData } from '../lib/heaven/posts'
+import { fetchPost, fetchPostComments, translatePost, likePost, commentPost, flagPost, getUserLang, getHasLiked, type FeedPostData } from '../lib/heaven/posts'
 import { openAuthDialog } from '../lib/auth-dialog'
 
 function timeAgo(ts: number, t: (key: TranslationKey, ...args: any[]) => string): string {
@@ -122,6 +122,20 @@ export const PostPage: Component = () => {
     }
   }
 
+  const handleReport = async () => {
+    const p = postQuery.data
+    const addr = auth.pkpAddress()
+    const pkpInfo = auth.pkpInfo()
+    if (!p || !addr || !pkpInfo) return
+
+    try {
+      const authContext = await auth.getAuthContext()
+      await flagPost(p.postId, 0, (msg) => auth.signMessage(msg), authContext, pkpInfo.publicKey)
+    } catch (err) {
+      console.error('Report failed:', err)
+    }
+  }
+
   const handleTranslate = async (targetLang: string) => {
     const p = postQuery.data
     const addr = auth.pkpAddress()
@@ -206,6 +220,7 @@ export const PostPage: Component = () => {
       onComment: authGuard(() => { /* comment input is below the post */ }),
       onRepost: authGuard(() => { /* TODO: wire to repost */ }),
       onQuote: authGuard(() => { /* TODO: wire to quote compose */ }),
+      onReportPost: authGuard(handleReport),
       translations: p.translations,
       userLang,
       postLang: p.language,

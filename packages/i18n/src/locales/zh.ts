@@ -222,6 +222,7 @@ const zh: TranslationDictionary = {
   'music.cloud': '云端',
   'music.shared': '分享给我的',
   'music.library': '音乐库',
+  'music.discover': '发现',
   'music.trending': '热门',
   'music.newReleases': '新发布',
   'music.recentlyPlayed': '最近播放',

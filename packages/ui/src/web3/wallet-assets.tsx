@@ -4,6 +4,7 @@ import { cn } from '../lib/classnames'
 import { Avatar } from '../primitives/avatar'
 import { Button } from '../primitives/button'
 import { WalletAddress } from './wallet-address'
+import { ArrowUpRight, ArrowDownLeft } from '../icons'
 
 export interface WalletAsset {
   id: string
@@ -82,15 +83,11 @@ const WalletView: Component<{
     <Show when={!props.readOnly}>
       <div class="flex items-center justify-center gap-4 pb-12">
         <Button onClick={props.onSend} class="gap-2 w-40">
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M7 17L17 7M17 7H7M17 7v10"/>
-          </svg>
+          <ArrowUpRight class="w-5 h-5" />
           Send
         </Button>
         <Button onClick={props.onReceive} variant="secondary" class="gap-2 w-40">
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M17 7L7 17M7 17h10M7 17V7"/>
-          </svg>
+          <ArrowDownLeft class="w-5 h-5" />
           Receive
         </Button>
       </div>

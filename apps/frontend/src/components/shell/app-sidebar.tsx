@@ -15,7 +15,7 @@ import {
   CreateDialog,
 } from '@heaven/ui'
 import {
-  HOME, PROFILE, WALLET, SCHEDULE, SEARCH, CHAT, SETTINGS,
+  HOME, MUSIC, PROFILE, WALLET, SCHEDULE, SEARCH, CHAT, SETTINGS,
   musicTab, playlist,
 } from '@heaven/core'
 import { useI18n } from '@heaven/i18n/solid'
@@ -23,16 +23,15 @@ import { AppLogo } from './header'
 import {
   HomeIcon, ChatCircleIcon, UserIcon, SearchIcon,
   CalendarIcon, WalletIcon, GearIcon, DownloadIcon, PlusIcon,
-  FolderIcon, CloudIcon, ShareIcon,
+  ShareIcon, CompassIcon, ListIcon,
 } from './sidebar-icons'
 import { NavItem, PlaylistDropTarget } from './sidebar-nav'
 import { useNavigate, useLocation } from '@solidjs/router'
 import { createQuery, useQueryClient } from '@tanstack/solid-query'
-import { usePlatform } from 'virtual:heaven-platform'
-import { useXMTP, useAuth, usePlayer } from '../../providers'
+import { useXMTP, useAuth } from '../../providers'
 import { openAuthDialog } from '../../lib/auth-dialog'
 import { fetchUserPlaylists, type OnChainPlaylist } from '../../lib/heaven/playlists'
-import { fetchUploadedContent, fetchSharedContent } from '../../lib/heaven/scrobbles'
+import { fetchSharedContent } from '../../lib/heaven/scrobbles'
 import { createPlaylistService } from '../../lib/playlist-service'
 import { addToast, updateToast } from '../../lib/toast'
 import { computeTrackIdFromMeta } from '../../lib/track-id'
@@ -43,10 +42,8 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
   const { t } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
-  const platform = usePlatform()
   const auth = useAuth()
   const xmtp = useXMTP()
-  const player = usePlayer()
   const queryClient = useQueryClient()
   const [downloadOpen, setDownloadOpen] = createSignal(false)
   const [createOpen, setCreateOpen] = createSignal(false)
@@ -68,21 +65,13 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
 
   const playlists = () => playlistsQuery.data ?? []
 
-  // Cloud/Shared track counts
-  const cloudTracksQuery = createQuery(() => ({
-    queryKey: ['uploadedContent', auth.pkpInfo()?.ethAddress],
-    queryFn: () => fetchUploadedContent(auth.pkpInfo()!.ethAddress),
-    get enabled() { return !!auth.pkpInfo()?.ethAddress },
-  }))
-
+  // Shared track count
   const sharedTracksQuery = createQuery(() => ({
     queryKey: ['sharedContent', auth.pkpInfo()?.ethAddress],
     queryFn: () => fetchSharedContent(auth.pkpInfo()!.ethAddress),
     get enabled() { return !!auth.pkpInfo()?.ethAddress },
   }))
 
-  const localTrackCount = () => player.tracks().length
-  const cloudTrackCount = () => cloudTracksQuery.data?.length ?? 0
   const sharedTrackCount = () => sharedTracksQuery.data?.length ?? 0
 
   const retryAbort = new AbortController()
@@ -286,7 +275,7 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
         {/* Main navigation */}
         <nav class={`flex flex-col gap-1 ${props.compact ? 'items-center' : ''}`}>
           <NavItem icon={HomeIcon} label={t('nav.home')} path={HOME} active={isActive(HOME)} onClick={() => navigate(HOME)} compact={props.compact} />
-          <NavItem icon={SearchIcon} label={t('nav.search')} path={SEARCH} active={isActive(SEARCH)} onClick={() => navigate(SEARCH)} compact={props.compact} />
+          <NavItem icon={SearchIcon} label={t('nav.community')} path={SEARCH} active={isActive(SEARCH)} onClick={() => navigate(SEARCH)} compact={props.compact} />
           <NavItem icon={ChatCircleIcon} label={t('nav.messages')} path={CHAT} active={location.pathname.startsWith(CHAT)} onClick={() => navigate(CHAT)} badge={unreadMessageCount()} compact={props.compact} />
           <NavItem icon={WalletIcon} label={t('nav.wallet')} path={WALLET} active={isActive(WALLET)} onClick={() => navigate(WALLET)} compact={props.compact} />
           <NavItem icon={CalendarIcon} label={t('nav.schedule')} path={SCHEDULE} active={isActive(SCHEDULE)} onClick={() => navigate(SCHEDULE)} compact={props.compact} />
@@ -310,59 +299,54 @@ export const AppSidebar: Component<{ compact?: boolean }> = (props) => {
           </div>
 
           <div class={`flex flex-col ${props.compact ? 'gap-1.5 items-center' : 'gap-0.5'}`}>
-            {/* System collections (Local, Cloud, Shared With Me) */}
-            <Show when={platform.isTauri}>
-              <Show when={props.compact} fallback={
+            {/* Discover + Library */}
+            <Show when={props.compact} fallback={
+              <>
                 <button
                   type="button"
-                  class={`flex items-center gap-3 w-full px-3 py-2 rounded-md cursor-pointer transition-colors hover:bg-[var(--bg-highlight-hover)] ${isActive(musicTab('local')) ? 'bg-[var(--bg-highlight)]' : ''}`}
-                  onClick={() => navigate(musicTab('local'))}
+                  class={`flex items-center gap-3 w-full px-3 py-2 rounded-md cursor-pointer transition-colors hover:bg-[var(--bg-highlight-hover)] ${isActive(MUSIC) ? 'bg-[var(--bg-highlight)]' : ''}`}
+                  onClick={() => navigate(MUSIC)}
                 >
                   <div class="w-10 h-10 flex-shrink-0 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)]">
-                    <FolderIcon />
+                    <CompassIcon />
                   </div>
                   <div class="flex flex-col min-w-0 text-left">
-                    <span class="text-base text-[var(--text-primary)] whitespace-nowrap">{t('music.local')}</span>
-                    <span class="text-base text-[var(--text-muted)] whitespace-nowrap">{t('music.songs', { count: localTrackCount().toLocaleString() })}</span>
+                    <span class="text-base text-[var(--text-primary)] whitespace-nowrap">{t('music.discover')}</span>
                   </div>
                 </button>
-              }>
                 <button
                   type="button"
-                  class={`w-11 h-11 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--bg-highlight-hover)] transition-colors ${isActive(musicTab('local')) ? 'ring-1 ring-[var(--accent-blue)]' : ''}`}
-                  onClick={() => navigate(musicTab('local'))}
-                  title={t('music.local')}
+                  class={`flex items-center gap-3 w-full px-3 py-2 rounded-md cursor-pointer transition-colors hover:bg-[var(--bg-highlight-hover)] ${isActive(musicTab('library')) ? 'bg-[var(--bg-highlight)]' : ''}`}
+                  onClick={() => navigate(musicTab('library'))}
                 >
-                  <FolderIcon />
+                  <div class="w-10 h-10 flex-shrink-0 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)]">
+                    <ListIcon />
+                  </div>
+                  <div class="flex flex-col min-w-0 text-left">
+                    <span class="text-base text-[var(--text-primary)] whitespace-nowrap">{t('music.library')}</span>
+                  </div>
                 </button>
-              </Show>
-            </Show>
-
-            <Show when={props.compact} fallback={
-              <button
-                type="button"
-                class={`flex items-center gap-3 w-full px-3 py-2 rounded-md cursor-pointer transition-colors hover:bg-[var(--bg-highlight-hover)] ${isActive(musicTab('cloud')) ? 'bg-[var(--bg-highlight)]' : ''}`}
-                onClick={() => navigate(musicTab('cloud'))}
-              >
-                <div class="w-10 h-10 flex-shrink-0 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)]">
-                  <CloudIcon />
-                </div>
-                <div class="flex flex-col min-w-0 text-left">
-                  <span class="text-base text-[var(--text-primary)] whitespace-nowrap">{t('music.cloud')}</span>
-                  <span class="text-base text-[var(--text-muted)] whitespace-nowrap">{t('music.songs', { count: cloudTrackCount() })}</span>
-                </div>
-              </button>
+              </>
             }>
               <button
                 type="button"
-                class={`w-11 h-11 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--bg-highlight-hover)] transition-colors ${isActive(musicTab('cloud')) ? 'ring-1 ring-[var(--accent-blue)]' : ''}`}
-                onClick={() => navigate(musicTab('cloud'))}
-                title={t('music.cloud')}
+                class={`w-11 h-11 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--bg-highlight-hover)] transition-colors ${isActive(MUSIC) ? 'ring-1 ring-[var(--accent-blue)]' : ''}`}
+                onClick={() => navigate(MUSIC)}
+                title={t('music.discover')}
               >
-                <CloudIcon />
+                <CompassIcon />
+              </button>
+              <button
+                type="button"
+                class={`w-11 h-11 rounded-md bg-[var(--bg-elevated)] flex items-center justify-center text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--bg-highlight-hover)] transition-colors ${isActive(musicTab('library')) ? 'ring-1 ring-[var(--accent-blue)]' : ''}`}
+                onClick={() => navigate(musicTab('library'))}
+                title={t('music.library')}
+              >
+                <ListIcon />
               </button>
             </Show>
 
+            {/* Shared With Me */}
             <Show when={props.compact} fallback={
               <button
                 type="button"

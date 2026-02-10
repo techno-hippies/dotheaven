@@ -290,35 +290,18 @@ export const AuthProvider: ParentComponent = (props) => {
         }
       }
 
-      // Helper: fire-and-forget linkEoa after EOA auth (non-blocking)
-      const backgroundLinkEoa = (result: { pkpInfo: PKPInfo; authData: AuthData; eoaAddress: `0x${string}` }) => {
-        // Run in background — don't block login
-        ;(async () => {
-          try {
-            const { createPKPAuthContext } = await import('../lib/lit')
-            const ctx = await createPKPAuthContext(result.pkpInfo, result.authData)
-            const { linkEoa } = await import('../lib/content-service')
-            await linkEoa(ctx, result.pkpInfo.publicKey, result.eoaAddress)
-          } catch (e) {
-            console.warn('[Auth] Background linkEoa failed (non-fatal):', e)
-          }
-        })()
-      }
-
       // Try authenticate first, auto-register if no PKP
       const { authenticateWithEOA } = await import('../lib/lit')
       try {
         const result = await authenticateWithEOA(walletClientForEoa)
         await persistEoaResult(result)
         setIsAuthenticating(false)
-        backgroundLinkEoa(result)
       } catch (authErr) {
         if (authErr instanceof Error && authErr.message.includes('No PKP found')) {
           const { registerWithEOA } = await import('../lib/lit')
           const result = await registerWithEOA(walletClientForEoa)
           await persistEoaResult(result)
           setIsAuthenticating(false)
-          backgroundLinkEoa(result)
         } else {
           throw authErr
         }

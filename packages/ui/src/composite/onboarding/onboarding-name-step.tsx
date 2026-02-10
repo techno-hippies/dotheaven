@@ -2,6 +2,7 @@ import type { Component } from 'solid-js'
 import { createSignal, createEffect, Show } from 'solid-js'
 import { cn } from '../../lib/classnames'
 import { Button, Spinner } from '../../primitives'
+import { CheckCircleFill, Prohibit, WarningCircle } from '../../icons'
 
 export interface OnboardingNameStepProps {
   class?: string
@@ -98,18 +99,14 @@ export const OnboardingNameStep: Component<OnboardingNameStepProps> = (props) =>
             <span class="text-base text-[var(--text-muted)]">Checking...</span>
           </Show>
           <Show when={status() === 'available'}>
-            <svg class="w-3.5 h-3.5 text-green-500" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-            </svg>
+            <CheckCircleFill class="w-3.5 h-3.5 text-green-500" />
             <span class="text-base text-green-500">Available</span>
             <Show when={pricingHint()}>
               <span class="text-base text-[var(--text-muted)]">· {pricingHint()}</span>
             </Show>
           </Show>
           <Show when={status() === 'taken'}>
-            <svg class="w-3.5 h-3.5 text-[var(--accent-coral)]" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-            </svg>
+            <Prohibit class="w-3.5 h-3.5 text-[var(--accent-coral)]" />
             <span class="text-base text-[var(--accent-coral)]">Taken</span>
           </Show>
         </div>
@@ -118,9 +115,7 @@ export const OnboardingNameStep: Component<OnboardingNameStepProps> = (props) =>
       {/* Error message */}
       <Show when={props.error}>
         <div class="flex items-center gap-2 px-3 py-2 rounded-md bg-[var(--accent-coral)]/10 text-[var(--accent-coral)] text-base">
-          <svg class="w-4 h-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
-          </svg>
+          <WarningCircle class="w-4 h-4 shrink-0" />
           <span>{props.error}</span>
         </div>
       </Show>

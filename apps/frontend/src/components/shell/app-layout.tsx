@@ -9,7 +9,7 @@
  */
 
 import type { ParentComponent } from 'solid-js'
-import { Show, createSignal, createMemo, createEffect } from 'solid-js'
+import { Show, createMemo, createEffect } from 'solid-js'
 import { useLocation, useNavigate } from '@solidjs/router'
 import {
   HOME, WALLET, SCHEDULE, CHAT, SEARCH, MUSIC, ONBOARDING, SETTINGS,
@@ -39,14 +39,14 @@ const HomeFillIcon = () => (
     <path d="M224,115.55V208a16,16,0,0,1-16,16H168a16,16,0,0,1-16-16V168a8,8,0,0,0-8-8H112a8,8,0,0,0-8,8v40a16,16,0,0,1-16,16H48a16,16,0,0,1-16-16V115.55a16,16,0,0,1,5.17-11.78l80-75.48a16,16,0,0,1,21.66,0l80,75.48A16,16,0,0,1,224,115.55Z" />
   </svg>
 )
-const SearchIcon = () => (
+const CommunityIcon = () => (
   <svg class="w-6 h-6" viewBox="0 0 256 256" fill="currentColor">
-    <path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z" />
+    <path d="M244.8,150.4a8,8,0,0,1-11.2-1.6A51.6,51.6,0,0,0,192,128a8,8,0,0,1-7.37-4.89,8,8,0,0,1,0-6.22A8,8,0,0,1,192,112a24,24,0,1,0-23.24-30,8,8,0,1,1-15.5-4A40,40,0,1,1,219,117.51a67.94,67.94,0,0,1,27.43,21.68A8,8,0,0,1,244.8,150.4ZM190.92,212a8,8,0,1,1-13.84,8,57,57,0,0,0-98.16,0,8,8,0,1,1-13.84-8,72.06,72.06,0,0,1,33.74-29.92,48,48,0,1,1,58.36,0A72.06,72.06,0,0,1,190.92,212ZM128,176a32,32,0,1,0-32-32A32,32,0,0,0,128,176ZM72,120a8,8,0,0,0-8-8A24,24,0,1,1,87.24,82a8,8,0,1,0,15.5-4A40,40,0,1,0,37,117.51,67.94,67.94,0,0,0,9.6,139.19a8,8,0,1,0,12.8,9.61A51.6,51.6,0,0,1,64,128,8,8,0,0,0,72,120Z" />
   </svg>
 )
-const SearchFillIcon = () => (
+const CommunityFillIcon = () => (
   <svg class="w-6 h-6" viewBox="0 0 256 256" fill="currentColor">
-    <path d="M168,112a56,56,0,1,1-56-56A56.06,56.06,0,0,1,168,112Zm61.66,117.66a8,8,0,0,1-11.32,0l-50.07-50.07a88.11,88.11,0,1,1,11.31-11.31l50.08,50.06A8,8,0,0,1,229.66,229.66ZM112,184a72,72,0,1,0-72-72A72.08,72.08,0,0,0,112,184Z" />
+    <path d="M64.12,147.8a4,4,0,0,1-4,4.2H16a8,8,0,0,1-7.8-6.17,8.35,8.35,0,0,1,1.62-6.93A67.79,67.79,0,0,1,37,117.51a40,40,0,1,1,66.46-35.8,3.94,3.94,0,0,1-2.27,4.18A64.08,64.08,0,0,0,64,144C64,145.28,64,146.54,64.12,147.8Zm182-8.91A67.76,67.76,0,0,0,219,117.51a40,40,0,1,0-66.46-35.8,3.94,3.94,0,0,0,2.27,4.18A64.08,64.08,0,0,1,192,144c0,1.28,0,2.54-.12,3.8a4,4,0,0,0,4,4.2H240a8,8,0,0,0,7.8-6.17A8.33,8.33,0,0,0,246.17,138.89Zm-89,43.18a48,48,0,1,0-58.37,0A72.13,72.13,0,0,0,65.07,212,8,8,0,0,0,72,224H184a8,8,0,0,0,6.93-12A72.15,72.15,0,0,0,157.19,182.07Z" />
   </svg>
 )
 const ChatIcon = () => (
@@ -137,9 +137,6 @@ export const AppLayout: ParentComponent = (props) => {
     }
   })
 
-  // Search bar in right panel
-  const [searchQuery, setSearchQuery] = createSignal('')
-
   // Playlist dialog for SidePlayer menu
   const plDialog = usePlaylistDialog()
   const sidePlayerMenu = buildMenuActions(plDialog)
@@ -179,8 +176,8 @@ export const AppLayout: ParentComponent = (props) => {
 
   // Mobile footer tabs
   const mobileFooterTabs = (): MobileFooterTab[] => [
-    { id: 'home', icon: <HomeIcon />, activeIcon: <HomeFillIcon />, label: t('nav.home') },
-    { id: 'search', icon: <SearchIcon />, activeIcon: <SearchFillIcon />, label: t('nav.search') },
+    { id: 'home', icon: <HomeIcon />, activeIcon: <HomeFillIcon />, label: t('nav.feed') },
+    { id: 'search', icon: <CommunityIcon />, activeIcon: <CommunityFillIcon />, label: t('nav.community') },
     { id: 'music', icon: <MusicIcon />, activeIcon: <MusicFillIcon />, label: t('nav.music') },
     { id: 'chat', icon: <ChatIcon />, activeIcon: <ChatFillIcon />, label: t('nav.chat') },
     { id: 'schedule', icon: <CalendarIcon />, activeIcon: <CalendarFillIcon />, label: t('nav.schedule') },
@@ -248,10 +245,6 @@ export const AppLayout: ParentComponent = (props) => {
                 } : undefined}
                 menuActions={player.currentTrack() ? sidePlayerMenu : undefined}
                 onArtistClick={player.currentTrack() ? () => goToArtist(player.currentTrack()!) : undefined}
-                searchQuery={!location.pathname.startsWith(SEARCH) ? searchQuery() : undefined}
-                onSearchChange={!location.pathname.startsWith(SEARCH) ? setSearchQuery : undefined}
-                onSearchSubmit={(q) => { navigate(`${SEARCH}?q=${encodeURIComponent(q)}`); setSearchQuery('') }}
-                searchPlaceholder={t('community.searchPlaceholder')}
                 noTrackText={t('music.noTrack')}
                 unknownArtistText={t('music.unknownArtist')}
               />

@@ -38,6 +38,22 @@ const mirrorAbi = parseAbi([
   "function linkedEoa(address pkp) external view returns (address)",
 ]);
 
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isRetryableLitNodeFault(message: string): boolean {
+  const msg = (message || "").toLowerCase();
+  return (
+    msg.includes("nodesystemfault") ||
+    msg.includes("nodeunknownerror") ||
+    msg.includes("ecdsa signing failed") ||
+    msg.includes("could not delete file") ||
+    msg.includes("/presigns/") ||
+    msg.includes(".cbor")
+  );
+}
+
 async function main() {
   const dryRun = process.argv.includes("--dry-run");
 
@@ -130,36 +146,58 @@ async function main() {
   console.log("\nExecuting Lit Action...");
 
   try {
-    let result;
-    if (useInlineCode) {
-      const actionCode = readFileSync(
-        join(ROOT_DIR, "features/profile/link-eoa-v1.js"),
-        "utf-8"
-      );
-      result = await litClient.executeJs({
-        code: actionCode,
-        authContext,
-        jsParams,
-      });
-    } else {
-      result = await litClient.executeJs({
-        ipfsId: actionCid,
-        authContext,
-        jsParams,
-      });
+    const maxAttempts = 4;
+    let result: any;
+    let response: any;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        if (useInlineCode) {
+          const actionCode = readFileSync(
+            join(ROOT_DIR, "features/profile/link-eoa-v1.js"),
+            "utf-8"
+          );
+          result = await litClient.executeJs({
+            code: actionCode,
+            authContext,
+            jsParams,
+          });
+        } else {
+          result = await litClient.executeJs({
+            ipfsId: actionCid,
+            authContext,
+            jsParams,
+          });
+        }
+
+        response =
+          typeof result.response === "string" ? JSON.parse(result.response) : result.response;
+
+        if (!response?.success) {
+          const errMsg = String(response?.error || "action returned success=false");
+          if (attempt < maxAttempts && isRetryableLitNodeFault(errMsg)) {
+            console.warn(`   WARN: transient Lit node fault, retrying (${attempt}/${maxAttempts})`);
+            await sleep(500 * attempt);
+            continue;
+          }
+          throw new Error(errMsg);
+        }
+        break;
+      } catch (err: any) {
+        const errMsg = err?.message || String(err);
+        if (attempt < maxAttempts && isRetryableLitNodeFault(errMsg)) {
+          console.warn(`   WARN: transient execution error, retrying (${attempt}/${maxAttempts})`);
+          await sleep(500 * attempt);
+          continue;
+        }
+        throw err;
+      }
     }
 
     console.log("Lit Action executed");
 
-    const response =
-      typeof result.response === "string" ? JSON.parse(result.response) : result.response;
-
     console.log("\nAction response:");
     console.log(JSON.stringify(response, null, 2));
-
-    if (!response?.success) {
-      throw new Error(response?.error || "action returned success=false");
-    }
 
     console.log("\nSUCCESS!");
     console.log(`   Version:     ${response.version}`);

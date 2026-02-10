@@ -551,20 +551,71 @@ export async function setProfile(
   // 2. Build profile input
   const profileInput = buildProfileInput(data)
 
-  // 3. Single executeJs: action signs with user's PKP + sponsor PKP broadcasts
-  const result = await litClient.executeJs({
-    ipfsId: HEAVEN_SET_PROFILE_CID,
-    authContext,
-    jsParams: {
-      user: userAddress,
-      userPkpPublicKey: pkpPublicKey,
-      profileInput,
-      nonce: Number(nonce),
-    },
-  })
+  const profileCidCandidates = [HEAVEN_SET_PROFILE_CID]
+  const isRetryableIpfsCodeFetchError = (message: string): boolean => {
+    const msg = message.toLowerCase()
+    return (
+      msg.includes('error retrieving ipfs code file') ||
+      msg.includes('timeout error getting code from ipfs') ||
+      msg.includes('operation timed out') ||
+      msg.includes('errorkind\":\"ipfs') ||
+      msg.includes('status\":500')
+    )
+  }
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-  const response = JSON.parse(result.response as string)
-  return response as SetProfileResult
+  let lastError = 'setProfile failed'
+  for (const cid of profileCidCandidates) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        if (import.meta.env.DEV) {
+          console.log('[HeavenProfile] setProfile executeJs', {
+            cid,
+            attempt,
+            userAddress,
+          })
+        }
+        const result = await litClient.executeJs({
+          ipfsId: cid,
+          authContext,
+          jsParams: {
+            user: userAddress,
+            userPkpPublicKey: pkpPublicKey,
+            profileInput,
+            nonce: Number(nonce),
+          },
+        })
+
+        const response = JSON.parse(result.response as string) as SetProfileResult
+        if (response.success) return response
+        const err = String(response.error || 'setProfile action returned success=false')
+        lastError = err
+        if (isRetryableIpfsCodeFetchError(err) && attempt < 3) {
+          await sleep(500 * attempt)
+          continue
+        }
+        if (isRetryableIpfsCodeFetchError(err)) {
+          // Exhausted this CID, try next
+          break
+        }
+        return response
+      } catch (error) {
+        const err = error instanceof Error ? error.message : String(error)
+        lastError = err
+        if (isRetryableIpfsCodeFetchError(err) && attempt < 3) {
+          await sleep(500 * attempt)
+          continue
+        }
+        if (isRetryableIpfsCodeFetchError(err)) {
+          // Exhausted this CID, try next
+          break
+        }
+        return { success: false, error: err }
+      }
+    }
+  }
+
+  return { success: false, error: lastError }
 }
 
 export { PROFILE_V2 }

@@ -1,64 +1,122 @@
 /**
- * Lit Action CIDs (from lit-actions/cids/test.json — naga-test)
+ * Lit Action CIDs — loaded per-network from embedded CID maps.
  *
- * Single source of truth for all deployed action CIDs used in the frontend.
+ * To switch networks, set VITE_LIT_NETWORK=naga-dev or VITE_LIT_NETWORK=naga-test
+ * in apps/frontend/.env (default: naga-dev).
+ *
  * After redeploying an action via `bun scripts/setup.ts <action>`, update the
- * corresponding CID here to match the new value in the active cids/*.json.
+ * corresponding CID in the map below to match the new value in lit-actions/cids/*.json.
+ *
+ * Individual CIDs can still be overridden via VITE_*_CID env vars.
  */
 
+const litNetwork = (import.meta.env.VITE_LIT_NETWORK || 'naga-dev') as 'naga-dev' | 'naga-test'
+
+/** CID maps mirroring lit-actions/cids/dev.json and lit-actions/cids/test.json */
+const CID_MAP = {
+  'naga-dev': {
+    playlistV1:           'QmYvozSnyUb3QCmsDLWQ1caYecokqeHpc8Cck5uqnuNf9R',
+    heavenClaimName:      'QmVx1YrPTn3bk1TiqvFZ73yBwnyNUpDugjqGzEYKNXBr7Z',
+    heavenSetProfile:     'Qmc6657yuLtgmtLnUqznmBFR9NWnX2th39HG64YdUEw4g8',
+    heavenSetRecords:     'QmNTJXB8KioAsJt4ebJUJF9w87a57nHHrF1HqqVwmqNi2r',
+    avatarUpload:         'QmTWwoC5zX2pUuSExsra5RVzChE9nCYRAkVVgppjvc196A',
+    contentRegisterV1:    'QmchDhdrQ8JiX1NDFe6XG2wspWhGMpfEZ652iZp9NzVmCu',
+    contentAccessV1:      'QmXnhhG1aykZGZoPXTKihi4jRbygD2rvn5DZwTBz89LPfn',
+    linkEoaV1:            'QmYPeQEpUhb8eMULPmW7RM5k5yNMTWMmRDa8p3Gw4d966C',
+    postRegisterV1:       'QmQ3sz9g1znyoKPyNUQetnfijwqNQNU7ir7YuQXtU7f4C3',
+    trackCoverV4:         'QmSVssbAxCr1xp7mKX1VfcJFNJewQfhCZGiPuhyEjGvUC2',
+    postTranslateV1:      'QmWAGjKKmnpmiN2BjVe5YUtXjkKApGyCwdLoszAjTRDFiY',
+    songPublish:          'Qmc2zDSsYURne8ZwG8sfLEqT12hazfHaRCM9sXjBGxD2cg',
+    lyricsTranslate:      'Qmdf2HHLzghjjeQZMvhgh6kY2EJERgC4Hw1BXfWjjeanch',
+    followV1:             'QmPccpeqwyJSHYzY1HGu6Nmp26anouhTT8daHS8Jox9VTx',
+    likeV1:               'QmYrhWHGbQHo7eSvJnN5BCSJ68xwQV7oCGWRho2CvmA3gm',
+    commentV1:            'QmPim3NkdLLL7yckGgUeqz5Bdzri5DygBcWFZppYMLYLsA',
+    flagV1:               'QmafHchRYrngBfBNVYqYbbgpio2xb3XVuAP6tUHg9z9Eu9',
+    storyRegisterSponsor: '',
+  },
+  'naga-test': {
+    playlistV1:           'QmUf2jSaquVXJZBaoq5WCjKZKJpW7zVZVWHKuGi68GYZqq',
+    heavenClaimName:      'QmXqTv35a4fV4szqEDwA6wWH4bZHgceemRniLaYTrEcU6z',
+    heavenSetProfile:     'QmY7iUpUwy4xqCGuWGdTSiYo8yBc8zuBRkAA2QXzuZkcWg',
+    heavenSetRecords:     'QmYdvepsZD3XGis7n3qCKEGHU559qeszxqD8DGgbXTPN2n',
+    avatarUpload:         'QmTWwoC5zX2pUuSExsra5RVzChE9nCYRAkVVgppjvc196A',
+    contentRegisterV1:    'QmdPHymWEbh4H8zBEhup9vWpCPwR5hTLK2Kb3H8hcjDga1',
+    contentAccessV1:      'QmcgN7ed4ePaCfpkzcwxiTG6WkvfgkPmNK26FZW67kbdau',
+    linkEoaV1:            'Qmac1ELMUarSwmpnjg29KoKo3zHc1SVWTTUFyXBZyMgchb',
+    postRegisterV1:       'Qma4SVQpBy2hnN9Hcf3ZpGzo9U5PGxJusDjpXrDnBKRc9z',
+    trackCoverV4:         'QmYhskK5XKmrREZBaGMpvzvTEYdaicUURjNLBhSV72U1Nm',
+    postTranslateV1:      'QmSiC1nV5hu248sipLjukDuH3sDAV31F6S3RqRLfrQmZa6',
+    songPublish:          'QmNUVHTrU4S823gp2JaP19hAZCCqpwdvzFrs35GiECuXAJ',
+    lyricsTranslate:      'QmUrbZY5MWrBFhfgoDLaxNwXchJgeB5vsRMMLMzRprvUu3',
+    followV1:             '',
+    likeV1:               '',
+    commentV1:            '',
+    flagV1:               '',
+    storyRegisterSponsor: 'QmQi5mVzt4u6ViXZYkZYrmFu7oXFEJjx7Fzc6YUYyUcSEt',
+  },
+} as const
+
+const cids = CID_MAP[litNetwork]
+
+/** Helper: env override → network CID (empty string if not deployed on this network) */
+const cid = (envKey: string, key: keyof typeof cids): string =>
+  import.meta.env[envKey] || cids[key]
+
+// ── Exported CIDs ───────────────────────────────────────────────────
+
 /** Playlist v1 — event-sourced playlist CRUD on PlaylistV1 */
-export const PLAYLIST_V1_CID = 'QmZ3DbcVxKVniEXeBxZdb2ZmyuLa7g61dU2FghdRTJ3RCL'
+export const PLAYLIST_V1_CID = cid('VITE_PLAYLIST_V1_CID', 'playlistV1')
 
 /** Heaven Claim Name — gasless .heaven name registration */
-export const HEAVEN_CLAIM_NAME_CID = 'QmQztQzc3tfZCwyyxXC9N9fK8bimiMWaaYapkJufHLjgg7'
+export const HEAVEN_CLAIM_NAME_CID = cid('VITE_HEAVEN_CLAIM_NAME_CID', 'heavenClaimName')
 
 /** Heaven Set Profile — gasless profile write to ProfileV2 */
-export const HEAVEN_SET_PROFILE_CID = 'QmWNyRKDjPUvG5RDinyep76Cyqr2zEKm9shUg6uJLzrUKS'
+export const HEAVEN_SET_PROFILE_CID = cid('VITE_HEAVEN_SET_PROFILE_CID', 'heavenSetProfile')
 
 /** Heaven Set Records — gasless ENS text record writes on RecordsV1 */
-export const HEAVEN_SET_RECORDS_CID = 'QmRhWGzCWYiDhbKSZ5Z9gmv5sr6nBTk5u8kAnM7YAKZ2sk'
+export const HEAVEN_SET_RECORDS_CID = cid('VITE_HEAVEN_SET_RECORDS_CID', 'heavenSetRecords')
 
 /** Avatar Upload — IPFS upload with style enforcement */
-export const AVATAR_UPLOAD_CID = 'QmTWwoC5zX2pUuSExsra5RVzChE9nCYRAkVVgppjvc196A'
+export const AVATAR_UPLOAD_CID = cid('VITE_AVATAR_UPLOAD_CID', 'avatarUpload')
 
 /** Content Register v1 — register Filecoin content entry on ContentRegistry + upload cover art */
-export const CONTENT_REGISTER_V1_CID = 'QmVzJrkKMBrXYu4urzayfnv6L2RNinUJm9tcXaeCNrWkg5'
+export const CONTENT_REGISTER_V1_CID = cid('VITE_CONTENT_REGISTER_V1_CID', 'contentRegisterV1')
 
 /** Content Access v1 — grant/revoke access on ContentRegistry */
-export const CONTENT_ACCESS_V1_CID = 'QmXyDnNxNV6uV296HVFv4kDuWH4iKQqRCHC77vJzxvuQgT'
+export const CONTENT_ACCESS_V1_CID = cid('VITE_CONTENT_ACCESS_V1_CID', 'contentAccessV1')
 
 /** Link EOA v1 — link PKP to EOA on ContentAccessMirror for shared content access */
-export const LINK_EOA_V1_CID = 'QmWcECPXvy8DigGiouuHkfA1xBcQ7dYtCrNgUmgcT5yVVE'
+export const LINK_EOA_V1_CID = cid('VITE_LINK_EOA_V1_CID', 'linkEoaV1')
 
 /** Post Register v1 — unified text + photo registration (image uploaded by Media Worker or text inline) */
-export const POST_REGISTER_V1_CID = 'Qma4SVQpBy2hnN9Hcf3ZpGzo9U5PGxJusDjpXrDnBKRc9z'
+export const POST_REGISTER_V1_CID = cid('VITE_POST_REGISTER_V1_CID', 'postRegisterV1')
 
 /** Track Cover v4 — upload cover art + set on ScrobbleV4 (operator-only) */
-export const TRACK_COVER_V4_CID = 'QmXiDUsYqxAVgvymn7qE1oX1xNyjQzP3gZBd1JBPb2Qz3n'
+export const TRACK_COVER_V4_CID = cid('VITE_TRACK_COVER_V4_CID', 'trackCoverV4')
 
 /** Post Translate v1 — LLM translation → EngagementV2.translateFor() on MegaETH */
-export const POST_TRANSLATE_V1_CID = 'QmSiC1nV5hu248sipLjukDuH3sDAV31F6S3RqRLfrQmZa6'
+export const POST_TRANSLATE_V1_CID = cid('VITE_POST_TRANSLATE_V1_CID', 'postTranslateV1')
 
 /** Song Publish v1 — upload audio/cover/instrumental/canvas to IPFS + lyrics alignment + translation */
-export const SONG_PUBLISH_CID = 'Qmc2zDSsYURne8ZwG8sfLEqT12hazfHaRCM9sXjBGxD2cg'
+export const SONG_PUBLISH_CID = cid('VITE_SONG_PUBLISH_CID', 'songPublish')
 
 /** Story Register Sponsor v1 — gasless Story Protocol IP registration (mint NFT + register IP + attach PIL license) */
-export const STORY_REGISTER_SPONSOR_CID = 'QmRKjHrJYAi6H8qomPVsxNSpSbTtGPap4CW2G63b2i3tAV'
+export const STORY_REGISTER_SPONSOR_CID = cid('VITE_STORY_REGISTER_SPONSOR_CID', 'storyRegisterSponsor')
 
 /** Lyrics Translate v1 — batch lyrics translation → IPFS + LyricsEngagementV1 on MegaETH */
-export const LYRICS_TRANSLATE_CID = 'Qmdf2HHLzghjjeQZMvhgh6kY2EJERgC4Hw1BXfWjjeanch'
+export const LYRICS_TRANSLATE_CID = cid('VITE_LYRICS_TRANSLATE_CID', 'lyricsTranslate')
 
 /** Follow v1 — follow/unfollow users on FollowV1 on MegaETH */
-export const FOLLOW_V1_CID = 'QmPccpeqwyJSHYzY1HGu6Nmp26anouhTT8daHS8Jox9VTx'
+export const FOLLOW_V1_CID = cid('VITE_FOLLOW_V1_CID', 'followV1')
 
 /** Like v1 — like/unlike posts on EngagementV2 on MegaETH */
-export const LIKE_V1_CID = 'QmYrhWHGbQHo7eSvJnN5BCSJ68xwQV7oCGWRho2CvmA3gm'
+export const LIKE_V1_CID = cid('VITE_LIKE_V1_CID', 'likeV1')
 
 /** Comment v1 — add comments to posts on EngagementV2 on MegaETH */
-export const COMMENT_V1_CID = 'QmPim3NkdLLL7yckGgUeqz5Bdzri5DygBcWFZppYMLYLsA'
+export const COMMENT_V1_CID = cid('VITE_COMMENT_V1_CID', 'commentV1')
 
 /** Flag v1 — flag posts for moderation on EngagementV2 on MegaETH */
-export const FLAG_V1_CID = 'QmafHchRYrngBfBNVYqYbbgpio2xb3XVuAP6tUHg9z9Eu9'
+export const FLAG_V1_CID = cid('VITE_FLAG_V1_CID', 'flagV1')
 
 // Content decrypt is handled client-side via litClient.decrypt() — no Lit Action needed.
 // The Lit BLS nodes enforce canAccess() on Base ContentAccessMirror during threshold decryption.

@@ -121,6 +121,67 @@ const menuActions = {
   onRemoveFromPlaylist: (track: any) => console.log('Remove from playlist:', track),
 }
 
+// Mix of local and cloud tracks to demonstrate the cloud icon
+const mixedTracks: Track[] = [
+  {
+    id: 'l1',
+    title: 'The Sign (with CamelPhat)',
+    artist: 'Anyma, CamelPhat',
+    album: 'Genesys',
+    albumCover: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=100&h=100&fit=crop',
+    duration: '3:33',
+    filePath: '/music/the-sign.mp3',
+  },
+  {
+    id: 'c1',
+    title: 'Inner Light',
+    artist: 'Elderbrook, Bob Moses',
+    album: 'Inner Light',
+    albumCover: 'https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=100&h=100&fit=crop',
+    duration: '4:17',
+    pieceCid: 'baga6ea4seaqao7s73y24kcutaosvacpdjgfe5pw76ooefynber4k2cljibs3ejq',
+    contentId: '0x1234',
+  },
+  {
+    id: 'l2',
+    title: 'On My Knees',
+    artist: 'RÜFÜS DU SOL',
+    album: 'Surrender',
+    albumCover: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=100&h=100&fit=crop',
+    duration: '4:21',
+    filePath: '/music/on-my-knees.mp3',
+  },
+  {
+    id: 'c2',
+    title: 'Midnight',
+    artist: 'Lane 8',
+    album: 'Brightest Lights',
+    albumCover: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=100&h=100&fit=crop',
+    duration: '6:42',
+    pieceCid: 'baga6ea4seaqxyz',
+    contentId: '0x5678',
+  },
+  {
+    id: 'c3',
+    title: 'Lose My Mind',
+    artist: 'Meduza, Becky Hill, Goodboys',
+    album: 'Lose My Mind',
+    albumCover: 'https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=100&h=100&fit=crop',
+    duration: '3:12',
+    pieceCid: 'baga6ea4seaqabc',
+    contentId: '0x9abc',
+  },
+  {
+    id: 'l3',
+    title: 'Sun Came Up',
+    artist: 'Sofi Tukker, John Summit',
+    album: 'Sun Came Up',
+    albumCover: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=100&h=100&fit=crop',
+    duration: '3:45',
+    filePath: '/music/sun-came-up.mp3',
+  },
+]
+
 export const Default: Story = {
   args: {
     tracks: mockTracks,
@@ -337,6 +398,25 @@ export const SharedWithMe: Story = {
             </div>
           }
         />
+        <Story />
+      </div>
+    ),
+  ],
+}
+
+/**
+ * Mix of local and cloud tracks — cloud tracks show a cloud icon next to the title.
+ */
+export const MixedSources: Story = {
+  args: {
+    tracks: mixedTracks,
+    onTrackClick: (track: any) => console.log('Track clicked:', track),
+    onTrackPlay: (track: any) => console.log('Track play:', track),
+    menuActions,
+  },
+  decorators: [
+    (Story: any) => (
+      <div class="h-screen overflow-y-auto bg-[var(--bg-page)]">
         <Story />
       </div>
     ),

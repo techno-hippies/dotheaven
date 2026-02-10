@@ -4,7 +4,7 @@
  * Steps:
  * 1. Name — Claim a .heaven name (on-chain via RegistryV1)
  * 2. Basics — Age, gender, location, language (on-chain via ProfileV2 + RecordsV1)
- * 3. Music — Connect Spotify or pick favorite artists (skippable)
+ * 3. Music — Pick favorite artists from curated grid (skippable)
  * 4. Avatar — Upload profile photo (IPFS + RecordsV1)
  *
  * All steps mandatory except Music (skippable). Resumes at the correct step
@@ -12,7 +12,7 @@
  */
 
 import type { Component } from 'solid-js'
-import { createSignal, createEffect, onMount, Show, Switch, Match } from 'solid-js'
+import { createSignal, createEffect, Show, Switch, Match } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import {
   OnboardingNameStep,
@@ -21,7 +21,7 @@ import {
   OnboardingAvatarStep,
   Stepper,
 } from '@heaven/ui'
-import type { OnboardingBasicsData, OnboardingMusicData, OnboardingArtist } from '@heaven/ui'
+import type { OnboardingBasicsData, OnboardingMusicData } from '@heaven/ui'
 import { HOME } from '@heaven/core'
 import { useAuth } from '../providers'
 import { useI18n } from '@heaven/i18n/solid'
@@ -36,12 +36,6 @@ import {
   computeNode,
 } from '../lib/heaven'
 import { queryClient } from '../main'
-import {
-  startSpotifyLink,
-  isSpotifyCallback,
-  handleSpotifyCallback,
-  clearSpotifyCallback,
-} from '../lib/camp-spotify'
 
 type OnboardingStep = 'name' | 'basics' | 'music' | 'avatar' | 'complete'
 
@@ -80,7 +74,6 @@ export const OnboardingPage: Component = () => {
   // Music step state
   const [musicSubmitting, setMusicSubmitting] = createSignal(false)
   const [musicError, setMusicError] = createSignal<string | null>(null)
-  const [connectingSpotify, setConnectingSpotify] = createSignal(false)
 
   // Avatar step state
   const [avatarUploading, setAvatarUploading] = createSignal(false)
@@ -231,77 +224,6 @@ export const OnboardingPage: Component = () => {
       source: data.spotifyConnected ? 'spotify' : 'manual',
       updatedAt: Math.floor(Date.now() / 1000),
       artistMbids,
-    }
-  }
-
-  // Build a PKP signer adapter for Camp SDK
-  function buildPkpSigner() {
-    const addr = address()
-    if (!addr) throw new Error('Not authenticated')
-    return {
-      signMessage: (message: string) => auth.signMessage(message),
-      getAddress: () => addr,
-    }
-  }
-
-  // On mount: detect if we're returning from Spotify OAuth redirect
-  onMount(async () => {
-    if (!isSpotifyCallback()) return
-
-    // Wait for auth to be ready
-    const waitForAuth = () =>
-      new Promise<void>((resolve) => {
-        const check = () => {
-          if (auth.isAuthenticated() && !auth.isSessionRestoring()) {
-            resolve()
-          } else {
-            setTimeout(check, 200)
-          }
-        }
-        check()
-      })
-
-    try {
-      await waitForAuth()
-      setStep('music')
-      setConnectingSpotify(true)
-      setMusicError(null)
-
-      const signer = buildPkpSigner()
-      const artists = await handleSpotifyCallback(signer)
-
-      if (artists.length > 0) {
-        // Auto-continue with the fetched artists
-        await handleMusicContinue({ artists, spotifyConnected: true })
-      } else {
-        setMusicError(t('onboarding.noSpotifyArtists'))
-        clearSpotifyCallback()
-      }
-    } catch (err) {
-      console.error('[Onboarding] Spotify callback error:', err)
-      setMusicError(
-        err instanceof Error ? err.message : t('onboarding.spotifyImportFailed'),
-      )
-      clearSpotifyCallback()
-    } finally {
-      setConnectingSpotify(false)
-    }
-  })
-
-  async function handleConnectSpotify(): Promise<OnboardingArtist[] | null> {
-    setConnectingSpotify(true)
-    setMusicError(null)
-    try {
-      const signer = buildPkpSigner()
-      // This redirects the browser — code after this won't execute
-      await startSpotifyLink(signer)
-      return null
-    } catch (err) {
-      console.error('[Onboarding] Spotify connect error:', err)
-      setMusicError(t('onboarding.spotifyConnectFailed'))
-      return null
-    } finally {
-      setConnectingSpotify(false)
     }
   }
 
@@ -529,10 +451,8 @@ export const OnboardingPage: Component = () => {
                 </p>
                 <OnboardingMusicStep
                   claimedName={claimedName()}
-                  onConnectSpotify={handleConnectSpotify}
                   onContinue={handleMusicContinue}
                   submitting={musicSubmitting()}
-                  connectingSpotify={connectingSpotify()}
                   error={musicError()}
                 />
               </div>

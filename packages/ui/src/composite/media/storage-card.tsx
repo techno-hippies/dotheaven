@@ -2,6 +2,7 @@ import type { Component } from 'solid-js'
 import { Show } from 'solid-js'
 import { Button } from '../../primitives/button'
 import { useIsMobile } from '../../lib/use-media-query'
+import { Plus, Warning } from '../../icons'
 
 export interface StorageStatus {
   balance: string
@@ -21,11 +22,6 @@ export interface StorageCardProps {
   footerText?: string
 }
 
-const PlusIcon = () => (
-  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M5 12h14" /><path d="M12 5v14" />
-  </svg>
-)
 
 export const StorageCard: Component<StorageCardProps> = (props) => {
   const isMobile = useIsMobile()
@@ -51,7 +47,7 @@ export const StorageCard: Component<StorageCardProps> = (props) => {
         <Button
           variant="ghost"
           size="sm"
-          icon={<PlusIcon />}
+          icon={<Plus class="w-3.5 h-3.5" />}
           onClick={props.onAddFunds}
         >
           Add Funds
@@ -90,11 +86,7 @@ export const StorageCard: Component<StorageCardProps> = (props) => {
             {/* Low balance warning */}
             <Show when={status().daysRemaining !== null && status().daysRemaining! < 7 && status().daysRemaining! > 0}>
               <div class="rounded-md bg-amber-500/10 border border-amber-500/20 p-3 mt-3 flex items-center gap-2">
-                <svg class="w-4 h-4 text-amber-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-                  <path d="M12 9v4" />
-                  <path d="M12 17h.01" />
-                </svg>
+                <Warning class="w-4 h-4 text-amber-400 flex-shrink-0" />
                 <span class="text-base text-amber-400">
                   Low balance — your uploads may be interrupted soon.
                 </span>

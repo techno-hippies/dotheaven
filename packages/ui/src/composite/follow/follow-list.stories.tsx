@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { FollowList, type FollowListMember } from './follow-list'
 
 const meta: Meta<typeof FollowList> = {
-  title: 'Profile/FollowList',
+  title: 'Follow/FollowList',
   component: FollowList,
   parameters: { layout: 'fullscreen' },
 }

@@ -2,6 +2,7 @@ import { type Component, Show } from 'solid-js'
 import { cn } from '../../lib/classnames'
 import { AlbumCover } from './album-cover'
 import { IconButton } from '../../primitives/icon-button'
+import { PlayFill, PauseFill, SkipForwardFill } from '../../icons'
 
 export interface MiniPlayerProps {
   class?: string
@@ -22,25 +23,6 @@ export interface MiniPlayerProps {
   /** Skip to next track */
   onNext?: () => void
 }
-
-// Phosphor icons (fill weight, 256x256 viewBox)
-const PlayFillIcon = () => (
-  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
-    <path d="M240,128a15.74,15.74,0,0,1-7.6,13.51L88.32,229.65a16,16,0,0,1-16.2.3A15.86,15.86,0,0,1,64,216.13V39.87a15.86,15.86,0,0,1,8.12-13.82,16,16,0,0,1,16.2.3L232.4,114.49A15.74,15.74,0,0,1,240,128Z" />
-  </svg>
-)
-
-const PauseFillIcon = () => (
-  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
-    <path d="M216,48V208a16,16,0,0,1-16,16H160a16,16,0,0,1-16-16V48a16,16,0,0,1,16-16h40A16,16,0,0,1,216,48ZM96,32H56A16,16,0,0,0,40,48V208a16,16,0,0,0,16,16H96a16,16,0,0,0,16-16V48A16,16,0,0,0,96,32Z" />
-  </svg>
-)
-
-const SkipForwardFillIcon = () => (
-  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 256 256">
-    <path d="M208,40V216a8,8,0,0,1-16,0V146.77L72.43,221.55A15.95,15.95,0,0,1,48,208.12V47.88A15.95,15.95,0,0,1,72.43,34.45L192,109.23V40a8,8,0,0,1,16,0Z" />
-  </svg>
-)
 
 /**
  * Compact mini player bar for mobile.
@@ -98,7 +80,7 @@ export const MiniPlayer: Component<MiniPlayerProps> = (props) => {
                 props.onPlayPause?.()
               }}
             >
-              {props.isPlaying ? <PauseFillIcon /> : <PlayFillIcon />}
+              {props.isPlaying ? <PauseFill class="w-5 h-5" /> : <PlayFill class="w-5 h-5" />}
             </IconButton>
             <IconButton
               variant="soft"
@@ -109,7 +91,7 @@ export const MiniPlayer: Component<MiniPlayerProps> = (props) => {
                 props.onNext?.()
               }}
             >
-              <SkipForwardFillIcon />
+              <SkipForwardFill class="w-5 h-5" />
             </IconButton>
           </div>
         </Show>

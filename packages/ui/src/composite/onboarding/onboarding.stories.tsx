@@ -123,7 +123,6 @@ export const MusicStep: StoryObj<typeof meta> = {
     >
       <OnboardingMusicStep
         claimedName="alice"
-        initialMode="manual"
         onContinue={(data) => console.log('Music:', data)}
       />
     </FullPageStep>
@@ -134,13 +133,13 @@ export const MusicStepWithError: StoryObj<typeof meta> = {
   name: 'Music Step (Error)',
   render: () => (
     <FullPageStep
-      title="Connect Your Spotify"
-      subtitle="Get matched with candidates who listen to the same music as you."
+      title="Your music taste"
+      subtitle="Pick some artists you love. This helps us personalize your experience."
       stepIndex={2}
     >
       <OnboardingMusicStep
         claimedName="alice"
-        error="Failed to connect to Spotify. Please try again."
+        error="Failed to save music preferences. Please try again."
         onContinue={(data) => console.log('Music:', data)}
       />
     </FullPageStep>

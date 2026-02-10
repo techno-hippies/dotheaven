@@ -1,28 +1,23 @@
-import { type Component, createSignal, createEffect, Show, createMemo, onCleanup, onMount } from 'solid-js'
+import { type Component, createSignal, createEffect, Show, createMemo, onMount } from 'solid-js'
 import { Button } from '@heaven/ui'
 import { useNavigate, useParams } from '@solidjs/router'
 import { createQuery } from '@tanstack/solid-query'
-import { ProfilePage, type ProfileTab, type ProfileScrobble } from '../components/profile'
+import { ProfilePage, type ProfileTab } from '../components/profile'
 import { useAuth } from '../providers'
 import { useI18n } from '@heaven/i18n/solid'
 import { openAuthDialog } from '../lib/auth-dialog'
-import { fetchScrobbleEntries, getProfile, setProfile, setTextRecord, setTextRecords, computeNode, checkNameAvailable, registerHeavenName, getEnsProfile, getPrimaryName, getVerificationStatus, buildSelfVerifyLink, syncVerificationToMegaEth, getHostBasePrice, getHostOpenSlots, getSlot, SlotStatus } from '../lib/heaven'
-import {
-  initSessionService,
-  setBasePrice as setBasePriceTx,
-  cancelSlot as cancelSlotTx,
-  bookSlot as bookSlotTx,
-  createRequest as createRequestTx,
-} from '../lib/session-service'
-import { uploadAvatar } from '../lib/heaven/avatar'
+import { fetchScrobbleEntries, getProfile, computeNode, checkNameAvailable, registerHeavenName, getEnsProfile, getPrimaryName, getVerificationStatus } from '../lib/heaven'
+import { initSessionService } from '../lib/session-service'
 import { getFollowState, getFollowCounts, toggleFollow } from '../lib/heaven/follow'
-import { type ProfileInput, type VerificationState, type VerifyStep, type VerificationData, type TimeSlot, type SessionSlotData, getTagLabel, VerifyIdentityDialog, alpha3ToAlpha2 } from '@heaven/ui'
+import { type ProfileInput, type VerificationData, VerifyIdentityDialog } from '@heaven/ui'
 import { publicProfile, peerChat } from '@heaven/core'
-import { parseTagCsv } from '../lib/heaven/profile'
-import { parseEther, type Address } from 'viem'
-import { formatTimeAgo, FILEBASE_GATEWAY, isValidCid, parseProfileId, resolveProfileId, applyHeavenRecords } from './profile-utils'
+import type { Address } from 'viem'
+import { mapScrobbles, resolveNationality, parseProfileId, resolveProfileId, applyHeavenRecords } from './profile-utils'
 import { ProfileWalletTab } from './ProfileWalletTab'
 import { ProfileSkeleton } from './ProfileSkeleton'
+import { useVerification } from '../hooks/useVerification'
+import { useSchedule } from '../hooks/useSchedule'
+import { useProfileSave } from '../hooks/useProfileSave'
 
 export const MyProfilePage: Component = () => {
   const auth = useAuth()
@@ -32,8 +27,10 @@ export const MyProfilePage: Component = () => {
   const [heavenName, setHeavenName] = createSignal<string | null>(localStorage.getItem('heaven:username'))
   const [nameClaiming, setNameClaiming] = createSignal(false)
   const [nameClaimError, setNameClaimError] = createSignal<string | null>(null)
+  const [importedAvatarUri, setImportedAvatarUri] = createSignal<string | null>(null)
 
   const address = () => auth.pkpAddress()
+  const eoaAddr = () => auth.eoaAddress()
 
   // Initialize session service for escrow transactions
   onMount(() => {
@@ -51,7 +48,6 @@ export const MyProfilePage: Component = () => {
     staleTime: 1000 * 60 * 5,
   }))
 
-  // Sync on-chain result into heavenName signal + localStorage
   createEffect(() => {
     const result = primaryNameQuery.data
     if (result?.label && !heavenName()) {
@@ -68,65 +64,36 @@ export const MyProfilePage: Component = () => {
     return null
   }
 
-  // ── Schedule state ──
-  const [scheduleAvailability, setScheduleAvailability] = createSignal<TimeSlot[]>(
-    JSON.parse(localStorage.getItem('heaven:schedule:availability') || '[]')
-  )
-  const [scheduleAccepting, setScheduleAccepting] = createSignal(
-    localStorage.getItem('heaven:schedule:accepting') === 'true'
-  )
-
-  // Persist availability to localStorage
-  createEffect(() => {
-    localStorage.setItem('heaven:schedule:availability', JSON.stringify(scheduleAvailability()))
-  })
-  createEffect(() => {
-    localStorage.setItem('heaven:schedule:accepting', String(scheduleAccepting()))
-  })
-
-  // Fetch host base price from contract
-  const basePriceQuery = createQuery(() => ({
-    queryKey: ['hostBasePrice', address()],
-    queryFn: () => getHostBasePrice(address()! as Address),
-    get enabled() { return !!address() },
-    staleTime: 1000 * 60 * 5,
-  }))
-
-  // Fetch open slots for this host
-  const slotsQuery = createQuery(() => ({
-    queryKey: ['hostSlots', address()],
+  // ── Hooks ──
+  const schedule = useSchedule(address, { isOwner: true })
+  const verification = useVerification(address, auth)
+  const profileQuery = createQuery(() => ({
+    queryKey: ['profile', address(), resolvedNode()],
     queryFn: async () => {
-      const slots = await getHostOpenSlots(address()! as Address)
-      return slots.map((s): SessionSlotData => ({
-        id: s.id,
-        startTime: s.startTime,
-        durationMins: s.durationMins,
-        priceEth: s.priceEth,
-        status: s.status === SlotStatus.Open ? 'open' : s.status === SlotStatus.Booked ? 'booked' : s.status === SlotStatus.Cancelled ? 'cancelled' : 'settled',
-      }))
+      let profile = (await getProfile(address()!)) ?? ({} as ProfileInput)
+      const node = resolvedNode()
+      if (node) {
+        try {
+          profile = await applyHeavenRecords(profile, node as `0x${string}`)
+        } catch (e) {
+          console.warn('[ProfilePage] Failed to fetch records:', e)
+        }
+      }
+      return profile
     },
     get enabled() { return !!address() },
-    staleTime: 1000 * 60 * 2,
   }))
 
-  const handleSetBasePrice = async (priceEth: string) => {
-    try {
-      await setBasePriceTx(priceEth)
-      basePriceQuery.refetch()
-    } catch (err) {
-      console.error('[Schedule] setBasePrice failed:', err)
-    }
-  }
+  const { handleProfileSave } = useProfileSave({
+    auth,
+    heavenName,
+    importedAvatarUri,
+    setImportedAvatarUri,
+    profileQuery,
+    t,
+  })
 
-  const handleCancelSlot = async (slotId: number) => {
-    try {
-      await cancelSlotTx(slotId)
-      slotsQuery.refetch()
-    } catch (err) {
-      console.error('[Schedule] cancelSlot failed:', err)
-    }
-  }
-
+  // ── Queries ──
   const myFollowCountsQuery = createQuery(() => ({
     queryKey: ['followCounts', address()],
     queryFn: () => getFollowCounts(address()! as Address),
@@ -140,27 +107,6 @@ export const MyProfilePage: Component = () => {
     get enabled() { return !!address() },
   }))
 
-  const profileQuery = createQuery(() => ({
-    queryKey: ['profile', address(), resolvedNode()],
-    queryFn: async () => {
-      let profile = (await getProfile(address()!)) ?? ({} as ProfileInput)
-
-      const node = resolvedNode()
-      if (node) {
-        try {
-          profile = await applyHeavenRecords(profile, node as `0x${string}`)
-        } catch (e) {
-          console.warn('[ProfilePage] Failed to fetch records:', e)
-        }
-      }
-
-      return profile
-    },
-    get enabled() { return !!address() },
-  }))
-
-  // Fetch ENS profile for EOA users (enables "import from wallet" avatar)
-  const eoaAddr = () => auth.eoaAddress()
   const ensQuery = createQuery(() => ({
     queryKey: ['ensProfile', eoaAddr()],
     queryFn: () => getEnsProfile(eoaAddr()!),
@@ -168,149 +114,25 @@ export const MyProfilePage: Component = () => {
     staleTime: 1000 * 60 * 30,
   }))
 
-  // Handle importing an avatar URI from ENS (stores as ENSIP-12 ref or URL)
-  const [importedAvatarUri, setImportedAvatarUri] = createSignal<string | null>(null)
-
-  const handleImportAvatar = (uri: string) => {
-    setImportedAvatarUri(uri)
-  }
-
-  // ---- Verification (Self.xyz) ----
-  const verificationQuery = createQuery(() => ({
-    queryKey: ['verification', address()],
-    queryFn: () => getVerificationStatus(address()! as `0x${string}`),
-    get enabled() { return !!address() },
-    staleTime: 1000 * 60 * 5,
-  }))
-
-  const verificationState = (): VerificationState => {
-    const v = verificationQuery.data
-    if (!v) return 'none'
-    return v.verified ? 'verified' : 'none'
-  }
-
-  const verificationData = (): VerificationData | undefined => {
-    const v = verificationQuery.data
-    if (!v?.verified) return undefined
-    return { verified: true, nationality: v.nationality }
-  }
-
-  const [verifyDialogOpen, setVerifyDialogOpen] = createSignal(false)
-  const [verifyStep, setVerifyStep] = createSignal<VerifyStep>('qr')
-  const [verifyLink, setVerifyLink] = createSignal<string | undefined>()
-  const [verifyLinkLoading, setVerifyLinkLoading] = createSignal(false)
-  const [verifyError, setVerifyError] = createSignal<string | undefined>()
-
-  let pollTimer: ReturnType<typeof setInterval> | undefined
-
-  onCleanup(() => { if (pollTimer) clearInterval(pollTimer) })
-
-  const handleVerifyClick = async () => {
-    setVerifyStep('qr')
-    setVerifyLink(undefined)
-    setVerifyError(undefined)
-    setVerifyDialogOpen(true)
-    setVerifyLinkLoading(true)
-
-    try {
-      const VERIFIER = import.meta.env.VITE_SELF_VERIFIER_CELO
-      console.log('[Verify] VITE_SELF_VERIFIER_CELO =', VERIFIER)
-      if (!VERIFIER) throw new Error('Verifier contract not configured')
-
-      const link = await buildSelfVerifyLink({
-        contractAddress: VERIFIER,
-        userAddress: address()! as `0x${string}`,
-        scope: 'heaven-profile-verify',
-      })
-      console.log('[Verify] Self link:', link)
-      setVerifyLink(link)
-      setVerifyLinkLoading(false)
-
-      // Stay on QR step — poll in background while user scans
-      pollTimer = setInterval(async () => {
-        try {
-          const status = await getVerificationStatus(address()! as `0x${string}`, { skipCache: true })
-          if (status.verified) {
-            clearInterval(pollTimer!)
-            pollTimer = undefined
-
-            // Mirror to MegaETH
-            if (status.mirrorStale) {
-              setVerifyStep('mirroring')
-              try {
-                const authCtx = await auth.getAuthContext()
-                await syncVerificationToMegaEth(address()! as `0x${string}`, authCtx)
-              } catch (e) {
-                console.warn('[Verify] Mirror sync failed (non-fatal):', e)
-              }
-            }
-
-            setVerifyStep('success')
-            verificationQuery.refetch()
-          }
-        } catch {
-          // polling error, keep trying
-        }
-      }, 5000)
-    } catch (err: any) {
-      setVerifyLinkLoading(false)
-      setVerifyStep('error')
-      setVerifyError(err?.message || 'Failed to start verification')
-    }
-  }
-
-  const handleVerifyRetry = () => {
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = undefined }
-    handleVerifyClick()
-  }
-
-  const handleVerifyDialogChange = (open: boolean) => {
-    setVerifyDialogOpen(open)
-    if (!open && pollTimer) {
-      clearInterval(pollTimer)
-      pollTimer = undefined
-    }
-  }
-
-  const scrobbles = (): ProfileScrobble[] => {
-    const entries = scrobblesQuery.data ?? []
-    return entries.map((e) => ({
-      id: e.id,
-      title: e.title,
-      artist: e.artist,
-      album: e.album,
-      trackId: e.trackId,
-      timestamp: formatTimeAgo(e.playedAt, t),
-      coverUrl: isValidCid(e.coverCid)
-        ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
-        : undefined,
-    }))
-  }
-
+  // ── Derived ──
   const displayName = () => {
-    const profile = profileQuery.data
-    if (profile?.displayName) return profile.displayName
+    if (profileQuery.data?.displayName) return profileQuery.data.displayName
     const hn = heavenName()
     if (hn) return hn
-    const ens = ensQuery.data
-    if (ens?.name) return ens.name
+    if (ensQuery.data?.name) return ensQuery.data.name
     return t('profile.myProfile')
   }
 
   const handleName = () => {
     const hn = heavenName()
     if (hn) return `${hn}.heaven`
-    const ens = ensQuery.data
-    if (ens?.name) return ens.name
+    if (ensQuery.data?.name) return ensQuery.data.name
     const addr = auth.eoaAddress() ?? auth.pkpAddress()
     if (!addr) return 'unknown'
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`
   }
 
-  const handleCheckNameAvailability = async (name: string): Promise<boolean> => {
-    return checkNameAvailable(name)
-  }
-
+  // ── Name claim ──
   const handleClaimName = async (name: string): Promise<boolean> => {
     const pkpInfoData = auth.pkpInfo()
     const addr = auth.pkpAddress()
@@ -335,189 +157,6 @@ export const MyProfilePage: Component = () => {
     } finally {
       setNameClaiming(false)
     }
-  }
-
-  const handleProfileSave = async (data: ProfileInput) => {
-    const addr = auth.pkpAddress()
-    const pkpInfoData = auth.pkpInfo()
-
-    if (!addr || !pkpInfoData) {
-      throw new Error('Not authenticated')
-    }
-
-    const draft: ProfileInput = { ...data }
-
-    // Get auth context for Lit Action execution (retry on stale session)
-    let authContext = await auth.getAuthContext()
-
-    const username = heavenName()
-    const wantsRecords = Boolean(
-      draft.avatarFile ||
-      draft.coverFile ||
-      draft.bio !== undefined ||
-      draft.url !== undefined ||
-      draft.twitter !== undefined ||
-      draft.github !== undefined ||
-      draft.telegram !== undefined
-    )
-    if (wantsRecords && !username) {
-      throw new Error(t('profile.claimNameFirst'))
-    }
-
-    let updatedAvatar = false
-    let updatedCover = false
-
-    // If user imported an avatar URI from ENS/wallet, use it directly (no upload)
-    const imported = importedAvatarUri()
-    if (imported && !draft.avatarFile) {
-      console.log('[ProfilePage] Using imported avatar URI:', imported)
-      draft.avatar = imported
-      updatedAvatar = true
-      setImportedAvatarUri(null)
-    }
-
-    // Upload avatar to IPFS if a new file was selected
-    if (draft.avatarFile) {
-      console.log('[ProfilePage] Uploading avatar to IPFS...')
-      const uploadResult = await uploadAvatar(
-        draft.avatarFile,
-        pkpInfoData.publicKey,
-        authContext,
-      )
-      if (!uploadResult.success || !uploadResult.avatarCID) {
-        throw new Error(uploadResult.error || 'Avatar upload failed')
-      }
-      console.log('[ProfilePage] Avatar uploaded:', uploadResult.avatarCID)
-      const avatarURI = `ipfs://${uploadResult.avatarCID}`
-      draft.avatar = avatarURI
-      delete draft.avatarFile
-      updatedAvatar = true
-
-    }
-
-    // Upload cover photo to IPFS if a new file was selected
-    if (draft.coverFile) {
-      console.log('[ProfilePage] Uploading cover photo to IPFS...')
-      const uploadResult = await uploadAvatar(
-        draft.coverFile,
-        pkpInfoData.publicKey,
-        authContext,
-        { skipStyleCheck: true },
-      )
-      if (!uploadResult.success || !uploadResult.avatarCID) {
-        throw new Error(uploadResult.error || 'Cover photo upload failed')
-      }
-      console.log('[ProfilePage] Cover uploaded:', uploadResult.avatarCID)
-      draft.coverPhoto = `ipfs://${uploadResult.avatarCID}`
-      delete draft.coverFile
-      updatedCover = true
-    }
-
-    // Store all text records in RecordsV1 (ENS-compatible keys) if user has a name
-    if (username) {
-      const recordKeys: string[] = []
-      const recordValues: string[] = []
-
-      if (updatedAvatar && draft.avatar) {
-        recordKeys.push('avatar')
-        recordValues.push(draft.avatar)
-      }
-      if (updatedCover && draft.coverPhoto) {
-        recordKeys.push('header')
-        recordValues.push(draft.coverPhoto)
-      }
-
-      // Convert tag IDs to display labels for RecordsV1
-      const hobbyIds = parseTagCsv(draft.hobbiesCommit)
-      const skillIds = parseTagCsv(draft.skillsCommit)
-      const hobbyLabels = hobbyIds.length ? hobbyIds.map(id => getTagLabel(id)).join(', ') : undefined
-      const skillLabels = skillIds.length ? skillIds.map(id => getTagLabel(id)).join(', ') : undefined
-
-      // Social/bio fields — always write if present (empty string clears the record)
-      const socialRecords: [string, string | undefined][] = [
-        ['description', draft.bio],
-        ['url', draft.url],
-        ['com.twitter', draft.twitter],
-        ['com.github', draft.github],
-        ['org.telegram', draft.telegram],
-        ['heaven.hobbies', hobbyLabels],
-        ['heaven.skills', skillLabels],
-        ['heaven.location', draft.locationCityId],
-        ['heaven.school', draft.school],
-      ]
-      console.log('[ProfilePage] Social/commit records to save:', Object.fromEntries(socialRecords))
-      for (const [key, value] of socialRecords) {
-        if (value !== undefined) {
-          recordKeys.push(key)
-          recordValues.push(value)
-        }
-      }
-
-      if (recordKeys.length > 0) {
-        const node = computeNode(username)
-        console.log('[ProfilePage] Setting records on node:', node, recordKeys)
-        let recordResult = recordKeys.length === 1
-          ? await setTextRecord(node, recordKeys[0], recordValues[0], pkpInfoData.publicKey, authContext)
-          : await setTextRecords(node, recordKeys, recordValues, pkpInfoData.publicKey, authContext)
-        if (!recordResult.success && /signature/i.test(recordResult.error || '')) {
-          console.warn('[ProfilePage] Signature error, refreshing auth context and retrying record set...')
-          const { clearAuthContext } = await import('../lib/lit')
-          clearAuthContext()
-          authContext = await auth.getAuthContext()
-          recordResult = recordKeys.length === 1
-            ? await setTextRecord(node, recordKeys[0], recordValues[0], pkpInfoData.publicKey, authContext)
-            : await setTextRecords(node, recordKeys, recordValues, pkpInfoData.publicKey, authContext)
-        }
-        if (!recordResult.success) {
-          throw new Error(recordResult.error || 'Failed to set ENS records')
-        }
-        console.log('[ProfilePage] Records set:', recordResult.txHash)
-      }
-    }
-
-    // These fields are stored in RecordsV1 only, not ProfileV1.
-    delete draft.avatar
-    delete draft.coverPhoto
-    delete draft.bio
-    delete draft.url
-    delete draft.twitter
-    delete draft.github
-    delete draft.telegram
-
-    console.log('[ProfilePage] Saving profile:', draft)
-    let result: Awaited<ReturnType<typeof setProfile>>
-    try {
-      result = await setProfile(draft, addr, authContext, pkpInfoData.publicKey)
-    } catch (err: any) {
-      // Retry once on Lit session/signature errors
-      if (/[Ss]ignature error/.test(err?.message || '')) {
-        console.warn('[ProfilePage] Signature error, refreshing auth context and retrying...')
-        const { clearAuthContext } = await import('../lib/lit')
-        clearAuthContext()
-        authContext = await auth.getAuthContext()
-        result = await setProfile(draft, addr, authContext, pkpInfoData.publicKey)
-      } else {
-        throw err
-      }
-    }
-
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to save profile')
-    }
-
-    console.log('[ProfilePage] Profile saved successfully:', result)
-
-    // Refetch profile data after successful save
-    profileQuery.refetch()
-  }
-
-  // Nationality: prefer verified (alpha-3 → alpha-2), fall back to self-reported
-  const nationalityCode = () => {
-    const v = verificationQuery.data
-    if (v?.verified && v.nationality) {
-      return alpha3ToAlpha2(v.nationality) ?? v.nationality.slice(0, 2).toUpperCase()
-    }
-    return profileQuery.data?.nationality || undefined
   }
 
   const initialLoading = () => profileQuery.isLoading || ensQuery.isLoading
@@ -548,50 +187,50 @@ export const MyProfilePage: Component = () => {
           username={handleName()}
           displayName={displayName()}
           avatarUrl={profileQuery.data?.avatar || ensQuery.data?.avatar || undefined}
-          nationalityCode={nationalityCode()}
+          nationalityCode={resolveNationality(verification.verificationQuery.data, profileQuery.data)}
           isOwnProfile={true}
           followerCount={myFollowCountsQuery.data?.followers}
           followingCount={myFollowCountsQuery.data?.following}
           onFollowerCountClick={() => { const id = heavenName() ? `${heavenName()}.heaven` : address(); if (id) navigate(`/u/${id}/followers`) }}
           onFollowingCountClick={() => { const id = heavenName() ? `${heavenName()}.heaven` : address(); if (id) navigate(`/u/${id}/following`) }}
-          verificationState={verificationState()}
-          onVerifyClick={handleVerifyClick}
+          verificationState={verification.verificationState()}
+          onVerifyClick={verification.handleVerifyClick}
           walletSlot={address() ? <ProfileWalletTab address={address()!} /> : undefined}
           activeTab={activeTab()}
           onTabChange={setActiveTab}
-          scrobbles={scrobbles()}
+          scrobbles={mapScrobbles(scrobblesQuery.data ?? [], t)}
           scrobblesLoading={scrobblesQuery.isLoading}
           profileData={profileQuery.data || null}
           profileLoading={profileQuery.isLoading}
           onProfileSave={handleProfileSave}
           heavenName={heavenName()}
           onClaimName={handleClaimName}
-          onCheckNameAvailability={handleCheckNameAvailability}
+          onCheckNameAvailability={(name: string) => checkNameAvailable(name)}
           nameClaiming={nameClaiming()}
           nameClaimError={nameClaimError()}
           eoaAddress={eoaAddr()}
           ensProfile={ensQuery.data}
           ensLoading={ensQuery.isLoading}
-          onImportAvatar={handleImportAvatar}
-          verification={verificationData()}
-          scheduleBasePrice={basePriceQuery.data}
-          scheduleAccepting={scheduleAccepting()}
-          scheduleAvailability={scheduleAvailability()}
-          scheduleSlots={slotsQuery.data}
-          scheduleSlotsLoading={slotsQuery.isLoading}
-          onSetBasePrice={handleSetBasePrice}
-          onToggleAccepting={setScheduleAccepting}
-          onAvailabilityChange={setScheduleAvailability}
-          onCancelSlot={handleCancelSlot}
+          onImportAvatar={(uri: string) => setImportedAvatarUri(uri)}
+          verification={verification.verificationData()}
+          scheduleBasePrice={schedule.basePriceQuery.data}
+          scheduleAccepting={schedule.accepting()}
+          scheduleAvailability={schedule.availability()}
+          scheduleSlots={schedule.slotsQuery.data}
+          scheduleSlotsLoading={schedule.slotsQuery.isLoading}
+          onSetBasePrice={schedule.handleSetBasePrice}
+          onToggleAccepting={schedule.setAccepting}
+          onAvailabilityChange={schedule.setAvailability}
+          onCancelSlot={schedule.handleCancelSlot}
         />
         <VerifyIdentityDialog
-          open={verifyDialogOpen()}
-          onOpenChange={handleVerifyDialogChange}
-          verifyLink={verifyLink()}
-          linkLoading={verifyLinkLoading()}
-          step={verifyStep()}
-          errorMessage={verifyError()}
-          onRetry={handleVerifyRetry}
+          open={verification.dialogOpen()}
+          onOpenChange={verification.handleDialogChange}
+          verifyLink={verification.link()}
+          linkLoading={verification.linkLoading()}
+          step={verification.step()}
+          errorMessage={verification.error()}
+          onRetry={verification.handleRetry}
         />
         </Show>
       </Show>
@@ -603,6 +242,7 @@ export const PublicProfilePage: Component = () => {
   const params = useParams()
   const { t } = useI18n()
   const navigate = useNavigate()
+  const auth = useAuth()
   const [activeTab, setActiveTab] = createSignal<ProfileTab>('posts')
 
   // Canonicalize bare heaven labels → /u/label.heaven
@@ -623,64 +263,12 @@ export const PublicProfilePage: Component = () => {
 
   const address = () => resolvedQuery.data?.address
   const node = () => resolvedQuery.data?.node
-
-  // Schedule data for public profile
-  const publicBasePriceQuery = createQuery(() => ({
-    queryKey: ['hostBasePrice', address()],
-    queryFn: () => getHostBasePrice(address()! as Address),
-    get enabled() { return !!address() },
-    staleTime: 1000 * 60 * 5,
-  }))
-
-  const publicSlotsQuery = createQuery(() => ({
-    queryKey: ['hostSlots', address()],
-    queryFn: async () => {
-      const slots = await getHostOpenSlots(address()! as Address)
-      return slots.map((s): SessionSlotData => ({
-        id: s.id,
-        startTime: s.startTime,
-        durationMins: s.durationMins,
-        priceEth: s.priceEth,
-        status: s.status === SlotStatus.Open ? 'open' : s.status === SlotStatus.Booked ? 'booked' : s.status === SlotStatus.Cancelled ? 'cancelled' : 'settled',
-      }))
-    },
-    get enabled() { return !!address() },
-    staleTime: 1000 * 60 * 2,
-  }))
-
-  const handleBookSlot = async (slotId: number) => {
-    try {
-      const slot = await getSlot(slotId)
-      const priceWei = parseEther(slot.priceEth)
-      await bookSlotTx(slotId, priceWei)
-      publicSlotsQuery.refetch()
-    } catch (err) {
-      console.error('[Schedule] bookSlot failed:', err)
-    }
-  }
-
-  const handleRequestCustomTime = async (params: { windowStart: number; windowEnd: number; durationMins: number; amountEth: string }) => {
-    const hostAddr = address()
-    if (!hostAddr) return
-    try {
-      await createRequestTx({
-        hostTarget: hostAddr as `0x${string}`,
-        windowStart: params.windowStart,
-        windowEnd: params.windowEnd,
-        durationMins: params.durationMins,
-        expiry: Math.floor(Date.now() / 1000) + 86400 * 7,
-        amountWei: parseEther(params.amountEth),
-      })
-      publicSlotsQuery.refetch()
-    } catch (err) {
-      console.error('[Schedule] createRequest failed:', err)
-    }
-  }
-
-  // ── Follow state ──────────────────────────────────────────────────
-  const auth = useAuth()
   const myAddress = () => auth.pkpAddress()
 
+  // ── Hooks ──
+  const schedule = useSchedule(address)
+
+  // ── Queries ──
   const followStateQuery = createQuery(() => ({
     queryKey: ['followState', myAddress(), address()],
     queryFn: () => getFollowState(myAddress()! as Address, address()! as Address),
@@ -695,6 +283,49 @@ export const PublicProfilePage: Component = () => {
     staleTime: 1000 * 60,
   }))
 
+  const scrobblesQuery = createQuery(() => ({
+    queryKey: ['scrobbles', address()],
+    queryFn: () => fetchScrobbleEntries(address()!),
+    get enabled() { return !!address() },
+  }))
+
+  const profileQuery = createQuery(() => ({
+    queryKey: ['profile', address(), node()],
+    queryFn: async () => {
+      let profile = (await getProfile(address()!)) ?? ({} as ProfileInput)
+      if (node()) {
+        try {
+          profile = await applyHeavenRecords(profile, node()!)
+        } catch (err) {
+          console.warn('[PublicProfilePage] Failed to fetch records:', err)
+        }
+      }
+      return profile
+    },
+    get enabled() { return !!address() },
+  }))
+
+  const ensProfileQuery = createQuery(() => ({
+    queryKey: ['ensProfile', address()],
+    queryFn: () => getEnsProfile(address()!),
+    get enabled() { return !!address() },
+    staleTime: 1000 * 60 * 30,
+  }))
+
+  const publicVerificationQuery = createQuery(() => ({
+    queryKey: ['verification', address()],
+    queryFn: () => getVerificationStatus(address()! as `0x${string}`),
+    get enabled() { return !!address() },
+    staleTime: 1000 * 60 * 5,
+  }))
+
+  const publicVerificationData = (): VerificationData | undefined => {
+    const v = publicVerificationQuery.data
+    if (!v?.verified) return undefined
+    return { verified: true, nationality: v.nationality }
+  }
+
+  // ── Handlers ──
   const handleFollowClick = async () => {
     const target = address()
     const pkp = auth.pkpInfo()
@@ -722,76 +353,14 @@ export const PublicProfilePage: Component = () => {
     }
   }
 
-  const scrobblesQuery = createQuery(() => ({
-    queryKey: ['scrobbles', address()],
-    queryFn: () => fetchScrobbleEntries(address()!),
-    get enabled() { return !!address() },
-  }))
-
-  const profileQuery = createQuery(() => ({
-    queryKey: ['profile', address(), node()],
-    queryFn: async () => {
-      let profile = (await getProfile(address()!)) ?? ({} as ProfileInput)
-
-      if (node()) {
-        try {
-          profile = await applyHeavenRecords(profile, node()!)
-        } catch (err) {
-          console.warn('[PublicProfilePage] Failed to fetch records:', err)
-        }
-      }
-
-      return profile
-    },
-    get enabled() { return !!address() },
-  }))
-
-  const ensProfileQuery = createQuery(() => ({
-    queryKey: ['ensProfile', address()],
-    queryFn: () => getEnsProfile(address()!),
-    get enabled() { return !!address() },
-    staleTime: 1000 * 60 * 30,
-  }))
-
-  const publicVerificationQuery = createQuery(() => ({
-    queryKey: ['verification', address()],
-    queryFn: () => getVerificationStatus(address()! as `0x${string}`),
-    get enabled() { return !!address() },
-    staleTime: 1000 * 60 * 5,
-  }))
-
-  const publicVerificationData = (): VerificationData | undefined => {
-    const v = publicVerificationQuery.data
-    if (!v?.verified) return undefined
-    return { verified: true, nationality: v.nationality }
-  }
-
-  const scrobbles = (): ProfileScrobble[] => {
-    const entries = scrobblesQuery.data ?? []
-    return entries.map((e) => ({
-      id: e.id,
-      title: e.title,
-      artist: e.artist,
-      album: e.album,
-      trackId: e.trackId,
-      timestamp: formatTimeAgo(e.playedAt, t),
-      coverUrl: isValidCid(e.coverCid)
-        ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
-        : undefined,
-    }))
-  }
-
+  // ── Derived ──
   const displayName = () => {
-    const profile = profileQuery.data
-    if (profile?.displayName) return profile.displayName
+    if (profileQuery.data?.displayName) return profileQuery.data.displayName
     const resolved = resolvedQuery.data
     if (resolved?.label) return resolved.label
     if (resolved?.name) return resolved.name
-    const ens = ensProfileQuery.data
-    if (ens?.name) return ens.name
-    if (resolved?.address) {
-      return `${resolved.address.slice(0, 6)}...${resolved.address.slice(-4)}`
-    }
+    if (ensProfileQuery.data?.name) return ensProfileQuery.data.name
+    if (resolved?.address) return `${resolved.address.slice(0, 6)}...${resolved.address.slice(-4)}`
     return t('nav.profile')
   }
 
@@ -802,15 +371,6 @@ export const PublicProfilePage: Component = () => {
     if (resolved.name) return resolved.name
     if (resolved.address) return `${resolved.address.slice(0, 6)}...${resolved.address.slice(-4)}`
     return 'unknown'
-  }
-
-  // Nationality: prefer verified (alpha-3 → alpha-2), fall back to self-reported
-  const publicNationalityCode = () => {
-    const v = publicVerificationQuery.data
-    if (v?.verified && v.nationality) {
-      return alpha3ToAlpha2(v.nationality) ?? v.nationality.slice(0, 2).toUpperCase()
-    }
-    return profileQuery.data?.nationality || undefined
   }
 
   const initialLoading = () => resolvedQuery.isLoading || (address() && (profileQuery.isLoading || ensProfileQuery.isLoading))
@@ -833,7 +393,7 @@ export const PublicProfilePage: Component = () => {
             username={handleName()}
             displayName={displayName()}
             avatarUrl={profileQuery.data?.avatar || ensProfileQuery.data?.avatar || undefined}
-            nationalityCode={publicNationalityCode()}
+            nationalityCode={resolveNationality(publicVerificationQuery.data, profileQuery.data)}
             isOwnProfile={false}
             isFollowing={followStateQuery.data ?? false}
             onFollowClick={handleFollowClick}
@@ -844,7 +404,7 @@ export const PublicProfilePage: Component = () => {
             walletSlot={address() ? <ProfileWalletTab address={address()!} /> : undefined}
             activeTab={activeTab()}
             onTabChange={setActiveTab}
-            scrobbles={scrobbles()}
+            scrobbles={mapScrobbles(scrobblesQuery.data ?? [], t)}
             scrobblesLoading={scrobblesQuery.isLoading}
             profileData={profileQuery.data || null}
             profileLoading={profileQuery.isLoading}
@@ -852,16 +412,14 @@ export const PublicProfilePage: Component = () => {
             ensProfile={ensProfileQuery.data}
             ensLoading={ensProfileQuery.isLoading}
             verification={publicVerificationData()}
-            scheduleBasePrice={publicBasePriceQuery.data}
-            scheduleSlots={publicSlotsQuery.data}
-            scheduleSlotsLoading={publicSlotsQuery.isLoading}
-            onBookSlot={handleBookSlot}
-            onRequestCustomTime={handleRequestCustomTime}
+            scheduleBasePrice={schedule.basePriceQuery.data}
+            scheduleSlots={schedule.slotsQuery.data}
+            scheduleSlotsLoading={schedule.slotsQuery.isLoading}
+            onBookSlot={schedule.handleBookSlot}
+            onRequestCustomTime={schedule.handleRequestCustomTime}
             onMessageClick={() => {
               const addr = address()
-              if (addr) {
-                navigate(peerChat(addr))
-              }
+              if (addr) navigate(peerChat(addr))
             }}
           />
         </Show>

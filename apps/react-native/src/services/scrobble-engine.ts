@@ -1,5 +1,5 @@
 /**
- * ScrobbleEngine — adapted from packages/core/src/scrobble/engine.ts for React Native.
+ * ScrobbleEngine — copy of packages/core/src/scrobble/engine.ts for React Native.
  * Uses Date.now() instead of performance.now().
  */
 
@@ -11,7 +11,10 @@ export interface ReadyScrobble {
   playedAtSec: number
   source: string
   ipId: string | null
-  isrc: string | null
+  mbid: string | null
+  coverCid: string | null
+  filePath: string | null
+  coverPath: string | null
 }
 
 export interface TrackMetadata {
@@ -20,12 +23,16 @@ export interface TrackMetadata {
   album?: string | null
   durationMs?: number | null
   ipId?: string | null
-  isrc?: string | null
+  mbid?: string | null
+  coverCid?: string | null
+  filePath?: string | null
+  coverPath?: string | null
 }
 
-// TEST: low thresholds for quick iteration — revert for production
-const MAX_SCROBBLE_THRESHOLD_MS = 10_000
-const MIN_DURATION_FOR_SCROBBLE_MS = 3_000
+// Scrobble thresholds (TEST: low for quick iteration — revert for production)
+// Production: MAX=240_000, MIN=30_000, divisor=2
+const MAX_SCROBBLE_THRESHOLD_MS = 10_000   // 10s
+const MIN_DURATION_FOR_SCROBBLE_MS = 3_000 // 3s
 
 interface SessionState {
   sessionKey: string
@@ -35,7 +42,10 @@ interface SessionState {
   album: string | null
   durationMs: number | null
   ipId: string | null
-  isrc: string | null
+  mbid: string | null
+  coverCid: string | null
+  filePath: string | null
+  coverPath: string | null
   startedAtEpochSec: number | null
   accumulatedPlayMs: number
   lastUpdateTimeMs: number
@@ -52,7 +62,10 @@ function createSession(sessionKey: string): SessionState {
     album: null,
     durationMs: null,
     ipId: null,
-    isrc: null,
+    mbid: null,
+    coverCid: null,
+    filePath: null,
+    coverPath: null,
     startedAtEpochSec: null,
     accumulatedPlayMs: 0,
     lastUpdateTimeMs: 0,
@@ -74,7 +87,7 @@ function buildTrackKey(
 
 function computeThreshold(durationMs: number | null): number {
   if (durationMs != null && durationMs >= MIN_DURATION_FOR_SCROBBLE_MS) {
-    return Math.min(durationMs / 100, MAX_SCROBBLE_THRESHOLD_MS)
+    return Math.min(durationMs / 100, MAX_SCROBBLE_THRESHOLD_MS) // TEST: 1% — revert to /2
   }
   return MAX_SCROBBLE_THRESHOLD_MS
 }
@@ -120,7 +133,10 @@ export class ScrobbleEngine {
     state.album = metadata.album ?? null
     state.durationMs = metadata.durationMs ?? null
     state.ipId = metadata.ipId ?? null
-    state.isrc = metadata.isrc ?? null
+    state.mbid = metadata.mbid ?? null
+    state.coverCid = metadata.coverCid ?? null
+    state.filePath = metadata.filePath ?? null
+    state.coverPath = metadata.coverPath ?? null
 
     if (newTrackKey != null && state.isPlaying && state.startedAtEpochSec == null) {
       state.startedAtEpochSec = nowEpochSec()
@@ -176,7 +192,10 @@ export class ScrobbleEngine {
           playedAtSec: state.startedAtEpochSec,
           source: state.sessionKey,
           ipId: state.ipId,
-          isrc: state.isrc,
+          mbid: state.mbid,
+          coverCid: state.coverCid,
+          filePath: state.filePath,
+          coverPath: state.coverPath,
         })
       }
     }
@@ -201,7 +220,7 @@ export class ScrobbleEngine {
       this.accumulatePlayTime(state)
     }
 
-    const { artist, title, album, durationMs, startedAtEpochSec, accumulatedPlayMs, alreadyScrobbled, ipId, isrc } = state
+    const { artist, title, album, durationMs, startedAtEpochSec, accumulatedPlayMs, alreadyScrobbled, ipId, mbid, coverCid, filePath, coverPath } = state
 
     state.trackKey = null
     state.artist = null
@@ -209,7 +228,10 @@ export class ScrobbleEngine {
     state.album = null
     state.durationMs = null
     state.ipId = null
-    state.isrc = null
+    state.mbid = null
+    state.coverCid = null
+    state.filePath = null
+    state.coverPath = null
     state.startedAtEpochSec = null
     state.accumulatedPlayMs = 0
     state.lastUpdateTimeMs = 0
@@ -228,7 +250,10 @@ export class ScrobbleEngine {
         playedAtSec: startedAtEpochSec,
         source: state.sessionKey,
         ipId,
-        isrc,
+        mbid,
+        coverCid,
+        filePath,
+        coverPath,
       })
     }
   }

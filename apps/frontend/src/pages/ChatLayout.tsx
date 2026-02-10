@@ -149,7 +149,7 @@ export const ChatLayout: ParentComponent = (props) => {
           <PageHeader
             title="Messages"
             rightSlot={
-              <IconButton onClick={() => setNewChatOpen(true)} aria-label="New message" variant="soft">
+              <IconButton onClick={() => setNewChatOpen(true)} aria-label="New message" variant="soft" size="xl">
                 <PencilSimple class="w-5 h-5" />
               </IconButton>
             }

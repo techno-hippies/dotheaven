@@ -135,16 +135,9 @@ export const ChatPage: Component = () => {
                   </IconButton>
                 </Show>
                 <Avatar size="md" />
-                <div>
-                  <span class="text-base font-medium text-[var(--text-primary)]">
-                    {formatAddress(peerAddressOrId())}
-                  </span>
-                  <p class="text-base text-[var(--text-muted)]">
-                    <Show when={xmtp.isConnected()} fallback="Connecting...">
-                      XMTP
-                    </Show>
-                  </p>
-                </div>
+                <span class="text-base font-semibold text-[var(--text-primary)]">
+                  {formatAddress(peerAddressOrId())}
+                </span>
               </div>
               <IconButton variant="soft" size="md" aria-label="Open menu">
                 <MoreIcon />

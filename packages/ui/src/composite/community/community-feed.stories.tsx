@@ -8,7 +8,7 @@ import { TextField } from '../../primitives/text-field'
 import { Sliders, MagnifyingGlass } from '../../icons'
 
 const meta: Meta<typeof CommunityFeed> = {
-  title: 'Search/CommunityFeed',
+  title: 'Community/CommunityFeed',
   component: CommunityFeed,
   parameters: { layout: 'fullscreen' },
   decorators: [

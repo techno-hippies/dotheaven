@@ -10,6 +10,7 @@
     "build": "bun --filter @heaven/frontend build",
     "build:web": "bun --filter @heaven/frontend build:web",
     "build:tauri": "bun --filter @heaven/frontend tauri build",
+    "sidecar:synapse": "cd apps/gpui-poc/sidecar && (test -e node_modules || ln -s ../../frontend/node_modules node_modules) && bun run start",
     "storybook": "bun --filter @heaven/ui storybook",
     "check:storybook": "bun --filter @heaven/ui check:storybook",
     "check": "bun --filter '*' check"

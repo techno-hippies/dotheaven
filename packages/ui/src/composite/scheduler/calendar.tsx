@@ -2,6 +2,7 @@ import { For, Show, type Component, createMemo } from 'solid-js'
 import Calendar from '@corvu/calendar'
 import { cn } from '../../lib/classnames'
 import { IconButton } from '../../primitives/icon-button'
+import { ChevronLeft, ChevronRight } from '../../icons'
 import type { DayAvailability } from './types'
 
 // =============================================================================
@@ -104,9 +105,7 @@ export const SchedulerCalendar: Component<CalendarProps> = (props) => {
                   size="md"
                   aria-label="Go to previous month"
                 >
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                  </svg>
+                  <ChevronLeft class="w-5 h-5" />
                 </IconButton>
               </Calendar.Nav>
 
@@ -120,9 +119,7 @@ export const SchedulerCalendar: Component<CalendarProps> = (props) => {
                   size="md"
                   aria-label="Go to next month"
                 >
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                  </svg>
+                  <ChevronRight class="w-5 h-5" />
                 </IconButton>
               </Calendar.Nav>
             </div>

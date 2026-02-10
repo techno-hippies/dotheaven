@@ -1,11 +1,13 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite'
+import { Show } from 'solid-js'
 import { FeedPost } from './feed-post'
 import { ComposeBox, ComposeFab } from './compose-box'
 import { LiveRoomsRow, type LiveRoom } from './live-rooms-row'
+import { useIsMobile } from '../../lib/use-media-query'
 
 const meta: Meta = {
   title: 'Feed/Feed',
-  parameters: { layout: 'centered' },
+  parameters: { layout: 'fullscreen' },
 }
 
 export default meta
@@ -134,44 +136,40 @@ const feedPosts = (
   </>
 )
 
-export const DesktopFeed: StoryObj = {
-  render: () => (
-    <div style={{ width: '600px', height: '900px', overflow: 'auto', background: 'var(--bg-page)' }}>
-      <LiveRoomsRow
-        rooms={sampleRooms}
-        onRoomClick={(id) => console.log('Join room:', id)}
-        onCreateRoom={() => console.log('Create room')}
-        createAvatarUrl="https://placewaifu.com/image/200"
-      />
-      <div class="border-t border-[var(--border-subtle)]" />
-      <div class="bg-[var(--bg-surface)] rounded-md divide-y divide-[var(--border-subtle)]">
-        <ComposeBox
-          avatarUrl="https://placewaifu.com/image/200"
-          onPost={(text, media) => console.log('Post:', text, media)}
+export const Feed: StoryObj = {
+  render: () => {
+    const isMobile = useIsMobile()
+    return (
+      <div class="h-screen overflow-auto bg-[var(--bg-page)] max-w-[600px] mx-auto relative">
+        <LiveRoomsRow
+          rooms={sampleRooms}
+          onRoomClick={(id) => console.log('Join room:', id)}
+          onCreateRoom={() => console.log('Create room')}
+          createAvatarUrl="https://placewaifu.com/image/200"
         />
-        {feedPosts}
+        <div class="border-t border-[var(--border-subtle)]" />
+        <Show
+          when={!isMobile()}
+          fallback={
+            <>
+              <div class="divide-y divide-[var(--border-subtle)]">
+                {feedPosts}
+              </div>
+              <ComposeFab onClick={() => console.log('Open compose')} />
+            </>
+          }
+        >
+          <div class="bg-[var(--bg-surface)] rounded-md divide-y divide-[var(--border-subtle)]">
+            <ComposeBox
+              avatarUrl="https://placewaifu.com/image/200"
+              onPost={(text, media) => console.log('Post:', text, media)}
+            />
+            {feedPosts}
+          </div>
+        </Show>
       </div>
-    </div>
-  ),
-}
-
-export const MobileFeed: StoryObj = {
-  parameters: { viewport: { defaultViewport: 'mobile1' } },
-  render: () => (
-    <div style={{ width: '375px', height: '812px', overflow: 'auto', background: 'var(--bg-page)', position: 'relative' }}>
-      <LiveRoomsRow
-        rooms={sampleRooms}
-        onRoomClick={(id) => console.log('Join room:', id)}
-        onCreateRoom={() => console.log('Create room')}
-        createAvatarUrl="https://placewaifu.com/image/200"
-      />
-      <div class="border-t border-[var(--border-subtle)]" />
-      <div class="divide-y divide-[var(--border-subtle)]">
-        {feedPosts}
-      </div>
-      <ComposeFab onClick={() => console.log('Open compose')} />
-    </div>
-  ),
+    )
+  },
 }
 
 export const NoCoverArt: StoryObj = {

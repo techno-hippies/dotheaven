@@ -25,6 +25,7 @@ import {
 } from '../../constants/profile-options'
 import { HOBBY_TAGS, SKILL_TAGS, tagsToOptions } from '../../data/tags'
 import type { LanguageEntry } from '../../data/languages'
+import { Globe, XLogo, GithubLogo, TelegramLogo, Image, Camera } from '../../icons'
 
 const HOBBY_OPTIONS = tagsToOptions(HOBBY_TAGS)
 const SKILL_OPTIONS = tagsToOptions(SKILL_TAGS)
@@ -251,7 +252,7 @@ export const ProfileInfoSection: Component<ProfileInfoSectionProps> = (props) =>
             value={formData().url}
             isEditing={props.isEditing}
             placeholder="https://yoursite.com"
-            icon={<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 256 256"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm88,104a87.62,87.62,0,0,1-6.4,32.94l-44.7-27.49a15.92,15.92,0,0,0-6.24-2.23l-22.82-3.08a16.11,16.11,0,0,0-16,7.86h-8.72l-3.8-7.86a15.91,15.91,0,0,0-11-8.67l-8-1.73L96.14,104h16.71a16.06,16.06,0,0,0,7.73-2l12.25-6.76a16.62,16.62,0,0,0,3-2.14l26.91-24.34A15.93,15.93,0,0,0,166,64V49.6l3.84,1.7A88.22,88.22,0,0,1,216,128ZM40,128a87.53,87.53,0,0,1,8.54-37.8l11.34,30.27a16,16,0,0,0,11.62,10l21.43,4.61L96.74,143a16.09,16.09,0,0,0,14.4,9h1.48l-7.23,38.51A16.08,16.08,0,0,0,109,207.94l-2.36,1.78A88.18,88.18,0,0,1,40,128Zm82.08,87.82,3-2.23A16,16,0,0,0,132,200.49l7.23-38.51a16,16,0,0,0-3.25-13.14l-12.45-15A16,16,0,0,0,113,128h-4.82l7.56-15.65a16.06,16.06,0,0,0-9.73-22.1l-5.55-1.2,5.07-7.38A16,16,0,0,0,106.8,72H96.14a16,16,0,0,0-7.73,2l-12.25,6.76a16.62,16.62,0,0,0-3,2.14L56,97.54a16.07,16.07,0,0,0-4.67,9.48l-2.12,16.47a16.06,16.06,0,0,0,10.79,17l7.46,2.41-4.13,11a16.08,16.08,0,0,0,5.59,19l22.84,15.71-3.45,18.39A88.39,88.39,0,0,1,122.08,215.82Z" /></svg>}
+            icon={<Globe class="w-4 h-4" />}
             onValueChange={(v: string | string[]) => updateField('url', typeof v === 'string' ? v : undefined)}
           />
           <EditableInfoCardRow
@@ -259,7 +260,7 @@ export const ProfileInfoSection: Component<ProfileInfoSectionProps> = (props) =>
             value={formData().twitter}
             isEditing={props.isEditing}
             placeholder="@username"
-            icon={<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 256 256"><path d="M214.75,211.71l-62.6-98.38,61.77-67.95a8,8,0,0,0-11.84-10.76L143.24,99.34,102.75,35.71A8,8,0,0,0,96,32H48a8,8,0,0,0-6.75,12.3l62.6,98.37-61.77,68a8,8,0,1,0,11.84,10.76l58.84-64.72,40.49,63.63A8,8,0,0,0,160,224h48a8,8,0,0,0,6.75-12.29ZM164.39,208,62.57,48h29L193.43,208Z" /></svg>}
+            icon={<XLogo class="w-4 h-4" />}
             onValueChange={(v: string | string[]) => updateField('twitter', typeof v === 'string' ? v : undefined)}
           />
           <EditableInfoCardRow
@@ -267,7 +268,7 @@ export const ProfileInfoSection: Component<ProfileInfoSectionProps> = (props) =>
             value={formData().github}
             isEditing={props.isEditing}
             placeholder="username"
-            icon={<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 256 256"><path d="M208.31,75.68A59.78,59.78,0,0,0,202.93,28,8,8,0,0,0,196,24a59.75,59.75,0,0,0-48,24H124A59.75,59.75,0,0,0,76,24a8,8,0,0,0-6.93,4,59.78,59.78,0,0,0-5.38,47.68A58.14,58.14,0,0,0,56,104v8a56.06,56.06,0,0,0,48.44,55.47A39.8,39.8,0,0,0,96,192v8H72a24,24,0,0,1-24-24A40,40,0,0,0,8,136a8,8,0,0,0,0,16,24,24,0,0,1,24,24,40,40,0,0,0,40,40H96v16a8,8,0,0,0,16,0V192a24,24,0,0,1,48,0v40a8,8,0,0,0,16,0V192a39.8,39.8,0,0,0-8.44-24.53A56.06,56.06,0,0,0,216,112v-8A58.14,58.14,0,0,0,208.31,75.68ZM200,112a40,40,0,0,1-40,40H112a40,40,0,0,1-40-40v-8a41.74,41.74,0,0,1,6.9-22.48A8,8,0,0,0,80,73.83a43.81,43.81,0,0,1,.79-33.58,43.88,43.88,0,0,1,32.32,20.06A8,8,0,0,0,119.82,64h32.35a8,8,0,0,0,6.74-3.69,43.87,43.87,0,0,1,32.32-20.06A43.81,43.81,0,0,1,192,73.83a8.09,8.09,0,0,0,1,7.65A41.72,41.72,0,0,1,200,104Z" /></svg>}
+            icon={<GithubLogo class="w-4 h-4" />}
             onValueChange={(v: string | string[]) => updateField('github', typeof v === 'string' ? v : undefined)}
           />
           <EditableInfoCardRow
@@ -275,7 +276,7 @@ export const ProfileInfoSection: Component<ProfileInfoSectionProps> = (props) =>
             value={formData().telegram}
             isEditing={props.isEditing}
             placeholder="username"
-            icon={<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 256 256"><path d="M228.88,26.19a9,9,0,0,0-9.16-1.57L17.06,103.93a14.22,14.22,0,0,0,2.43,27.21L72,141.45V200a15.92,15.92,0,0,0,10,14.83,15.91,15.91,0,0,0,17.51-3.73l25.32-26.26L165,220a15.88,15.88,0,0,0,10.51,4,16.3,16.3,0,0,0,5-.79,15.85,15.85,0,0,0,10.67-11.63L231.77,35A9,9,0,0,0,228.88,26.19Zm-61.14,36L78.15,126.35l-49.6-9.73ZM88,200V152.52l24.79,21.74Zm87.53,8L92.85,135.5l119-85.29Z" /></svg>}
+            icon={<TelegramLogo class="w-4 h-4" />}
             onValueChange={(v: string | string[]) => updateField('telegram', typeof v === 'string' ? v : undefined)}
           />
         </EditableInfoCardSection>
@@ -303,9 +304,7 @@ export const ProfileInfoSection: Component<ProfileInfoSectionProps> = (props) =>
                     when={coverPreview()}
                     fallback={
                       <div class="flex flex-col items-center gap-2 text-[var(--text-muted)]">
-                        <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-                        </svg>
+                        <Image class="w-10 h-10" />
                         <span class="text-base font-medium">Upload cover photo</span>
                       </div>
                     }
@@ -338,10 +337,7 @@ export const ProfileInfoSection: Component<ProfileInfoSectionProps> = (props) =>
                       when={avatarPreview()}
                       fallback={
                         <div class="flex flex-col items-center gap-2 text-[var(--text-muted)]">
-                          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
-                          </svg>
+                          <Camera class="w-8 h-8" />
                         </div>
                       }
                     >

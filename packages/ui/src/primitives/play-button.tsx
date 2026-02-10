@@ -1,6 +1,7 @@
 import { type Component, type JSX, splitProps } from 'solid-js'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '../lib/classnames'
+import { PlayFill, PauseFill } from '../icons'
 
 const playButtonVariants = cva(
   'inline-flex items-center justify-center rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 cursor-pointer',
@@ -53,15 +54,9 @@ export const PlayButton: Component<PlayButtonProps> = (props) => {
       {...others}
     >
       {local.isPlaying ? (
-        // Pause icon
-        <svg class={cn(local.size === 'lg' ? 'w-6 h-6' : 'w-4 h-4')} fill="currentColor" viewBox="0 0 256 256">
-          <path d="M216,48V208a16,16,0,0,1-16,16H160a16,16,0,0,1-16-16V48a16,16,0,0,1,16-16h40A16,16,0,0,1,216,48ZM96,32H56A16,16,0,0,0,40,48V208a16,16,0,0,0,16,16H96a16,16,0,0,0,16-16V48A16,16,0,0,0,96,32Z" />
-        </svg>
+        <PauseFill class={cn(local.size === 'lg' ? 'w-6 h-6' : 'w-4 h-4')} />
       ) : (
-        // Play icon
-        <svg class={cn(local.size === 'lg' ? 'w-6 h-6' : 'w-4 h-4', 'ml-0.5')} fill="currentColor" viewBox="0 0 256 256">
-          <path d="M240,128a15.74,15.74,0,0,1-7.6,13.51L88.32,229.65a16,16,0,0,1-16.2.3A15.86,15.86,0,0,1,64,216.13V39.87a15.86,15.86,0,0,1,8.12-13.82,16,16,0,0,1,16.2.3L232.4,114.49A15.74,15.74,0,0,1,240,128Z" />
-        </svg>
+        <PlayFill class={cn(local.size === 'lg' ? 'w-6 h-6' : 'w-4 h-4', 'ml-0.5')} />
       )}
     </button>
   )

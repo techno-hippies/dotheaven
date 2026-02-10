@@ -5,7 +5,7 @@ import { Button } from '../../primitives/button'
 import { Sliders } from '../../icons'
 
 const meta: Meta<typeof CommunityFilterDialog> = {
-  title: 'Search/CommunityFilter',
+  title: 'Community/CommunityFilter',
   component: CommunityFilterDialog,
   parameters: { layout: 'centered' },
 }

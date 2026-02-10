@@ -1,6 +1,7 @@
 import type { Component } from 'solid-js'
 import { createSignal, createMemo, Show } from 'solid-js'
 import { useIsMobile } from '../../lib/use-media-query'
+import { Clock } from '../../icons'
 import {
   Dialog,
   DialogContent,
@@ -27,8 +28,44 @@ export interface AddFundsDialogProps {
   daysRemaining: number | null
   /** Current balance as a number (for computing ratio) */
   balanceNum: number
+  /** Monthly storage cost (e.g. "$0.12") */
+  monthlyCost?: string
   loading: boolean
   onDeposit: (amount: string) => void
+}
+
+/** Inline storage breakdown: Balance / Monthly / Days Left */
+const StorageBreakdown: Component<{ balance: string; monthlyCost?: string; daysRemaining: number | null }> = (props) => {
+  const daysColor = () => {
+    const days = props.daysRemaining
+    if (days == null) return 'text-[var(--text-primary)]'
+    if (days < 7) return 'text-amber-400'
+    if (days > 30) return 'text-green-400'
+    return 'text-[var(--text-primary)]'
+  }
+
+  const formatDays = () => {
+    const days = props.daysRemaining
+    if (days == null) return '—'
+    return days.toLocaleString()
+  }
+
+  return (
+    <div class="grid grid-cols-3 gap-2">
+      <div class="rounded-md bg-[var(--bg-elevated)] p-3">
+        <div class="text-lg font-bold text-[var(--text-primary)]">{props.balance}</div>
+        <div class="text-xs text-[var(--text-muted)] mt-1">Balance</div>
+      </div>
+      <div class="rounded-md bg-[var(--bg-elevated)] p-3">
+        <div class="text-lg font-bold text-[var(--text-primary)]">{props.monthlyCost || '—'}</div>
+        <div class="text-xs text-[var(--text-muted)] mt-1">Monthly</div>
+      </div>
+      <div class="rounded-md bg-[var(--bg-elevated)] p-3">
+        <div class={`text-lg font-bold ${daysColor()}`}>{formatDays()}</div>
+        <div class="text-xs text-[var(--text-muted)] mt-1">Days Left</div>
+      </div>
+    </div>
+  )
 }
 
 const AddFundsDesktop: Component<AddFundsDialogProps> = (props) => {
@@ -59,10 +96,7 @@ const AddFundsDesktop: Component<AddFundsDialogProps> = (props) => {
           </DialogDescription>
         </DialogHeader>
         <DialogBody class="flex flex-col gap-5">
-          <div class="flex items-center justify-between">
-            <span class="text-base text-[var(--text-muted)]">Current balance</span>
-            <span class="text-base font-semibold text-[var(--text-primary)]">{props.currentBalance}</span>
-          </div>
+          <StorageBreakdown balance={props.currentBalance} monthlyCost={props.monthlyCost} daysRemaining={props.daysRemaining} />
 
           <div class="flex flex-col gap-2">
             <label class="text-base font-medium text-[var(--text-secondary)]">Amount (USDFC)</label>
@@ -83,9 +117,7 @@ const AddFundsDesktop: Component<AddFundsDialogProps> = (props) => {
 
           <Show when={estimateDays() !== null && estimateDays()! > 0}>
             <div class="flex items-center gap-2 rounded-md bg-[var(--bg-elevated)] p-3">
-              <svg class="w-4 h-4 text-[var(--text-muted)] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-              </svg>
+              <Clock class="w-4 h-4 text-[var(--text-muted)] flex-shrink-0" />
               <span class="text-xs text-[var(--text-secondary)]">
                 Estimated ~{estimateDays()!.toLocaleString()} additional days of storage
               </span>
@@ -154,10 +186,7 @@ const AddFundsMobile: Component<AddFundsDialogProps> = (props) => {
             Deposit USDFC to fund your Filecoin storage. Your balance covers hosting for all uploaded tracks.
           </p>
 
-          <div class="flex items-center justify-between">
-            <span class="text-base text-[var(--text-muted)]">Current balance</span>
-            <span class="text-base font-semibold text-[var(--text-primary)]">{props.currentBalance}</span>
-          </div>
+          <StorageBreakdown balance={props.currentBalance} monthlyCost={props.monthlyCost} daysRemaining={props.daysRemaining} />
 
           <div class="flex flex-col gap-2">
             <label class="text-base font-medium text-[var(--text-secondary)]">Amount (USDFC)</label>
@@ -178,9 +207,7 @@ const AddFundsMobile: Component<AddFundsDialogProps> = (props) => {
 
           <Show when={estimateDays() !== null && estimateDays()! > 0}>
             <div class="flex items-center gap-2 rounded-md bg-[var(--bg-elevated)] p-3">
-              <svg class="w-4 h-4 text-[var(--text-muted)] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-              </svg>
+              <Clock class="w-4 h-4 text-[var(--text-muted)] flex-shrink-0" />
               <span class="text-xs text-[var(--text-secondary)]">
                 Estimated ~{estimateDays()!.toLocaleString()} additional days of storage
               </span>

@@ -23,6 +23,7 @@
         "backgroundColor": "#171717"
       },
       "edgeToEdgeEnabled": true,
+      "softwareKeyboardLayoutMode": "pan",
       "predictiveBackGestureEnabled": false,
       "package": "com.heaven.app",
       "permissions": [
@@ -44,7 +45,8 @@
         {
           "photosPermission": false,
           "savePhotosPermission": false,
-          "isAccessMediaLocationEnabled": false
+          "isAccessMediaLocationEnabled": false,
+          "granularPermissions": ["audio"]
         }
       ]
     ],

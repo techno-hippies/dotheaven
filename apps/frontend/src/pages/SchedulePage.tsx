@@ -3,8 +3,8 @@ import {
   ScheduleDashboard,
   BookingDetail,
   UpcomingSessions,
-  Button,
   IconButton,
+  PageHeader,
   Switch,
   ChevronLeft,
   CalendarBlank,
@@ -262,18 +262,16 @@ export const SchedulePage: Component = () => {
 
   return (
     <div class="h-full overflow-y-auto">
-      <Show when={view() === 'upcoming'}>
-        <div class="flex justify-end px-4 pt-3">
-          <Button
-            variant="secondary"
-            icon={<CalendarBlank />}
-            onClick={() => navigate(SCHEDULE_AVAILABILITY)}
-            class="h-12"
-          >
-            {t('schedule.availability')}
-          </Button>
-        </div>
-      </Show>
+      <PageHeader
+        title={t('nav.schedule')}
+        rightSlot={
+          <Show when={view() === 'upcoming'}>
+            <IconButton variant="soft" size="xl" aria-label={t('schedule.availability')} onClick={() => navigate(SCHEDULE_AVAILABILITY)}>
+              <CalendarBlank class="w-5 h-5" />
+            </IconButton>
+          </Show>
+        }
+      />
 
       <div class="w-full max-w-4xl mx-auto px-4 py-6">
         {/* Error toast */}
@@ -480,28 +478,24 @@ export const ScheduleAvailabilityPage: Component = () => {
 
   return (
     <div class="flex flex-col h-full">
-      {/* Header with back chevron + accepting toggle */}
-      <div class="flex items-center gap-3 px-4 h-14 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] flex-shrink-0">
-        <IconButton
-          variant="soft"
-          size="md"
-          aria-label="Back"
-          onClick={() => navigate(-1)}
-        >
-          <ChevronLeft class="w-5 h-5" />
-        </IconButton>
-        <span class="flex-1 text-base font-semibold text-[var(--text-primary)]">
+      <PageHeader
+        compact
+        title={<>
           {t('schedule.availability')}
           <Show when={!scheduleAccepting()}>
             <span class="text-base font-normal text-[var(--text-muted)] ml-2">{t('schedule.paused')}</span>
           </Show>
-        </span>
-        <span class="text-base text-[var(--text-muted)] mr-1 hidden sm:inline">{t('schedule.accepting')}</span>
-        <Switch
-          checked={scheduleAccepting()}
-          onChange={handleToggleAccepting}
-        />
-      </div>
+        </>}
+        leftSlot={
+          <IconButton variant="soft" size="md" aria-label="Back" onClick={() => navigate(-1)}>
+            <ChevronLeft class="w-5 h-5" />
+          </IconButton>
+        }
+        rightSlot={<>
+          <span class="text-base text-[var(--text-muted)] mr-1 hidden sm:inline">{t('schedule.accepting')}</span>
+          <Switch checked={scheduleAccepting()} onChange={handleToggleAccepting} />
+        </>}
+      />
 
       <div class={`flex-1 overflow-y-auto transition-opacity ${!scheduleAccepting() ? 'opacity-60' : ''}`}>
         <div class="w-full max-w-4xl mx-auto px-4 py-6">

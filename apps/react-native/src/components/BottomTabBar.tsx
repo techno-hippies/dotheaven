@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, View, TouchableOpacity } from 'react-native';
-import { House, MagnifyingGlass, MusicNote, ChatCircle, CalendarBlank, Wallet } from 'phosphor-react-native';
+import { House, UsersThree, MusicNote, ChatCircle, CalendarBlank, Wallet } from 'phosphor-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../lib/theme';
 
@@ -18,7 +18,7 @@ interface BottomTabBarProps {
 
 const ICON_MAP = {
   home: House,
-  community: MagnifyingGlass,
+  community: UsersThree,
   music: MusicNote,
   chat: ChatCircle,
   schedule: CalendarBlank,

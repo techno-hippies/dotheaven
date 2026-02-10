@@ -1,7 +1,7 @@
 import { type Component, createSignal, createResource, createMemo, Show, For } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { Button, PageHeader, SettingsMenu, type SettingsMenuItem, Switch } from '@heaven/ui'
-import { Globe, UserCircle, SignOut } from '@heaven/ui/icons'
+import { Globe, UserCircle, SignOut, Code, ArrowLineUpRight } from '@heaven/ui/icons'
 import { HOME } from '@heaven/core'
 import { useAuth } from '../providers'
 import { useI18n } from '@heaven/i18n/solid'
@@ -196,6 +196,22 @@ export const SettingsPage: Component = () => {
               </For>
             </div>
           </Show>
+        </div>
+
+        {/* Repository link */}
+        <div class="mt-6">
+          <a
+            href="https://app.radicle.xyz/nodes/radicle.jarg.io/rad%3AzFPXXmn5fnwzNUbUG7Wj1iSKLYQw"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="w-full flex items-center justify-between px-4 py-3 rounded-md bg-[var(--bg-surface)] hover:bg-[var(--bg-highlight-hover)] transition-colors"
+          >
+            <div class="flex items-center gap-3">
+              <Code class="w-5 h-5 text-[var(--text-secondary)]" />
+              <span class="text-base font-medium text-[var(--text-primary)]">Source Code (GPLv3)</span>
+            </div>
+            <ArrowLineUpRight class="w-5 h-5 text-[var(--text-secondary)]" />
+          </a>
         </div>
       </div>
     </div>

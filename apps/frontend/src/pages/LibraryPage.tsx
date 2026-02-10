@@ -3,17 +3,22 @@ import {
   MediaHeader,
   TrackList,
   IconButton,
+  Button,
   PlayButton,
+  PageHeader,
+  PageHero,
+  FilterSortBar,
   SongPublishForm,
-  StorageCard,
   AddFundsDialog,
+  useIsMobile,
   type SongFormData,
   type PublishStep,
   type Track,
   type SortField,
   type SortState,
 } from '@heaven/ui'
-import { musicTab } from '@heaven/core'
+import { musicTab, MUSIC } from '@heaven/core'
+import { ChevronLeft, Wallet, CloudFill } from '@heaven/ui/icons'
 import { usePlatform } from 'virtual:heaven-platform'
 import { useParams, useNavigate } from '@solidjs/router'
 import { pickFolder, type LocalTrack } from '../lib/local-music'
@@ -29,12 +34,18 @@ import { mapUploadedToTracks, mapSharedToTracks, buildEntriesMap, handleEncrypte
 import { publishSong, type PublishResult } from '../lib/heaven/song-publish'
 import { getStorageStatus, depositAndApprove, type StorageStatus } from '../lib/storage-service'
 
-type LibraryTab = 'local' | 'cloud' | 'shared' | 'publish'
+type LibraryTab = 'library' | 'local' | 'cloud' | 'shared' | 'publish'
+type LibraryFilter = 'all' | 'local' | 'cloud'
+type LibrarySortField = 'recent' | 'title' | 'artist' | 'album'
+
+const filterLabels: Record<LibraryFilter, string> = { all: 'All', local: 'On device', cloud: 'Cloud' }
+const sortFieldLabels: Record<LibrarySortField, string> = { recent: 'Recent', title: 'Title', artist: 'Artist', album: 'Album' }
 
 export const LibraryPage: Component = () => {
   const platform = usePlatform()
   const player = usePlayer()
   const auth = useAuth()
+  const isMobile = useIsMobile()
   const params = useParams<{ tab?: string }>()
   const navigate = useNavigate()
   const plDialog = usePlaylistDialog()
@@ -47,15 +58,16 @@ export const LibraryPage: Component = () => {
     })
   }
 
-  // Get tab from route params, default to local (Tauri) or cloud (web)
+  // Get tab from route params, default to library
   const tab = createMemo<LibraryTab>(() => {
     const t = params.tab
+    if (t === 'library') return 'library'
     if (t === 'local' && platform.isTauri) return 'local'
     if (t === 'cloud') return 'cloud'
     if (t === 'shared') return 'shared'
     if (t === 'publish') return 'publish'
-    // Default: redirect to appropriate default tab
-    return platform.isTauri ? 'local' : 'cloud'
+    // Default: unified library view
+    return 'library'
   })
 
   // ── Publish form state ──────────────────────────────────────────
@@ -129,10 +141,10 @@ export const LibraryPage: Component = () => {
     navigate(musicTab('cloud'))
   }
 
-  // Redirect /music to /music/local on Tauri (desktop app has local files as default)
+  // Redirect bare /music/:tab to /music/library if no tab specified
   createEffect(() => {
-    if (!params.tab && platform.isTauri) {
-      navigate(musicTab('local'), { replace: true })
+    if (!params.tab) {
+      navigate(musicTab('library'), { replace: true })
     }
   })
 
@@ -154,6 +166,65 @@ export const LibraryPage: Component = () => {
   const uploadedEntriesMap = createMemo(() => buildEntriesMap(uploadedTracks() ?? []))
   const sharedTracksAsTrack = createMemo<Track[]>(() => mapSharedToTracks(sharedTracks() ?? []))
   const sharedEntriesMap = createMemo(() => buildEntriesMap(sharedTracks() ?? []))
+
+  // Filter & sort state for unified library
+  const [libraryFilter, setLibraryFilter] = createSignal<LibraryFilter>('all')
+  const [librarySortField, setLibrarySortField] = createSignal<LibrarySortField>('recent')
+
+  // Sort state
+  const [sort, setSort] = createSignal<SortState | undefined>(undefined)
+  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+  const sortedTracks = createMemo<LocalTrack[]>(() => {
+    const s = sort()
+    const t = player.tracks()
+    if (!s) return t
+    return [...t].sort((a, b) => {
+      const aVal = ((a as any)[s.field] ?? '') as string
+      const bVal = ((b as any)[s.field] ?? '') as string
+      const cmp = collator.compare(aVal, bVal)
+      return s.direction === 'asc' ? cmp : -cmp
+    })
+  })
+
+  // Combined tracks for unified library view (local + cloud, deduped)
+  const libraryTracks = createMemo<Track[]>(() => {
+    const local = sortedTracks() as Track[]
+    const cloud = uploadedTracksAsTrack()
+    const filter = libraryFilter()
+    const seen = new Set<string>()
+    const combined: Track[] = []
+
+    if (filter !== 'cloud') {
+      for (const t of local) {
+        const key = `${t.title.toLowerCase()}|${t.artist.toLowerCase()}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          combined.push(t)
+        }
+      }
+    }
+    if (filter !== 'local') {
+      for (const t of cloud) {
+        const key = `${t.title.toLowerCase()}|${t.artist.toLowerCase()}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          combined.push(t)
+        }
+      }
+    }
+
+    // Apply sort
+    const sf = librarySortField()
+    if (sf !== 'recent') {
+      combined.sort((a, b) => {
+        const aVal = (sf === 'title' ? a.title : sf === 'artist' ? a.artist : a.album) ?? ''
+        const bVal = (sf === 'title' ? b.title : sf === 'artist' ? b.artist : b.album) ?? ''
+        return collator.compare(aVal, bVal)
+      })
+    }
+
+    return combined
+  })
 
   // Refetch when new uploads complete (with delay for subgraph indexing)
   let lastDoneCount = 0
@@ -213,9 +284,9 @@ export const LibraryPage: Component = () => {
     }
   }
 
-  // Load storage status when authenticated and on cloud tab
+  // Load storage status when authenticated and on cloud/library tab
   createEffect(() => {
-    if (auth.isAuthenticated() && auth.pkpInfo() && tab() === 'cloud') {
+    if (auth.isAuthenticated() && auth.pkpInfo() && (tab() === 'cloud' || tab() === 'library')) {
       refreshStorage()
     }
   })
@@ -275,20 +346,6 @@ export const LibraryPage: Component = () => {
     restored = false
   })
 
-  // Sort state
-  const [sort, setSort] = createSignal<SortState | undefined>(undefined)
-  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
-  const sortedTracks = createMemo<LocalTrack[]>(() => {
-    const s = sort()
-    const t = player.tracks()
-    if (!s) return t
-    return [...t].sort((a, b) => {
-      const aVal = ((a as any)[s.field] ?? '') as string
-      const bVal = ((b as any)[s.field] ?? '') as string
-      const cmp = collator.compare(aVal, bVal)
-      return s.direction === 'asc' ? cmp : -cmp
-    })
-  })
   const handleSort = (field: SortField) => {
     const current = sort()
     if (current?.field === field) {
@@ -337,93 +394,203 @@ export const LibraryPage: Component = () => {
       onScroll={handleScroll}
       class="h-full overflow-y-auto"
     >
-      {/* Cloud tab — no header, storage section acts as header */}
+      {/* ── Unified Library tab ──────────────────────────────────────── */}
+      <Show when={tab() === 'library'}>
+        {/* Mobile: compact header bar */}
+        <Show when={isMobile()}>
+          <PageHeader
+            compact
+            title="Library"
+            leftSlot={
+              <IconButton variant="soft" size="md" aria-label="Back" onClick={() => navigate(MUSIC)}>
+                <ChevronLeft class="w-5 h-5" />
+              </IconButton>
+            }
+            rightSlot={
+              <IconButton variant="soft" size="md" aria-label="Cloud storage" onClick={() => setAddFundsOpen(true)}>
+                <CloudFill class="w-5 h-5" />
+              </IconButton>
+            }
+          />
+        </Show>
 
+        {/* Desktop: full gradient hero */}
+        <Show when={!isMobile()}>
+          <PageHero
+            title="Library"
+            backgroundStyle={{ background: 'linear-gradient(135deg, #312e81 0%, #5b21b6 40%, #7c3aed 70%, #6d28d9 100%)' }}
+            subtitle={<>{(sortedTracks() as Track[]).length.toLocaleString()} local, {uploadedTracksAsTrack().length.toLocaleString()} cloud</>}
+            actions={
+              <Button variant="secondary" icon={<Wallet />} onClick={() => setAddFundsOpen(true)} class="!bg-white/15 !border-white/25 !text-white hover:!bg-white/25">
+                Add Funds
+              </Button>
+            }
+          />
+        </Show>
 
-      {/* Other tabs — full MediaHeader */}
-      <Show when={tab() !== 'publish' && tab() !== 'cloud'}>
+        <FilterSortBar
+          filter={libraryFilter()}
+          filterLabels={filterLabels}
+          onFilterChange={setLibraryFilter}
+          sortField={librarySortField()}
+          sortLabels={sortFieldLabels}
+          onSortChange={setLibrarySortField}
+        />
+
+        <Show
+          when={libraryTracks().length > 0}
+          fallback={
+            <div class="flex flex-col items-center justify-center py-20 text-[var(--text-muted)]">
+              <p class="text-base">No songs in your library yet</p>
+            </div>
+          }
+        >
+          <TrackList
+            tracks={libraryTracks()}
+            artistBelowTitle
+            showRowNumbers={false}
+            activeTrackId={player.currentTrack()?.id}
+            activeTrackPlaying={player.isPlaying()}
+            onTrackClick={(track) => player.setSelectedTrackId(track.id)}
+            onTrackPlay={(track) => {
+              const idx = player.tracks().findIndex((t) => t.id === track.id)
+              if (idx >= 0) { player.playTrack(idx); return }
+              handleEncryptedTrackPlay(track, uploadedEntriesMap(), player)
+            }}
+            menuActions={menuActionsLocal}
+          />
+        </Show>
+      </Show>
+
+      {/* ── Shared with Me tab ──────────────────────────────────────── */}
+      <Show when={tab() === 'shared'}>
+        {/* Header */}
+        <PageHeader
+          compact
+          title="Shared with Me"
+          leftSlot={
+            <IconButton variant="soft" size="md" aria-label="Back" onClick={() => navigate(MUSIC)}>
+              <ChevronLeft class="w-5 h-5" />
+            </IconButton>
+          }
+          rightSlot={
+            <Show when={(sharedTracks()?.length ?? 0) > 0}>
+              <span class="h-[22px] px-2 rounded-full bg-[var(--accent-blue)] text-[11px] font-semibold text-[#171717] flex items-center">
+                {sharedTracks()?.length} new
+              </span>
+            </Show>
+          }
+        />
+
+        <Show when={sharedTracks.loading}>
+          <div class="flex items-center justify-center py-20 text-[var(--text-muted)]">
+            <div class="flex items-center gap-3">
+              <div class="w-5 h-5 border-2 border-[var(--text-muted)] border-t-transparent rounded-full animate-spin" />
+              <span>Loading shared songs...</span>
+            </div>
+          </div>
+        </Show>
+        <Show when={!sharedTracks.loading && sharedTracksAsTrack().length > 0}>
+          <TrackList
+            tracks={sharedTracksAsTrack()}
+            showAlbum={false}
+            showSharedBy
+            showDateAdded
+            forceCompact
+            activeTrackId={player.currentTrack()?.id}
+            activeTrackPlaying={player.isPlaying()}
+            onTrackClick={(track) => player.setSelectedTrackId(track.id)}
+            onTrackPlay={(track) => handleEncryptedTrackPlay(track, sharedEntriesMap(), player)}
+            menuActions={menuActionsShared}
+          />
+        </Show>
+        <Show when={!sharedTracks.loading && sharedTracksAsTrack().length === 0}>
+          <div class="flex items-start justify-center pt-6">
+            <p class="text-base text-[var(--text-muted)]">Songs shared to you appear here</p>
+          </div>
+        </Show>
+      </Show>
+
+      {/* ── Legacy: Local Files tab (direct access via /music/local) ── */}
+      <Show when={tab() === 'local'}>
       <MediaHeader
         type="playlist"
-        title={tab() === 'local' ? 'Local Files' : 'Shared with Me'}
-        creator={tab() === 'local' ? (player.folderPath() || 'No folder selected') : `${sharedTracks()?.length ?? 0} tracks`}
-        stats={tab() === 'local' ? { songCount: player.tracks().length } : { songCount: sharedTracks()?.length ?? 0 }}
-        onBack={() => navigate(-1)}
+        title="Local Files"
+        creator={player.folderPath() || 'No folder selected'}
+        stats={{ songCount: player.tracks().length }}
+        onBack={() => navigate(MUSIC)}
         actionsSlot={
-          <>
-            <Show when={tab() === 'local'}>
-              <div class="flex items-center gap-4">
-                <PlayButton
-                  variant="primary"
-                  size="lg"
-                  onClick={() => {
-                    if (player.tracks().length > 0) player.playTrack(0)
-                  }}
-                  aria-label="Play library"
-                />
+          <div class="flex items-center gap-4">
+            <PlayButton
+              variant="primary"
+              size="lg"
+              onClick={() => {
+                if (player.tracks().length > 0) player.playTrack(0)
+              }}
+              aria-label="Play library"
+            />
 
-                <IconButton
-                  variant="soft"
-                  size="lg"
-                  onClick={() => {
-                    const t = [...player.tracks()]
-                    for (let i = t.length - 1; i > 0; i--) {
-                      const j = Math.floor(Math.random() * (i + 1))
-                      ;[t[i], t[j]] = [t[j], t[i]]
-                    }
-                    player.setTracks(t)
-                    if (t.length > 0) player.playTrack(0)
-                  }}
-                  aria-label="Shuffle"
-                >
-                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                  </svg>
-                </IconButton>
+            <IconButton
+              variant="soft"
+              size="lg"
+              onClick={() => {
+                const t = [...player.tracks()]
+                for (let i = t.length - 1; i > 0; i--) {
+                  const j = Math.floor(Math.random() * (i + 1))
+                  ;[t[i], t[j]] = [t[j], t[i]]
+                }
+                player.setTracks(t)
+                if (t.length > 0) player.playTrack(0)
+              }}
+              aria-label="Shuffle"
+            >
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+              </svg>
+            </IconButton>
 
-                <Show when={platform.isTauri}>
-                  <IconButton
-                    variant="soft"
-                    size="lg"
-                    onClick={handlePickFolder}
-                    aria-label="Select music folder"
-                  >
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                    </svg>
-                  </IconButton>
-                </Show>
-
-                <Show when={platform.isTauri && player.folderPath()}>
-                  <IconButton
-                    variant="soft"
-                    size="lg"
-                    onClick={() => player.rescanLibrary()}
-                    aria-label="Re-sync folder"
-                    disabled={player.scanning()}
-                  >
-                    <svg
-                      class={`w-6 h-6 ${player.scanning() ? 'animate-spin' : ''}`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      stroke-width="2"
-                    >
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                  </IconButton>
-                  <Show when={player.scanning() && player.scanProgress()}>
-                    {(p) => (
-                      <span class="text-base text-[var(--text-muted)] tabular-nums hidden md:inline">
-                        {p().done === 0
-                          ? `Finding files... ${p().total.toLocaleString()}`
-                          : `${p().done.toLocaleString()}/${p().total.toLocaleString()}`}
-                      </span>
-                    )}
-                  </Show>
-                </Show>
-              </div>
+            <Show when={platform.isTauri}>
+              <IconButton
+                variant="soft"
+                size="lg"
+                onClick={handlePickFolder}
+                aria-label="Select music folder"
+              >
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+              </IconButton>
             </Show>
-          </>
+
+            <Show when={platform.isTauri && player.folderPath()}>
+              <IconButton
+                variant="soft"
+                size="lg"
+                onClick={() => player.rescanLibrary()}
+                aria-label="Re-sync folder"
+                disabled={player.scanning()}
+              >
+                <svg
+                  class={`w-6 h-6 ${player.scanning() ? 'animate-spin' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  stroke-width="2"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </IconButton>
+              <Show when={player.scanning() && player.scanProgress()}>
+                {(p) => (
+                  <span class="text-base text-[var(--text-muted)] tabular-nums hidden md:inline">
+                    {p().done === 0
+                      ? `Finding files... ${p().total.toLocaleString()}`
+                      : `${p().done.toLocaleString()}/${p().total.toLocaleString()}`}
+                  </span>
+                )}
+              </Show>
+            </Show>
+          </div>
         }
       />
       </Show>
@@ -501,21 +668,20 @@ export const LibraryPage: Component = () => {
 
       {/* Cloud tab */}
       <Show when={tab() === 'cloud'}>
-        <div class="px-6 pt-4 pb-6">
-          <StorageCard
-            status={storageStatus() ?? {
-              balance: '$0.00',
-              balanceRaw: 0n,
-              operatorApproved: false,
-              monthlyCost: '$0.00',
-              daysRemaining: 0,
-              ready: false,
-            }}
-            loading={storageLoading()}
-            error={storageError()}
-            onAddFunds={() => setAddFundsOpen(true)}
-          />
-        </div>
+        <PageHeader
+          compact
+          title="Cloud Library"
+          leftSlot={
+            <IconButton variant="soft" size="md" aria-label="Back" onClick={() => navigate(MUSIC)}>
+              <ChevronLeft class="w-5 h-5" />
+            </IconButton>
+          }
+          rightSlot={
+            <IconButton variant="soft" size="md" aria-label="Add Funds" onClick={() => setAddFundsOpen(true)}>
+              <Wallet class="w-5 h-5" />
+            </IconButton>
+          }
+        />
 
         <Show when={uploadedTracks.loading}>
           <div class="flex items-center justify-center py-20 text-[var(--text-muted)]">
@@ -547,51 +713,18 @@ export const LibraryPage: Component = () => {
           </Show>
         </Show>
 
-        <AddFundsDialog
-          open={addFundsOpen()}
-          onOpenChange={setAddFundsOpen}
-          currentBalance={storageStatus()?.balance ?? '$0.00'}
-          daysRemaining={storageStatus()?.daysRemaining ?? null}
-          balanceNum={balanceNum()}
-          loading={depositLoading()}
-          onDeposit={handleDeposit}
-        />
       </Show>
 
-      {/* Shared tab */}
-      <Show when={tab() === 'shared'}>
-        <Show when={sharedTracks.loading}>
-          <div class="flex items-center justify-center py-20 text-[var(--text-muted)]">
-            <div class="flex items-center gap-3">
-              <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              <span>Loading shared tracks...</span>
-            </div>
-          </div>
-        </Show>
-        <Show when={!sharedTracks.loading && sharedTracksAsTrack().length > 0}>
-          <Show when={scrollRef()}>
-            {(el) => (
-              <TrackList
-                tracks={sharedTracksAsTrack()}
-                showAlbum={false}
-                showSharedBy
-                showDateAdded
-                activeTrackId={player.currentTrack()?.id}
-                activeTrackPlaying={player.isPlaying()}
-                selectedTrackId={player.selectedTrackId() || undefined}
-                scrollRef={el()}
-                enableDrag
-                onTrackClick={(track) => player.setSelectedTrackId(track.id)}
-                onTrackPlay={(track) => handleEncryptedTrackPlay(track, sharedEntriesMap(), player)}
-                menuActions={menuActionsShared}
-              />
-            )}
-          </Show>
-        </Show>
-      </Show>
+      <AddFundsDialog
+        open={addFundsOpen()}
+        onOpenChange={setAddFundsOpen}
+        currentBalance={storageStatus()?.balance ?? '$0.00'}
+        daysRemaining={storageStatus()?.daysRemaining ?? null}
+        balanceNum={balanceNum()}
+        monthlyCost={storageStatus()?.monthlyCost}
+        loading={depositLoading()}
+        onDeposit={handleDeposit}
+      />
 
       <AddToPlaylistDialog
         open={plDialog.open()}

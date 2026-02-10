@@ -39,8 +39,8 @@ const SKELETON_COUNT = 8
  */
 export const CommunityFeed: Component<CommunityFeedProps> = (props) => {
   return (
-    <div class={cn('flex flex-col h-full', props.class)}>
-      <div class="flex-1 overflow-y-auto">
+    <div class={cn('flex flex-col', props.class)}>
+      <div>
         <Show
           when={props.members.length > 0}
           fallback={

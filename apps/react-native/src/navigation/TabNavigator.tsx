@@ -46,16 +46,23 @@ export const TabNavigator: React.FC = () => {
       <View style={styles.root}>
         <Tab.Navigator
           screenOptions={{ headerShown: false }}
-          tabBar={({ state, navigation }) => (
-            <>
-              <MiniPlayer />
-              <BottomTabBar
-                tabs={TABS}
-                activeTab={state.routes[state.index].name}
-                onTabPress={(key) => navigation.navigate(key)}
-              />
-            </>
-          )}
+          tabBar={({ state, descriptors, navigation }) => {
+            const focusedRoute = state.routes[state.index];
+            const focusedOptions = descriptors[focusedRoute.key]?.options;
+            const tabBarStyle = (focusedOptions as any)?.tabBarStyle;
+            if (tabBarStyle?.display === 'none') return null;
+
+            return (
+              <>
+                <MiniPlayer />
+                <BottomTabBar
+                  tabs={TABS}
+                  activeTab={focusedRoute.name}
+                  onTabPress={(key) => navigation.navigate(key)}
+                />
+              </>
+            );
+          }}
         >
           <Tab.Screen name="Home" component={FeedScreen} />
           <Tab.Screen name="Community" component={CommunityScreen} />

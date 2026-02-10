@@ -1,7 +1,12 @@
-import type { ProfileInput } from '@heaven/ui'
+import type { ProfileInput, SessionSlotData } from '@heaven/ui'
+import { alpha3ToAlpha2 } from '@heaven/ui'
 import type { TranslationKey } from '@heaven/i18n'
 import { isAddress, zeroAddress } from 'viem'
 import { computeNode, getTextRecord, getAddr, resolveEnsName, getPrimaryName, resolveAvatarUri, resolveIpfsUri } from '../lib/heaven'
+import { SlotStatus, type SessionSlot } from '../lib/heaven/escrow'
+import type { ScrobbleEntry } from '../lib/heaven/scrobbles'
+import type { ProfileScrobble } from '../components/profile'
+import type { VerificationStatus } from '../lib/heaven/verification'
 
 // ── Types ──
 
@@ -101,6 +106,45 @@ export async function resolveProfileId(parsed: ParsedProfileId): Promise<Resolve
     default:
       throw new Error('Invalid profile identifier')
   }
+}
+
+// ── Shared mappers (used by both MyProfilePage and PublicProfilePage) ──
+
+export function mapScrobbles(
+  entries: ScrobbleEntry[],
+  t?: (key: TranslationKey, ...args: any[]) => string,
+): ProfileScrobble[] {
+  return entries.map((e) => ({
+    id: e.id,
+    title: e.title,
+    artist: e.artist,
+    album: e.album,
+    trackId: e.trackId,
+    timestamp: formatTimeAgo(e.playedAt, t),
+    coverUrl: isValidCid(e.coverCid)
+      ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
+      : undefined,
+  }))
+}
+
+export function resolveNationality(
+  verification: VerificationStatus | undefined,
+  profileData: ProfileInput | null | undefined,
+): string | undefined {
+  if (verification?.verified && verification.nationality) {
+    return alpha3ToAlpha2(verification.nationality) ?? verification.nationality.slice(0, 2).toUpperCase()
+  }
+  return profileData?.nationality || undefined
+}
+
+export function mapSlotData(slots: SessionSlot[]): SessionSlotData[] {
+  return slots.map((s): SessionSlotData => ({
+    id: s.id,
+    startTime: s.startTime,
+    durationMins: s.durationMins,
+    priceEth: s.priceEth,
+    status: s.status === SlotStatus.Open ? 'open' : s.status === SlotStatus.Booked ? 'booked' : s.status === SlotStatus.Cancelled ? 'cancelled' : 'settled',
+  }))
 }
 
 export async function applyHeavenRecords(profile: ProfileInput, node: `0x${string}`): Promise<ProfileInput> {

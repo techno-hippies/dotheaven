@@ -280,6 +280,11 @@ export async function fetchPlaintext(
 }
 
 // ── Access Control ─────────────────────────────────────────────────────
+const linkedEoaSessionCache = new Set<string>()
+
+function linkedEoaCacheKey(pkpPublicKey: string, eoaAddress: string): string {
+  return `${pkpPublicKey.toLowerCase()}:${eoaAddress.toLowerCase()}`
+}
 
 /**
  * Grant or revoke access to content.
@@ -287,7 +292,7 @@ export async function fetchPlaintext(
 /**
  * Link a PKP to its originating EOA on ContentAccessMirror (Base).
  * This allows content grants made to the EOA to also apply when the user
- * authenticates via their PKP. Called once after EOA signup/login.
+ * authenticates via their PKP. Called lazily during content-access operations.
  *
  * No-ops if LINK_EOA_V1_CID is not deployed yet.
  */
@@ -312,26 +317,67 @@ export async function linkEoa(
   const { signMessageWithPKP } = await import('./lit/signer-pkp')
   const message = `heaven:linkEoa:${pkpAddress}:${eoaAddress.toLowerCase()}:${timestamp}:${nonce}`
   const signature = await signMessageWithPKP(
-    { publicKey: pkpPublicKey, ethAddress: eoaAddress as `0x${string}`, tokenId: '' },
+    { publicKey: pkpPublicKey, ethAddress: pkpAddress as `0x${string}`, tokenId: '' },
     authContext,
     message,
   )
 
-  const result = await litClient.executeJs({
-    ipfsId: LINK_EOA_V1_CID,
-    authContext,
-    jsParams: {
-      userPkpPublicKey: pkpPublicKey,
-      eoaAddress,
-      signature,
-      timestamp,
-      nonce,
-    },
-  })
+  const isRetryableNodeFault = (message: string): boolean => {
+    const msg = message.toLowerCase()
+    return (
+      msg.includes('nodesystemfault') ||
+      msg.includes('nodeunknownerror') ||
+      msg.includes('ecdsa signing failed') ||
+      msg.includes('could not delete file') ||
+      msg.includes('/presigns/') ||
+      msg.includes('.cbor')
+    )
+  }
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-  const response = JSON.parse(result.response as string)
-  if (!response.success) {
-    throw new Error(`linkEoa failed: ${response.error}`)
+  const maxAttempts = 3
+  let response: any = null
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      if (import.meta.env.DEV) {
+        console.log('[ContentService] linkEoa executeJs', {
+          cid: LINK_EOA_V1_CID,
+          attempt,
+          maxAttempts,
+        })
+      }
+      const result = await litClient.executeJs({
+        ipfsId: LINK_EOA_V1_CID,
+        authContext,
+        jsParams: {
+          userPkpPublicKey: pkpPublicKey,
+          eoaAddress,
+          signature,
+          timestamp,
+          nonce,
+        },
+      })
+
+      response = JSON.parse(result.response as string)
+      if (!response.success) {
+        const errorMessage = String(response.error || 'Unknown linkEoa error')
+        if (attempt < maxAttempts && isRetryableNodeFault(errorMessage)) {
+          console.warn(`[ContentService] linkEoa transient Lit node error, retrying (${attempt}/${maxAttempts})`)
+          await sleep(400 * attempt)
+          continue
+        }
+        throw new Error(`linkEoa failed: ${errorMessage}`)
+      }
+      break
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      if (attempt < maxAttempts && isRetryableNodeFault(errorMessage)) {
+        console.warn(`[ContentService] linkEoa executeJs transient failure, retrying (${attempt}/${maxAttempts})`)
+        await sleep(400 * attempt)
+        continue
+      }
+      throw error
+    }
   }
 
   return {
@@ -351,15 +397,35 @@ export async function manageAccess(
     contentId?: string
     contentIds?: string[]
     grantee?: string
+    eoaAddress?: string
   },
 ): Promise<{ txHash: string; blockNumber: number }> {
   if (!CONTENT_ACCESS_V1_CID) {
     throw new Error('CONTENT_ACCESS_V1_CID not set — deploy content-access-v1 first')
   }
+  const eoaAddress = params.eoaAddress?.trim()
+  if (eoaAddress) {
+    const cacheKey = linkedEoaCacheKey(pkpPublicKey, eoaAddress)
+    if (!linkedEoaSessionCache.has(cacheKey)) {
+      try {
+        await linkEoa(authContext, pkpPublicKey, eoaAddress)
+        linkedEoaSessionCache.add(cacheKey)
+      } catch (e) {
+        // Non-fatal: allow access ops to continue for PKP-native use.
+        console.warn('[ContentService] linkEoa during manageAccess failed (non-fatal):', e)
+      }
+    }
+  }
   const litClient = await getLitClient()
   const timestamp = Date.now().toString()
   const nonce = crypto.randomUUID()
 
+  if (import.meta.env.DEV) {
+    console.log('[ContentService] manageAccess executeJs', {
+      cid: CONTENT_ACCESS_V1_CID,
+      operation,
+    })
+  }
   const result = await litClient.executeJs({
     ipfsId: CONTENT_ACCESS_V1_CID,
     authContext,
@@ -368,7 +434,9 @@ export async function manageAccess(
       operation,
       timestamp,
       nonce,
-      ...params,
+      ...(params.contentId ? { contentId: params.contentId } : {}),
+      ...(params.contentIds ? { contentIds: params.contentIds } : {}),
+      ...(params.grantee ? { grantee: params.grantee } : {}),
     },
   })
 

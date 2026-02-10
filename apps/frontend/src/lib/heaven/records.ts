@@ -33,6 +33,63 @@ export interface SetTextRecordResult {
   error?: string
 }
 
+const recordsCidCandidates = [HEAVEN_SET_RECORDS_CID]
+
+function isRetryableIpfsCodeFetchError(message: string): boolean {
+  const msg = message.toLowerCase()
+  return (
+    msg.includes('error retrieving ipfs code file') ||
+    msg.includes('timeout error getting code from ipfs') ||
+    msg.includes('operation timed out') ||
+    msg.includes('errorkind\":\"ipfs') ||
+    msg.includes('status\":500')
+  )
+}
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+async function executeRecordsAction(
+  litClient: Awaited<ReturnType<typeof getLitClient>>,
+  authContext: PKPAuthContext,
+  jsParams: Record<string, unknown>,
+): Promise<SetTextRecordResult> {
+  let lastError = 'setRecords failed'
+  for (const cid of recordsCidCandidates) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        if (import.meta.env.DEV) {
+          console.log('[HeavenRecords] executeJs', { cid, attempt })
+        }
+        const result = await litClient.executeJs({
+          ipfsId: cid,
+          authContext,
+          jsParams,
+        })
+        const response = JSON.parse(result.response as string) as SetTextRecordResult
+        if (response.success) return response
+        const err = String(response.error || 'setRecords action returned success=false')
+        lastError = err
+        if (isRetryableIpfsCodeFetchError(err) && attempt < 3) {
+          await sleep(500 * attempt)
+          continue
+        }
+        if (isRetryableIpfsCodeFetchError(err)) break
+        return response
+      } catch (error) {
+        const err = error instanceof Error ? error.message : String(error)
+        lastError = err
+        if (isRetryableIpfsCodeFetchError(err) && attempt < 3) {
+          await sleep(500 * attempt)
+          continue
+        }
+        if (isRetryableIpfsCodeFetchError(err)) break
+        return { success: false, error: err }
+      }
+    }
+  }
+  return { success: false, error: lastError }
+}
+
 /**
  * Set a single text record on a .heaven name via Lit Action (gasless).
  *
@@ -60,20 +117,13 @@ export async function setTextRecord(
     args: [node as `0x${string}`],
   })
 
-  const result = await litClient.executeJs({
-    ipfsId: HEAVEN_SET_RECORDS_CID,
-    authContext,
-    jsParams: {
-      node,
-      userPkpPublicKey: pkpPublicKey,
-      nonce: Number(nonce),
-      key,
-      value,
-    },
+  return executeRecordsAction(litClient, authContext, {
+    node,
+    userPkpPublicKey: pkpPublicKey,
+    nonce: Number(nonce),
+    key,
+    value,
   })
-
-  const response = JSON.parse(result.response as string)
-  return response as SetTextRecordResult
 }
 
 /**
@@ -96,18 +146,11 @@ export async function setTextRecords(
     args: [node as `0x${string}`],
   })
 
-  const result = await litClient.executeJs({
-    ipfsId: HEAVEN_SET_RECORDS_CID,
-    authContext,
-    jsParams: {
-      node,
-      userPkpPublicKey: pkpPublicKey,
-      nonce: Number(nonce),
-      keys,
-      values,
-    },
+  return executeRecordsAction(litClient, authContext, {
+    node,
+    userPkpPublicKey: pkpPublicKey,
+    nonce: Number(nonce),
+    keys,
+    values,
   })
-
-  const response = JSON.parse(result.response as string)
-  return response as SetTextRecordResult
 }

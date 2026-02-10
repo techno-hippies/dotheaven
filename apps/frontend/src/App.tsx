@@ -1,15 +1,14 @@
 import type { Component } from 'solid-js'
 import { createSignal, createEffect, Show } from 'solid-js'
 import { createQuery } from '@tanstack/solid-query'
-import { useNavigate, useSearchParams } from '@solidjs/router'
+import { useNavigate } from '@solidjs/router'
 import {
   CommunityFeed,
   CommunityFilterDialog,
   countActiveFilters,
-  Button,
-  TextField,
+  IconButton,
+  PageHeader,
   Sliders,
-  MagnifyingGlass,
   getNativeLanguages,
   getLearningLanguages,
   type CommunityFilters,
@@ -23,17 +22,9 @@ export const App: Component = () => {
   const { t } = useI18n()
   const auth = useAuth()
   const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams<{ q?: string }>()
-  const [searchQuery, setSearchQuery] = createSignal(searchParams.q ?? '')
   const [filterOpen, setFilterOpen] = createSignal(false)
   const [filters, setFilters] = createSignal<CommunityFilters>({ nativeLanguage: 'en' })
   const [filtersInitialized, setFiltersInitialized] = createSignal(false)
-
-  // Sync URL query param → local signal
-  createEffect(() => {
-    const q = searchParams.q ?? ''
-    if (q !== searchQuery()) setSearchQuery(q)
-  })
 
   const userAddress = () => auth.pkpInfo()?.ethAddress?.toLowerCase()
 
@@ -85,16 +76,14 @@ export const App: Component = () => {
     staleTime: 60_000,
   }))
 
-  // Filter out self, apply search query, sort mutual matches first
+  // Filter out self, sort mutual matches first
   const members = (): CommunityCardProps[] => {
     const all = membersQuery.data ?? []
     const self = userAddress()
-    const q = searchQuery().toLowerCase().trim()
     const nativeCodes = myNativeCodes()
 
     const filtered = all
       .filter((m) => !self || m.address.toLowerCase() !== self)
-      .filter((m) => !q || m.name?.toLowerCase().includes(q) || m.address.toLowerCase().includes(q))
 
     // Sort: people learning my native language first (mutual exchange match)
     if (nativeCodes.length > 0) {
@@ -121,40 +110,30 @@ export const App: Component = () => {
     )
   }
 
-  const handleSearch = (q: string) => {
-    setSearchQuery(q)
-    setSearchParams({ q: q || undefined })
-  }
-
   const activeFilterCount = () => countActiveFilters(filters())
 
   return (
     <div class="h-full overflow-y-auto">
-      {/* Search bar + filter */}
-      <div class="flex items-center gap-2 px-4 pt-4 pb-2">
-        <TextField
-          value={searchQuery()}
-          onChange={handleSearch}
-          placeholder={t('community.searchPlaceholder')}
-          icon={<MagnifyingGlass class="w-4 h-4" />}
-          class="flex-1"
-        />
-        <div class="relative flex-shrink-0">
-          <Button
-            variant="secondary"
-            icon={<Sliders />}
-            onClick={() => setFilterOpen(true)}
-            class="h-12"
-          >
-            {t('common.filter')}
-          </Button>
-          <Show when={activeFilterCount() > 0}>
-            <span class="absolute -top-0.5 -right-1.5 w-4 h-4 bg-[var(--accent-coral)] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-              {activeFilterCount()}
-            </span>
-          </Show>
-        </div>
-      </div>
+      <PageHeader
+        title={t('nav.community')}
+        rightSlot={
+          <div class="relative">
+            <IconButton
+              variant="soft"
+              size="md"
+              aria-label={t('common.filter')}
+              onClick={() => setFilterOpen(true)}
+            >
+              <Sliders class="w-5 h-5" />
+            </IconButton>
+            <Show when={activeFilterCount() > 0}>
+              <span class="absolute -top-0.5 -right-1.5 w-4 h-4 bg-[var(--accent-coral)] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {activeFilterCount()}
+              </span>
+            </Show>
+          </div>
+        }
+      />
       <CommunityFeed
         members={members()}
         isLoading={membersQuery.isPending}

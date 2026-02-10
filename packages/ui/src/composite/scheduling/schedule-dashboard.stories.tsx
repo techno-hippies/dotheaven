@@ -5,7 +5,7 @@ import { Switch, IconButton } from '../../primitives'
 import type { SessionSlotData } from './schedule-tab'
 
 const meta: Meta = {
-  title: 'Scheduling/ScheduleDashboard',
+  title: 'Scheduling/Management/ScheduleDashboard',
   component: ScheduleDashboard,
   parameters: {
     layout: 'padded',

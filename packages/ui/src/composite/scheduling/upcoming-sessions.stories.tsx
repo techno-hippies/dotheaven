@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite'
 import { UpcomingSessions, type BookingData } from './upcoming-sessions'
 
 const meta: Meta<typeof UpcomingSessions> = {
-  title: 'Scheduling/UpcomingSessions',
+  title: 'Scheduling/Management/UpcomingSessions',
   component: UpcomingSessions,
   parameters: {
     layout: 'padded',

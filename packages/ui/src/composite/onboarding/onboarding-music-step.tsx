@@ -25,20 +25,14 @@ export interface OnboardingMusicStepProps {
   class?: string
   /** Called when user continues. Return false to prevent advancing. */
   onContinue?: (data: OnboardingMusicData) => Promise<boolean | void> | boolean | void
-  /** Called when user clicks "Connect Spotify" */
-  onConnectSpotify?: () => Promise<OnboardingArtist[] | null>
   /** Whether submission is in progress */
   submitting?: boolean
-  /** Whether Spotify connection is in progress */
-  connectingSpotify?: boolean
   /** Error message */
   error?: string | null
   /** Pre-filled claimed name for context */
   claimedName?: string
   /** Minimum artists to select (default: 3) */
   minArtists?: number
-  /** Initial view mode (default: 'prompt') */
-  initialMode?: 'prompt' | 'manual'
 }
 
 /**
@@ -113,18 +107,12 @@ export const POPULAR_ARTISTS: OnboardingArtist[] = [
   { mbid: '11111111-1111-4111-8111-000000000037', name: 'Elton John', genres: ['Pop Rock', 'Classic'] },
 ]
 
-/** State: initial prompt or manual picker */
-type Mode = 'prompt' | 'manual'
-
 /**
  * OnboardingMusicStep - Collect music taste during onboarding.
  *
- * Exclusive paths:
- * - Connect Spotify → auto-imports and continues immediately
- * - "I don't use Spotify" → shows curated grid to pick from manually
+ * Shows a curated grid of popular artists for the user to pick from.
  */
 export const OnboardingMusicStep: Component<OnboardingMusicStepProps> = (props) => {
-  const [mode, setMode] = createSignal<Mode>(props.initialMode ?? 'prompt')
   const [selected, setSelected] = createSignal<Set<string>>(new Set())
 
   const minRequired = () => props.minArtists ?? 3
@@ -145,17 +133,6 @@ export const OnboardingMusicStep: Component<OnboardingMusicStepProps> = (props) 
 
   const canContinue = () => selected().size >= minRequired()
 
-  const handleConnectSpotify = async () => {
-    const result = await props.onConnectSpotify?.()
-    if (result && result.length > 0) {
-      // Auto-continue with Spotify artists (no selection needed)
-      props.onContinue?.({
-        artists: result,
-        spotifyConnected: true,
-      })
-    }
-  }
-
   const handleContinue = () => {
     props.onContinue?.({
       artists: selectedArtists(),
@@ -165,57 +142,22 @@ export const OnboardingMusicStep: Component<OnboardingMusicStepProps> = (props) 
 
   return (
     <div class={cn('flex flex-col gap-5 w-full', props.class)}>
-      {/* ── Initial prompt: Spotify or manual ─────────────── */}
-      <Show when={mode() === 'prompt'}>
-        <div class="flex flex-col gap-4">
-          <Button
-            class="w-full h-12 text-lg"
-            disabled={props.connectingSpotify}
-            loading={props.connectingSpotify}
-            onClick={handleConnectSpotify}
-          >
-            {props.connectingSpotify ? 'Connecting...' : 'Connect Spotify'}
-          </Button>
+      <ArtistGrid
+        artists={POPULAR_ARTISTS}
+        selected={selected()}
+        onToggle={toggleArtist}
+        label="Pick artists you like"
+        selectedCount={selected().size}
+        minRequired={minRequired()}
+      />
 
-          <button
-            type="button"
-            class="text-base text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors text-center"
-            onClick={() => setMode('manual')}
-          >
-            I don't use Spotify
-          </button>
-        </div>
-      </Show>
-
-      {/* ── Manual picker: curated grid ──────────────────── */}
-      <Show when={mode() === 'manual'}>
-        <ArtistGrid
-          artists={POPULAR_ARTISTS}
-          selected={selected()}
-          onToggle={toggleArtist}
-          label="Pick artists you like"
-          selectedCount={selected().size}
-          minRequired={minRequired()}
-        />
-
-        <ContinueActions
-          canContinue={canContinue()}
-          submitting={props.submitting}
-          minRemaining={minRequired() - selected().size}
-          onContinue={handleContinue}
-          error={props.error}
-        />
-      </Show>
-
-      {/* Error shown in prompt mode */}
-      <Show when={mode() === 'prompt' && props.error}>
-        <div class="flex items-center gap-2 px-3 py-2 rounded-md bg-[var(--accent-coral)]/10 text-[var(--accent-coral)] text-base">
-          <svg class="w-4 h-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
-          </svg>
-          <span>{props.error}</span>
-        </div>
-      </Show>
+      <ContinueActions
+        canContinue={canContinue()}
+        submitting={props.submitting}
+        minRemaining={minRequired() - selected().size}
+        onContinue={handleContinue}
+        error={props.error}
+      />
     </div>
   )
 }

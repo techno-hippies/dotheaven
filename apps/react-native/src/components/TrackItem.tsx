@@ -11,7 +11,7 @@ interface TrackItemProps {
   onPress: () => void;
 }
 
-export const TrackItem: React.FC<TrackItemProps> = ({ track, isActive, isPlaying, onPress }) => {
+export const TrackItem: React.FC<TrackItemProps> = React.memo(({ track, isActive, isPlaying, onPress }) => {
   return (
     <TouchableOpacity
       style={[styles.container, isActive && styles.active]}
@@ -47,7 +47,7 @@ export const TrackItem: React.FC<TrackItemProps> = ({ track, isActive, isPlaying
       </View>
     </TouchableOpacity>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

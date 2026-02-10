@@ -4,7 +4,7 @@ import { ProfilePage } from './profile-page'
 import type { ProfileTab } from './profile-tabs'
 import type { ProfileScrobble } from './profile-page'
 const meta = {
-  title: 'Profile/ProfilePage',
+  title: 'Components/ProfilePage',
   component: ProfilePage,
   parameters: {
     layout: 'fullscreen',

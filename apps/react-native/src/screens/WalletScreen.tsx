@@ -192,7 +192,7 @@ export const WalletScreen: React.FC = () => {
   if (!isAuthenticated) {
     return (
       <View style={styles.container}>
-        <MobileHeader isAuthenticated={false} onAvatarPress={drawer.open} />
+        <MobileHeader title="Wallet" isAuthenticated={false} onAvatarPress={drawer.open} />
         <View style={styles.centered}>
           <View style={styles.welcomeIcon}>
             <Wallet size={48} color={colors.textMuted} weight="light" />
@@ -228,7 +228,7 @@ export const WalletScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <MobileHeader isAuthenticated onAvatarPress={drawer.open} />
+      <MobileHeader title="Wallet" isAuthenticated onAvatarPress={drawer.open} />
 
       <FlatList
         data={ASSETS}

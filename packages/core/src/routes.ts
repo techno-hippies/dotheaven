@@ -82,9 +82,9 @@ export const album = (mbid: string) => `/album/${mbid}`
 
 /**
  * Music library with specific tab.
- * @param tab - 'local' | 'cloud' | 'shared' | 'publish'
+ * @param tab - 'library' | 'local' | 'cloud' | 'shared' | 'publish'
  */
-export const musicTab = (tab: 'local' | 'cloud' | 'shared' | 'publish') => `/music/${tab}`
+export const musicTab = (tab: 'library' | 'local' | 'cloud' | 'shared' | 'publish') => `/music/${tab}`
 
 /**
  * Peer-to-peer chat (XMTP).
