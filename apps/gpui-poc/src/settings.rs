@@ -1020,7 +1020,7 @@ impl Render for SettingsView {
                                 })
                                 .child(
                                     div().text_xs().text_color(TEXT_DIM).child(
-                                        "Env required: HEAVEN_LIT_RPC_URL (or LIT_RPC_URL). Sidecar requires bun + sidecar deps. For Load uploads set HEAVEN_API_URL (backend mode) or HEAVEN_LOAD_S3_AGENT_API_KEY (direct mode). JackTrip local test uses localhost and HEAVEN_JACKTRIP_PORT (default 4464).",
+                                        "Env required: HEAVEN_LIT_RPC_URL (or LIT_RPC_URL). Sidecar requires bun + sidecar deps. For Load uploads use HEAVEN_LOAD_UPLOAD_MODE=auto plus HEAVEN_API_URL and/or HEAVEN_LOAD_S3_AGENT_API_KEY. JackTrip local test uses localhost and HEAVEN_JACKTRIP_PORT (default 4464).",
                                     ),
                                 ),
                         )

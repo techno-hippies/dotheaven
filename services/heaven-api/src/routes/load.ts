@@ -88,9 +88,15 @@ app.post('/upload', async (c) => {
 
 app.get('/health', async (c) => {
   const agentUrl = (c.env.LOAD_S3_AGENT_URL || DEFAULT_AGENT_URL).replace(/\/+$/, '')
-  const info = await fetch(`${agentUrl}/health`)
-  if (!info.ok) {
-    return c.json({ ok: false, status: info.status }, 502)
+  // load-s3-agent deprecates /health and /info in recent versions; probe "/" first.
+  const root = await fetch(`${agentUrl}/`)
+  if (root.ok) {
+    return c.json({ ok: true })
+  }
+
+  const legacy = await fetch(`${agentUrl}/health`)
+  if (!legacy.ok) {
+    return c.json({ ok: false, status: root.status, legacyStatus: legacy.status }, 502)
   }
   return c.json({ ok: true })
 })

@@ -5,8 +5,8 @@ This app is a **proof of concept** for a Rust-native desktop client using GPUI.
 ## Status
 
 - GPUI currently covers shell/navigation/auth persistence/local library UX.
-- Synapse/Filecoin upload + storage balance/deposit flows are still implemented in the Tauri + TS app.
-- This is intentional for now: we are validating product UX and native shell behavior before full backend migration.
+- Encrypted upload flow in GPUI sidecar now targets Load storage paths (backend proxy or direct agent mode).
+- Sidecar method names still keep `storage.*` compatibility for existing Rust callers.
 
 ## Setup
 
@@ -24,13 +24,17 @@ export HEAVEN_AA_GATEWAY_URL="http://127.0.0.1:3337"
 export HEAVEN_AA_RPC_URL="https://carrot.megaeth.com/rpc"
 export HEAVEN_AA_GATEWAY_KEY=""  # optional
 
-# Optional: Synapse/Filecoin network for sidecar-backed uploads
-# Defaults to "calibration" in gpui-poc sidecar.
-export HEAVEN_FIL_NETWORK="calibration"  # "calibration" or "mainnet"
+# Storage upload mode (auto | backend | agent)
+# auto: backend first, then fallback to direct agent if key is set
+export HEAVEN_LOAD_UPLOAD_MODE="auto"
 
-# Optional: override Synapse Warm Storage address
-# Useful when testing alternate Calibration deployments.
-export HEAVEN_WARM_STORAGE_ADDRESS=""
+# Backend mode (recommended): heaven-api route /api/load/*
+export HEAVEN_API_URL="http://localhost:8787"
+
+# Direct agent mode fallback (optional):
+# export HEAVEN_LOAD_S3_AGENT_API_KEY="load_acc_..."
+# export HEAVEN_LOAD_S3_AGENT_URL="https://load-s3-agent.load.network"
+# export HEAVEN_LOAD_GATEWAY_URL="https://gateway.s3-node-1.load.network"
 ```
 
 **Important**: Without these environment variables set, scrobbling will fail with "Missing Lit RPC URL" error. The scrobble hook will fire correctly, but submission will fail due to missing configuration.
@@ -59,78 +63,29 @@ source .env  # or export them manually
 cargo run --release
 ```
 
-## Why Tauri First (Current Constraint)
+## Storage Sidecar Bridge
 
-We have two working implementations today:
-
-- `apps/frontend` (Tauri + TS/JS app path)
-- `lit-actions` (working Synapse integration tests/scripts)
-
-The production Synapse integration is still anchored on `@filoz/synapse-sdk` (TS/JS), so Tauri remains the fastest reliable path while GPUI matures.
-
-## Filoz/Synapse Findings (Local Code Audit)
-
-Current app uses a narrow Synapse surface area (not full SDK):
-
-- `Synapse.create({ signer, withCDN: true })`
-- `payments.accountInfo()`
-- `payments.depositWithPermitAndApproveOperator(...)`
-- `payments.deposit(...)`
-- `storage.getStorageInfo()`
-- `storage.preflightUpload(sizeBytes)`
-- `storage.createContext({ withCDN: true })`
-- `context.upload(blob)`
-
-Relevant app files:
-
-- `apps/frontend/src/lib/storage-service.ts`
-- `apps/frontend/src/lib/filecoin-upload-service.ts`
-- `apps/frontend/src/lib/lit/pkp-ethers-signer.ts`
-
-Important behavior details used by the app:
-
-- Filecoin tx signing is legacy type-0 only.
-- Permit/deposit path depends on EIP-712 typed-data signing.
-- Upload path intentionally uses `createContext(...).upload(...)` (not `storage.upload(...)`) to preserve dataset reuse behavior in our flow.
-- Upload queue is sequential to avoid nonce collisions.
-
-## Migration Direction
-
-### Short term (pragmatic)
-
-Keep Tauri path as primary for storage/upload while GPUI is PoC.
-
-### Mid term (bridge)
-
-If needed, run Synapse TS in a local JS runtime sidecar (Node/Bun) and call it from GPUI Rust over local IPC.
-
-- This removes WebView dependency.
-- It is not fully Rust-only runtime.
-- It is a practical bridge while native Rust equivalents are built.
-
-### Implemented bridge PoC
-
-A minimal Synapse sidecar is implemented at:
+GPUI uses a Bun sidecar for encrypted upload + registration orchestration:
 
 - `apps/gpui-poc/sidecar/synapse-sidecar.ts`
 
-Run it with:
+Run it directly for health checks:
 
-- `bun run sidecar:synapse`
+- `printf '{"id":1,"method":"health","params":{}}\n' | bun apps/gpui-poc/sidecar/synapse-sidecar.ts`
 
-Current bootstrap note:
+Modes:
 
-- The sidecar source lives under GPUI.
-- Runtime deps are currently reused from `apps/frontend/node_modules` via a local symlink bootstrap in the root script.
-- Next hardening step is a dedicated sidecar lock/install path so this dependency link is removed.
+- `backend`: uploads via `HEAVEN_API_URL/api/load/upload` (server holds key).
+- `agent`: uploads directly to `load-s3-agent` (requires `HEAVEN_LOAD_S3_AGENT_API_KEY`).
+- `auto` (default): `backend` first, fallback to `agent` when key is configured.
 
 Protocol: NDJSON over stdin/stdout (one JSON-RPC-like message per line).
 
-Supported methods:
+Supported sidecar methods:
 
 - `health`
 - `storage.status`
-- `storage.depositAndApprove`
+- `storage.depositAndApprove` (compat no-op in Load mode)
 - `storage.preflight`
 - `storage.upload`
 - `content.encryptUploadRegister`
@@ -141,7 +96,7 @@ Expected auth payload shape (per request needing auth):
 - `pkp`: `{ publicKey, ethAddress, tokenId? }`
 - `authData`: `{ authMethodType, authMethodId, accessToken, ... }`
 
-This is intentionally limited to current production needs and does not attempt full Synapse SDK parity.
+This is intentionally limited to current product needs and does not attempt full SDK parity.
 
 ### Long term (target)
 

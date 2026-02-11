@@ -106,7 +106,7 @@ const REGISTER_TIMEOUT_MS = parseTimeoutMs(
   process.env.HEAVEN_REGISTER_TIMEOUT_MS,
   DEFAULT_REGISTER_TIMEOUT_MS,
 )
-const LOAD_UPLOAD_MODE = (process.env.HEAVEN_LOAD_UPLOAD_MODE || 'backend').trim().toLowerCase()
+const LOAD_UPLOAD_MODE = (process.env.HEAVEN_LOAD_UPLOAD_MODE || 'auto').trim().toLowerCase()
 const LOAD_BACKEND_URL = (
   process.env.HEAVEN_API_URL ||
   process.env.VITE_HEAVEN_API_URL ||
@@ -140,6 +140,15 @@ function sidecarLog(scope: string, details: Record<string, unknown> = {}) {
     ...details,
   }
   console.error(`[synapse-sidecar] ${JSON.stringify(payload)}`)
+}
+
+type LoadHealthResult = {
+  ok: boolean
+  mode: 'backend' | 'agent'
+  endpoint: string
+  status: number | null
+  reason?: string
+  fallbackUsed?: boolean
 }
 
 function parseTimeoutMs(raw: string | undefined, fallbackMs: number): number {
@@ -373,7 +382,10 @@ function extractUploadId(payload: any): string | null {
 }
 
 function resolveUploadMode(): 'backend' | 'agent' {
-  return LOAD_UPLOAD_MODE === 'agent' || LOAD_UPLOAD_MODE === 'direct' ? 'agent' : 'backend'
+  if (LOAD_UPLOAD_MODE === 'agent' || LOAD_UPLOAD_MODE === 'direct') return 'agent'
+  if (LOAD_UPLOAD_MODE === 'backend') return 'backend'
+  if (LOAD_UPLOAD_MODE === 'auto') return 'backend'
+  return 'backend'
 }
 
 function withApiPrefix(path: string): string {
@@ -403,10 +415,8 @@ async function parseJsonOrText(resp: Response): Promise<any> {
   }
 }
 
-async function loadHealthCheck() {
-  const mode = resolveUploadMode()
-  const endpoint =
-    mode === 'backend' ? withApiPrefix('/load/health') : `${LOAD_AGENT_URL}/health`
+async function checkHealth(mode: 'backend' | 'agent'): Promise<LoadHealthResult> {
+  const endpoint = mode === 'backend' ? withApiPrefix('/load/health') : `${LOAD_AGENT_URL}/`
   try {
     const resp = await fetch(endpoint)
     if (!resp.ok) {
@@ -428,6 +438,19 @@ async function loadHealthCheck() {
       reason: err instanceof Error ? err.message : String(err),
     }
   }
+}
+
+async function loadHealthCheck(): Promise<LoadHealthResult> {
+  const preferred = resolveUploadMode()
+  const primary = await checkHealth(preferred)
+  if (primary.ok) return primary
+
+  // If backend was preferred but unavailable, try direct agent mode when key is configured.
+  if (preferred === 'backend' && LOAD_S3_AGENT_API_KEY) {
+    const fallback = await checkHealth('agent')
+    if (fallback.ok) return { ...fallback, fallbackUsed: true }
+  }
+  return primary
 }
 
 async function uploadViaBackend(
@@ -511,9 +534,20 @@ async function uploadToLoad(
   filePath?: string,
   tags: Array<{ name: string; value: string }> = [],
 ): Promise<LoadUploadResult> {
-  return resolveUploadMode() === 'agent'
-    ? uploadViaAgent(payload, filePath, tags)
-    : uploadViaBackend(payload, filePath, tags)
+  const mode = resolveUploadMode()
+  if (mode === 'agent') {
+    return uploadViaAgent(payload, filePath, tags)
+  }
+
+  try {
+    return await uploadViaBackend(payload, filePath, tags)
+  } catch (err) {
+    if (!LOAD_S3_AGENT_API_KEY) throw err
+    sidecarLog('storage.upload.fallback.agent', {
+      reason: err instanceof Error ? err.message : String(err),
+    })
+    return uploadViaAgent(payload, filePath, tags)
+  }
 }
 
 function requireAuthInput(params: Json | undefined): SidecarAuthInput {
