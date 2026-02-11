@@ -9,7 +9,7 @@ use gpui_component::StyledExt;
 
 use crate::auth;
 use crate::lit_wallet::LitWalletService;
-use crate::synapse_sidecar::{SynapseSidecarService, TrackMetaInput};
+use crate::load_storage::{LoadStorageService, TrackMetaInput};
 use crate::voice::jacktrip::JackTripController;
 
 const BG_ELEVATED: Hsla = Hsla {
@@ -68,13 +68,13 @@ const SMOKE_ACTION_CODE: &str = r#"(async () => {
 
 pub struct SettingsView {
     service: Arc<Mutex<LitWalletService>>,
-    sidecar: Arc<Mutex<SynapseSidecarService>>,
+    storage: Arc<Mutex<LoadStorageService>>,
     jacktrip_test: Arc<Mutex<JackTripController>>,
     busy: bool,
     status: String,
     last_action_response: Option<String>,
     last_signature: Option<String>,
-    last_sidecar_response: Option<String>,
+    last_storage_response: Option<String>,
     last_voice_response: Option<String>,
     error: Option<String>,
     show_dev_tools: bool,
@@ -96,13 +96,13 @@ impl SettingsView {
 
         Self {
             service,
-            sidecar: Arc::new(Mutex::new(SynapseSidecarService::new())),
+            storage: Arc::new(Mutex::new(LoadStorageService::new())),
             jacktrip_test: Arc::new(Mutex::new(JackTripController::new())),
             busy: false,
             status: "Ready".to_string(),
             last_action_response: None,
             last_signature: None,
-            last_sidecar_response: None,
+            last_storage_response: None,
             last_voice_response: None,
             error,
             show_dev_tools: true,
@@ -182,7 +182,7 @@ impl SettingsView {
         auth::delete_from_disk();
         self.last_action_response = None;
         self.last_signature = None;
-        self.last_sidecar_response = None;
+        self.last_storage_response = None;
         self.last_voice_response = None;
         self.error = None;
         self.status = "Signed out".to_string();
@@ -326,20 +326,20 @@ impl SettingsView {
         .detach();
     }
 
-    fn sidecar_health(&mut self, cx: &mut Context<Self>) {
+    fn storage_health(&mut self, cx: &mut Context<Self>) {
         if self.busy {
             return;
         }
 
         self.busy = true;
-        self.status = "Checking storage sidecar health...".into();
+        self.status = "Checking storage health...".into();
         self.error = None;
         cx.notify();
 
-        let sidecar = self.sidecar.clone();
+        let storage = self.storage.clone();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             let result = smol::unblock(move || {
-                let mut svc = sidecar.lock().map_err(|e| format!("sidecar lock: {e}"))?;
+                let mut svc = storage.lock().map_err(|e| format!("storage lock: {e}"))?;
                 svc.health()
             })
             .await;
@@ -348,15 +348,15 @@ impl SettingsView {
                 this.busy = false;
                 match result {
                     Ok(resp) => {
-                        this.status = "Storage sidecar is healthy".into();
-                        this.last_sidecar_response = Some(
+                        this.status = "Storage is healthy".into();
+                        this.last_storage_response = Some(
                             serde_json::to_string_pretty(&resp)
                                 .unwrap_or_else(|_| format!("{resp:?}")),
                         );
                         this.error = None;
                     }
                     Err(e) => {
-                        this.status = "Storage sidecar health check failed".into();
+                        this.status = "Storage health check failed".into();
                         this.error = Some(e);
                     }
                 }
@@ -366,7 +366,7 @@ impl SettingsView {
         .detach();
     }
 
-    fn sidecar_storage_status(&mut self, cx: &mut Context<Self>) {
+    fn storage_status(&mut self, cx: &mut Context<Self>) {
         if self.busy {
             return;
         }
@@ -381,14 +381,14 @@ impl SettingsView {
         };
 
         self.busy = true;
-        self.status = "Fetching Load storage status via sidecar...".into();
+        self.status = "Fetching Load storage status...".into();
         self.error = None;
         cx.notify();
 
-        let sidecar = self.sidecar.clone();
+        let storage = self.storage.clone();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             let result = smol::unblock(move || {
-                let mut svc = sidecar.lock().map_err(|e| format!("sidecar lock: {e}"))?;
+                let mut svc = storage.lock().map_err(|e| format!("storage lock: {e}"))?;
                 svc.storage_status(&auth)
             })
             .await;
@@ -398,7 +398,7 @@ impl SettingsView {
                 match result {
                     Ok(resp) => {
                         this.status = "Load storage status loaded".into();
-                        this.last_sidecar_response = Some(
+                        this.last_storage_response = Some(
                             serde_json::to_string_pretty(&resp)
                                 .unwrap_or_else(|_| format!("{resp:?}")),
                         );
@@ -415,7 +415,7 @@ impl SettingsView {
         .detach();
     }
 
-    fn sidecar_preflight_smoke(&mut self, cx: &mut Context<Self>) {
+    fn storage_preflight_smoke(&mut self, cx: &mut Context<Self>) {
         if self.busy {
             return;
         }
@@ -434,10 +434,10 @@ impl SettingsView {
         self.error = None;
         cx.notify();
 
-        let sidecar = self.sidecar.clone();
+        let storage = self.storage.clone();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             let result = smol::unblock(move || {
-                let mut svc = sidecar.lock().map_err(|e| format!("sidecar lock: {e}"))?;
+                let mut svc = storage.lock().map_err(|e| format!("storage lock: {e}"))?;
                 svc.storage_preflight(&auth, 10 * 1024 * 1024)
             })
             .await;
@@ -447,7 +447,7 @@ impl SettingsView {
                 match result {
                     Ok(resp) => {
                         this.status = "Load preflight check complete".into();
-                        this.last_sidecar_response = Some(
+                        this.last_storage_response = Some(
                             serde_json::to_string_pretty(&resp)
                                 .unwrap_or_else(|_| format!("{resp:?}")),
                         );
@@ -464,7 +464,7 @@ impl SettingsView {
         .detach();
     }
 
-    fn sidecar_deposit_and_approve(&mut self, cx: &mut Context<Self>) {
+    fn storage_deposit_and_approve(&mut self, cx: &mut Context<Self>) {
         if self.busy {
             return;
         }
@@ -479,15 +479,15 @@ impl SettingsView {
         };
 
         self.busy = true;
-        self.status = "Running Load funding compatibility check...".into();
+        self.status = "Running Base Sepolia PKP funding flow...".into();
         self.error = None;
         cx.notify();
 
-        let sidecar = self.sidecar.clone();
+        let storage = self.storage.clone();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             let result = smol::unblock(move || {
-                let mut svc = sidecar.lock().map_err(|e| format!("sidecar lock: {e}"))?;
-                svc.storage_deposit_and_approve(&auth, "1.00")
+                let mut svc = storage.lock().map_err(|e| format!("storage lock: {e}"))?;
+                svc.storage_deposit_and_approve(&auth, "0.0001")
             })
             .await;
 
@@ -495,15 +495,15 @@ impl SettingsView {
                 this.busy = false;
                 match result {
                     Ok(resp) => {
-                        this.status = "Load funding check complete".into();
-                        this.last_sidecar_response = Some(
+                        this.status = "Load funding flow complete".into();
+                        this.last_storage_response = Some(
                             serde_json::to_string_pretty(&resp)
                                 .unwrap_or_else(|_| format!("{resp:?}")),
                         );
                         this.error = None;
                     }
                     Err(e) => {
-                        this.status = "Load funding check failed".into();
+                        this.status = "Load funding flow failed".into();
                         this.error = Some(e);
                     }
                 }
@@ -513,7 +513,7 @@ impl SettingsView {
         .detach();
     }
 
-    fn sidecar_encrypt_upload_file(&mut self, cx: &mut Context<Self>) {
+    fn storage_encrypt_upload_file(&mut self, cx: &mut Context<Self>) {
         if self.busy {
             return;
         }
@@ -543,15 +543,15 @@ impl SettingsView {
 
         self.busy = true;
         self.status =
-            "Encrypting + uploading + registering content via sidecar (can take a few minutes)..."
+            "Encrypting + uploading + registering content via storage (can take a few minutes)..."
                 .into();
         self.error = None;
         cx.notify();
 
-        let sidecar = self.sidecar.clone();
+        let storage = self.storage.clone();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             let result = smol::unblock(move || {
-                let mut svc = sidecar.lock().map_err(|e| format!("sidecar lock: {e}"))?;
+                let mut svc = storage.lock().map_err(|e| format!("storage lock: {e}"))?;
                 svc.content_encrypt_upload_register(&auth, &path_str, true, track_meta)
             })
             .await;
@@ -561,7 +561,7 @@ impl SettingsView {
                 match result {
                     Ok(resp) => {
                         this.status = "Encrypted upload + content register complete".into();
-                        this.last_sidecar_response = Some(
+                        this.last_storage_response = Some(
                             serde_json::to_string_pretty(&resp)
                                 .unwrap_or_else(|_| format!("{resp:?}")),
                         );
@@ -930,34 +930,34 @@ impl Render for SettingsView {
                                             cx.listener(|this, _, _, cx| this.sign_smoke_payload(cx)),
                                         ))
                                         .child(action_button(
-                                            "Sidecar Health",
+                                            "Storage Health",
                                             !self.busy,
                                             true,
-                                            cx.listener(|this, _, _, cx| this.sidecar_health(cx)),
+                                            cx.listener(|this, _, _, cx| this.storage_health(cx)),
                                         ))
                                         .child(action_button(
                                             "Storage Status",
                                             !self.busy,
                                             false,
-                                            cx.listener(|this, _, _, cx| this.sidecar_storage_status(cx)),
+                                            cx.listener(|this, _, _, cx| this.storage_status(cx)),
                                         ))
                                         .child(action_button(
                                             "Preflight 10MB",
                                             !self.busy,
                                             false,
-                                            cx.listener(|this, _, _, cx| this.sidecar_preflight_smoke(cx)),
+                                            cx.listener(|this, _, _, cx| this.storage_preflight_smoke(cx)),
                                         ))
                                         .child(action_button(
                                             "Funding Check",
                                             !self.busy,
                                             false,
-                                            cx.listener(|this, _, _, cx| this.sidecar_deposit_and_approve(cx)),
+                                            cx.listener(|this, _, _, cx| this.storage_deposit_and_approve(cx)),
                                         ))
                                         .child(action_button(
                                             "Encrypt+Upload File",
                                             !self.busy,
                                             true,
-                                            cx.listener(|this, _, _, cx| this.sidecar_encrypt_upload_file(cx)),
+                                            cx.listener(|this, _, _, cx| this.storage_encrypt_upload_file(cx)),
                                         ))
                                         .child(action_button(
                                             "JT Server On",
@@ -1012,15 +1012,15 @@ impl Render for SettingsView {
                                 .when_some(self.last_signature.clone(), |el, sig| {
                                     el.child(result_box("Last PKP signature response", &sig))
                                 })
-                                .when_some(self.last_sidecar_response.clone(), |el, resp| {
-                                    el.child(result_box("Last storage sidecar response", &resp))
+                                .when_some(self.last_storage_response.clone(), |el, resp| {
+                                    el.child(result_box("Last storage response", &resp))
                                 })
                                 .when_some(self.last_voice_response.clone(), |el, resp| {
                                     el.child(result_box("Last JackTrip response", &resp))
                                 })
                                 .child(
                                     div().text_xs().text_color(TEXT_DIM).child(
-                                        "Env required: HEAVEN_LIT_RPC_URL (or LIT_RPC_URL). Sidecar requires bun + sidecar deps. For Load uploads use HEAVEN_LOAD_UPLOAD_MODE=auto plus HEAVEN_API_URL and/or HEAVEN_LOAD_S3_AGENT_API_KEY. JackTrip local test uses localhost and HEAVEN_JACKTRIP_PORT (default 4464).",
+                                        "Env required: HEAVEN_LIT_RPC_URL (or LIT_RPC_URL). For Load uploads use HEAVEN_LOAD_TURBO_UPLOAD_URL and optional HEAVEN_LOAD_TURBO_TOKEN (default ethereum). JackTrip local test uses localhost and HEAVEN_JACKTRIP_PORT (default 4464).",
                                     ),
                                 ),
                         )

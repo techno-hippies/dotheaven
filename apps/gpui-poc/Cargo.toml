@@ -22,7 +22,7 @@ dirs = "6"
 log = "0.4"
 env_logger = "0.11"
 futures-lite = "2"
-ureq = { version = "3", features = ["json"] }
+ureq = { version = "3", features = ["json", "multipart"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
 lofty = "0.22"
 walkdir = "2"
@@ -30,6 +30,7 @@ rfd = "0.15"
 chrono = "0.4"
 tokio = { version = "1.40", features = ["rt-multi-thread"] }
 lit-rust-sdk = { path = "../../../lit-rust-sdk/lit-rust-sdk" }
+ethers = { version = "2", default-features = false, features = ["rustls"] }
 alloy-primitives = "1"
 alloy-sol-types = "1"
 hex = { package = "const-hex", version = "1.14" }
@@ -37,6 +38,10 @@ dotenvy = "0.15"
 prost = { version = "0.14", default-features = false }
 futures = "0.3"
 base64 = "0.22"
+aes-gcm = "0.10"
+rand = "0.8"
+sha2 = "0.10"
+bundles_rs = { git = "https://github.com/loadnetwork/bundles-rs.git", branch = "main" }
 
 # Audio playback (ported from Tauri audio.rs)
 symphonia = { version = "0.5", features = ["mp3", "aac", "isomp4", "flac", "ogg", "vorbis", "pcm", "wav"] }

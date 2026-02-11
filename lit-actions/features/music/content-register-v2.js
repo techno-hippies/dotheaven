@@ -288,6 +288,38 @@ const main = async () => {
       algoNum,
     ]);
 
+    // Simulate MegaETH write first to surface a concrete revert reason (e.g. already active).
+    const simJson = await Lit.Actions.runOnce(
+      { waitForResponse: true, name: "simulateRegisterContentMega" },
+      async () => {
+        try {
+          const megaProvider = new ethers.providers.JsonRpcProvider(MEGAETH_RPC_URL);
+          await megaProvider.call({
+            from: SPONSOR_PKP_ADDRESS,
+            to: registryAddr,
+            data: txData,
+          });
+          return JSON.stringify({ ok: true });
+        } catch (err) {
+          return JSON.stringify({
+            simError:
+              err?.reason ||
+              err?.error?.message ||
+              err?.message ||
+              String(err),
+            code: err?.code,
+            data: err?.data || err?.error?.data || null,
+          });
+        }
+      }
+    );
+    const sim = JSON.parse(simJson);
+    if (sim.simError) {
+      throw new Error(
+        `registerContentFor simulation failed: ${sim.simError} (code: ${sim.code || "n/a"})`
+      );
+    }
+
     const nonceJson = await Lit.Actions.runOnce(
       { waitForResponse: true, name: "getTxNonces" },
       async () => {
@@ -373,8 +405,6 @@ const main = async () => {
     // ========================================
     // STEP 4: Broadcast both txs
     // ========================================
-    const baseBroadcast = await broadcastSignedTx(baseSigned.signedTx, BASE_RPC_URL, "registerContent_base");
-
     let megaBroadcast;
     try {
       megaBroadcast = await broadcastSignedTx(megaSigned.signedTx, MEGAETH_RPC_URL, "registerContent_mega");
@@ -384,13 +414,14 @@ const main = async () => {
           success: false,
           error: `MegaETH broadcast failed: ${megaErr.message}`,
           version: "content-register-v2",
-          mirrorTxHash: baseBroadcast.txHash,
           contentId: computedContentId,
           user: userAddress.toLowerCase(),
         }),
       });
       return;
     }
+
+    const baseBroadcast = await broadcastSignedTx(baseSigned.signedTx, BASE_RPC_URL, "registerContent_base");
 
     Lit.Actions.setResponse({
       response: JSON.stringify({

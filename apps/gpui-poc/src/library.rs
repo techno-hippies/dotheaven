@@ -10,9 +10,9 @@ use gpui_component::StyledExt;
 
 use crate::audio::AudioHandle;
 use crate::auth;
+use crate::load_storage::{LoadStorageService, TrackMetaInput};
 use crate::music_db::{MusicDb, ScanProgress, TrackRow};
 use crate::scrobble::{now_epoch_sec, ScrobbleService};
-use crate::synapse_sidecar::{SynapseSidecarService, TrackMetaInput};
 use crate::ui::overflow_menu::track_row_overflow_menu;
 
 // =============================================================================
@@ -118,7 +118,7 @@ pub struct LibraryView {
     track_started_at_sec: Option<u64>,
     last_scrobbled_key: Option<String>,
     scrobble_service: Option<Arc<Mutex<ScrobbleService>>>,
-    sidecar: Arc<Mutex<SynapseSidecarService>>,
+    storage: Arc<Mutex<LoadStorageService>>,
     upload_busy: bool,
     status_message: Option<String>,
     storage_balance: Option<String>,
@@ -156,7 +156,7 @@ impl LibraryView {
             track_started_at_sec: None,
             last_scrobbled_key: None,
             scrobble_service,
-            sidecar: Arc::new(Mutex::new(SynapseSidecarService::new())),
+            storage: Arc::new(Mutex::new(LoadStorageService::new())),
             upload_busy: false,
             status_message: None,
             storage_balance: None,
@@ -515,10 +515,10 @@ impl LibraryView {
         self.storage_loading = true;
         cx.notify();
 
-        let sidecar = self.sidecar.clone();
+        let storage = self.storage.clone();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             let result = smol::unblock(move || {
-                let mut svc = sidecar.lock().map_err(|e| format!("lock: {e}"))?;
+                let mut svc = storage.lock().map_err(|e| format!("lock: {e}"))?;
                 svc.storage_status(&auth)
             })
             .await;
@@ -559,13 +559,13 @@ impl LibraryView {
             return;
         }
         self.add_funds_busy = true;
-        self.set_status_message("Checking Load upload funding mode...", cx);
+        self.set_status_message("Submitting Base Sepolia PKP funding tx...", cx);
 
-        let sidecar = self.sidecar.clone();
+        let storage = self.storage.clone();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             let result = smol::unblock(move || {
-                let mut svc = sidecar.lock().map_err(|e| format!("lock: {e}"))?;
-                svc.storage_deposit_and_approve(&auth, "1")
+                let mut svc = storage.lock().map_err(|e| format!("lock: {e}"))?;
+                svc.storage_deposit_and_approve(&auth, "0.0001")
             })
             .await;
 
@@ -577,16 +577,19 @@ impl LibraryView {
                             .get("txHash")
                             .and_then(|v| v.as_str())
                             .unwrap_or("unknown");
-                        log::info!("[Library] storage funding compatibility check: txHash={}", tx_hash);
+                        log::info!(
+                            "[Library] storage funding flow complete: txHash={}",
+                            tx_hash
+                        );
                         this.set_status_message(
-                            "Load upload flow ready. Refreshing storage status...",
+                            "Funding submitted. Refreshing storage status...",
                             cx,
                         );
                         this.fetch_storage_status(cx);
                     }
                     Err(e) => {
-                        log::error!("[Library] storage funding check failed: {}", e);
-                        this.set_status_message(format!("Funding check failed: {}", e), cx);
+                        log::error!("[Library] storage funding flow failed: {}", e);
+                        this.set_status_message(format!("Funding failed: {}", e), cx);
                     }
                 }
             });
@@ -636,10 +639,10 @@ impl LibraryView {
             cx,
         );
 
-        let sidecar = self.sidecar.clone();
+        let storage = self.storage.clone();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             let result = smol::unblock(move || {
-                let mut svc = sidecar.lock().map_err(|e| format!("sidecar lock: {e}"))?;
+                let mut svc = storage.lock().map_err(|e| format!("storage lock: {e}"))?;
                 match svc.content_encrypt_upload_register(&auth, &path, true, track_meta) {
                     Ok(resp) => Ok(resp),
                     Err(upload_err) => {
@@ -647,7 +650,7 @@ impl LibraryView {
                         let storage_status = svc.storage_status(&auth).ok();
                         let diagnostic = serde_json::json!({
                             "uploadError": upload_err,
-                            "sidecarHealth": health,
+                            "storageHealth": health,
                             "storageStatus": storage_status,
                         });
                         Err(
@@ -664,14 +667,46 @@ impl LibraryView {
                 this.upload_busy = false;
                 match result {
                     Ok(resp) => {
+                        let piece_cid = resp
+                            .get("pieceCid")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("n/a");
+                        let track_id = resp
+                            .get("trackId")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("n/a");
+                        let tx_hash = resp.get("txHash").and_then(|v| v.as_str()).unwrap_or("n/a");
+                        let gateway_url = resp
+                            .get("gatewayUrl")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("n/a");
+                        let reg_ver = resp
+                            .get("registerVersion")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("n/a");
+
                         log::info!(
-                            "[Library] encrypt+upload success for '{}': {}",
+                            "[Library] encrypt+upload success for '{}' pieceCid={} trackId={} txHash={} registerVersion={} gatewayUrl={}",
                             track_title,
-                            serde_json::to_string(&resp)
+                            piece_cid,
+                            track_id,
+                            tx_hash,
+                            reg_ver,
+                            gateway_url,
+                        );
+                        log::debug!(
+                            "[Library] encrypt+upload response for '{}': {}",
+                            track_title,
+                            serde_json::to_string_pretty(&resp)
                                 .unwrap_or_else(|_| "<invalid response>".to_string())
                         );
                         this.set_status_message(
-                            format!("Encrypt + upload complete for \"{}\".", track_title),
+                            format!(
+                                "Upload complete: \"{}\" | cid={} | tx={}",
+                                track_title,
+                                abbreviate_for_status(piece_cid),
+                                abbreviate_for_status(tx_hash),
+                            ),
                             cx,
                         );
                     }
@@ -682,7 +717,11 @@ impl LibraryView {
                             err
                         );
                         this.set_status_message(
-                            format!("Encrypt + upload failed for \"{}\".", track_title),
+                            format!(
+                                "Encrypt + upload failed for \"{}\": {}",
+                                track_title,
+                                summarize_status_error(&err),
+                            ),
                             cx,
                         );
                     }
@@ -1438,4 +1477,26 @@ pub fn get_active_cover_path(tracks: &[TrackRow], active_index: Option<usize>) -
         .and_then(|i| tracks.get(i))
         .and_then(|t| t.cover_path.clone())
         .filter(|p| !p.is_empty() && std::path::Path::new(p).exists())
+}
+
+fn abbreviate_for_status(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.len() <= 20 {
+        return trimmed.to_string();
+    }
+    format!(
+        "{}...{}",
+        &trimmed[..10],
+        &trimmed[trimmed.len().saturating_sub(8)..]
+    )
+}
+
+fn summarize_status_error(raw: &str) -> String {
+    let compact = raw.replace('\n', " ").replace('\r', " ");
+    let compact = compact.split_whitespace().collect::<Vec<_>>().join(" ");
+    if compact.len() <= 180 {
+        compact
+    } else {
+        format!("{}...", &compact[..180])
+    }
 }

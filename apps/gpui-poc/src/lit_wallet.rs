@@ -9,11 +9,16 @@
 use std::env;
 
 use alloy_primitives::{keccak256, Address};
+use ethers::middleware::SignerMiddleware;
+use ethers::providers::{Http, Middleware, Provider};
+use ethers::signers::Signer;
+use ethers::types::{Address as EthersAddress, BlockId, TransactionRequest, U256 as EthersU256};
+use ethers::utils::parse_ether;
 
 use lit_rust_sdk::{
-    create_lit_client, naga_dev, naga_mainnet, naga_proto, naga_staging, naga_test, AuthConfig,
-    AuthContext, AuthData, ExecuteJsResponse, LitAbility, LitClient, NetworkConfig,
-    ResourceAbilityRequest,
+    create_eth_wallet_auth_data, create_lit_client, naga_dev, naga_mainnet, naga_proto,
+    naga_staging, naga_test, AuthConfig, AuthContext, AuthData, EncryptParams, EncryptResponse,
+    ExecuteJsResponse, LitAbility, LitClient, NetworkConfig, PkpSigner, ResourceAbilityRequest,
 };
 
 use crate::auth::PersistedAuth;
@@ -414,51 +419,7 @@ impl LitWalletService {
             .signatures
             .get("sig")
             .ok_or_else(|| format!("executeJs returned no 'sig' (response={})", result.response))?;
-
-        // Combine r+s+v into 65 bytes (same as JS: signature + (recoveryId + 27)).
-        // Lit responses can be inconsistently encoded (quoted JSON string, r/s fields, etc.),
-        // so normalize before decoding.
-        let sig_hex = extract_compact_signature_hex(sig)?;
-        let recovery_id = sig
-            .get("recid")
-            .and_then(|v| v.as_u64())
-            .or_else(|| sig.get("recoveryId").and_then(|v| v.as_u64()))
-            .or_else(|| sig.get("recovery_id").and_then(|v| v.as_u64()))
-            .or_else(|| {
-                sig.get("recid")
-                    .and_then(|v| v.as_str())
-                    .and_then(|v| v.parse::<u64>().ok())
-            })
-            .or_else(|| {
-                sig.get("recoveryId")
-                    .and_then(|v| v.as_str())
-                    .and_then(|v| v.parse::<u64>().ok())
-            })
-            .or_else(|| {
-                sig.get("recovery_id")
-                    .and_then(|v| v.as_str())
-                    .and_then(|v| v.parse::<u64>().ok())
-            })
-            .ok_or("Missing 'recid' field in sig")?;
-
-        let clean_hex = sig_hex.strip_prefix("0x").unwrap_or(&sig_hex);
-        let mut sig_bytes = hex::decode(clean_hex)
-            .map_err(|e| format!("hex decode sig: {e}; sig={}", truncate_for_log(&sig_hex)))?;
-        if sig_bytes.len() != 64 {
-            return Err(format!(
-                "Invalid signature length: expected 64 bytes for r+s, got {}",
-                sig_bytes.len()
-            ));
-        }
-
-        let v = if recovery_id >= 27 {
-            recovery_id as u8
-        } else {
-            (recovery_id as u8) + 27
-        };
-        sig_bytes.push(v);
-
-        Ok(sig_bytes)
+        signature_value_to_65_bytes(sig)
     }
 
     /// Sign pre-hashed bytes with PKP via `/web/pkp/sign`.
@@ -497,8 +458,212 @@ impl LitWalletService {
             .map_err(|e| format!("pkpSignEthereum failed: {e}"))
     }
 
+    /// Signs arbitrary message bytes using Ethereum personal-sign semantics
+    /// and returns the canonical 65-byte signature (r+s+v).
+    pub fn pkp_sign_ethereum_message(&mut self, message: &[u8]) -> Result<Vec<u8>, String> {
+        let hash = ethereum_personal_message_hash(message);
+        let response = self.pkp_sign_ethereum(&hash)?;
+        signature_value_to_65_bytes(&response)
+    }
+
+    /// Sends a native EVM transaction signed by the authenticated PKP.
+    /// Returns the tx hash and, when `wait_for_receipt` is true, mined receipt metadata.
+    pub fn pkp_send_native_transaction(
+        &mut self,
+        rpc_url: &str,
+        expected_chain_id: u64,
+        to: &str,
+        amount_eth: &str,
+        wait_for_receipt: bool,
+    ) -> Result<serde_json::Value, String> {
+        let client = self
+            .client
+            .as_ref()
+            .ok_or("Lit client is not initialized")?
+            .clone();
+        let auth_context = self
+            .auth_context
+            .as_ref()
+            .ok_or("Lit auth context is not initialized")?
+            .clone();
+        let pkp_public_key = self
+            .pkp_public_key
+            .as_ref()
+            .ok_or("Missing PKP public key")?
+            .clone();
+        let pkp_address = self
+            .pkp_address
+            .as_ref()
+            .ok_or("Missing PKP address")?
+            .to_string();
+        let rpc_url = rpc_url.trim().to_string();
+        let to_address: EthersAddress = to
+            .trim()
+            .parse()
+            .map_err(|e| format!("Invalid recipient address: {e}"))?;
+        let from_address: EthersAddress = pkp_address
+            .parse()
+            .map_err(|e| format!("Invalid PKP address: {e}"))?;
+        let value_wei = parse_ether(amount_eth.trim())
+            .map_err(|e| format!("Invalid ETH amount ({amount_eth}): {e}"))?;
+
+        self.runtime.block_on(async move {
+            let provider = Provider::<Http>::try_from(rpc_url.as_str())
+                .map_err(|e| format!("Invalid EVM RPC URL: {e}"))?;
+            let chain_id = provider
+                .get_chainid()
+                .await
+                .map_err(|e| format!("Failed to read chain id from RPC: {e}"))?
+                .as_u64();
+
+            if chain_id != expected_chain_id {
+                return Err(format!(
+                    "Unexpected chain id from RPC: got {chain_id}, expected {expected_chain_id}"
+                ));
+            }
+
+            let signer = PkpSigner::new(client, pkp_public_key, auth_context, chain_id)
+                .map_err(|e| format!("Failed to initialize PKP signer: {e}"))?
+                .with_chain_id(chain_id);
+            let signer_client = SignerMiddleware::new(provider, signer);
+
+            let tx = TransactionRequest::new()
+                .from(from_address)
+                .to(to_address)
+                .value(value_wei)
+                .chain_id(chain_id);
+
+            let pending = signer_client
+                .send_transaction(tx, Option::<BlockId>::None)
+                .await
+                .map_err(|e| format!("Failed to broadcast PKP tx: {e}"))?;
+            let tx_hash = format!("{:#x}", pending.tx_hash());
+
+            if !wait_for_receipt {
+                return Ok(serde_json::json!({
+                    "txHash": tx_hash,
+                    "chainId": chain_id,
+                    "from": format!("{:#x}", from_address),
+                    "to": format!("{:#x}", to_address),
+                    "valueWei": value_wei.to_string(),
+                }));
+            }
+
+            let receipt_opt = pending
+                .await
+                .map_err(|e| format!("Failed waiting for tx receipt: {e}"))?;
+            let receipt = receipt_opt.ok_or("Transaction dropped before confirmation")?;
+            let block_number = receipt.block_number.map(|n| n.as_u64());
+            let status = receipt.status.map(|s| s.as_u64());
+            let gas_used = receipt
+                .gas_used
+                .unwrap_or_else(EthersU256::zero)
+                .to_string();
+
+            Ok(serde_json::json!({
+                "txHash": tx_hash,
+                "chainId": chain_id,
+                "from": format!("{:#x}", from_address),
+                "to": format!("{:#x}", to_address),
+                "valueWei": value_wei.to_string(),
+                "blockNumber": block_number,
+                "status": status,
+                "gasUsed": gas_used,
+            }))
+        })
+    }
+
     pub fn network_name(&self) -> Option<&str> {
         self.network.as_deref()
+    }
+
+    pub fn encrypt_with_access_control(
+        &mut self,
+        data_to_encrypt: Vec<u8>,
+        unified_access_control_conditions: serde_json::Value,
+    ) -> Result<EncryptResponse, String> {
+        let client = self
+            .client
+            .as_ref()
+            .ok_or("Lit client is not initialized")?
+            .clone();
+
+        self.runtime
+            .block_on(async move {
+                client
+                    .encrypt(EncryptParams {
+                        data_to_encrypt,
+                        unified_access_control_conditions: Some(unified_access_control_conditions),
+                        hashed_access_control_conditions_hex: None,
+                        metadata: None,
+                    })
+                    .await
+            })
+            .map_err(|e| format!("encrypt failed: {e}"))
+    }
+
+    pub fn execute_js_with_auth_context(
+        &mut self,
+        code: Option<String>,
+        ipfs_id: Option<String>,
+        js_params: Option<serde_json::Value>,
+        auth_context: &AuthContext,
+    ) -> Result<ExecuteJsResponse, String> {
+        let client = self
+            .client
+            .as_ref()
+            .ok_or("Lit client is not initialized")?
+            .clone();
+        let auth_context = auth_context.clone();
+
+        self.runtime
+            .block_on(async move {
+                client
+                    .execute_js(code, ipfs_id, js_params, &auth_context)
+                    .await
+            })
+            .map_err(|e| format!("executeJs failed: {e}"))
+    }
+
+    pub fn create_auth_context_from_eth_wallet(
+        &mut self,
+        pkp_public_key: &str,
+        private_key_hex: &str,
+        statement: &str,
+        domain: &str,
+        expiration_days: i64,
+    ) -> Result<AuthContext, String> {
+        let client = self
+            .client
+            .as_ref()
+            .ok_or("Lit client is not initialized")?
+            .clone();
+        let pkp_public_key = pkp_public_key.to_string();
+        let private_key_hex = private_key_hex.to_string();
+        let auth_config = auth_config_with(statement, domain, expiration_days);
+
+        self.runtime
+            .block_on(async move {
+                let nonce = format!(
+                    "heaven{}",
+                    chrono::Utc::now()
+                        .timestamp_nanos_opt()
+                        .unwrap_or_default()
+                        .unsigned_abs()
+                );
+                let auth_data = create_eth_wallet_auth_data(&private_key_hex, &nonce).await?;
+                client
+                    .create_pkp_auth_context(
+                        &pkp_public_key,
+                        auth_data,
+                        auth_config,
+                        None,
+                        None,
+                        None,
+                    )
+                    .await
+            })
+            .map_err(|e| format!("create auth context from eth wallet failed: {e}"))
     }
 }
 
@@ -531,11 +696,15 @@ async fn probe_auth_context(
 }
 
 fn default_auth_config() -> AuthConfig {
+    auth_config_with("Heaven GPUI native Lit wallet flow", "localhost", 30)
+}
+
+fn auth_config_with(statement: &str, domain: &str, expiration_days: i64) -> AuthConfig {
     AuthConfig {
         capability_auth_sigs: vec![],
-        expiration: (chrono::Utc::now() + chrono::Duration::days(30)).to_rfc3339(),
-        statement: "Heaven GPUI native Lit wallet flow".into(),
-        domain: "localhost".into(),
+        expiration: (chrono::Utc::now() + chrono::Duration::days(expiration_days)).to_rfc3339(),
+        statement: statement.into(),
+        domain: domain.into(),
         resources: vec![
             ResourceAbilityRequest {
                 ability: LitAbility::PKPSigning,
@@ -721,6 +890,67 @@ fn extract_compact_signature_hex(sig: &serde_json::Value) -> Result<String, Stri
     let r_no_prefix = r_clean.strip_prefix("0x").unwrap_or(&r_clean);
     let s_no_prefix = s_clean.strip_prefix("0x").unwrap_or(&s_clean);
     Ok(format!("{}{}", r_no_prefix, s_no_prefix))
+}
+
+fn signature_value_to_65_bytes(raw_sig: &serde_json::Value) -> Result<Vec<u8>, String> {
+    let sig = raw_sig.get("sig").unwrap_or(raw_sig);
+    let sig_hex = extract_compact_signature_hex(sig)?;
+    let clean_hex = sig_hex.strip_prefix("0x").unwrap_or(&sig_hex);
+    let mut sig_bytes = hex::decode(clean_hex)
+        .map_err(|e| format!("hex decode sig: {e}; sig={}", truncate_for_log(&sig_hex)))?;
+    if sig_bytes.len() == 65 {
+        let v = sig_bytes[64];
+        sig_bytes[64] = if v < 27 { v + 27 } else { v };
+        return Ok(sig_bytes);
+    }
+
+    if sig_bytes.len() != 64 {
+        return Err(format!(
+            "Invalid signature length: expected 64 or 65 bytes, got {}",
+            sig_bytes.len()
+        ));
+    }
+
+    let recovery_id = sig
+        .get("recid")
+        .and_then(|v| v.as_u64())
+        .or_else(|| sig.get("recoveryId").and_then(|v| v.as_u64()))
+        .or_else(|| sig.get("recovery_id").and_then(|v| v.as_u64()))
+        .or_else(|| {
+            sig.get("recid")
+                .and_then(|v| v.as_str())
+                .and_then(|v| v.parse::<u64>().ok())
+        })
+        .or_else(|| {
+            sig.get("recoveryId")
+                .and_then(|v| v.as_str())
+                .and_then(|v| v.parse::<u64>().ok())
+        })
+        .or_else(|| {
+            sig.get("recovery_id")
+                .and_then(|v| v.as_str())
+                .and_then(|v| v.parse::<u64>().ok())
+        })
+        .ok_or("Missing 'recid' field in sig")?;
+
+    let v = if recovery_id >= 27 {
+        recovery_id as u8
+    } else {
+        (recovery_id as u8) + 27
+    };
+    sig_bytes.push(v);
+    Ok(sig_bytes)
+}
+
+fn ethereum_personal_message_hash(message: &[u8]) -> [u8; 32] {
+    let prefix = format!("\x19Ethereum Signed Message:\n{}", message.len());
+    let mut payload = Vec::with_capacity(prefix.len() + message.len());
+    payload.extend_from_slice(prefix.as_bytes());
+    payload.extend_from_slice(message);
+    let hash = keccak256(payload);
+    let mut out = [0u8; 32];
+    out.copy_from_slice(hash.as_slice());
+    out
 }
 
 fn normalize_hex_like_string(raw: &str) -> Result<String, String> {
