@@ -12,7 +12,6 @@ import {
   PUBLISH_STEPS,
   isPublishFormStep,
   isPublishNextDisabled,
-  AddFundsDialog,
   useIsMobile,
   type SongFormData,
   type PublishStep,
@@ -21,7 +20,7 @@ import {
   type SortState,
 } from '@heaven/ui'
 import { musicTab, MUSIC } from '@heaven/core'
-import { ChevronLeft, Wallet, CloudFill } from '@heaven/ui/icons'
+import { ChevronLeft, CloudFill } from '@heaven/ui/icons'
 import { usePlatform } from 'virtual:heaven-platform'
 import { useParams, useNavigate } from '@solidjs/router'
 import { pickFolder, type LocalTrack } from '../lib/local-music'
@@ -35,7 +34,7 @@ import { initFilecoinUploadService } from '../lib/filecoin-upload-service'
 import { fetchUploadedContent, fetchSharedContent } from '../lib/heaven/scrobbles'
 import { mapUploadedToTracks, mapSharedToTracks, buildEntriesMap, handleEncryptedTrackPlay } from './library-utils'
 import { publishSong, type PublishResult } from '../lib/heaven/song-publish'
-import { getStorageStatus, depositAndApprove, type StorageStatus } from '../lib/storage-service'
+import { getStorageStatus } from '../lib/storage-service'
 
 type LibraryTab = 'library' | 'local' | 'cloud' | 'shared' | 'publish'
 type LibraryFilter = 'all' | 'local' | 'cloud'
@@ -248,46 +247,18 @@ export const LibraryPage: Component = () => {
   })
 
   // ── Storage state (cloud tab) ──────────────────────────────────────
-  const [storageStatus, setStorageStatus] = createSignal<StorageStatus | null>(null)
-  const [storageLoading, setStorageLoading] = createSignal(false)
-  const [storageError, setStorageError] = createSignal<string | null>(null)
-  const [depositLoading, setDepositLoading] = createSignal(false)
-  const [addFundsOpen, setAddFundsOpen] = createSignal(false)
-
   let storageRefreshInflight = false
   async function refreshStorage() {
     const pkp = auth.pkpInfo()
     if (!pkp || storageRefreshInflight) return
     storageRefreshInflight = true
-    setStorageLoading(true)
-    setStorageError(null)
     try {
       const authCtx = await auth.getAuthContext()
-      const status = await getStorageStatus(pkp, authCtx)
-      setStorageStatus(status)
-    } catch (e: any) {
+      await getStorageStatus(pkp, authCtx)
+    } catch (e) {
       console.error('[Library] Storage status error:', e)
-      setStorageError(e.message || 'Failed to load storage status')
     } finally {
-      setStorageLoading(false)
       storageRefreshInflight = false
-    }
-  }
-
-  async function handleDeposit(amount: string) {
-    const pkp = auth.pkpInfo()
-    if (!pkp) return
-    setDepositLoading(true)
-    try {
-      const authCtx = await auth.getAuthContext()
-      await depositAndApprove(pkp, authCtx, amount)
-      await refreshStorage()
-    } catch (e: any) {
-      console.error('[Library] Deposit error:', e)
-      setStorageError(e.message || 'Deposit failed')
-    } finally {
-      setDepositLoading(false)
-      setAddFundsOpen(false)
     }
   }
 
@@ -296,13 +267,6 @@ export const LibraryPage: Component = () => {
     if (auth.isAuthenticated() && auth.pkpInfo() && (tab() === 'cloud' || tab() === 'library')) {
       refreshStorage()
     }
-  })
-
-  // Compute balance as number for AddFundsDialog estimate
-  const balanceNum = createMemo(() => {
-    const status = storageStatus()
-    if (!status) return 0
-    return parseFloat(status.balance.replace('$', '')) || 0
   })
 
   const [scrollRef, setScrollRef] = createSignal<HTMLDivElement | undefined>(undefined)
@@ -417,7 +381,7 @@ export const LibraryPage: Component = () => {
                   </IconButton>
                 }
                 rightSlot={
-                  <IconButton variant="soft" size="md" aria-label="Cloud storage" onClick={() => setAddFundsOpen(true)}>
+                  <IconButton variant="soft" size="md" aria-label="Refresh cloud status" onClick={() => void refreshStorage()}>
                     <CloudFill class="w-5 h-5" />
                   </IconButton>
                 }
@@ -433,8 +397,8 @@ export const LibraryPage: Component = () => {
             backgroundStyle={{ background: 'linear-gradient(135deg, #312e81 0%, #5b21b6 40%, #7c3aed 70%, #6d28d9 100%)' }}
             subtitle={<>{(sortedTracks() as Track[]).length.toLocaleString()} local, {uploadedTracksAsTrack().length.toLocaleString()} cloud</>}
             actions={
-              <Button variant="secondary" icon={<Wallet />} onClick={() => setAddFundsOpen(true)} class="!bg-white/15 !border-white/25 !text-white hover:!bg-white/25">
-                Add Funds
+              <Button variant="secondary" icon={<CloudFill class="w-5 h-5" />} onClick={() => void refreshStorage()} class="!bg-white/15 !border-white/25 !text-white hover:!bg-white/25">
+                Refresh Storage
               </Button>
             }
           />
@@ -728,8 +692,8 @@ export const LibraryPage: Component = () => {
                 </IconButton>
               }
               rightSlot={
-                <IconButton variant="soft" size="md" aria-label="Add Funds" onClick={() => setAddFundsOpen(true)}>
-                  <Wallet class="w-5 h-5" />
+                <IconButton variant="soft" size="md" aria-label="Refresh cloud status" onClick={() => void refreshStorage()}>
+                  <CloudFill class="w-5 h-5" />
                 </IconButton>
               }
             />
@@ -769,18 +733,6 @@ export const LibraryPage: Component = () => {
         </div>
 
       </Show>
-
-      <AddFundsDialog
-        open={addFundsOpen()}
-        onOpenChange={setAddFundsOpen}
-        currentBalance={storageStatus()?.balance ?? '$0.00'}
-        daysRemaining={storageStatus()?.daysRemaining ?? null}
-        balanceNum={balanceNum()}
-        monthlyCost={storageStatus()?.monthlyCost}
-        loading={depositLoading()}
-        onDeposit={handleDeposit}
-      />
-
       <AddToPlaylistDialog
         open={plDialog.open()}
         onOpenChange={plDialog.setOpen}

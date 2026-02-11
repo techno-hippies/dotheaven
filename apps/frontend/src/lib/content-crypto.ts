@@ -315,8 +315,18 @@ export function beamUrl(
   pieceCid: string,
   network: 'calibration' | 'mainnet' = 'mainnet',
 ): string {
+  const isFilecoinPieceCid =
+    pieceCid.startsWith('baga') ||
+    pieceCid.startsWith('bafy') ||
+    pieceCid.startsWith('Qm')
+
+  if (isFilecoinPieceCid) {
   const host = network === 'mainnet' ? 'filbeam.io' : 'calibration.filbeam.io'
-  return `https://${datasetOwner}.${host}/${pieceCid}`
+    return `https://${datasetOwner}.${host}/${pieceCid}`
+  }
+
+  const gateway = (import.meta.env.VITE_LOAD_GATEWAY_URL || 'https://gateway.s3-node-1.load.network').replace(/\/+$/, '')
+  return `${gateway}/resolve/${pieceCid}`
 }
 
 // ── Internal ───────────────────────────────────────────────────────────

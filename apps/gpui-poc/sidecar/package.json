@@ -6,7 +6,6 @@
     "start": "bun synapse-sidecar.ts"
   },
   "dependencies": {
-    "@filoz/synapse-sdk": "0.36.1",
     "@lit-protocol/auth": "8.2.3",
     "@lit-protocol/lit-client": "8.3.1",
     "@lit-protocol/networks": "8.4.1",

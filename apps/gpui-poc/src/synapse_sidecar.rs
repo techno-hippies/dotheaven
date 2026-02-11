@@ -1,7 +1,7 @@
-//! Minimal NDJSON RPC client for the Synapse TS sidecar.
+//! Minimal NDJSON RPC client for the TS storage sidecar.
 //!
 //! This bridges GPUI Rust -> `apps/gpui-poc/sidecar/synapse-sidecar.ts` so we
-//! can keep the proven Synapse SDK flow while native Rust equivalents mature.
+//! can keep a stable JS bridge for Load uploads while native Rust equivalents mature.
 
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -11,7 +11,7 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
 use crate::auth::PersistedAuth;
 
-const SIDECAR_STARTUP_ERR: &str = "Failed to start Synapse sidecar. Ensure bun is installed and sidecar dependencies are available (apps/gpui-poc/sidecar/node_modules).";
+const SIDECAR_STARTUP_ERR: &str = "Failed to start storage sidecar. Ensure bun is installed and sidecar dependencies are available (apps/gpui-poc/sidecar/node_modules).";
 
 #[derive(Default)]
 pub struct SynapseSidecarService {
@@ -150,7 +150,7 @@ impl SynapseSidecarService {
                 .read_line(&mut response_line)
                 .map_err(|e| format!("Failed to read sidecar response: {e}"))?;
             if bytes == 0 {
-                return Err("Synapse sidecar exited unexpectedly".to_string());
+                return Err("Storage sidecar exited unexpectedly".to_string());
             }
             if response_line.trim().is_empty() {
                 continue;
@@ -177,7 +177,7 @@ impl SynapseSidecarService {
         let script_path = sidecar_dir.join("synapse-sidecar.ts");
         if !script_path.exists() {
             return Err(format!(
-                "Synapse sidecar script not found at {}",
+                "Storage sidecar script not found at {}",
                 script_path.display()
             ));
         }
@@ -195,11 +195,11 @@ impl SynapseSidecarService {
 
         let child_stdin = child.stdin.take().ok_or_else(|| {
             self.shutdown();
-            "Failed to capture Synapse sidecar stdin".to_string()
+            "Failed to capture storage sidecar stdin".to_string()
         })?;
         let child_stdout = child.stdout.take().ok_or_else(|| {
             self.shutdown();
-            "Failed to capture Synapse sidecar stdout".to_string()
+            "Failed to capture storage sidecar stdout".to_string()
         })?;
 
         self.child = Some(child);

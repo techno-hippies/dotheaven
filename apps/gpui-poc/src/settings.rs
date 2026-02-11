@@ -332,7 +332,7 @@ impl SettingsView {
         }
 
         self.busy = true;
-        self.status = "Checking Synapse sidecar health...".into();
+        self.status = "Checking storage sidecar health...".into();
         self.error = None;
         cx.notify();
 
@@ -348,7 +348,7 @@ impl SettingsView {
                 this.busy = false;
                 match result {
                     Ok(resp) => {
-                        this.status = "Synapse sidecar is healthy".into();
+                        this.status = "Storage sidecar is healthy".into();
                         this.last_sidecar_response = Some(
                             serde_json::to_string_pretty(&resp)
                                 .unwrap_or_else(|_| format!("{resp:?}")),
@@ -356,7 +356,7 @@ impl SettingsView {
                         this.error = None;
                     }
                     Err(e) => {
-                        this.status = "Synapse sidecar health check failed".into();
+                        this.status = "Storage sidecar health check failed".into();
                         this.error = Some(e);
                     }
                 }
@@ -381,7 +381,7 @@ impl SettingsView {
         };
 
         self.busy = true;
-        self.status = "Fetching Synapse storage status via sidecar...".into();
+        self.status = "Fetching Load storage status via sidecar...".into();
         self.error = None;
         cx.notify();
 
@@ -397,7 +397,7 @@ impl SettingsView {
                 this.busy = false;
                 match result {
                     Ok(resp) => {
-                        this.status = "Synapse storage status loaded".into();
+                        this.status = "Load storage status loaded".into();
                         this.last_sidecar_response = Some(
                             serde_json::to_string_pretty(&resp)
                                 .unwrap_or_else(|_| format!("{resp:?}")),
@@ -405,7 +405,7 @@ impl SettingsView {
                         this.error = None;
                     }
                     Err(e) => {
-                        this.status = "Synapse storage status failed".into();
+                        this.status = "Load storage status failed".into();
                         this.error = Some(e);
                     }
                 }
@@ -430,7 +430,7 @@ impl SettingsView {
         };
 
         self.busy = true;
-        self.status = "Running Synapse preflight check (10MB)...".into();
+        self.status = "Running Load preflight check (10MB)...".into();
         self.error = None;
         cx.notify();
 
@@ -446,7 +446,7 @@ impl SettingsView {
                 this.busy = false;
                 match result {
                     Ok(resp) => {
-                        this.status = "Synapse preflight check complete".into();
+                        this.status = "Load preflight check complete".into();
                         this.last_sidecar_response = Some(
                             serde_json::to_string_pretty(&resp)
                                 .unwrap_or_else(|_| format!("{resp:?}")),
@@ -454,7 +454,7 @@ impl SettingsView {
                         this.error = None;
                     }
                     Err(e) => {
-                        this.status = "Synapse preflight check failed".into();
+                        this.status = "Load preflight check failed".into();
                         this.error = Some(e);
                     }
                 }
@@ -479,7 +479,7 @@ impl SettingsView {
         };
 
         self.busy = true;
-        self.status = "Depositing 1.00 USDFC + approving storage operator...".into();
+        self.status = "Running Load funding compatibility check...".into();
         self.error = None;
         cx.notify();
 
@@ -495,7 +495,7 @@ impl SettingsView {
                 this.busy = false;
                 match result {
                     Ok(resp) => {
-                        this.status = "Deposit + approve complete".into();
+                        this.status = "Load funding check complete".into();
                         this.last_sidecar_response = Some(
                             serde_json::to_string_pretty(&resp)
                                 .unwrap_or_else(|_| format!("{resp:?}")),
@@ -503,7 +503,7 @@ impl SettingsView {
                         this.error = None;
                     }
                     Err(e) => {
-                        this.status = "Deposit + approve failed".into();
+                        this.status = "Load funding check failed".into();
                         this.error = Some(e);
                     }
                 }
@@ -543,7 +543,7 @@ impl SettingsView {
 
         self.busy = true;
         self.status =
-            "Encrypting + uploading + registering content via sidecar (Calibration can take 2-6+ min)..."
+            "Encrypting + uploading + registering content via sidecar (can take a few minutes)..."
                 .into();
         self.error = None;
         cx.notify();
@@ -948,7 +948,7 @@ impl Render for SettingsView {
                                             cx.listener(|this, _, _, cx| this.sidecar_preflight_smoke(cx)),
                                         ))
                                         .child(action_button(
-                                            "Deposit+Approve $1",
+                                            "Funding Check",
                                             !self.busy,
                                             false,
                                             cx.listener(|this, _, _, cx| this.sidecar_deposit_and_approve(cx)),
@@ -1013,14 +1013,14 @@ impl Render for SettingsView {
                                     el.child(result_box("Last PKP signature response", &sig))
                                 })
                                 .when_some(self.last_sidecar_response.clone(), |el, resp| {
-                                    el.child(result_box("Last Synapse sidecar response", &resp))
+                                    el.child(result_box("Last storage sidecar response", &resp))
                                 })
                                 .when_some(self.last_voice_response.clone(), |el, resp| {
                                     el.child(result_box("Last JackTrip response", &resp))
                                 })
                                 .child(
                                     div().text_xs().text_color(TEXT_DIM).child(
-                                        "Env required: HEAVEN_LIT_RPC_URL (or LIT_RPC_URL). Synapse sidecar requires bun + sidecar deps. JackTrip local test uses localhost and HEAVEN_JACKTRIP_PORT (default 4464).",
+                                        "Env required: HEAVEN_LIT_RPC_URL (or LIT_RPC_URL). Sidecar requires bun + sidecar deps. For Load uploads set HEAVEN_API_URL (backend mode) or HEAVEN_LOAD_S3_AGENT_API_KEY (direct mode). JackTrip local test uses localhost and HEAVEN_JACKTRIP_PORT (default 4464).",
                                     ),
                                 ),
                         )

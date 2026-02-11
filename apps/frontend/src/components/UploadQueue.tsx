@@ -30,23 +30,19 @@ function stepProgress(step: UploadStep): number {
 
 function friendlyError(error?: string): string {
   if (!error) return 'Unknown error'
-  if (error.includes('Service Provider') && error.includes('insufficient funds'))
-    return 'Storage provider low on funds — retry later'
-  if (error.includes('insufficient funds') || error.includes('no tFIL'))
-    return 'No FIL for gas — fund your wallet'
-  if (error.includes('addPieces failed') || error.includes('Failed to create data set'))
-    return 'Storage provider error — retry later'
-  if (error.includes('No USDFC deposited'))
-    return 'Deposit USDFC on the Wallet page first'
-  if (error.includes('PaymentsService') || error.includes('account information') || error.includes('CALL_EXCEPTION') || error.includes('missing revert data'))
-    return 'Wallet needs FIL + USDFC on Filecoin'
+  if (error.includes('Load upload not configured'))
+    return 'Load storage is not configured on backend'
+  if (error.includes('Load agent upload failed'))
+    return 'Load storage gateway error — retry shortly'
+  if (error.includes('submitFundTransaction'))
+    return 'Funding credit sync failed — retry'
   if (error.includes('Not authenticated'))
     return 'Sign in first'
   if (error.includes('No signature'))
     return 'Signing failed — try again'
   if (error.includes('empty or unreadable') || error.includes('readFile'))
     return 'Could not read audio file'
-  if (error.includes('pieceCid'))
+  if (error.includes('no id'))
     return 'Upload failed — try again'
   if (error.length > 80) return error.slice(0, 77) + '...'
   return error

@@ -559,7 +559,7 @@ impl LibraryView {
             return;
         }
         self.add_funds_busy = true;
-        self.set_status_message("Depositing 1 USDFC into Synapse storage...", cx);
+        self.set_status_message("Checking Load upload funding mode...", cx);
 
         let sidecar = self.sidecar.clone();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
@@ -577,16 +577,16 @@ impl LibraryView {
                             .get("txHash")
                             .and_then(|v| v.as_str())
                             .unwrap_or("unknown");
-                        log::info!("[Library] deposit success: txHash={}", tx_hash);
+                        log::info!("[Library] storage funding compatibility check: txHash={}", tx_hash);
                         this.set_status_message(
-                            "Deposit complete! Refreshing storage status...",
+                            "Load upload flow ready. Refreshing storage status...",
                             cx,
                         );
                         this.fetch_storage_status(cx);
                     }
                     Err(e) => {
-                        log::error!("[Library] deposit failed: {}", e);
-                        this.set_status_message(format!("Deposit failed: {}", e), cx);
+                        log::error!("[Library] storage funding check failed: {}", e);
+                        this.set_status_message(format!("Funding check failed: {}", e), cx);
                     }
                 }
             });
@@ -630,7 +630,7 @@ impl LibraryView {
         self.upload_busy = true;
         self.set_status_message(
             format!(
-                "Encrypting + uploading \"{}\" to Synapse (Calibration can take 2-6+ min)...",
+                "Encrypting + uploading \"{}\" to Load (network + register can take a few minutes)...",
                 track_title
             ),
             cx,
@@ -930,9 +930,9 @@ fn render_hero(
                     "add-funds",
                     "icons/wallet.svg",
                     if add_funds_busy {
-                        "Depositing..."
+                        "Checking..."
                     } else {
-                        "Add Funds"
+                        "Funding Check"
                     },
                     false,
                     cx.listener(|this, _, _w, cx| {

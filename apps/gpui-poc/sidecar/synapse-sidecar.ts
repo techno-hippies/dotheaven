@@ -1,10 +1,10 @@
 /**
- * Synapse sidecar (NDJSON over stdin/stdout)
+ * Storage sidecar (NDJSON over stdin/stdout)
  *
  * Minimal surface for GPUI integration:
  * - health
  * - storage.status
- * - storage.depositAndApprove
+ * - storage.depositAndApprove (Load no-op, kept for compatibility)
  * - storage.preflight
  * - storage.upload
  * - content.encryptUploadRegister
@@ -24,30 +24,13 @@
 import { createInterface } from 'node:readline'
 import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { basename, resolve } from 'node:path'
 import { ethers } from 'ethers'
-import { Synapse, RPC_URLS } from '@filoz/synapse-sdk'
 import { createLitClient } from '@lit-protocol/lit-client'
 import { createAuthManager, storagePlugins, ViemAccountAuthenticator } from '@lit-protocol/auth'
 import { nagaDev, nagaTest } from '@lit-protocol/networks'
 import { privateKeyToAccount } from 'viem/accounts'
 
-type FilecoinNetwork = 'mainnet' | 'calibration'
-
-const rawFilecoinNetwork = (
-  process.env.HEAVEN_FIL_NETWORK ||
-  process.env.HEAVEN_FILECOIN_NETWORK ||
-  'calibration'
-)
-  .trim()
-  .toLowerCase()
-const filecoinNetwork: FilecoinNetwork =
-  rawFilecoinNetwork === 'mainnet' ? 'mainnet' : 'calibration'
-const FIL_RPC = RPC_URLS[filecoinNetwork].http
-const warmStorageOverride = process.env.HEAVEN_WARM_STORAGE_ADDRESS?.trim() || null
-const USDFC_DECIMALS = 18
-const EPOCHS_PER_DAY = 2880n
-const DEFAULT_MAX_LOCKUP_EPOCHS = EPOCHS_PER_DAY * 30n
 const ALGO_AES_GCM_256 = 1
 const DEFAULT_UPLOAD_TIMEOUT_MS = 15 * 60 * 1000
 const DEFAULT_REGISTER_TIMEOUT_MS = 2 * 60 * 1000
@@ -109,18 +92,6 @@ interface SidecarAuthInput {
   authData: AuthData
 }
 
-type CachedContext = {
-  key: string
-  synapse: Synapse
-  diagnostics: {
-    chainId: number
-    warmStorageAddress: string
-    paymentsAddress: string
-    pdpVerifierAddress: string
-  }
-}
-
-let cachedSynapse: CachedContext | null = null
 let cachedAuthContext: { key: string; authContext: any } | null = null
 let cachedSponsorAuthContext: { key: string; authContext: any } | null = null
 let litClientSingleton: Awaited<ReturnType<typeof createLitClient>> | null = null
@@ -135,14 +106,37 @@ const REGISTER_TIMEOUT_MS = parseTimeoutMs(
   process.env.HEAVEN_REGISTER_TIMEOUT_MS,
   DEFAULT_REGISTER_TIMEOUT_MS,
 )
+const LOAD_UPLOAD_MODE = (process.env.HEAVEN_LOAD_UPLOAD_MODE || 'backend').trim().toLowerCase()
+const LOAD_BACKEND_URL = (
+  process.env.HEAVEN_API_URL ||
+  process.env.VITE_HEAVEN_API_URL ||
+  'http://localhost:8787'
+)
+  .trim()
+  .replace(/\/+$/, '')
+const LOAD_AGENT_URL = (process.env.HEAVEN_LOAD_S3_AGENT_URL || 'https://load-s3-agent.load.network')
+  .trim()
+  .replace(/\/+$/, '')
+const LOAD_GATEWAY_URL = (process.env.HEAVEN_LOAD_GATEWAY_URL || 'https://gateway.s3-node-1.load.network')
+  .trim()
+  .replace(/\/+$/, '')
+const LOAD_S3_AGENT_API_KEY = (process.env.HEAVEN_LOAD_S3_AGENT_API_KEY || '').trim()
+const MAX_BACKEND_UPLOAD_BYTES = 500 * 1024 * 1024
+
+type LoadUploadResult = {
+  id: string
+  gatewayUrl: string
+  payload: unknown
+}
 
 function sidecarLog(scope: string, details: Record<string, unknown> = {}) {
   const payload = {
     ts: new Date().toISOString(),
     scope,
     litNetwork: litNetworkName,
-    filecoinNetwork,
-    filecoinRpc: FIL_RPC,
+    loadUploadMode: LOAD_UPLOAD_MODE,
+    loadBackendUrl: LOAD_BACKEND_URL,
+    loadAgentUrl: LOAD_AGENT_URL,
     ...details,
   }
   console.error(`[synapse-sidecar] ${JSON.stringify(payload)}`)
@@ -328,47 +322,6 @@ async function createPkpAuthContext(input: SidecarAuthInput): Promise<any> {
   return authContext
 }
 
-function parseLitSignature(sig: any): { r: string; s: string; v: number } {
-  const v = sig.recid !== undefined ? sig.recid + 27 : sig.recoveryId + 27
-  if (sig.signature) {
-    const hex = sig.signature.startsWith('0x') ? sig.signature.slice(2) : sig.signature
-    return { r: `0x${hex.slice(0, 64)}`, s: `0x${hex.slice(64, 128)}`, v }
-  }
-  if (sig.r && sig.s) {
-    return {
-      r: sig.r.startsWith('0x') ? sig.r : `0x${sig.r}`,
-      s: sig.s.startsWith('0x') ? sig.s : `0x${sig.s}`,
-      v,
-    }
-  }
-  throw new Error(`Unknown Lit signature format: ${JSON.stringify(sig)}`)
-}
-
-async function signHash(
-  hashBytes: number[],
-  publicKey: string,
-  authContext: any,
-): Promise<{ r: string; s: string; v: number }> {
-  const litClient = await getLitClient()
-  const code = `(async () => {
-    const toSign = new Uint8Array(jsParams.hashBytes);
-    await Lit.Actions.signEcdsa({
-      toSign,
-      publicKey: jsParams.publicKey,
-      sigName: "sig",
-    });
-  })();`
-
-  const result = await litClient.executeJs({
-    code,
-    authContext,
-    jsParams: { hashBytes, publicKey },
-  })
-
-  if (!result.signatures?.sig) throw new Error('No signature returned from PKP')
-  return parseLitSignature(result.signatures.sig)
-}
-
 async function signPersonalMessage(
   message: string,
   publicKey: string,
@@ -408,160 +361,159 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
     .join('')
 }
 
-class PKPEthersSigner extends ethers.AbstractSigner {
-  private _pkp: PkpInfo
-  private _authContext: any
+function extractUploadId(payload: any): string | null {
+  const candidate =
+    payload?.id ||
+    payload?.dataitem_id ||
+    payload?.dataitemId ||
+    payload?.result?.id ||
+    payload?.result?.dataitem_id ||
+    payload?.result?.dataitemId
+  return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : null
+}
 
-  constructor(pkp: PkpInfo, authContext: any, provider: ethers.Provider) {
-    super(provider)
-    this._pkp = pkp
-    this._authContext = authContext
-  }
+function resolveUploadMode(): 'backend' | 'agent' {
+  return LOAD_UPLOAD_MODE === 'agent' || LOAD_UPLOAD_MODE === 'direct' ? 'agent' : 'backend'
+}
 
-  async getAddress(): Promise<string> {
-    return this._pkp.ethAddress
-  }
+function withApiPrefix(path: string): string {
+  const base = LOAD_BACKEND_URL.endsWith('/api') ? LOAD_BACKEND_URL : `${LOAD_BACKEND_URL}/api`
+  return `${base}${path}`
+}
 
-  connect(provider: ethers.Provider): PKPEthersSigner {
-    return new PKPEthersSigner(this._pkp, this._authContext, provider)
-  }
+function inferContentType(filePath?: string): string {
+  const lower = (filePath || '').toLowerCase()
+  if (lower.endsWith('.mp3')) return 'audio/mpeg'
+  if (lower.endsWith('.m4a')) return 'audio/mp4'
+  if (lower.endsWith('.aac')) return 'audio/aac'
+  if (lower.endsWith('.flac')) return 'audio/flac'
+  if (lower.endsWith('.wav')) return 'audio/wav'
+  if (lower.endsWith('.ogg')) return 'audio/ogg'
+  if (lower.endsWith('.opus')) return 'audio/ogg'
+  if (lower.endsWith('.ans104')) return 'application/octet-stream'
+  return 'application/octet-stream'
+}
 
-  async signMessage(message: string | Uint8Array): Promise<string> {
-    const litClient = await getLitClient()
-    const msgStr = typeof message === 'string' ? message : ethers.hexlify(message)
-    const code = `(async () => {
-      await Lit.Actions.ethPersonalSignMessageEcdsa({
-        message: jsParams.message,
-        publicKey: jsParams.publicKey,
-        sigName: "sig",
-      });
-    })();`
-
-    const result = await litClient.executeJs({
-      code,
-      authContext: this._authContext,
-      jsParams: { message: msgStr, publicKey: this._pkp.publicKey },
-    })
-
-    if (!result.signatures?.sig) throw new Error('No signature returned from PKP')
-    const sig = result.signatures.sig as any
-    const vHex = ((sig.recid ?? sig.recoveryId) + 27).toString(16).padStart(2, '0')
-    const sigHex = sig.signature.startsWith('0x') ? sig.signature.slice(2) : sig.signature
-    return `0x${sigHex}${vHex}`
-  }
-
-  async signTypedData(
-    domain: ethers.TypedDataDomain,
-    types: Record<string, ethers.TypedDataField[]>,
-    value: Record<string, any>,
-  ): Promise<string> {
-    const hash = ethers.TypedDataEncoder.hash(domain, types, value)
-    const hashBytes = Array.from(ethers.getBytes(hash))
-    const { r, s, v } = await signHash(hashBytes, this._pkp.publicKey, this._authContext)
-    return ethers.Signature.from({ r, s, v }).serialized
-  }
-
-  async signTransaction(tx: ethers.TransactionRequest): Promise<string> {
-    const txToSign = { ...tx }
-
-    if (txToSign.from === undefined) txToSign.from = this._pkp.ethAddress
-    if (txToSign.nonce === undefined && this.provider) {
-      txToSign.nonce = await this.provider.getTransactionCount(this._pkp.ethAddress)
-    }
-    if (txToSign.gasLimit === undefined && this.provider) {
-      txToSign.gasLimit = await this.provider.estimateGas({
-        ...txToSign,
-        from: this._pkp.ethAddress,
-      })
-    }
-    // Force legacy (type 0) — strip EIP-1559 fields and ensure gasPrice is set
-    if (txToSign.maxFeePerGas !== undefined || txToSign.maxPriorityFeePerGas !== undefined) {
-      if (txToSign.gasPrice === undefined && this.provider) {
-        const feeData = await this.provider.getFeeData()
-        txToSign.gasPrice = feeData.gasPrice
-      }
-      delete txToSign.maxFeePerGas
-      delete txToSign.maxPriorityFeePerGas
-      delete txToSign.accessList
-    } else if (txToSign.gasPrice === undefined && this.provider) {
-      const feeData = await this.provider.getFeeData()
-      txToSign.gasPrice = feeData.gasPrice
-    }
-    if ((txToSign.chainId === undefined || txToSign.chainId === 0) && this.provider) {
-      const network = await this.provider.getNetwork()
-      txToSign.chainId = network.chainId
-    } else if (txToSign.chainId === undefined || txToSign.chainId === 0) {
-      txToSign.chainId = 314n
-    }
-
-    txToSign.type = 0
-
-    const { from: _from, ...txWithoutFrom } = txToSign
-    const unsignedTx = ethers.Transaction.from(txWithoutFrom as ethers.TransactionLike)
-    const txHash = ethers.keccak256(unsignedTx.unsignedSerialized)
-    const txHashBytes = Array.from(ethers.getBytes(txHash))
-
-    const { r, s, v } = await signHash(txHashBytes, this._pkp.publicKey, this._authContext)
-    const signedTx = ethers.Transaction.from({
-      ...txWithoutFrom,
-      signature: { r, s, v },
-    } as ethers.TransactionLike)
-
-    return signedTx.serialized
-  }
-
-  async sendTransaction(tx: ethers.TransactionRequest): Promise<ethers.TransactionResponse> {
-    const populated = await this.populateTransaction(tx)
-    const signedTx = await this.signTransaction(populated)
-    if (!this.provider) throw new Error('No provider')
-    return this.provider.broadcastTransaction(signedTx)
+async function parseJsonOrText(resp: Response): Promise<any> {
+  const text = await resp.text()
+  try {
+    return text ? JSON.parse(text) : null
+  } catch {
+    return { raw: text }
   }
 }
 
-async function getSynapse(input: SidecarAuthInput): Promise<Synapse> {
-  const cacheKey = getAuthCacheKey(input)
-  if (cachedSynapse && cachedSynapse.key === cacheKey) {
-    sidecarLog('synapse.reuse', {
-      pkpAddress: input.pkp.ethAddress,
-      authMethodType: input.authData.authMethodType,
-      authMethodId: input.authData.authMethodId,
-      chainId: cachedSynapse.diagnostics.chainId,
-      warmStorageAddress: cachedSynapse.diagnostics.warmStorageAddress,
-      paymentsAddress: cachedSynapse.diagnostics.paymentsAddress,
-      pdpVerifierAddress: cachedSynapse.diagnostics.pdpVerifierAddress,
-    })
-    return cachedSynapse.synapse
+async function loadHealthCheck() {
+  const mode = resolveUploadMode()
+  const endpoint =
+    mode === 'backend' ? withApiPrefix('/load/health') : `${LOAD_AGENT_URL}/health`
+  try {
+    const resp = await fetch(endpoint)
+    if (!resp.ok) {
+      return {
+        ok: false,
+        mode,
+        endpoint,
+        status: resp.status,
+        reason: `Health check failed: HTTP ${resp.status}`,
+      }
+    }
+    return { ok: true, mode, endpoint, status: resp.status }
+  } catch (err) {
+    return {
+      ok: false,
+      mode,
+      endpoint,
+      status: null,
+      reason: err instanceof Error ? err.message : String(err),
+    }
+  }
+}
+
+async function uploadViaBackend(
+  payload: Uint8Array,
+  filePath?: string,
+  tags: Array<{ name: string; value: string }> = [],
+): Promise<LoadUploadResult> {
+  const contentType = inferContentType(filePath)
+  const fileName = filePath ? basename(filePath) : `upload-${Date.now()}.bin`
+  const form = new FormData()
+  form.append('file', new File([payload], fileName, { type: contentType }))
+  form.append('contentType', contentType)
+  form.append('tags', JSON.stringify(tags))
+
+  const url = withApiPrefix('/load/upload')
+  const resp = await fetch(url, { method: 'POST', body: form })
+  const body = await parseJsonOrText(resp)
+  if (!resp.ok) {
+    const msg =
+      typeof body?.error === 'string'
+        ? body.error
+        : `Load backend upload failed with status ${resp.status}`
+    throw new Error(msg)
   }
 
-  sidecarLog('synapse.create', {
-    pkpAddress: input.pkp.ethAddress,
-    authMethodType: input.authData.authMethodType,
-    authMethodId: input.authData.authMethodId,
-  })
+  const id = extractUploadId(body)
+  if (!id) throw new Error('Load backend upload returned no dataitem id')
+  const gatewayUrl =
+    typeof body?.gatewayUrl === 'string' && body.gatewayUrl.trim()
+      ? body.gatewayUrl
+      : `${LOAD_GATEWAY_URL}/resolve/${id}`
+  return { id, gatewayUrl, payload: body?.payload ?? body }
+}
 
-  const authContext = await createPkpAuthContext(input)
-  const provider = new ethers.JsonRpcProvider(FIL_RPC)
-  const signer = new PKPEthersSigner(input.pkp, authContext, provider)
-  const synapse = await Synapse.create({
-    signer: signer as any,
-    withCDN: true,
-    warmStorageAddress: warmStorageOverride ?? undefined,
-  })
-  const diagnostics = {
-    chainId: synapse.getChainId(),
-    warmStorageAddress: synapse.getWarmStorageAddress(),
-    paymentsAddress: synapse.getPaymentsAddress(),
-    pdpVerifierAddress: synapse.getPDPVerifierAddress(),
+async function uploadViaAgent(
+  payload: Uint8Array,
+  filePath?: string,
+  tags: Array<{ name: string; value: string }> = [],
+): Promise<LoadUploadResult> {
+  if (!LOAD_S3_AGENT_API_KEY) {
+    throw new Error(
+      'Missing HEAVEN_LOAD_S3_AGENT_API_KEY for direct agent mode (set HEAVEN_LOAD_UPLOAD_MODE=backend to proxy via heaven-api)',
+    )
   }
-  sidecarLog('synapse.created', {
-    pkpAddress: input.pkp.ethAddress,
-    authMethodType: input.authData.authMethodType,
-    authMethodId: input.authData.authMethodId,
-    warmStorageOverride,
-    ...diagnostics,
+
+  const contentType = inferContentType(filePath)
+  const fileName = filePath ? basename(filePath) : `upload-${Date.now()}.bin`
+  const form = new FormData()
+  form.append('file', new File([payload], fileName, { type: contentType }))
+  form.append('content_type', contentType)
+  form.append('tags', JSON.stringify(tags))
+
+  const url = `${LOAD_AGENT_URL}/upload`
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${LOAD_S3_AGENT_API_KEY}`,
+    },
+    body: form,
   })
-  cachedSynapse = { key: cacheKey, synapse, diagnostics }
-  return synapse
+  const body = await parseJsonOrText(resp)
+  if (!resp.ok) {
+    const msg =
+      typeof body?.error === 'string'
+        ? body.error
+        : `Load agent upload failed with status ${resp.status}`
+    throw new Error(msg)
+  }
+
+  const id = extractUploadId(body)
+  if (!id) throw new Error('Load agent upload returned no dataitem id')
+  return {
+    id,
+    gatewayUrl: `${LOAD_GATEWAY_URL}/resolve/${id}`,
+    payload: body,
+  }
+}
+
+async function uploadToLoad(
+  payload: Uint8Array,
+  filePath?: string,
+  tags: Array<{ name: string; value: string }> = [],
+): Promise<LoadUploadResult> {
+  return resolveUploadMode() === 'agent'
+    ? uploadViaAgent(payload, filePath, tags)
+    : uploadViaBackend(payload, filePath, tags)
 }
 
 function requireAuthInput(params: Json | undefined): SidecarAuthInput {
@@ -573,12 +525,6 @@ function requireAuthInput(params: Json | undefined): SidecarAuthInput {
   if (!pkp?.publicKey || !pkp?.ethAddress) throw new Error('Missing pkp')
   if (!authData?.authMethodId || authData.authMethodType === undefined) throw new Error('Missing authData')
   return { pkp, authData }
-}
-
-function formatUsd(value: string): string {
-  const num = parseFloat(value)
-  if (Number.isNaN(num) || num === 0) return '$0.00'
-  return `$${num.toFixed(2)}`
 }
 
 function normalize(s: string): string {
@@ -855,7 +801,6 @@ async function encryptForUpload(
 }
 
 async function ensureUploadReady(
-  synapse: Synapse,
   context: { pkpAddress?: string },
   sizeBytes?: number,
 ): Promise<{ ready: boolean; reason?: string; suggestedDeposit?: string }> {
@@ -864,238 +809,125 @@ async function ensureUploadReady(
     sizeBytes: sizeBytes ?? null,
   })
 
-  let availableFunds = 0n
-  try {
-    const info = await synapse.payments.accountInfo()
-    availableFunds = info.availableFunds
-    sidecarLog('storage.account_info', {
-      pkpAddress: context.pkpAddress,
-      availableFundsRaw: info.availableFunds.toString(),
-      lockupRateRaw: info.lockupRate.toString(),
-    })
-  } catch (err) {
-    sidecarLog('storage.account_info.error', {
-      pkpAddress: context.pkpAddress,
-      error: err instanceof Error ? err.message : String(err),
-    })
+  if (sizeBytes !== undefined && sizeBytes > MAX_BACKEND_UPLOAD_BYTES && resolveUploadMode() === 'backend') {
     return {
       ready: false,
-      reason:
-        'Unable to read storage balance from Filecoin RPC. Check network/RPC and wallet funding state.',
-      suggestedDeposit: '1.00',
+      reason: `File exceeds backend upload limit (${MAX_BACKEND_UPLOAD_BYTES} bytes)`,
     }
   }
 
-  if (availableFunds === 0n) {
-    sidecarLog('storage.ensure_ready.empty_balance', {
+  const health = await loadHealthCheck()
+  if (!health.ok) {
+    sidecarLog('storage.ensure_ready.health.error', {
       pkpAddress: context.pkpAddress,
-      availableFundsRaw: '0',
+      sizeBytes: sizeBytes ?? null,
+      ...health,
     })
-    return {
-      ready: false,
-      reason: 'Storage balance is empty. Add funds on the Wallet page to enable uploads.',
-      suggestedDeposit: '1.00',
-    }
+    return { ready: false, reason: health.reason || 'Load upload backend unavailable' }
   }
 
-  let isApproved = false
-  try {
-    const storageInfo = await synapse.storage.getStorageInfo()
-    isApproved = storageInfo.allowances?.isApproved ?? false
-    sidecarLog('storage.allowance', {
-      pkpAddress: context.pkpAddress,
-      operatorApproved: isApproved,
-    })
-  } catch (err) {
-    sidecarLog('storage.allowance.error', {
-      pkpAddress: context.pkpAddress,
-      error: err instanceof Error ? err.message : String(err),
-    })
-  }
-
-  if (!isApproved) {
-    return {
-      ready: false,
-      reason: 'Storage not set up. Add funds on the Wallet page to enable uploads.',
-      suggestedDeposit: '1.00',
-    }
-  }
-
-  if (sizeBytes !== undefined) {
-    try {
-      const preflight = await synapse.storage.preflightUpload(sizeBytes)
-      sidecarLog('storage.preflight', {
-        pkpAddress: context.pkpAddress,
-        sizeBytes,
-        sufficient: preflight.allowanceCheck.sufficient,
-        message: preflight.allowanceCheck.message || null,
-      })
-      if (!preflight.allowanceCheck.sufficient) {
-        return {
-          ready: false,
-          reason:
-            preflight.allowanceCheck.message ||
-            'Insufficient storage allowance. Add more funds on the Wallet page.',
-          suggestedDeposit: '5.00',
-        }
-      }
-    } catch (err) {
-      sidecarLog('storage.preflight.error', {
-        pkpAddress: context.pkpAddress,
-        sizeBytes,
-        error: err instanceof Error ? err.message : String(err),
-      })
-    }
-  }
-
+  sidecarLog('storage.ensure_ready.ok', {
+    pkpAddress: context.pkpAddress,
+    sizeBytes: sizeBytes ?? null,
+    mode: health.mode,
+    endpoint: health.endpoint,
+  })
   return { ready: true }
 }
 
 async function storageStatus(params: Json | undefined) {
   const input = requireAuthInput(params)
-  const synapse = await getSynapse(input)
-
-  let balanceRaw = 0n
-  let lockupRate = 0n
-  let accountInfoError: string | null = null
-  try {
-    const info = await synapse.payments.accountInfo()
-    balanceRaw = info.availableFunds
-    lockupRate = info.lockupRate
-  } catch (err) {
-    accountInfoError = err instanceof Error ? err.message : String(err)
-    sidecarLog('storage.status.account_info.error', {
-      pkpAddress: input.pkp.ethAddress,
-      error: accountInfoError,
-    })
-  }
-
-  let operatorApproved = false
-  let storageInfoError: string | null = null
-  try {
-    const storageInfo = await synapse.storage.getStorageInfo()
-    operatorApproved = storageInfo.allowances?.isApproved ?? false
-  } catch (err) {
-    storageInfoError = err instanceof Error ? err.message : String(err)
-    sidecarLog('storage.status.allowance.error', {
-      pkpAddress: input.pkp.ethAddress,
-      error: storageInfoError,
-    })
-  }
-
-  const balance = ethers.formatUnits(balanceRaw, USDFC_DECIMALS)
-  const epochsPerMonth = EPOCHS_PER_DAY * 30n
-  const monthlyCostRaw = lockupRate * epochsPerMonth
-  const monthlyCost = ethers.formatUnits(monthlyCostRaw, USDFC_DECIMALS)
-
-  let daysRemaining: number | null = null
-  if (lockupRate > 0n) {
-    const dailyCost = lockupRate * EPOCHS_PER_DAY
-    if (dailyCost > 0n) daysRemaining = Number(balanceRaw / dailyCost)
-  }
+  const health = await loadHealthCheck()
+  const accountInfoError = health.ok ? null : health.reason || 'Load health check failed'
+  const storageInfoError = null
 
   sidecarLog('storage.status', {
     pkpAddress: input.pkp.ethAddress,
-    balanceRaw: balanceRaw.toString(),
-    lockupRateRaw: lockupRate.toString(),
-    operatorApproved,
+    mode: health.mode,
+    endpoint: health.endpoint,
+    status: health.status,
+    ready: health.ok,
     accountInfoError,
     storageInfoError,
   })
 
   return {
-    balance: formatUsd(balance),
-    balanceRaw: balanceRaw.toString(),
-    operatorApproved,
-    monthlyCost: formatUsd(monthlyCost),
-    daysRemaining,
-    ready: balanceRaw > 0n && operatorApproved,
+    balance: 'n/a',
+    balanceRaw: null,
+    operatorApproved: health.ok,
+    monthlyCost: 'n/a',
+    daysRemaining: null,
+    ready: health.ok,
     accountInfoError,
     storageInfoError,
+    uploadMode: health.mode,
+    endpoint: health.endpoint,
+    gatewayUrl: LOAD_GATEWAY_URL,
   }
 }
 
 async function storageDepositAndApprove(params: Json | undefined) {
   const input = requireAuthInput(params)
   const amount = typeof params?.amount === 'string' ? params.amount : null
-  if (!amount) throw new Error('Missing amount')
-
-  const synapse = await getSynapse(input)
-  const amountWei = ethers.parseUnits(amount, USDFC_DECIMALS)
-
-  let isApproved = false
-  try {
-    const storageInfo = await synapse.storage.getStorageInfo()
-    isApproved = storageInfo.allowances?.isApproved ?? false
-  } catch {}
-
-  if (!isApproved) {
-    const warmAddr = synapse.getWarmStorageAddress()
-    const rateAllowance = ethers.parseUnits('10', USDFC_DECIMALS)
-    const lockupAllowance = ethers.parseUnits('100', USDFC_DECIMALS)
-    const tx = await synapse.payments.depositWithPermitAndApproveOperator(
-      amountWei,
-      warmAddr,
-      rateAllowance,
-      lockupAllowance,
-      DEFAULT_MAX_LOCKUP_EPOCHS,
-    )
-    const receipt = await tx.wait()
-    return { txHash: receipt?.hash || tx.hash }
+  sidecarLog('storage.deposit_compat.noop', {
+    pkpAddress: input.pkp.ethAddress,
+    amount: amount || null,
+    mode: resolveUploadMode(),
+  })
+  return {
+    ok: true,
+    txHash: null,
+    message:
+      'Load upload flow does not require Synapse USDFC deposit. Fund Turbo/x402 wallet only when using paid upload endpoints.',
+    uploadMode: resolveUploadMode(),
   }
-
-  const tx = await synapse.payments.deposit(amountWei)
-  const receipt = await tx.wait()
-  return { txHash: receipt?.hash || tx.hash }
 }
 
 async function storagePreflight(params: Json | undefined) {
   const input = requireAuthInput(params)
   const sizeBytesRaw = params?.sizeBytes
   const sizeBytes = typeof sizeBytesRaw === 'number' ? sizeBytesRaw : undefined
-  const synapse = await getSynapse(input)
-  return ensureUploadReady(synapse, { pkpAddress: input.pkp.ethAddress }, sizeBytes)
+  return ensureUploadReady({ pkpAddress: input.pkp.ethAddress }, sizeBytes)
 }
 
 async function storageUpload(params: Json | undefined) {
   const input = requireAuthInput(params)
-  const withCDN = params?.withCDN !== false
-  const { payload } = await resolvePayload(params)
-
-  const synapse = await getSynapse(input)
-  const ready = await ensureUploadReady(
-    synapse,
-    { pkpAddress: input.pkp.ethAddress },
-    payload.length,
-  )
+  const { payload, filePath } = await resolvePayload(params)
+  const ready = await ensureUploadReady({ pkpAddress: input.pkp.ethAddress }, payload.length)
   if (!ready.ready) {
     throw new Error(ready.reason || 'Storage not ready')
   }
-  const ctx = await synapse.storage.createContext({ withCDN })
+
   const uploadStartedAt = Date.now()
   sidecarLog('storage.upload.start', {
     pkpAddress: input.pkp.ethAddress,
     sizeBytes: payload.length,
-    withCDN,
+    filePath: filePath || null,
     timeoutMs: UPLOAD_TIMEOUT_MS,
+    mode: resolveUploadMode(),
   })
-  const result = await withTimeout(ctx.upload(payload), UPLOAD_TIMEOUT_MS, 'Storage upload')
+  const result = await withTimeout(
+    uploadToLoad(payload, filePath, [{ name: 'App-Name', value: 'Heaven Desktop' }]),
+    UPLOAD_TIMEOUT_MS,
+    'Storage upload',
+  )
   sidecarLog('storage.upload.done', {
     pkpAddress: input.pkp.ethAddress,
     sizeBytes: payload.length,
-    pieceCid: result.pieceCid.toString(),
+    pieceCid: result.id,
+    gatewayUrl: result.gatewayUrl,
     durationMs: Date.now() - uploadStartedAt,
   })
   return {
-    pieceCid: result.pieceCid.toString(),
-    size: result.size,
-    pieceId: result.pieceId ?? null,
+    pieceCid: result.id,
+    size: payload.length,
+    pieceId: null,
+    gatewayUrl: result.gatewayUrl,
   }
 }
 
 async function contentEncryptUploadRegister(params: Json | undefined) {
   const input = requireAuthInput(params)
-  const withCDN = params?.withCDN !== false
   const authContext = await createPkpAuthContext(input)
   const { payload: sourceBytes, filePath } = await resolvePayload(params)
 
@@ -1114,7 +946,6 @@ async function contentEncryptUploadRegister(params: Json | undefined) {
     pkpAddress: input.pkp.ethAddress,
     filePath: filePath || null,
     sourceBytes: sourceBytes.length,
-    withCDN,
     mbid: mbid || null,
     ipId: ipId || null,
     uploadTimeoutMs: UPLOAD_TIMEOUT_MS,
@@ -1133,31 +964,34 @@ async function contentEncryptUploadRegister(params: Json | undefined) {
     durationMs: Date.now() - encryptStartedAt,
   })
 
-  const synapse = await getSynapse(input)
-  const ready = await ensureUploadReady(
-    synapse,
-    { pkpAddress: input.pkp.ethAddress },
-    encryptedBlob.length,
-  )
+  const ready = await ensureUploadReady({ pkpAddress: input.pkp.ethAddress }, encryptedBlob.length)
   if (!ready.ready) {
     throw new Error(ready.reason || 'Storage not ready')
   }
 
-  const ctx = await synapse.storage.createContext({ withCDN })
   const uploadStartedAt = Date.now()
   sidecarLog('content.upload.start', {
     pkpAddress: input.pkp.ethAddress,
     contentId,
     blobBytes: encryptedBlob.length,
     timeoutMs: UPLOAD_TIMEOUT_MS,
+    mode: resolveUploadMode(),
   })
-  const uploadResult = await withTimeout(ctx.upload(encryptedBlob), UPLOAD_TIMEOUT_MS, 'Content upload')
-  const pieceCid = uploadResult.pieceCid.toString()
+  const uploadResult = await withTimeout(
+    uploadToLoad(encryptedBlob, filePath ? `${filePath}.enc` : undefined, [
+      { name: 'App-Name', value: 'Heaven Desktop' },
+      { name: 'Content-Id', value: contentId },
+    ]),
+    UPLOAD_TIMEOUT_MS,
+    'Content upload',
+  )
+  const pieceCid = uploadResult.id
   sidecarLog('content.upload.done', {
     pkpAddress: input.pkp.ethAddress,
     contentId,
     pieceCid,
-    uploadSize: uploadResult.size,
+    uploadSize: encryptedBlob.length,
+    gatewayUrl: uploadResult.gatewayUrl,
     durationMs: Date.now() - uploadStartedAt,
   })
 
@@ -1236,7 +1070,8 @@ async function contentEncryptUploadRegister(params: Json | undefined) {
     contentId,
     pieceCid,
     blobSize: encryptedBlob.length,
-    uploadSize: uploadResult.size,
+    uploadSize: encryptedBlob.length,
+    gatewayUrl: uploadResult.gatewayUrl,
     registerVersion: response.version || null,
     txHash: response.txHash,
     blockNumber: response.blockNumber,
@@ -1268,10 +1103,10 @@ async function handleRequest(req: RpcRequest) {
         ok: true,
         component: 'synapse-sidecar',
         litNetwork: litNetworkName,
-        filecoinNetwork,
-        filecoinRpc: FIL_RPC,
-        warmStorageOverride,
-        cachedSynapse: cachedSynapse?.diagnostics ?? null,
+        loadUploadMode: resolveUploadMode(),
+        loadBackendUrl: LOAD_BACKEND_URL,
+        loadAgentUrl: LOAD_AGENT_URL,
+        loadGatewayUrl: LOAD_GATEWAY_URL,
       }
     case 'storage.status':
       return await storageStatus(req.params)
@@ -1284,7 +1119,6 @@ async function handleRequest(req: RpcRequest) {
     case 'content.encryptUploadRegister':
       return await contentEncryptUploadRegister(req.params)
     case 'storage.reset':
-      cachedSynapse = null
       cachedAuthContext = null
       cachedSponsorAuthContext = null
       return { ok: true }

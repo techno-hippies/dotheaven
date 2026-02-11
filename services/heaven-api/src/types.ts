@@ -124,6 +124,11 @@ export interface Env {
   // Filebase canvas videos bucket (separate bucket for video content)
   FILEBASE_CANVAS_KEY?: string
 
+  // Load S3 agent upload credentials/config
+  LOAD_S3_AGENT_API_KEY?: string
+  LOAD_S3_AGENT_URL?: string
+  LOAD_GATEWAY_URL?: string
+
   // Privy wallet proxy (gas sponsorship)
   PRIVY_APP_ID?: string
   PRIVY_APP_SECRET?: string
