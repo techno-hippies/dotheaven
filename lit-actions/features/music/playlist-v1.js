@@ -60,8 +60,8 @@ const RPC_URL = "https://carrot.megaeth.com/rpc";
 // PlaylistV1 contract (MegaETH Testnet)
 const PLAYLIST_V1 = "0xF0337C4A335cbB3B31c981945d3bE5B914F7B329";
 
-// ScrobbleV3 contract (MegaETH Testnet) — global track catalog
-const SCROBBLE_V3 = "0x144c450cd5B641404EEB5D5eD523399dD94049E0";
+// ScrobbleV4 contract (MegaETH Testnet) — global track catalog (AA-enabled)
+const SCROBBLE_V4 = "0xBcD4EbBb964182ffC5EA03FF70761770a326Ccf1";
 
 // Sponsor PKP
 const SPONSOR_PKP_PUBLIC_KEY =
@@ -237,10 +237,10 @@ const PLAYLIST_V1_ABI = [
   "function userNonces(address user) external view returns (uint256)",
 ];
 
-const SCROBBLE_V3_ABI = [
-  "function registerTracksBatch(uint8[] kinds, bytes32[] payloads, string[] titles, string[] artists, string[] albums) external",
+const SCROBBLE_V4_ABI = [
+  "function registerTracksBatch(uint8[] kinds, bytes32[] payloads, string[] titles, string[] artists, string[] albums, uint32[] durations) external",
   "function isRegistered(bytes32 trackId) external view returns (bool)",
-  "function getTrack(bytes32 trackId) external view returns (string title, string artist, string album, uint8 kind, bytes32 payload, uint64 registeredAt, string coverCid)",
+  "function getTrack(bytes32 trackId) external view returns (string title, string artist, string album, uint8 kind, bytes32 payload, uint64 registeredAt, string coverCid, uint32 durationSec)",
   "function setTrackCoverBatch(bytes32[] trackIds, string[] coverCids) external",
 ];
 
@@ -383,7 +383,7 @@ async function checkRegistrationAndCovers(trackInfos) {
     { waitForResponse: true, name: "checkRegistered" },
     async () => {
       const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
-      const contract = new ethers.Contract(SCROBBLE_V3, SCROBBLE_V3_ABI, provider);
+      const contract = new ethers.Contract(SCROBBLE_V4, SCROBBLE_V4_ABI, provider);
 
       const uniqueIds = [...new Set(trackInfos.map((t) => t.trackId))];
       const results = {};
@@ -437,20 +437,22 @@ async function ensureTracksRegistered(trackInfos, registered, currentNonce) {
   }
 
   // Register missing tracks
-  const iface = new ethers.utils.Interface(SCROBBLE_V3_ABI);
+  const iface = new ethers.utils.Interface(SCROBBLE_V4_ABI);
+  const regDurations = regKinds.map(() => 0);
   const txData = iface.encodeFunctionData("registerTracksBatch", [
     regKinds,
     regPayloads,
     regTitles,
     regArtists,
     regAlbums,
+    regDurations,
   ]);
 
   await signAndBroadcast({
     type: 0,
     chainId: CHAIN_ID,
     nonce: toBigNumber(currentNonce, "nonce"),
-    to: SCROBBLE_V3,
+    to: SCROBBLE_V4,
     data: txData,
     gasLimit: toBigNumber(GAS_LIMIT_REGISTER, "gasLimit"),
     gasPrice: toBigNumber(GAS_PRICE, "gasPrice"),
@@ -805,7 +807,7 @@ const main = async () => {
       coversSet = coverTrackIds.length;
 
       if (coverTrackIds.length > 0) {
-        const coverIface = new ethers.utils.Interface(SCROBBLE_V3_ABI);
+        const coverIface = new ethers.utils.Interface(SCROBBLE_V4_ABI);
         const coverTxData = coverIface.encodeFunctionData("setTrackCoverBatch", [
           coverTrackIds,
           coverCids,
@@ -826,7 +828,7 @@ const main = async () => {
             type: 0,
             chainId: CHAIN_ID,
             nonce: toBigNumber(coverTxNonce, "nonce"),
-            to: SCROBBLE_V3,
+            to: SCROBBLE_V4,
             data: coverTxData,
             gasLimit: toBigNumber("4000000", "gasLimit"),
             gasPrice: toBigNumber(GAS_PRICE, "gasPrice"),

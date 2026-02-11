@@ -100,6 +100,7 @@ pub struct SubmitScrobbleInput {
     pub title: String,
     pub album: Option<String>,
     pub mbid: Option<String>,
+    pub ip_id: Option<String>,
     pub duration_sec: u32,
     pub played_at_sec: u64,
 }
@@ -184,6 +185,7 @@ impl ScrobbleService {
                 Some(track.album.clone())
             },
             mbid: track.mbid.clone(),
+            ip_id: track.ip_id.clone(),
             duration_sec: parse_duration_to_sec(&track.duration).unwrap_or(0),
             played_at_sec,
         };
@@ -632,6 +634,20 @@ fn derive_track_kind_and_payload(track: &SubmitScrobbleInput) -> Result<(u8, B25
         let mut payload = [0u8; 32];
         payload[..16].copy_from_slice(&raw);
         return Ok((1, B256::from(payload)));
+    }
+
+    if let Some(ip_id) = track.ip_id.as_ref().filter(|id| !id.trim().is_empty()) {
+        let normalized = if ip_id.starts_with("0x") {
+            ip_id.clone()
+        } else {
+            format!("0x{ip_id}")
+        };
+        let addr = normalized
+            .parse::<Address>()
+            .map_err(|e| format!("Invalid ipId address: {e}"))?;
+        let mut payload = [0u8; 32];
+        payload[12..].copy_from_slice(addr.as_slice());
+        return Ok((2, B256::from(payload)));
     }
 
     let payload = keccak256(
@@ -1111,4 +1127,38 @@ fn now_epoch_millis() -> u128 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn derive_track_kind_uses_ip_id_when_present() {
+        let input = SubmitScrobbleInput {
+            file_path: "/tmp/test.mp3".to_string(),
+            cover_path: None,
+            user_pkp_public_key: None,
+            artist: "Artist".to_string(),
+            title: "Title".to_string(),
+            album: Some("Album".to_string()),
+            mbid: None,
+            ip_id: Some("0x1234567890abcdef1234567890abcdef12345678".to_string()),
+            duration_sec: 180,
+            played_at_sec: 1_700_000_000,
+        };
+
+        let (kind, payload) = derive_track_kind_and_payload(&input).expect("derive kind/payload");
+        assert_eq!(kind, 2, "ipId should map to kind 2");
+
+        let mut expected = [0u8; 32];
+        expected[12..].copy_from_slice(
+            &hex::decode("1234567890abcdef1234567890abcdef12345678").expect("decode address"),
+        );
+        assert_eq!(
+            payload,
+            B256::from(expected),
+            "ipId payload must be right-aligned address"
+        );
+    }
 }

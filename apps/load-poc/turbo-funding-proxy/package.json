@@ -1,0 +1,12 @@
+{
+  "name": "turbo-funding-proxy",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun src/server.ts",
+    "start": "bun src/server.ts"
+  },
+  "dependencies": {
+    "@ardrive/turbo-sdk": "latest"
+  }
+}

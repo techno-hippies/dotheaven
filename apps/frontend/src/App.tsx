@@ -119,7 +119,7 @@ export const App: Component = () => {
         <div class="max-w-4xl mx-auto w-full px-4 md:px-8">
           <PageHeader
             title={t('nav.community')}
-            class="border-b-0"
+            class="border-b-0 !px-0"
             rightSlot={
               <div class="relative">
                 <IconButton

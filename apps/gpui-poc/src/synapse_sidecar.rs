@@ -27,6 +27,7 @@ pub struct TrackMetaInput {
     pub artist: Option<String>,
     pub album: Option<String>,
     pub mbid: Option<String>,
+    pub ip_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -98,6 +99,9 @@ impl SynapseSidecarService {
         }
         if let Some(mbid) = track.mbid {
             params["mbid"] = json!(mbid);
+        }
+        if let Some(ip_id) = track.ip_id {
+            params["ipId"] = json!(ip_id);
         }
         self.call("content.encryptUploadRegister", Some(params))
     }

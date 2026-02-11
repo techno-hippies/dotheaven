@@ -32,7 +32,7 @@ const ROOT_DIR = join(__dirname, "../../");
 
 // Base Sepolia
 const BASE_RPC = "https://sepolia.base.org";
-const CONTENT_ACCESS_MIRROR = "0xd4D3baB38a11D72e36F49a73D50Dbdc3c1Aa4e9A";
+const CONTENT_ACCESS_MIRROR = "0x4dD375b09160d09d4C33312406dFFAFb3f8A5035";
 
 const mirrorAbi = parseAbi([
   "function linkedEoa(address pkp) external view returns (address)",

@@ -141,7 +141,11 @@ export const LibraryPage: Component = () => {
     setPublishProgress(0)
     setPublishError(undefined)
     setPublishResult(undefined)
-    navigate(musicTab('cloud'))
+    navigate(musicTab('library'))
+    // Refetch after delays to allow subgraph indexing
+    setTimeout(() => refetchUploaded(), 3000)
+    setTimeout(() => refetchUploaded(), 8000)
+    setTimeout(() => refetchUploaded(), 15000)
   }
 
   // Redirect bare /music/:tab to /music/library if no tab specified
@@ -406,7 +410,7 @@ export const LibraryPage: Component = () => {
               <PageHeader
                 compact
                 title="Library"
-                class="border-b-0"
+                class="border-b-0 !px-0"
                 leftSlot={
                   <IconButton variant="soft" size="md" aria-label="Back" onClick={() => navigate(MUSIC)}>
                     <ChevronLeft class="w-5 h-5" />
@@ -480,7 +484,7 @@ export const LibraryPage: Component = () => {
             <PageHeader
               compact
               title="Shared with Me"
-              class="border-b-0 bg-transparent"
+              class="border-b-0 bg-transparent !px-0"
               leftSlot={
                 <IconButton variant="soft" size="md" aria-label="Back" onClick={() => navigate(MUSIC)}>
                   <ChevronLeft class="w-5 h-5" />
@@ -488,7 +492,7 @@ export const LibraryPage: Component = () => {
               }
               rightSlot={
                 <Show when={(sharedTracks()?.length ?? 0) > 0}>
-                  <span class="h-[22px] px-2 rounded-full bg-[var(--accent-blue)] text-[11px] font-semibold text-[#171717] flex items-center">
+                  <span class="h-[22px] px-2 rounded-full bg-[var(--accent-blue)] text-xs font-semibold text-[#171717] flex items-center">
                     {sharedTracks()?.length} new
                   </span>
                 </Show>
@@ -717,7 +721,7 @@ export const LibraryPage: Component = () => {
             <PageHeader
               compact
               title="Cloud Library"
-              class="border-b-0 bg-transparent"
+              class="border-b-0 bg-transparent !px-0"
               leftSlot={
                 <IconButton variant="soft" size="md" aria-label="Back" onClick={() => navigate(MUSIC)}>
                   <ChevronLeft class="w-5 h-5" />

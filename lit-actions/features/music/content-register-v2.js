@@ -44,15 +44,12 @@ const CONTENT_REGISTRY = "0x9ca08C2D2170A43ecfA12AB35e06F2E1cEEB4Ef2";
 // Base Sepolia
 const BASE_CHAIN_ID = 84532;
 const BASE_RPC_URL = "https://sepolia.base.org";
-const CONTENT_ACCESS_MIRROR = "0xd4D3baB38a11D72e36F49a73D50Dbdc3c1Aa4e9A";
+const CONTENT_ACCESS_MIRROR = "0x4dD375b09160d09d4C33312406dFFAFb3f8A5035";
 
-// Sponsor PKPs (current on-chain sponsors differ by chain)
-const MEGA_SPONSOR_PKP_PUBLIC_KEY =
+// Sponsor PKP
+const SPONSOR_PKP_PUBLIC_KEY =
   "04fb425233a6b6c7628c42570d074d53fc7b4211464c9fc05f84a0f15f7d10cc2b149a2fca26f69539310b0ee129577b9d368015f207ce8719e5ef9040e340a0a5";
-const MEGA_SPONSOR_PKP_ADDRESS = "0xF2a9Ea42e5eD701AE5E7532d4217AE94D3F03455";
-const BASE_SPONSOR_PKP_PUBLIC_KEY =
-  "044615ca5ec3bfec5f5306f62ccc1a398cbd7e9cc53ac0e715b27ba81272e7397b185aa6f43c9bb2f0d9c489d30478cec9310685cd3a33922c0d12417b6375bc08";
-const BASE_SPONSOR_PKP_ADDRESS = "0x089fc7801D8f7D487765343a7946b1b97A7d29D4";
+const SPONSOR_PKP_ADDRESS = "0xF2a9Ea42e5eD701AE5E7532d4217AE94D3F03455";
 
 // MegaETH gas config (legacy type 0 txs, ~0.001 gwei)
 const MEGAETH_GAS_PRICE = "1000000";
@@ -297,8 +294,8 @@ const main = async () => {
         const megaProvider = new ethers.providers.JsonRpcProvider(MEGAETH_RPC_URL);
         const baseProvider = new ethers.providers.JsonRpcProvider(BASE_RPC_URL);
         const [megaNonce, baseNonce] = await Promise.all([
-          megaProvider.getTransactionCount(MEGA_SPONSOR_PKP_ADDRESS, "pending"),
-          baseProvider.getTransactionCount(BASE_SPONSOR_PKP_ADDRESS, "pending"),
+          megaProvider.getTransactionCount(SPONSOR_PKP_ADDRESS, "pending"),
+          baseProvider.getTransactionCount(SPONSOR_PKP_ADDRESS, "pending"),
         ]);
         return JSON.stringify({
           megaNonce: megaNonce.toString(),
@@ -352,8 +349,8 @@ const main = async () => {
       value: 0,
     };
 
-    const megaSigned = await signTx(unsignedMegaTx, "registerContent_mega", MEGA_SPONSOR_PKP_PUBLIC_KEY);
-    const baseSigned = await signTx(unsignedBaseTx, "registerContent_base", BASE_SPONSOR_PKP_PUBLIC_KEY);
+    const megaSigned = await signTx(unsignedMegaTx, "registerContent_mega", SPONSOR_PKP_PUBLIC_KEY);
+    const baseSigned = await signTx(unsignedBaseTx, "registerContent_base", SPONSOR_PKP_PUBLIC_KEY);
 
     if (dryRun) {
       Lit.Actions.setResponse({
@@ -365,8 +362,7 @@ const main = async () => {
           contentId: computedContentId,
           megaSignedTx: megaSigned.signedTx,
           baseSignedTx: baseSigned.signedTx,
-          megaSponsor: MEGA_SPONSOR_PKP_ADDRESS,
-          baseSponsor: BASE_SPONSOR_PKP_ADDRESS,
+          sponsor: SPONSOR_PKP_ADDRESS,
           contract: registryAddr,
           mirror: mirrorAddr,
         }),

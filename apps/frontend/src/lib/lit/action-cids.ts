@@ -15,7 +15,7 @@ const litNetwork = (import.meta.env.VITE_LIT_NETWORK || 'naga-test') as 'naga-de
 /** CID maps mirroring lit-actions/cids/dev.json and lit-actions/cids/test.json */
 const CID_MAP = {
   'naga-dev': {
-    playlistV1:           'QmQdLV5T2DUHhYy3SPY7KffCRbjAEkbM2ZqMEc1hf7GfVa',
+    playlistV1:           'QmeajAFaBK9uk2YgE2jrxamMB3rhqRioyfLqXsmomyTkc5',
     heavenClaimName:      'QmQB5GsQVaNbD8QS8zcXkjBMAZUjpADfbcWVaPgL3PygSA',
     heavenSetProfile:     'QmUJnDz9Q92bSLvNQMLyPDNSkw69MA3fpYsSCnAeMAJtuy',
     heavenSetRecords:     'QmaXJcjGbPWQ1ypKnQB3vfnDwaQ1NLEGFmN3t7gQisw9g5',
@@ -34,6 +34,7 @@ const CID_MAP = {
     commentV1:            'QmVhonUxBF9upcJh6NnzMNeGndenMoAN1a7qtu1PU7EoS1',
     flagV1:               'QmbCPSxieogoSVLR3HAYDffyerNE1DZGZuLFAWiwnTzzPx',
     storyRegisterSponsor: 'QmZ38qG34PKnENxzV8eejbRwiqQf2aRFKuNKqJNTXvU43Q',
+    contentRegisterMegaethV1: 'QmRFuAAYCmri8kTCmJupF9AZWhYmvKnhNhVyqr5trRfZhS',
   },
   'naga-test': {
     playlistV1:           'QmUf2jSaquVXJZBaoq5WCjKZKJpW7zVZVWHKuGi68GYZqq',
@@ -55,6 +56,7 @@ const CID_MAP = {
     commentV1:            '',
     flagV1:               '',
     storyRegisterSponsor: 'QmQi5mVzt4u6ViXZYkZYrmFu7oXFEJjx7Fzc6YUYyUcSEt',
+    contentRegisterMegaethV1: '',
   },
 } as const
 
@@ -122,6 +124,9 @@ export const COMMENT_V1_CID = cid('VITE_COMMENT_V1_CID', 'commentV1')
 
 /** Flag v1 — flag posts for moderation on EngagementV2 on MegaETH */
 export const FLAG_V1_CID = cid('VITE_FLAG_V1_CID', 'flagV1')
+
+/** Content Register MegaETH v1 — register content on ContentRegistry (MegaETH only, no Base mirror) */
+export const CONTENT_REGISTER_MEGAETH_V1_CID = cid('VITE_CONTENT_REGISTER_MEGAETH_V1_CID', 'contentRegisterMegaethV1')
 
 // Content decrypt is handled client-side via litClient.decrypt() — no Lit Action needed.
 // The Lit BLS nodes enforce canAccess() on Base ContentAccessMirror during threshold decryption.

@@ -35,7 +35,7 @@ const withCover = process.argv.includes("--with-cover");
 const MEGAETH_RPC = "https://carrot.megaeth.com/rpc";
 const BASE_RPC = "https://sepolia.base.org";
 const CONTENT_REGISTRY = "0x9ca08C2D2170A43ecfA12AB35e06F2E1cEEB4Ef2";
-const CONTENT_ACCESS_MIRROR = "0xd4D3baB38a11D72e36F49a73D50Dbdc3c1Aa4e9A";
+const CONTENT_ACCESS_MIRROR = "0x4dD375b09160d09d4C33312406dFFAFb3f8A5035";
 const SCROBBLE_V3 = "0x144c450cd5B641404EEB5D5eD523399dD94049E0";
 
 // Generate a small test image (1x1 red PNG, ~70 bytes)

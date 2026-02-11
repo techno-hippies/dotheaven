@@ -1,0 +1,13 @@
+[package]
+name = "rust-upload-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.100"
+clap = { version = "4.5.31", features = ["derive", "env"] }
+rand = "0.8.5"
+reqwest = { version = "0.12.23", default-features = false, features = ["json", "multipart", "rustls-tls"] }
+serde = { version = "1.0.226", features = ["derive"] }
+serde_json = "1.0.145"
+tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread", "sync", "fs", "time"] }

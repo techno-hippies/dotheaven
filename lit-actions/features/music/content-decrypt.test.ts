@@ -26,7 +26,7 @@ import { randomBytes, hexlify, keccak256, AbiCoder } from "ethers";
 
 const abiCoder = AbiCoder.defaultAbiCoder();
 
-const CONTENT_ACCESS_MIRROR = "0xd4D3baB38a11D72e36F49a73D50Dbdc3c1Aa4e9A";
+const CONTENT_ACCESS_MIRROR = "0x4dD375b09160d09d4C33312406dFFAFb3f8A5035";
 
 function buildAccessConditions(contentId: string) {
   // Unified access control conditions with conditionType: "evmContract"

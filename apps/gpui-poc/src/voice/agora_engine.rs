@@ -68,8 +68,7 @@ mod imp {
     impl AgoraNativeEngine {
         fn last_error_message(&self) -> Option<String> {
             let mut buf = [0_i8; 512];
-            let rc =
-                unsafe { heaven_agora_last_error(self.handle, buf.as_mut_ptr(), buf.len()) };
+            let rc = unsafe { heaven_agora_last_error(self.handle, buf.as_mut_ptr(), buf.len()) };
             if rc != 0 {
                 return None;
             }
@@ -77,7 +76,11 @@ mod imp {
                 .to_string_lossy()
                 .trim()
                 .to_string();
-            if msg.is_empty() { None } else { Some(msg) }
+            if msg.is_empty() {
+                None
+            } else {
+                Some(msg)
+            }
         }
 
         pub fn new(app_id: &str) -> Result<Self, String> {

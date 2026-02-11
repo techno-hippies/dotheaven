@@ -40,7 +40,7 @@ const USDFC_ADDRESS = "0xb3042734b608a1b16e9e86b374a3f3e389b4cdf0";
 const USDFC_DECIMALS = 18;
 const DEPOSIT_AMOUNT = ethers.parseUnits("1", USDFC_DECIMALS); // 1 USDFC
 
-const CONTENT_ACCESS_MIRROR = "0xd4D3baB38a11D72e36F49a73D50Dbdc3c1Aa4e9A";
+const CONTENT_ACCESS_MIRROR = "0x4dD375b09160d09d4C33312406dFFAFb3f8A5035";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Min upload size for Filecoin

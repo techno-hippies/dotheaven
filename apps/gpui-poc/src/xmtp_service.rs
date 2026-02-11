@@ -8,6 +8,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use crate::voice::transport::VoiceSignalEnvelope;
 use futures::StreamExt;
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -73,6 +74,7 @@ pub struct XmtpMessage {
 const IS_DEV: bool = cfg!(debug_assertions);
 const XMTP_HOST: &str = "https://grpc.dev.xmtp.network:443";
 const XMTP_HOST_PROD: &str = "https://grpc.production.xmtp.network:443";
+const VOICE_SIGNAL_PREFIX: &str = "[heaven-voice-v1]";
 
 fn xmtp_host() -> &'static str {
     if IS_DEV {
@@ -94,8 +96,25 @@ fn decode_text(msg: &StoredGroupMessage) -> Option<String> {
     TextCodec::decode(encoded).ok()
 }
 
+fn encode_voice_signal_text(signal: &VoiceSignalEnvelope) -> Result<String, String> {
+    let json = signal.to_json()?;
+    Ok(format!("{VOICE_SIGNAL_PREFIX}{json}"))
+}
+
+fn parse_voice_signal_text(content: &str) -> Option<VoiceSignalEnvelope> {
+    let trimmed = content.trim();
+    if !trimmed.starts_with(VOICE_SIGNAL_PREFIX) {
+        return None;
+    }
+    let payload = &trimmed[VOICE_SIGNAL_PREFIX.len()..];
+    VoiceSignalEnvelope::from_json(payload).ok()
+}
+
 fn msg_to_json(msg: &StoredGroupMessage, conversation_id: &str) -> Option<XmtpMessage> {
     let content = decode_text(msg)?;
+    if parse_voice_signal_text(&content).is_some() {
+        return None;
+    }
     Some(XmtpMessage {
         id: hex::encode(&msg.id),
         conversation_id: conversation_id.to_string(),
@@ -164,6 +183,33 @@ pub struct XmtpService {
     client: Option<Arc<XmtpClient>>,
     my_inbox_id: Option<String>,
     my_address: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::voice::transport::{VoiceCapabilities, VoicePlatform, VoiceTransport};
+
+    #[test]
+    fn voice_signal_text_round_trips() {
+        let envelope = VoiceSignalEnvelope::offer(
+            "session-123",
+            VoiceCapabilities::new(
+                VoicePlatform::Desktop,
+                vec![VoiceTransport::Jacktrip, VoiceTransport::Agora],
+            ),
+        );
+
+        let encoded = encode_voice_signal_text(&envelope).expect("encode voice signal");
+        let decoded = parse_voice_signal_text(&encoded).expect("decode voice signal");
+
+        assert_eq!(decoded, envelope);
+    }
+
+    #[test]
+    fn plain_text_is_not_parsed_as_voice_signal() {
+        assert!(parse_voice_signal_text("hello world").is_none());
+    }
 }
 
 impl XmtpService {
@@ -536,7 +582,11 @@ to get below the {max} installation cap..."
 
                 let (last_message, last_message_at, last_message_sender) =
                     if let Some(ref msg) = conv.last_message {
-                        let text = decode_text(msg);
+                        let text = decode_text(msg).and_then(|decoded| {
+                            parse_voice_signal_text(&decoded)
+                                .is_none()
+                                .then_some(decoded)
+                        });
                         (
                             text,
                             Some(msg.sent_at_ns / 1_000_000),
@@ -600,6 +650,21 @@ to get below the {max} installation cap..."
                 .map(|_| ())
                 .map_err(|e| format!("send: {e}"))
         })
+    }
+
+    /// Send a session signaling message (offer/accept/reject) over XMTP.
+    /// Media is not transported via XMTP; this is metadata signaling only.
+    pub fn send_voice_signal(
+        &self,
+        conversation_id: &str,
+        signal: &VoiceSignalEnvelope,
+    ) -> Result<(), String> {
+        let content = encode_voice_signal_text(signal)?;
+        self.send_message(conversation_id, &content)
+    }
+
+    pub fn parse_voice_signal_payload(content: &str) -> Option<VoiceSignalEnvelope> {
+        parse_voice_signal_text(content)
     }
 
     /// Load messages from a conversation.
@@ -668,6 +733,43 @@ to get below the {max} installation cap..."
                 }
                 Err(e) => {
                     log::error!("[XMTP] Failed to start stream: {e}");
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    /// Stream only session signaling messages for a specific conversation.
+    pub fn stream_voice_signals<F>(&self, conversation_id: &str, callback: F) -> Result<(), String>
+    where
+        F: Fn(VoiceSignalEnvelope) + Send + 'static,
+    {
+        let client = get_client(&self.client)?;
+        let group_id = hex::decode(conversation_id).map_err(|e| format!("hex: {e}"))?;
+        let group = client.group(&group_id).map_err(|e| format!("group: {e}"))?;
+
+        self.runtime.spawn(async move {
+            match group.stream_owned().await {
+                Ok(mut stream) => {
+                    while let Some(result) = stream.next().await {
+                        match result {
+                            Ok(msg) => {
+                                if let Some(content) = decode_text(&msg) {
+                                    if let Some(signal) = parse_voice_signal_text(&content) {
+                                        callback(signal);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("[XMTP] Voice signal stream error: {e}");
+                                break;
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::error!("[XMTP] Failed to start voice signal stream: {e}");
                 }
             }
         });

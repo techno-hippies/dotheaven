@@ -26,6 +26,7 @@ pub struct TrackRow {
     pub duration: String,
     pub file_path: String,
     pub mbid: Option<String>,
+    pub ip_id: Option<String>,
     pub cover_path: Option<String>,
 }
 
@@ -82,6 +83,25 @@ fn format_duration_ms(ms: u64) -> String {
     format!("{}:{:02}", m, s)
 }
 
+fn normalize_ip_id(input: &str) -> Option<String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let raw = if let Some(stripped) = trimmed.strip_prefix("0x") {
+        stripped
+    } else {
+        trimmed
+    };
+
+    if raw.len() != 40 || !raw.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+
+    Some(format!("0x{}", raw.to_lowercase()))
+}
+
 /// Simple content hash using std — no sha2 crate needed.
 fn content_hash(data: &[u8]) -> String {
     // Use a basic FNV-1a 64-bit hash for cover art dedup.
@@ -120,6 +140,7 @@ impl MusicDb {
                 duration_ms INTEGER,
                 duration    TEXT NOT NULL DEFAULT '',
                 mbid        TEXT,
+                ip_id       TEXT,
                 file_size   INTEGER NOT NULL,
                 file_mtime  INTEGER NOT NULL,
                 folder_path TEXT NOT NULL,
@@ -132,6 +153,14 @@ impl MusicDb {
             );",
         )
         .map_err(|e| format!("Failed to create tables: {e}"))?;
+
+        // Backfill schema for existing local DBs created before ip_id support.
+        if let Err(e) = conn.execute("ALTER TABLE tracks ADD COLUMN ip_id TEXT", []) {
+            let msg = e.to_string();
+            if !msg.contains("duplicate column name") {
+                return Err(format!("Failed to migrate tracks.ip_id: {e}"));
+            }
+        }
 
         let covers_dir = app_data_dir.join("covers");
         std::fs::create_dir_all(&covers_dir).ok();
@@ -169,7 +198,7 @@ impl MusicDb {
         let mut stmt = self
             .conn
             .prepare(
-                "SELECT file_path, title, artist, album, duration, mbid, rowid, cover_path
+                "SELECT file_path, title, artist, album, duration, mbid, ip_id, rowid, cover_path
                  FROM tracks WHERE folder_path = ?1 ORDER BY title COLLATE NOCASE
                  LIMIT ?2 OFFSET ?3",
             )
@@ -177,7 +206,7 @@ impl MusicDb {
 
         let rows = stmt
             .query_map(params![folder, limit, offset], |row| {
-                let rowid: i64 = row.get(6)?;
+                let rowid: i64 = row.get(7)?;
                 Ok(TrackRow {
                     id: format!("local-{}", rowid),
                     file_path: row.get(0)?,
@@ -186,7 +215,8 @@ impl MusicDb {
                     album: row.get(3)?,
                     duration: row.get(4)?,
                     mbid: row.get(5)?,
-                    cover_path: row.get(7)?,
+                    ip_id: row.get(6)?,
+                    cover_path: row.get(8)?,
                 })
             })
             .map_err(|e| format!("Failed to query: {e}"))?;
@@ -292,13 +322,13 @@ impl MusicDb {
 
             // Extract metadata
             extracted += 1;
-            let (title, artist, album, duration, mbid, cover_path) =
+            let (title, artist, album, duration, mbid, ip_id, cover_path) =
                 extract_metadata(path, &path_str, &self.covers_dir);
 
             self.conn
                 .execute(
-                    "INSERT OR REPLACE INTO tracks (file_path, title, artist, album, duration_ms, duration, mbid, file_size, file_mtime, folder_path, cover_path)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                    "INSERT OR REPLACE INTO tracks (file_path, title, artist, album, duration_ms, duration, mbid, ip_id, file_size, file_mtime, folder_path, cover_path)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                     params![
                         &path_str,
                         &title,
@@ -307,6 +337,7 @@ impl MusicDb {
                         duration.map(|d| d as i64),
                         duration.map(format_duration_ms).unwrap_or_default(),
                         &mbid,
+                        &ip_id,
                         file_size,
                         file_mtime,
                         folder,
@@ -374,6 +405,7 @@ fn extract_metadata(
     Option<u64>,
     Option<String>,
     Option<String>,
+    Option<String>,
 ) {
     let file_name = path
         .file_name()
@@ -408,6 +440,17 @@ fn extract_metadata(
                 t.get_string(&lofty::prelude::ItemKey::MusicBrainzRecordingId)
                     .map(|s| s.to_string())
             });
+            let ip_id = tag.and_then(|t| {
+                for key in ["IPID", "ipId", "ip_id", "story_ip_id", "storyIpId"] {
+                    let item_key = lofty::prelude::ItemKey::Unknown(key.to_string());
+                    if let Some(value) = t.get_string(&item_key) {
+                        if let Some(normalized) = normalize_ip_id(value) {
+                            return Some(normalized);
+                        }
+                    }
+                }
+                None
+            });
 
             // Extract cover art
             let cover_path = tag.and_then(|t| {
@@ -438,11 +481,11 @@ fn extract_metadata(
                 Some(cover_file.to_string_lossy().to_string())
             });
 
-            (title, artist, album, duration_ms, mbid, cover_path)
+            (title, artist, album, duration_ms, mbid, ip_id, cover_path)
         }
         Err(e) => {
             log::warn!("lofty failed for {}: {}", path_str, e);
-            (fb_title, fb_artist, String::new(), None, None, None)
+            (fb_title, fb_artist, String::new(), None, None, None, None)
         }
     }
 }

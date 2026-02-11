@@ -118,8 +118,11 @@ export interface Env {
   // Filebase IPFS pinning (format: ACCESS_KEY_ID:SECRET_ACCESS_KEY:BUCKET)
   FILEBASE_KEY?: string
 
-  // Filebase songs bucket (presigned uploads for song publishing)
+  // Filebase songs bucket (audio, instrumental, cover uploads)
   FILEBASE_SONGS_KEY?: string
+
+  // Filebase canvas videos bucket (separate bucket for video content)
+  FILEBASE_CANVAS_KEY?: string
 
   // Privy wallet proxy (gas sponsorship)
   PRIVY_APP_ID?: string

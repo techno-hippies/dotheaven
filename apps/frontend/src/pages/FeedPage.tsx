@@ -341,24 +341,17 @@ export const FeedPage: Component = () => {
 
   return (
     <div class="h-full overflow-y-auto">
-      {/* Mobile: avatar (left) + logo (center) row */}
+      {/* Mobile: avatar row */}
       <Show when={isMobile()}>
         <header>
-          <div class="relative flex items-center justify-center h-14">
-            <Show when={auth.isAuthenticated()}>
-              <button
-                type="button"
-                class="absolute left-4 cursor-pointer"
-                onClick={openUserMenu}
-              >
-                <Avatar src={cachedAvatarUrl()} fallback="U" size="sm" />
-              </button>
-            </Show>
-            <img
-              src={`${import.meta.env.BASE_URL}images/heaven-white-sm.png`}
-              alt="Heaven"
-              class="h-7"
-            />
+          <div class="flex items-center h-14 px-4 mt-1">
+            <button
+              type="button"
+              class="cursor-pointer"
+              onClick={auth.isAuthenticated() ? openUserMenu : () => openAuthDialog()}
+            >
+              <Avatar src={auth.isAuthenticated() ? cachedAvatarUrl() : undefined} fallback="U" size="md" />
+            </button>
           </div>
         </header>
       </Show>

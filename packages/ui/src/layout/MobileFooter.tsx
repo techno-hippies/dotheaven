@@ -1,5 +1,5 @@
 import { type Component, type JSX, Show, For } from 'solid-js'
-import { cn } from '../lib/classnames'
+import { cn, haptic } from '../lib/classnames'
 
 export interface MobileFooterTab {
   /** Unique identifier for the tab */
@@ -37,6 +37,7 @@ export const MobileFooter: Component<MobileFooterProps> = (props) => {
         'h-16 bg-[var(--bg-surface)] border-t border-[var(--border-subtle)] flex items-center justify-around px-2',
         props.class
       )}
+      style={{ 'padding-bottom': 'env(safe-area-inset-bottom)' }}
     >
       <For each={props.tabs}>
         {(tab) => (
@@ -46,7 +47,7 @@ export const MobileFooter: Component<MobileFooterProps> = (props) => {
             label={tab.label}
             badge={tab.badge}
             active={props.activeTab === tab.id}
-            onClick={() => props.onTabPress(tab.id)}
+            onClick={() => { haptic.light(); props.onTabPress(tab.id) }}
           />
         )}
       </For>

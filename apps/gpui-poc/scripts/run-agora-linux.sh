@@ -7,6 +7,15 @@ SDK_ROOT="${2:-/tmp/agora-sdk-linux}"
 
 cd "$ROOT_DIR"
 
+if [[ "${HEAVEN_ENABLE_SCARLETT_DESKTOP_AGORA:-0}" != "1" ]]; then
+  echo "GPUI Scarlett desktop Agora is disabled by default."
+  echo "Desktop voice is JackTrip-only for now."
+  echo
+  echo "If you intentionally want to run the deprecated native Agora path, set:"
+  echo "  HEAVEN_ENABLE_SCARLETT_DESKTOP_AGORA=1"
+  exit 1
+fi
+
 "$ROOT_DIR/scripts/setup-agora-linux-sdk.sh" "$DOWNLOAD_DIR" "$SDK_ROOT"
 
 export AGORA_SDK_ROOT="$SDK_ROOT"

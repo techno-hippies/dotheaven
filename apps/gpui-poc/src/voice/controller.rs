@@ -3,6 +3,7 @@ use std::time::Instant;
 use super::agora_engine::{AgoraEngineEvent, AgoraNativeEngine};
 use super::api::{self, ChatHistoryItem, VoiceEndpoints};
 use super::auth::WorkerAuthContext;
+use super::transport::{VoiceCapabilities, VoiceTransport};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VoiceState {
@@ -46,6 +47,10 @@ pub struct ScarlettVoiceController {
 }
 
 impl ScarlettVoiceController {
+    pub fn call_supported(&self) -> bool {
+        VoiceCapabilities::for_current_client().supports(VoiceTransport::Agora)
+    }
+
     pub fn new() -> Self {
         Self {
             endpoints: VoiceEndpoints::default(),
@@ -75,6 +80,13 @@ impl ScarlettVoiceController {
     }
 
     pub fn start_call(&mut self) -> Result<(), String> {
+        if !self.call_supported() {
+            return Err(
+                "Scarlett voice calls are not supported in GPUI desktop right now. Desktop voice uses JackTrip for session calls."
+                    .to_string(),
+            );
+        }
+
         if self.state == VoiceState::Connected || self.state == VoiceState::Connecting {
             return Ok(());
         }

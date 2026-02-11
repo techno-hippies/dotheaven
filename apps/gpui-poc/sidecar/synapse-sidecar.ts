@@ -22,13 +22,15 @@
  */
 
 import { createInterface } from 'node:readline'
+import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { ethers } from 'ethers'
 import { Synapse, RPC_URLS } from '@filoz/synapse-sdk'
 import { createLitClient } from '@lit-protocol/lit-client'
-import { createAuthManager, storagePlugins } from '@lit-protocol/auth'
+import { createAuthManager, storagePlugins, ViemAccountAuthenticator } from '@lit-protocol/auth'
 import { nagaDev, nagaTest } from '@lit-protocol/networks'
+import { privateKeyToAccount } from 'viem/accounts'
 
 type FilecoinNetwork = 'mainnet' | 'calibration'
 
@@ -47,8 +49,25 @@ const USDFC_DECIMALS = 18
 const EPOCHS_PER_DAY = 2880n
 const DEFAULT_MAX_LOCKUP_EPOCHS = EPOCHS_PER_DAY * 30n
 const ALGO_AES_GCM_256 = 1
+const DEFAULT_UPLOAD_TIMEOUT_MS = 15 * 60 * 1000
+const DEFAULT_REGISTER_TIMEOUT_MS = 2 * 60 * 1000
+const DEFAULT_SPONSOR_PKP_ADDRESS = '0xF2a9Ea42e5eD701AE5E7532d4217AE94D3F03455'
+const DEFAULT_SPONSOR_PKP_PUBLIC_KEY =
+  '04fb425233a6b6c7628c42570d074d53fc7b4211464c9fc05f84a0f15f7d10cc2b149a2fca26f69539310b0ee129577b9d368015f207ce8719e5ef9040e340a0a5'
+const SPONSOR_PKP_ADDRESS = (
+  process.env.HEAVEN_SPONSOR_PKP_ADDRESS ||
+  DEFAULT_SPONSOR_PKP_ADDRESS
+).trim() as `0x${string}`
+const SPONSOR_PKP_PUBLIC_KEY = (
+  process.env.HEAVEN_SPONSOR_PKP_PUBLIC_KEY ||
+  DEFAULT_SPONSOR_PKP_PUBLIC_KEY
+)
+  .trim()
+const SPONSOR_PKP_PUBLIC_KEY_HEX = SPONSOR_PKP_PUBLIC_KEY.startsWith('0x')
+  ? SPONSOR_PKP_PUBLIC_KEY
+  : `0x${SPONSOR_PKP_PUBLIC_KEY}`
 const CONTENT_ACCESS_MIRROR =
-  process.env.HEAVEN_CONTENT_ACCESS_MIRROR || '0xd4D3baB38a11D72e36F49a73D50Dbdc3c1Aa4e9A'
+  process.env.HEAVEN_CONTENT_ACCESS_MIRROR || '0x4dD375b09160d09d4C33312406dFFAFb3f8A5035'
 const LIT_CHAIN = process.env.HEAVEN_LIT_CHAIN || 'baseSepolia'
 const CONTENT_REGISTER_V1_CID_BY_NETWORK: Record<string, string> = {
   'naga-dev': 'QmcyVkadHqJnFDhkrAPu4UjyPtYBbcLKqfMuYoHJnaQvde',
@@ -103,12 +122,19 @@ type CachedContext = {
 
 let cachedSynapse: CachedContext | null = null
 let cachedAuthContext: { key: string; authContext: any } | null = null
+let cachedSponsorAuthContext: { key: string; authContext: any } | null = null
 let litClientSingleton: Awaited<ReturnType<typeof createLitClient>> | null = null
 let authManagerSingleton: ReturnType<typeof createAuthManager> | null = null
+let sponsorAuthManagerSingleton: ReturnType<typeof createAuthManager> | null = null
 let cachedContentRegisterAction: ContentRegisterActionSpec | null = null
 
 const litNetworkName = (process.env.LIT_NETWORK || process.env.VITE_LIT_NETWORK || 'naga-dev').trim()
 const litNetwork = litNetworkName === 'naga-test' ? nagaTest : nagaDev
+const UPLOAD_TIMEOUT_MS = parseTimeoutMs(process.env.HEAVEN_UPLOAD_TIMEOUT_MS, DEFAULT_UPLOAD_TIMEOUT_MS)
+const REGISTER_TIMEOUT_MS = parseTimeoutMs(
+  process.env.HEAVEN_REGISTER_TIMEOUT_MS,
+  DEFAULT_REGISTER_TIMEOUT_MS,
+)
 
 function sidecarLog(scope: string, details: Record<string, unknown> = {}) {
   const payload = {
@@ -120,6 +146,27 @@ function sidecarLog(scope: string, details: Record<string, unknown> = {}) {
     ...details,
   }
   console.error(`[synapse-sidecar] ${JSON.stringify(payload)}`)
+}
+
+function parseTimeoutMs(raw: string | undefined, fallbackMs: number): number {
+  if (!raw || !raw.trim()) return fallbackMs
+  const parsed = Number(raw.trim())
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallbackMs
+  return Math.floor(parsed)
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined
+  try {
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error(`${label} timed out after ${timeoutMs}ms`))
+      }, timeoutMs)
+    })
+    return await Promise.race([promise, timeout])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 }
 
 function getAuthCacheKey(input: SidecarAuthInput): string {
@@ -168,6 +215,84 @@ function getAuthManager() {
     })
   }
   return authManagerSingleton
+}
+
+function getSponsorAuthManager() {
+  if (!sponsorAuthManagerSingleton) {
+    sponsorAuthManagerSingleton = createAuthManager({
+      storage: storagePlugins.localStorageNode({
+        appName: 'heaven-sidecar-sponsor',
+        networkName: litNetworkName,
+        storagePath:
+          process.env.HEAVEN_SIDECAR_SPONSOR_AUTH_PATH || './.heaven-sidecar-sponsor-auth',
+      }),
+    })
+  }
+  return sponsorAuthManagerSingleton
+}
+
+function requireSponsorPrivateKey(): `0x${string}` {
+  const envRaw = (
+    process.env.HEAVEN_SPONSOR_PRIVATE_KEY ||
+    process.env.PRIVATE_KEY ||
+    ''
+  ).trim()
+  if (envRaw) {
+    return (envRaw.startsWith('0x') ? envRaw : `0x${envRaw}`) as `0x${string}`
+  }
+
+  const dotenvPaths = [
+    resolve(process.cwd(), '../../../lit-actions/.env'),
+    resolve(process.cwd(), '../.env'),
+    resolve(process.cwd(), '.env'),
+  ]
+  for (const path of dotenvPaths) {
+    try {
+      const contents = readFileSync(path, 'utf8')
+      const match = contents.match(/^\s*PRIVATE_KEY\s*=\s*([^\r\n#]+)\s*$/m)
+      if (match?.[1]) {
+        const raw = match[1].trim()
+        sidecarLog('sponsor.key.loaded', { source: path })
+        return (raw.startsWith('0x') ? raw : `0x${raw}`) as `0x${string}`
+      }
+    } catch {
+      // Ignore missing/unreadable fallback files.
+    }
+  }
+
+  throw new Error(
+    'Missing sponsor private key: set HEAVEN_SPONSOR_PRIVATE_KEY or PRIVATE_KEY for sidecar sponsor auth',
+  )
+}
+
+async function createSponsorPkpAuthContext(): Promise<any> {
+  const sponsorKey = `${litNetworkName}:${SPONSOR_PKP_PUBLIC_KEY_HEX}:${SPONSOR_PKP_ADDRESS}`
+  if (cachedSponsorAuthContext && cachedSponsorAuthContext.key === sponsorKey) {
+    return cachedSponsorAuthContext.authContext
+  }
+
+  const litClient = await getLitClient()
+  const authManager = getSponsorAuthManager()
+  const sponsorAccount = privateKeyToAccount(requireSponsorPrivateKey())
+  const authData = await ViemAccountAuthenticator.authenticate(sponsorAccount)
+  const authContext = await authManager.createPkpAuthContext({
+    authData,
+    pkpPublicKey: SPONSOR_PKP_PUBLIC_KEY_HEX,
+    authConfig: {
+      domain: process.env.HEAVEN_SIDECAR_DOMAIN || 'localhost',
+      statement: 'Heaven desktop sponsor content registration',
+      expiration: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      resources: [
+        ['lit-action-execution', '*'],
+        ['pkp-signing', '*'],
+        ['access-control-condition-decryption', '*'],
+      ],
+    },
+    litClient,
+  })
+
+  cachedSponsorAuthContext = { key: sponsorKey, authContext }
+  return authContext
 }
 
 async function createPkpAuthContext(input: SidecarAuthInput): Promise<any> {
@@ -242,6 +367,45 @@ async function signHash(
 
   if (!result.signatures?.sig) throw new Error('No signature returned from PKP')
   return parseLitSignature(result.signatures.sig)
+}
+
+async function signPersonalMessage(
+  message: string,
+  publicKey: string,
+  authContext: any,
+): Promise<string> {
+  const litClient = await getLitClient()
+  const code = `(async () => {
+    await Lit.Actions.ethPersonalSignMessageEcdsa({
+      message: jsParams.message,
+      publicKey: jsParams.publicKey,
+      sigName: "sig",
+    });
+  })();`
+
+  const result = await litClient.executeJs({
+    code,
+    authContext,
+    jsParams: { message, publicKey },
+  })
+
+  if (!result.signatures?.sig) throw new Error('No signature returned from PKP')
+  const sig = result.signatures.sig as any
+  const vHex = ((sig.recid ?? sig.recoveryId) + 27).toString(16).padStart(2, '0')
+  const sigHex = sig.signature.startsWith('0x') ? sig.signature.slice(2) : sig.signature
+  return `0x${sigHex}${vHex}`
+}
+
+function bytesFromPieceCid(value: string): Uint8Array {
+  if (value.startsWith('0x')) return ethers.getBytes(value)
+  return new TextEncoder().encode(value)
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes)
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
 }
 
 class PKPEthersSigner extends ethers.AbstractSigner {
@@ -432,12 +596,21 @@ function buildTrackId(input: {
   artist: string
   album: string
   mbid?: string
+  ipId?: string
 }): string {
   const abi = ethers.AbiCoder.defaultAbiCoder()
   if (input.mbid) {
     const mbidHex = (`0x${input.mbid.replace(/-/g, '').padEnd(64, '0')}`).toLowerCase()
     return ethers
       .keccak256(abi.encode(['uint8', 'bytes32'], [1, mbidHex]))
+      .toLowerCase()
+  }
+
+  if (input.ipId) {
+    const ipIdAddress = ethers.getAddress(input.ipId)
+    const payload = ethers.zeroPadValue(ipIdAddress, 32)
+    return ethers
+      .keccak256(abi.encode(['uint8', 'bytes32'], [2, payload]))
       .toLowerCase()
   }
 
@@ -899,7 +1072,20 @@ async function storageUpload(params: Json | undefined) {
     throw new Error(ready.reason || 'Storage not ready')
   }
   const ctx = await synapse.storage.createContext({ withCDN })
-  const result = await ctx.upload(payload)
+  const uploadStartedAt = Date.now()
+  sidecarLog('storage.upload.start', {
+    pkpAddress: input.pkp.ethAddress,
+    sizeBytes: payload.length,
+    withCDN,
+    timeoutMs: UPLOAD_TIMEOUT_MS,
+  })
+  const result = await withTimeout(ctx.upload(payload), UPLOAD_TIMEOUT_MS, 'Storage upload')
+  sidecarLog('storage.upload.done', {
+    pkpAddress: input.pkp.ethAddress,
+    sizeBytes: payload.length,
+    pieceCid: result.pieceCid.toString(),
+    durationMs: Date.now() - uploadStartedAt,
+  })
   return {
     pieceCid: result.pieceCid.toString(),
     size: result.size,
@@ -921,10 +1107,31 @@ async function contentEncryptUploadRegister(params: Json | undefined) {
       : fallback.artist
   const album = typeof params?.album === 'string' ? params.album.trim() : fallback.album
   const mbid = typeof params?.mbid === 'string' && params.mbid.trim() ? params.mbid.trim() : undefined
+  const ipId =
+    typeof params?.ipId === 'string' && params.ipId.trim() ? ethers.getAddress(params.ipId.trim()) : undefined
 
-  const trackId = buildTrackId({ title, artist, album, mbid })
+  sidecarLog('content.pipeline.start', {
+    pkpAddress: input.pkp.ethAddress,
+    filePath: filePath || null,
+    sourceBytes: sourceBytes.length,
+    withCDN,
+    mbid: mbid || null,
+    ipId: ipId || null,
+    uploadTimeoutMs: UPLOAD_TIMEOUT_MS,
+    registerTimeoutMs: REGISTER_TIMEOUT_MS,
+  })
+
+  const encryptStartedAt = Date.now()
+  const trackId = buildTrackId({ title, artist, album, mbid, ipId })
   const contentId = computeContentId(trackId, input.pkp.ethAddress)
   const encryptedBlob = await encryptForUpload(sourceBytes, contentId, authContext)
+  sidecarLog('content.encrypt.done', {
+    pkpAddress: input.pkp.ethAddress,
+    contentId,
+    trackId,
+    blobBytes: encryptedBlob.length,
+    durationMs: Date.now() - encryptStartedAt,
+  })
 
   const synapse = await getSynapse(input)
   const ready = await ensureUploadReady(
@@ -937,38 +1144,95 @@ async function contentEncryptUploadRegister(params: Json | undefined) {
   }
 
   const ctx = await synapse.storage.createContext({ withCDN })
-  const uploadResult = await ctx.upload(encryptedBlob)
+  const uploadStartedAt = Date.now()
+  sidecarLog('content.upload.start', {
+    pkpAddress: input.pkp.ethAddress,
+    contentId,
+    blobBytes: encryptedBlob.length,
+    timeoutMs: UPLOAD_TIMEOUT_MS,
+  })
+  const uploadResult = await withTimeout(ctx.upload(encryptedBlob), UPLOAD_TIMEOUT_MS, 'Content upload')
   const pieceCid = uploadResult.pieceCid.toString()
+  sidecarLog('content.upload.done', {
+    pkpAddress: input.pkp.ethAddress,
+    contentId,
+    pieceCid,
+    uploadSize: uploadResult.size,
+    durationMs: Date.now() - uploadStartedAt,
+  })
 
   const contentRegisterAction = await getContentRegisterAction()
 
   const litClient = await getLitClient()
-  const executeResult = await litClient.executeJs({
-    ...(contentRegisterAction.mode === 'ipfs'
-      ? { ipfsId: contentRegisterAction.value }
-      : { code: contentRegisterAction.value }),
-    authContext,
-    jsParams: {
-      userPkpPublicKey: input.pkp.publicKey,
-      trackId,
-      pieceCid,
-      datasetOwner: input.pkp.ethAddress,
-      algo: ALGO_AES_GCM_256,
-      title,
-      artist,
-      album,
-      timestamp: Date.now().toString(),
-      nonce: crypto.randomUUID(),
-    },
+  const timestamp = Date.now().toString()
+  const nonce = crypto.randomUUID()
+  const trackId32 = ethers.zeroPadValue(trackId, 32).toLowerCase()
+  const pieceCidHash = await sha256Hex(bytesFromPieceCid(pieceCid))
+  const registerMessage = `heaven:content:register:${trackId32}:${pieceCidHash}:${input.pkp.ethAddress.toLowerCase()}:${ALGO_AES_GCM_256}:${timestamp}:${nonce}`
+  const sigStartedAt = Date.now()
+  const userSignature = await signPersonalMessage(registerMessage, input.pkp.publicKey, authContext)
+  sidecarLog('content.register.user_sig.done', {
+    pkpAddress: input.pkp.ethAddress,
+    contentId,
+    durationMs: Date.now() - sigStartedAt,
   })
+
+  const sponsorAuthContext = await createSponsorPkpAuthContext()
+  sidecarLog('content.register.start', {
+    pkpAddress: input.pkp.ethAddress,
+    contentId,
+    pieceCid,
+    sponsorPkpAddress: SPONSOR_PKP_ADDRESS,
+    actionMode: contentRegisterAction.mode,
+    actionSource: contentRegisterAction.source,
+    timeoutMs: REGISTER_TIMEOUT_MS,
+  })
+  const registerStartedAt = Date.now()
+  const executeResult = await withTimeout(
+    litClient.executeJs({
+      ...(contentRegisterAction.mode === 'ipfs'
+        ? { ipfsId: contentRegisterAction.value }
+        : { code: contentRegisterAction.value }),
+      authContext: sponsorAuthContext,
+      jsParams: {
+        userPkpPublicKey: input.pkp.publicKey,
+        trackId,
+        pieceCid,
+        datasetOwner: input.pkp.ethAddress,
+        signature: userSignature,
+        algo: ALGO_AES_GCM_256,
+        title,
+        artist,
+        album,
+        timestamp,
+        nonce,
+      },
+    }),
+    REGISTER_TIMEOUT_MS,
+    'Content registration',
+  )
 
   const response = JSON.parse(executeResult.response as string)
   if (!response.success) {
+    sidecarLog('content.register.error', {
+      pkpAddress: input.pkp.ethAddress,
+      contentId,
+      pieceCid,
+      error: response.error || 'unknown error',
+    })
     throw new Error(`Content register failed: ${response.error || 'unknown error'}`)
   }
+  sidecarLog('content.register.done', {
+    pkpAddress: input.pkp.ethAddress,
+    contentId,
+    pieceCid,
+    txHash: response.txHash || null,
+    durationMs: Date.now() - registerStartedAt,
+  })
 
   return {
     trackId,
+    ipId: ipId || null,
     contentId,
     pieceCid,
     blobSize: encryptedBlob.length,
@@ -1022,6 +1286,7 @@ async function handleRequest(req: RpcRequest) {
     case 'storage.reset':
       cachedSynapse = null
       cachedAuthContext = null
+      cachedSponsorAuthContext = null
       return { ok: true }
     default:
       throw new Error(`Unknown method: ${req.method}`)

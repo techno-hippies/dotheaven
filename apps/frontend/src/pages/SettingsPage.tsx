@@ -125,7 +125,11 @@ export const SettingsPage: Component = () => {
 
   return (
     <div class="h-full overflow-y-auto">
-      <PageHeader title={t('settings.title')} />
+      <div class="border-b border-[var(--border-subtle)]">
+        <div class="max-w-2xl mx-auto w-full px-4 md:px-6">
+          <PageHeader title={t('settings.title')} class="border-b-0 !px-0" />
+        </div>
+      </div>
 
       <div class="max-w-2xl mx-auto px-4 md:px-6 py-6">
         <Show

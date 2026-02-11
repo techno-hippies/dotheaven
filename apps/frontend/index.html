@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-visual" />
     <title>Heaven</title>
 
     <!-- Open Graph -->
@@ -27,5 +27,18 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Dynamic viewport height for mobile browsers (address bar, keyboard)
+      ;(function () {
+        var docEl = document.documentElement
+        function update() {
+          var h = (window.visualViewport ? window.visualViewport.height : window.innerHeight)
+          docEl.style.setProperty('--vh-screen', h + 'px')
+          docEl.style.setProperty('--vh', (h * 0.01) + 'px')
+        }
+        update()
+        ;(window.visualViewport || window).addEventListener('resize', update)
+      })()
+    </script>
   </body>
 </html>

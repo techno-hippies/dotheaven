@@ -527,8 +527,14 @@ impl LibraryView {
                 this.storage_loading = false;
                 match result {
                     Ok(val) => {
-                        this.storage_balance = val.get("balance").and_then(|v| v.as_str()).map(|s| s.to_string());
-                        this.storage_monthly = val.get("monthlyCost").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        this.storage_balance = val
+                            .get("balance")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+                        this.storage_monthly = val
+                            .get("monthlyCost")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
                         this.storage_days = val.get("daysRemaining").and_then(|v| v.as_i64());
                     }
                     Err(e) => {
@@ -567,9 +573,15 @@ impl LibraryView {
                 this.add_funds_busy = false;
                 match result {
                     Ok(val) => {
-                        let tx_hash = val.get("txHash").and_then(|v| v.as_str()).unwrap_or("unknown");
+                        let tx_hash = val
+                            .get("txHash")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
                         log::info!("[Library] deposit success: txHash={}", tx_hash);
-                        this.set_status_message("Deposit complete! Refreshing storage status...", cx);
+                        this.set_status_message(
+                            "Deposit complete! Refreshing storage status...",
+                            cx,
+                        );
                         this.fetch_storage_status(cx);
                     }
                     Err(e) => {
@@ -610,13 +622,17 @@ impl LibraryView {
             title: Some(track.title.clone()),
             artist: Some(track.artist.clone()),
             album: Some(track.album.clone()),
-            mbid: None,
+            mbid: track.mbid.clone(),
+            ip_id: track.ip_id.clone(),
         };
         let path = track.file_path.clone();
 
         self.upload_busy = true;
         self.set_status_message(
-            format!("Encrypting + uploading \"{}\" to Synapse...", track_title),
+            format!(
+                "Encrypting + uploading \"{}\" to Synapse (Calibration can take 2-6+ min)...",
+                track_title
+            ),
             cx,
         );
 
@@ -913,7 +929,11 @@ fn render_hero(
                 .child(hero_button(
                     "add-funds",
                     "icons/wallet.svg",
-                    if add_funds_busy { "Depositing..." } else { "Add Funds" },
+                    if add_funds_busy {
+                        "Depositing..."
+                    } else {
+                        "Add Funds"
+                    },
                     false,
                     cx.listener(|this, _, _w, cx| {
                         this.add_funds(cx);
@@ -921,7 +941,12 @@ fn render_hero(
                 )),
         )
         // Storage stats bar
-        .child(render_storage_stats(storage_balance, storage_monthly, storage_days, storage_loading));
+        .child(render_storage_stats(
+            storage_balance,
+            storage_monthly,
+            storage_days,
+            storage_loading,
+        ));
 
     if let Some(status) = status_message.filter(|s| !s.is_empty()) {
         hero = hero.child(
@@ -1054,18 +1079,10 @@ fn render_storage_stats(
                         .text_color(TEXT_PRIMARY)
                         .child(balance_str.to_string()),
                 )
-                .child(
-                    div()
-                        .text_color(TEXT_MUTED)
-                        .child("Balance"),
-                ),
+                .child(div().text_color(TEXT_MUTED).child("Balance")),
         )
         // Separator
-        .child(
-            div()
-                .text_color(TEXT_DIM)
-                .child("|"),
-        )
+        .child(div().text_color(TEXT_DIM).child("|"))
         // Monthly
         .child(
             div()
@@ -1078,18 +1095,10 @@ fn render_storage_stats(
                         .text_color(TEXT_PRIMARY)
                         .child(monthly_str.to_string()),
                 )
-                .child(
-                    div()
-                        .text_color(TEXT_MUTED)
-                        .child("Monthly"),
-                ),
+                .child(div().text_color(TEXT_MUTED).child("Monthly")),
         )
         // Separator
-        .child(
-            div()
-                .text_color(TEXT_DIM)
-                .child("|"),
-        )
+        .child(div().text_color(TEXT_DIM).child("|"))
         // Days Left
         .child(
             div()
@@ -1102,11 +1111,7 @@ fn render_storage_stats(
                         .text_color(days_color)
                         .child(days_str),
                 )
-                .child(
-                    div()
-                        .text_color(TEXT_MUTED)
-                        .child("Days Left"),
-                ),
+                .child(div().text_color(TEXT_MUTED).child("Days Left")),
         )
         .into_any_element()
 }

@@ -8,14 +8,16 @@
  * 4. Call song-publish-v1 Lit Action (IPFS upload, lyrics alignment, translation)
  * 5. Sign EIP-712 typed data for Story registration via PKP
  * 6. Call story-register-sponsor-v1 Lit Action (mint NFT, register IP, attach license)
- * 7. Auto-translate lyrics to Mandarin + English (best-effort, doesn't fail publish)
+ * 7. Register on ContentRegistry (MegaETH) so subgraph indexes the song
+ * 8. Auto-translate lyrics to Mandarin + English (best-effort, doesn't fail publish)
  */
 
 import { getLitClient } from '../lit/client'
-import { SONG_PUBLISH_CID, STORY_REGISTER_SPONSOR_CID, LYRICS_TRANSLATE_CID } from '../lit/action-cids'
+import { SONG_PUBLISH_CID, STORY_REGISTER_SPONSOR_CID, LYRICS_TRANSLATE_CID, CONTENT_REGISTER_MEGAETH_V1_CID } from '../lit/action-cids'
 import { signMessageWithPKP } from '../lit/signer-pkp'
 import type { PKPInfo, PKPAuthContext } from '../lit/types'
 import type { SongFormData, LicenseType } from '@heaven/ui'
+import { computeTrackId } from '../filecoin-upload-service'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -209,81 +211,38 @@ async function signTypedDataWithPKP(
 
 const IPFS_GATEWAY = 'https://ipfs.filebase.io/ipfs/'
 
-// ── Presigned upload via heaven-api backend ─────────────────────────
+// ── Proxy upload via heaven-api backend ──────────────────────────────
 
 const HEAVEN_API_URL = import.meta.env.VITE_HEAVEN_API_URL || 'http://localhost:8787'
 
-interface UploadSlot {
-  slot: string
-  contentType: string
-  size: number
-}
-
-interface PresignedSlot {
-  slot: string
-  url: string
-  key: string
-}
-
 /**
- * Pre-upload files to Filebase via presigned URLs from heaven-api.
- * 1. Request presigned PUT URLs from backend (no secrets in browser)
- * 2. Upload directly to Filebase S3 using presigned URLs
- * 3. Call backend /complete/:key to get CID (avoids CORS header issues)
+ * Upload files to Filebase via heaven-api proxy (avoids CORS issues).
+ * Browser sends multipart form to worker, worker uploads to S3 server-side.
  *
- * Returns map of slot → { cid, gatewayUrl }
+ * Returns map of slot → CID
  */
-async function presignAndUpload(
+async function proxyUpload(
   files: Array<{ slot: string; data: Uint8Array; contentType: string }>,
 ): Promise<Map<string, string>> {
-  // Step 1: Get presigned URLs from backend
-  const slots: UploadSlot[] = files.map((f) => ({
-    slot: f.slot,
-    contentType: f.contentType,
-    size: f.data.byteLength,
-  }))
-
-  const presignResp = await fetch(`${HEAVEN_API_URL}/api/upload/presign`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ slots }),
-  })
-  if (!presignResp.ok) {
-    const err = await presignResp.text()
-    throw new Error(`Presign failed: ${presignResp.status} ${err}`)
+  const form = new FormData()
+  for (const f of files) {
+    form.append(f.slot, new Blob([f.data], { type: f.contentType }), `${f.slot}.${f.contentType.split('/')[1] || 'bin'}`)
   }
-  const { slots: presigned } = (await presignResp.json()) as { slots: PresignedSlot[] }
 
-  // Step 2: Upload files directly to Filebase using presigned URLs
-  await Promise.all(
-    files.map(async (f) => {
-      const ps = presigned.find((p) => p.slot === f.slot)
-      if (!ps) throw new Error(`No presigned URL for slot: ${f.slot}`)
+  const resp = await fetch(`${HEAVEN_API_URL}/api/upload`, {
+    method: 'POST',
+    body: form,
+  })
+  if (!resp.ok) {
+    const err = await resp.text()
+    throw new Error(`Upload failed: ${resp.status} ${err}`)
+  }
 
-      const uploadResp = await fetch(ps.url, {
-        method: 'PUT',
-        headers: { 'Content-Type': f.contentType },
-        body: f.data,
-      })
-      if (!uploadResp.ok) {
-        throw new Error(`Upload failed for ${f.slot}: ${uploadResp.status}`)
-      }
-    }),
-  )
-
-  // Step 3: Get CIDs from backend (HEAD object server-side)
+  const { slots } = (await resp.json()) as { slots: Record<string, { cid: string; gatewayUrl: string }> }
   const cidMap = new Map<string, string>()
-  await Promise.all(
-    presigned.map(async (ps) => {
-      const completeResp = await fetch(`${HEAVEN_API_URL}/api/upload/complete/${ps.key}`)
-      if (!completeResp.ok) {
-        throw new Error(`Failed to get CID for ${ps.slot}: ${completeResp.status}`)
-      }
-      const { cid } = (await completeResp.json()) as { cid: string }
-      cidMap.set(ps.slot, cid)
-    }),
-  )
-
+  for (const [slot, { cid }] of Object.entries(slots)) {
+    cidMap.set(slot, cid)
+  }
   return cidMap
 }
 
@@ -333,7 +292,7 @@ export async function publishSong(
     uploadFiles.push({ slot: 'canvas', data: canvasBytes, contentType: formData.canvasFile.type })
   }
 
-  const cidMap = await presignAndUpload(uploadFiles)
+  const cidMap = await proxyUpload(uploadFiles)
 
   const audioUrl = `${IPFS_GATEWAY}${cidMap.get('audio')}`
   const instrumentalUrl = `${IPFS_GATEWAY}${cidMap.get('instrumental')}`
@@ -460,7 +419,7 @@ export async function publishSong(
 
   onProgress(70)
 
-  // ── Step 7: Call story-register-sponsor-v1 Lit Action (70-95%) ───
+  // ── Step 7: Call story-register-sponsor-v1 Lit Action (70-88%) ───
   const storyResult = await litClient.executeJs({
     ipfsId: STORY_REGISTER_SPONSOR_CID,
     authContext,
@@ -483,9 +442,60 @@ export async function publishSong(
     throw new Error(`Story registration failed: ${storyResponse.error}`)
   }
 
+  onProgress(88)
+
+  // ── Step 8: Register on ContentRegistry (MegaETH) for subgraph ────
+  // Uses MegaETH-only Lit Action (skips Base mirror which isn't needed for published songs).
+  // This creates a ContentRegistered event that the dotheaven-activity subgraph
+  // indexes, making the song appear in the library across devices.
+  if (CONTENT_REGISTER_MEGAETH_V1_CID) {
+    try {
+      const trackId = computeTrackId({
+        title: formData.title,
+        artist: formData.artist,
+        album: '',
+      })
+      const audioCid = publishResponse.audioCID
+      console.log('[Publish] Registering on ContentRegistry (MegaETH):', { trackId, audioCid })
+
+      const litClient = await getLitClient()
+      const timestamp = Date.now().toString()
+      const nonce = crypto.randomUUID()
+
+      const result = await litClient.executeJs({
+        ipfsId: CONTENT_REGISTER_MEGAETH_V1_CID,
+        authContext,
+        jsParams: {
+          userPkpPublicKey: pkpInfo.publicKey,
+          trackId,
+          pieceCid: audioCid,
+          algo: 1, // ContentRegistry requires algo != 0
+          timestamp,
+          nonce,
+          title: formData.title,
+          artist: formData.artist,
+          album: '',
+        },
+      })
+
+      const response = JSON.parse(result.response as string)
+      if (!response.success) {
+        console.warn('[Publish] ContentRegistry registration failed:', response.error)
+      } else {
+        console.log('[Publish] ContentRegistry registered:', response)
+      }
+    } catch (err) {
+      // Non-fatal: song is already on Story + IPFS. Library indexing will be missing
+      // but the song is published. User can still access via Story.
+      console.warn('[Publish] ContentRegistry registration failed (non-fatal):', err)
+    }
+  } else {
+    console.warn('[Publish] CONTENT_REGISTER_MEGAETH_V1_CID not set — skipping ContentRegistry registration')
+  }
+
   onProgress(95)
 
-  // ── Step 8: Auto-translate lyrics (95-100%, best-effort) ──────────
+  // ── Step 9: Auto-translate lyrics (95-100%, best-effort) ──────────
   if (LYRICS_TRANSLATE_CID && lyricsText !== '(instrumental)') {
     const targetLangs = AUTO_TRANSLATE_LANGS.filter((l) => l !== formData.primaryLanguage)
 

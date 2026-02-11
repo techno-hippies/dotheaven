@@ -1,0 +1,12 @@
+{
+  "name": "load-network-poc",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "run": "bun src/run-load-poc.ts"
+  },
+  "dependencies": {
+    "@ardrive/turbo-sdk": "latest",
+    "arweave": "latest"
+  }
+}

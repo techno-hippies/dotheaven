@@ -52,7 +52,7 @@ function LibraryEntryCard(props: {
       </div>
       <Show when={props.badge}>
         <span
-          class="h-[22px] px-2 rounded-full text-[11px] font-semibold flex items-center"
+          class="h-[22px] px-2 rounded-full text-xs font-semibold flex items-center"
           style={{ background: props.badgeColor || 'var(--accent-blue)', color: '#171717' }}
         >
           {props.badge}
@@ -69,7 +69,7 @@ function LibraryEntryCard(props: {
 
 function SectionHeader(props: { title: string; onAction?: () => void }) {
   return (
-    <div class="flex items-center justify-between px-5">
+    <div class="flex items-center justify-between">
       <h2 class="text-lg font-bold text-[var(--text-primary)]">{props.title}</h2>
       <Show when={props.onAction}>
         <button
@@ -195,7 +195,7 @@ export const MusicPage: Component = () => {
         <div class="max-w-4xl mx-auto w-full px-4 md:px-8">
           <PageHeader
             title={isMobile() ? t('nav.music') : t('music.discover')}
-            class="border-b-0"
+            class="border-b-0 !px-0"
             rightSlot={isMobile() ? (
               <IconButton
                 variant="soft"
@@ -214,7 +214,7 @@ export const MusicPage: Component = () => {
       <div class="h-4" />
 
       {/* Library entry rows — mobile only (sidebar handles these on desktop) */}
-      <div class="flex flex-col pb-2 md:hidden">
+      <div class="flex flex-col pb-2 md:hidden -mx-4">
         <LibraryEntryCard
           icon={<List class="w-5 h-5" />}
           iconBg="#2e2040"
@@ -247,7 +247,7 @@ export const MusicPage: Component = () => {
       <Show when={recentTracks().length > 0}>
         <div class="flex flex-col gap-3.5 pb-7">
           <SectionHeader title="Recent Listens" onAction={() => navigate(musicTab('library'))} />
-          <div class="flex gap-3 overflow-x-auto px-5 scrollbar-hide">
+          <div class="flex gap-3 overflow-x-auto scrollbar-hide">
             <For each={recentTracks().slice(0, 6)}>
               {(track) => <HorizAlbumCard track={track} />}
             </For>
@@ -258,7 +258,7 @@ export const MusicPage: Component = () => {
       {/* Discovery: Trending (placeholder) */}
       <div class="flex flex-col gap-3.5 pb-7">
         <SectionHeader title="Trending" />
-        <div class="flex gap-3 overflow-x-auto px-5 scrollbar-hide">
+        <div class="flex gap-3 overflow-x-auto scrollbar-hide">
           <For each={trendingPlaceholder}>
             {(track) => <HorizAlbumCard track={track} />}
           </For>
@@ -268,7 +268,7 @@ export const MusicPage: Component = () => {
       {/* Discovery: New Releases (placeholder) */}
       <div class="flex flex-col gap-3.5 pb-7">
         <SectionHeader title="New Releases" />
-        <div class="flex gap-3 overflow-x-auto px-5 scrollbar-hide">
+        <div class="flex gap-3 overflow-x-auto scrollbar-hide">
           <For each={newReleasesPlaceholder}>
             {(track) => <HorizAlbumCard track={track} />}
           </For>
@@ -278,7 +278,7 @@ export const MusicPage: Component = () => {
       {/* Discovery: Top Artists (placeholder) */}
       <div class="flex flex-col gap-3.5 pb-7">
         <SectionHeader title="Top Artists" />
-        <div class="flex gap-4 overflow-x-auto px-5 scrollbar-hide">
+        <div class="flex gap-4 overflow-x-auto scrollbar-hide">
           <For each={topArtistsPlaceholder}>
             {(artist) => <ArtistCircle name={artist.name} avatar={artist.avatar} />}
           </For>

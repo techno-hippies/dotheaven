@@ -267,7 +267,7 @@ export const SchedulePage: Component = () => {
         <div class="max-w-4xl mx-auto w-full px-4 md:px-8">
           <PageHeader
             title={t('nav.schedule')}
-            class="border-b-0"
+            class="border-b-0 !px-0"
             rightSlot={
               <Show when={view() === 'upcoming'}>
                 <IconButton variant="soft" size="xl" aria-label={t('schedule.availability')} onClick={() => navigate(SCHEDULE_AVAILABILITY)}>

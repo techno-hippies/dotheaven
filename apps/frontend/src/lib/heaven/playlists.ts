@@ -9,7 +9,7 @@ import { payloadToMbid } from './artist'
  * Subgraph indexes PlaylistCreated, PlaylistTracksSet, PlaylistMetaUpdated, PlaylistDeleted
  * from PlaylistV1 on MegaETH (chain 6343).
  *
- * Track display strings (title/artist/album) live on ScrobbleV3 (getTrack),
+ * Track display strings (title/artist/album) live on ScrobbleV4 (getTrack),
  * resolved via MegaETH RPC — same pattern as scrobbles.ts.
  */
 
@@ -185,7 +185,7 @@ export async function fetchPlaylistTracks(
   }))
 }
 
-// ── Track Metadata Resolution (on-chain via ScrobbleV3) ────────────
+// ── Track Metadata Resolution (on-chain via ScrobbleV4) ────────────
 
 export async function resolvePlaylistTracks(
   playlistTracks: OnChainPlaylistTrack[],

@@ -10,6 +10,7 @@ use gpui_component::StyledExt;
 use crate::auth;
 use crate::lit_wallet::LitWalletService;
 use crate::synapse_sidecar::{SynapseSidecarService, TrackMetaInput};
+use crate::voice::jacktrip::JackTripController;
 
 const BG_ELEVATED: Hsla = Hsla {
     h: 0.,
@@ -68,11 +69,13 @@ const SMOKE_ACTION_CODE: &str = r#"(async () => {
 pub struct SettingsView {
     service: Arc<Mutex<LitWalletService>>,
     sidecar: Arc<Mutex<SynapseSidecarService>>,
+    jacktrip_test: Arc<Mutex<JackTripController>>,
     busy: bool,
     status: String,
     last_action_response: Option<String>,
     last_signature: Option<String>,
     last_sidecar_response: Option<String>,
+    last_voice_response: Option<String>,
     error: Option<String>,
     show_dev_tools: bool,
 }
@@ -94,11 +97,13 @@ impl SettingsView {
         Self {
             service,
             sidecar: Arc::new(Mutex::new(SynapseSidecarService::new())),
+            jacktrip_test: Arc::new(Mutex::new(JackTripController::new())),
             busy: false,
             status: "Ready".to_string(),
             last_action_response: None,
             last_signature: None,
             last_sidecar_response: None,
+            last_voice_response: None,
             error,
             show_dev_tools: true,
         }
@@ -178,10 +183,15 @@ impl SettingsView {
         self.last_action_response = None;
         self.last_signature = None;
         self.last_sidecar_response = None;
+        self.last_voice_response = None;
         self.error = None;
         self.status = "Signed out".to_string();
         if let Ok(mut svc) = self.service.lock() {
             svc.clear();
+        }
+        if let Ok(mut jacktrip) = self.jacktrip_test.lock() {
+            let _ = jacktrip.disconnect();
+            let _ = jacktrip.stop_local_server();
         }
         cx.update_global::<auth::AuthState, _>(|state, _| {
             state.persisted = None;
@@ -532,7 +542,9 @@ impl SettingsView {
         let track_meta = infer_track_meta_from_path(&path);
 
         self.busy = true;
-        self.status = "Encrypting + uploading + registering content via sidecar...".into();
+        self.status =
+            "Encrypting + uploading + registering content via sidecar (Calibration can take 2-6+ min)..."
+                .into();
         self.error = None;
         cx.notify();
 
@@ -557,6 +569,197 @@ impl SettingsView {
                     }
                     Err(e) => {
                         this.status = "Encrypted upload failed".into();
+                        this.error = Some(e);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn jacktrip_start_local_server(&mut self, cx: &mut Context<Self>) {
+        if self.busy {
+            return;
+        }
+        self.busy = true;
+        self.status = "Starting local JackTrip server...".into();
+        self.error = None;
+        cx.notify();
+
+        let jacktrip = self.jacktrip_test.clone();
+        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            let result = smol::unblock(move || {
+                let mut ctrl = jacktrip
+                    .lock()
+                    .map_err(|e| format!("jacktrip controller lock: {e}"))?;
+                ctrl.start_local_server(local_jacktrip_port())
+            })
+            .await;
+
+            let _ = this.update(cx, |this, cx| {
+                this.busy = false;
+                match result {
+                    Ok(msg) => {
+                        this.status = msg.clone();
+                        this.last_voice_response = Some(msg);
+                        this.error = None;
+                    }
+                    Err(e) => {
+                        this.status = "Failed to start local JackTrip server".into();
+                        this.error = Some(e);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn jacktrip_stop_local_server(&mut self, cx: &mut Context<Self>) {
+        if self.busy {
+            return;
+        }
+        self.busy = true;
+        self.status = "Stopping local JackTrip server...".into();
+        self.error = None;
+        cx.notify();
+
+        let jacktrip = self.jacktrip_test.clone();
+        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            let result = smol::unblock(move || {
+                let mut ctrl = jacktrip
+                    .lock()
+                    .map_err(|e| format!("jacktrip controller lock: {e}"))?;
+                ctrl.stop_local_server()
+            })
+            .await;
+
+            let _ = this.update(cx, |this, cx| {
+                this.busy = false;
+                match result {
+                    Ok(msg) => {
+                        this.status = msg.clone();
+                        this.last_voice_response = Some(msg);
+                        this.error = None;
+                    }
+                    Err(e) => {
+                        this.status = "Failed to stop local JackTrip server".into();
+                        this.error = Some(e);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn jacktrip_connect_local_client(&mut self, cx: &mut Context<Self>) {
+        if self.busy {
+            return;
+        }
+        self.busy = true;
+        self.status = "Connecting JackTrip client to localhost...".into();
+        self.error = None;
+        cx.notify();
+
+        let jacktrip = self.jacktrip_test.clone();
+        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            let result = smol::unblock(move || {
+                let mut ctrl = jacktrip
+                    .lock()
+                    .map_err(|e| format!("jacktrip controller lock: {e}"))?;
+                ctrl.connect("127.0.0.1", local_jacktrip_port())
+            })
+            .await;
+
+            let _ = this.update(cx, |this, cx| {
+                this.busy = false;
+                match result {
+                    Ok(msg) => {
+                        this.status = msg.clone();
+                        this.last_voice_response = Some(msg);
+                        this.error = None;
+                    }
+                    Err(e) => {
+                        this.status = "JackTrip local connect failed".into();
+                        this.error = Some(e);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn jacktrip_disconnect_client(&mut self, cx: &mut Context<Self>) {
+        if self.busy {
+            return;
+        }
+        self.busy = true;
+        self.status = "Disconnecting JackTrip client...".into();
+        self.error = None;
+        cx.notify();
+
+        let jacktrip = self.jacktrip_test.clone();
+        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            let result = smol::unblock(move || {
+                let mut ctrl = jacktrip
+                    .lock()
+                    .map_err(|e| format!("jacktrip controller lock: {e}"))?;
+                ctrl.disconnect()
+            })
+            .await;
+
+            let _ = this.update(cx, |this, cx| {
+                this.busy = false;
+                match result {
+                    Ok(msg) => {
+                        this.status = msg.clone();
+                        this.last_voice_response = Some(msg);
+                        this.error = None;
+                    }
+                    Err(e) => {
+                        this.status = "JackTrip disconnect failed".into();
+                        this.error = Some(e);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn jacktrip_list_ports(&mut self, cx: &mut Context<Self>) {
+        if self.busy {
+            return;
+        }
+        self.busy = true;
+        self.status = "Listing JACK ports...".into();
+        self.error = None;
+        cx.notify();
+
+        let jacktrip = self.jacktrip_test.clone();
+        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            let result = smol::unblock(move || {
+                let ctrl = jacktrip
+                    .lock()
+                    .map_err(|e| format!("jacktrip controller lock: {e}"))?;
+                ctrl.list_ports()
+            })
+            .await;
+
+            let _ = this.update(cx, |this, cx| {
+                this.busy = false;
+                match result {
+                    Ok(ports) => {
+                        this.status = format!("Found {} JACK ports", ports.len());
+                        this.last_voice_response =
+                            Some(serde_json::to_string_pretty(&ports).unwrap_or_default());
+                        this.error = None;
+                    }
+                    Err(e) => {
+                        this.status = "Failed to list JACK ports".into();
                         this.error = Some(e);
                     }
                 }
@@ -755,6 +958,44 @@ impl Render for SettingsView {
                                             !self.busy,
                                             true,
                                             cx.listener(|this, _, _, cx| this.sidecar_encrypt_upload_file(cx)),
+                                        ))
+                                        .child(action_button(
+                                            "JT Server On",
+                                            !self.busy,
+                                            true,
+                                            cx.listener(|this, _, _, cx| {
+                                                this.jacktrip_start_local_server(cx)
+                                            }),
+                                        ))
+                                        .child(action_button(
+                                            "JT Server Off",
+                                            !self.busy,
+                                            false,
+                                            cx.listener(|this, _, _, cx| {
+                                                this.jacktrip_stop_local_server(cx)
+                                            }),
+                                        ))
+                                        .child(action_button(
+                                            "JT Connect Local",
+                                            !self.busy,
+                                            true,
+                                            cx.listener(|this, _, _, cx| {
+                                                this.jacktrip_connect_local_client(cx)
+                                            }),
+                                        ))
+                                        .child(action_button(
+                                            "JT Disconnect",
+                                            !self.busy,
+                                            false,
+                                            cx.listener(|this, _, _, cx| {
+                                                this.jacktrip_disconnect_client(cx)
+                                            }),
+                                        ))
+                                        .child(action_button(
+                                            "JT List Ports",
+                                            !self.busy,
+                                            false,
+                                            cx.listener(|this, _, _, cx| this.jacktrip_list_ports(cx)),
                                         )),
                                 )
                                 .when_some(self.error.clone(), |el, error| {
@@ -774,9 +1015,12 @@ impl Render for SettingsView {
                                 .when_some(self.last_sidecar_response.clone(), |el, resp| {
                                     el.child(result_box("Last Synapse sidecar response", &resp))
                                 })
+                                .when_some(self.last_voice_response.clone(), |el, resp| {
+                                    el.child(result_box("Last JackTrip response", &resp))
+                                })
                                 .child(
                                     div().text_xs().text_color(TEXT_DIM).child(
-                                        "Env required: HEAVEN_LIT_RPC_URL (or LIT_RPC_URL). Synapse sidecar requires bun + sidecar deps.",
+                                        "Env required: HEAVEN_LIT_RPC_URL (or LIT_RPC_URL). Synapse sidecar requires bun + sidecar deps. JackTrip local test uses localhost and HEAVEN_JACKTRIP_PORT (default 4464).",
                                     ),
                                 ),
                         )
@@ -803,6 +1047,7 @@ fn infer_track_meta_from_path(path: &Path) -> TrackMetaInput {
                 artist: Some(artist),
                 album: Some(String::new()),
                 mbid: None,
+                ip_id: None,
             };
         }
     }
@@ -812,6 +1057,7 @@ fn infer_track_meta_from_path(path: &Path) -> TrackMetaInput {
         artist: Some("Unknown Artist".to_string()),
         album: Some(String::new()),
         mbid: None,
+        ip_id: None,
     }
 }
 
@@ -890,4 +1136,11 @@ fn action_button(
             el.on_click(move |ev, window, cx| on_click(ev, window, cx))
         })
         .child(label)
+}
+
+fn local_jacktrip_port() -> u16 {
+    std::env::var("HEAVEN_JACKTRIP_PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(4464)
 }

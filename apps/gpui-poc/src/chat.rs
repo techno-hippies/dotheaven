@@ -252,6 +252,18 @@ fn abbreviate_address(addr: &str) -> String {
     }
 }
 
+fn normalize_preview_text(input: &str) -> String {
+    const MAX_PREVIEW_CHARS: usize = 72;
+    let normalized = input.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut iter = normalized.chars();
+    let head: String = iter.by_ref().take(MAX_PREVIEW_CHARS).collect();
+    if iter.next().is_some() {
+        format!("{head}...")
+    } else {
+        head
+    }
+}
+
 fn lock_xmtp<'a>(xmtp: &'a Arc<Mutex<XmtpService>>) -> std::sync::MutexGuard<'a, XmtpService> {
     match xmtp.lock() {
         Ok(guard) => guard,
@@ -623,7 +635,7 @@ impl ChatView {
             peer_address: SCARLETT_CONVERSATION_ID.to_string(),
             peer_display_name: SCARLETT_NAME.to_string(),
             peer_nationality: None,
-            last_message: last.as_ref().map(|m| m.content.clone()),
+            last_message: last.as_ref().map(|m| normalize_preview_text(&m.content)),
             last_message_at: last.as_ref().map(|m| m.sent_at_ns / 1_000_000),
             unread: false,
         };
@@ -647,6 +659,13 @@ impl ChatView {
         match self.voice_controller.lock() {
             Ok(voice) => voice.snapshot(),
             Err(poisoned) => poisoned.into_inner().snapshot(),
+        }
+    }
+
+    fn voice_call_supported(&self) -> bool {
+        match self.voice_controller.lock() {
+            Ok(voice) => voice.call_supported(),
+            Err(poisoned) => poisoned.into_inner().call_supported(),
         }
     }
 
@@ -797,7 +816,7 @@ impl ChatView {
         };
 
         let mut conv = self.conversations.remove(idx);
-        conv.last_message = Some(content.to_string());
+        conv.last_message = Some(normalize_preview_text(content));
         conv.last_message_at = Some(sent_at_ns / 1_000_000);
         self.conversations.insert(0, conv);
     }
@@ -822,7 +841,9 @@ impl ChatView {
                                 id: c.id,
                                 peer_display_name: abbreviate_address(&c.peer_address),
                                 peer_nationality: None, // TODO: resolve from profile
-                                last_message: c.last_message,
+                                last_message: c
+                                    .last_message
+                                    .map(|msg| normalize_preview_text(&msg)),
                                 last_message_at: c.last_message_at,
                                 unread: false, // TODO: track unread state
                                 peer_address: c.peer_address,
@@ -1087,6 +1108,10 @@ impl ChatView {
     }
 
     fn start_scarlett_call(&mut self, cx: &mut Context<Self>) {
+        if !self.voice_call_supported() {
+            return;
+        }
+
         self.voice_error = None;
         cx.notify();
 
@@ -1309,7 +1334,8 @@ impl ChatView {
                     .child(
                         div().text_color(c.muted_fg).truncate().child(
                             conv.last_message
-                                .clone()
+                                .as_deref()
+                                .map(normalize_preview_text)
                                 .unwrap_or_else(|| "No messages yet".to_string()),
                         ),
                     ),
@@ -1383,6 +1409,11 @@ impl ChatView {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let is_scarlett = conv_id == SCARLETT_CONVERSATION_ID;
+        let voice_supported = if is_scarlett {
+            self.voice_call_supported()
+        } else {
+            false
+        };
         let voice = if is_scarlett {
             self.voice_snapshot()
         } else {
@@ -1434,7 +1465,7 @@ impl ChatView {
                                             .text_color(c.foreground)
                                             .child(display_name),
                                     )
-                                    .when(is_scarlett, |el| {
+                                    .when(is_scarlett && voice_supported, |el| {
                                         let status = match voice.state {
                                             VoiceState::Idle => "Idle".to_string(),
                                             VoiceState::Connecting => "Connecting...".to_string(),
@@ -1462,7 +1493,7 @@ impl ChatView {
                                     }),
                             ),
                     )
-                    .when(is_scarlett, |el| {
+                    .when(is_scarlett && voice_supported, |el| {
                         el.child(
                             div()
                                 .h_flex()
@@ -1539,7 +1570,8 @@ impl ChatView {
                                     )
                                 })
                                 .when(
-                                    voice.state != VoiceState::Connected
+                                    voice_supported
+                                        && voice.state != VoiceState::Connected
                                         && voice.state != VoiceState::Connecting,
                                     |row| {
                                         row.child(

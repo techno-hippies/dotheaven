@@ -186,6 +186,12 @@ const ACTIONS: Record<string, ActionDef> = {
     displayName: 'Flag v1',
     keys: [], // No encrypted keys — sponsor PKP pays gas directly
   },
+  contentRegisterMegaethV1: {
+    name: 'contentRegisterMegaethV1',
+    path: 'features/music/content-register-megaeth-v1.js',
+    displayName: 'Content Register MegaETH v1',
+    keys: [], // No encrypted keys — sponsor PKP pays gas directly
+  },
 };
 
 // Parse CLI args
