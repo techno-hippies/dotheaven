@@ -24,7 +24,7 @@ import { IconButton } from '../ui/IconButton';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../providers/AuthProvider';
 import { useXMTP, type XMTPMessage, type ChatListItem } from '../providers/XMTPProvider';
-import { DrawerContext } from '../navigation/TabNavigator';
+import { DrawerContext } from '../navigation/DrawerContext';
 import { getWorkerToken } from '../lib/worker-auth';
 import { colors, fontSize, radii } from '../lib/theme';
 
@@ -722,7 +722,7 @@ export const ChatScreen: React.FC = () => {
             accessibilityLabel="New message"
             onPress={() => console.log('[ChatScreen] New message')}
           >
-            <PencilSimple size={18} color={colors.textSecondary} />
+            <PencilSimple size={20} color={colors.textSecondary} />
           </IconButton>
         }
       />

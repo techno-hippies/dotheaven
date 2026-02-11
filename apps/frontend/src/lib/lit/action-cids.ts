@@ -10,29 +10,29 @@
  * Individual CIDs can still be overridden via VITE_*_CID env vars.
  */
 
-const litNetwork = (import.meta.env.VITE_LIT_NETWORK || 'naga-dev') as 'naga-dev' | 'naga-test'
+const litNetwork = (import.meta.env.VITE_LIT_NETWORK || 'naga-test') as 'naga-dev' | 'naga-test'
 
 /** CID maps mirroring lit-actions/cids/dev.json and lit-actions/cids/test.json */
 const CID_MAP = {
   'naga-dev': {
-    playlistV1:           'QmYvozSnyUb3QCmsDLWQ1caYecokqeHpc8Cck5uqnuNf9R',
-    heavenClaimName:      'QmVx1YrPTn3bk1TiqvFZ73yBwnyNUpDugjqGzEYKNXBr7Z',
-    heavenSetProfile:     'Qmc6657yuLtgmtLnUqznmBFR9NWnX2th39HG64YdUEw4g8',
-    heavenSetRecords:     'QmNTJXB8KioAsJt4ebJUJF9w87a57nHHrF1HqqVwmqNi2r',
+    playlistV1:           'QmQdLV5T2DUHhYy3SPY7KffCRbjAEkbM2ZqMEc1hf7GfVa',
+    heavenClaimName:      'QmQB5GsQVaNbD8QS8zcXkjBMAZUjpADfbcWVaPgL3PygSA',
+    heavenSetProfile:     'QmUJnDz9Q92bSLvNQMLyPDNSkw69MA3fpYsSCnAeMAJtuy',
+    heavenSetRecords:     'QmaXJcjGbPWQ1ypKnQB3vfnDwaQ1NLEGFmN3t7gQisw9g5',
     avatarUpload:         'QmTWwoC5zX2pUuSExsra5RVzChE9nCYRAkVVgppjvc196A',
-    contentRegisterV1:    'QmchDhdrQ8JiX1NDFe6XG2wspWhGMpfEZ652iZp9NzVmCu',
-    contentAccessV1:      'QmXnhhG1aykZGZoPXTKihi4jRbygD2rvn5DZwTBz89LPfn',
-    linkEoaV1:            'QmYPeQEpUhb8eMULPmW7RM5k5yNMTWMmRDa8p3Gw4d966C',
-    postRegisterV1:       'QmQ3sz9g1znyoKPyNUQetnfijwqNQNU7ir7YuQXtU7f4C3',
-    trackCoverV4:         'QmSVssbAxCr1xp7mKX1VfcJFNJewQfhCZGiPuhyEjGvUC2',
-    postTranslateV1:      'QmWAGjKKmnpmiN2BjVe5YUtXjkKApGyCwdLoszAjTRDFiY',
+    contentRegisterV1:    'QmcyVkadHqJnFDhkrAPu4UjyPtYBbcLKqfMuYoHJnaQvde',
+    contentAccessV1:      'QmeFDbYinv28a26uVELqSpYk2SBF27j3Ci7EfdnJ8xDVhA',
+    linkEoaV1:            'QmXFkjpHT95ZWQYtz2GVdhEqh8oZscXSkDBiEpK6VEy4k1',
+    postRegisterV1:       'QmduQNBGLfEB1bkCFMXLjRcpBJ3wfcV675KMWWYQe5k477',
+    trackCoverV4:         'QmcwLxoNyuV5KrJALfaAEBa4zspoxedEfPJba2Y3uhWYx7',
+    postTranslateV1:      'QmefcfyK57V6XQeHsH9oVCfukwMiLGC4KgZVniXFBAL6Sv',
     songPublish:          'Qmc2zDSsYURne8ZwG8sfLEqT12hazfHaRCM9sXjBGxD2cg',
-    lyricsTranslate:      'Qmdf2HHLzghjjeQZMvhgh6kY2EJERgC4Hw1BXfWjjeanch',
-    followV1:             'QmPccpeqwyJSHYzY1HGu6Nmp26anouhTT8daHS8Jox9VTx',
-    likeV1:               'QmYrhWHGbQHo7eSvJnN5BCSJ68xwQV7oCGWRho2CvmA3gm',
-    commentV1:            'QmPim3NkdLLL7yckGgUeqz5Bdzri5DygBcWFZppYMLYLsA',
-    flagV1:               'QmafHchRYrngBfBNVYqYbbgpio2xb3XVuAP6tUHg9z9Eu9',
-    storyRegisterSponsor: '',
+    lyricsTranslate:      'QmViMXk72SZdjoWWuXP6kUsxB3BHzrK2ZN934YPFKmXBeV',
+    followV1:             'QmUxWxazesrDvsFF4gDk2mbT8L8dbHrWVQUKAnwRYm8yyU',
+    likeV1:               'QmbXU6jxx2rH8ZopmEJQDTYce83LBEnsVxGhkTDD8hWcCX',
+    commentV1:            'QmVhonUxBF9upcJh6NnzMNeGndenMoAN1a7qtu1PU7EoS1',
+    flagV1:               'QmbCPSxieogoSVLR3HAYDffyerNE1DZGZuLFAWiwnTzzPx',
+    storyRegisterSponsor: 'QmZ38qG34PKnENxzV8eejbRwiqQf2aRFKuNKqJNTXvU43Q',
   },
   'naga-test': {
     playlistV1:           'QmUf2jSaquVXJZBaoq5WCjKZKJpW7zVZVWHKuGi68GYZqq',

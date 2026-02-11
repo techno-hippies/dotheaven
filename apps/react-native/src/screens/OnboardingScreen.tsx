@@ -3,11 +3,14 @@
  *
  * Steps: Name → Basics → Languages (Speak) → Languages (Learning) → Location → Music → Avatar → Complete
  *
- * Currently saves to AsyncStorage only (placeholder).
- * TODO: Wire on-chain operations via Lit WebView bridge when Lit network is stable.
+ * On-chain operations via Lit WebView bridge (naga-dev):
+ * - Name: registerHeavenName via heaven-claim-name Lit Action
+ * - Basics + Languages: setProfile via heaven-set-profile Lit Action
+ * - Location: setTextRecord via heaven-set-records Lit Action
+ * - Music/Avatar: local only (no on-chain target)
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -22,13 +25,20 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../lib/theme';
 import { useAuth } from '../providers/AuthProvider';
+import { useLit } from '../providers/LitProvider';
 import { NameStep } from '../components/onboarding/NameStep';
 import { BasicsStep, type BasicsData, type BasicsDraft } from '../components/onboarding/BasicsStep';
 import { LanguagesStep, type LanguageEntry, type LanguagesData } from '../components/onboarding/LanguagesStep';
 import { LocationStep, type LocationDraft } from '../components/onboarding/LocationStep';
 import { MusicStep, type PopularArtist } from '../components/onboarding/MusicStep';
 import { AvatarStep } from '../components/onboarding/AvatarStep';
-import { checkNameAvailable } from '../lib/heaven-onchain';
+import {
+  checkNameAvailable,
+  registerHeavenName,
+  setProfile,
+  setTextRecord,
+  computeNode,
+} from '../lib/heaven-onchain';
 
 type OnboardingStep =
   | 'name'
@@ -99,7 +109,8 @@ interface OnboardingScreenProps {
 
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete, onLogout }) => {
   const insets = useSafeAreaInsets();
-  const { pkpInfo } = useAuth();
+  const { pkpInfo, createAuthContext, signMessage } = useAuth();
+  const { bridge } = useLit();
 
   const [step, setStep] = useState<OnboardingStep>('name');
   const [claimedName, setClaimedName] = useState('');
@@ -124,20 +135,32 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete, 
   const [avatarSubmitting, setAvatarSubmitting] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
 
+  // Stored basics data (needed when we combine with languages for on-chain call)
+  const basicsDataRef = useRef<BasicsData | null>(null);
+
   const address = pkpInfo?.ethAddress as string | undefined;
   const storageKeyFor = useCallback((suffix: string) => {
     const userKey = address?.toLowerCase() ?? 'unknown';
     return `heaven:${userKey}:${suffix}`;
   }, [address]);
 
-  // ── Name step (local placeholder) ────────────────────────────
+  // Ensure auth context is ready for Lit operations
+  const authInitRef = useRef(false);
+  useEffect(() => {
+    if (authInitRef.current || !pkpInfo?.ethAddress) return;
+    authInitRef.current = true;
+    createAuthContext().catch((err) => {
+      console.warn('[Onboarding] Auth context init failed (will retry on each step):', err?.message);
+    });
+  }, [pkpInfo?.ethAddress]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Name step ────────────────────────────────────────────────
 
   const handleCheckNameAvailability = useCallback(async (name: string): Promise<boolean> => {
     try {
       return await checkNameAvailable(name);
     } catch (err) {
       console.error('[Onboarding] Name availability check failed:', err);
-      // Keep onboarding unblocked when RPC is flaky.
       return true;
     }
   }, []);
@@ -157,8 +180,33 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete, 
         return false;
       }
 
-      // TODO: Call registerHeavenName via Lit bridge when network is stable
-      console.log('[Onboarding] Name claimed (local):', name);
+      // Register on-chain via Lit Action
+      if (bridge && pkpInfo?.ethAddress && pkpInfo?.pubkey) {
+        try {
+          await createAuthContext();
+          console.log('[Onboarding] Registering .heaven name on-chain:', name);
+          const result = await registerHeavenName(
+            name,
+            pkpInfo.ethAddress as `0x${string}`,
+            bridge,
+            pkpInfo.pubkey,
+            signMessage,
+          );
+          if (!result.success) {
+            console.error('[Onboarding] Name registration failed:', result.error);
+            setClaimError(result.error || 'Failed to register name on-chain.');
+            return false;
+          }
+          console.log('[Onboarding] Name registered on-chain:', result.txHash);
+        } catch (err: any) {
+          console.error('[Onboarding] Name registration error:', err);
+          setClaimError(`On-chain registration failed: ${err?.message || 'Unknown error'}`);
+          return false;
+        }
+      } else {
+        console.warn('[Onboarding] Lit bridge not ready — saving name locally only');
+      }
+
       setClaimedName(name);
       await AsyncStorage.setItem(storageKeyFor('username'), name);
       setStep('basics');
@@ -170,9 +218,9 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete, 
     } finally {
       setClaiming(false);
     }
-  }, [storageKeyFor, handleCheckNameAvailability]);
+  }, [storageKeyFor, handleCheckNameAvailability, bridge, pkpInfo, createAuthContext, signMessage]);
 
-  // ── Basics step (local placeholder) ──────────────────────────
+  // ── Basics step ──────────────────────────────────────────────
 
   const handleBasicsContinue = useCallback(async (data: BasicsData): Promise<boolean | void> => {
     setBasicsSubmitting(true);
@@ -182,7 +230,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete, 
         age: data.age == null ? '' : String(data.age),
         gender: data.gender,
       });
-      // TODO: Call setProfile via Lit bridge
+      basicsDataRef.current = data;
       await AsyncStorage.setItem(storageKeyFor('profile'), JSON.stringify(data));
       console.log('[Onboarding] Profile saved (local):', data);
       setStep('languagesSpeak');
@@ -208,6 +256,50 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete, 
     setStep('languagesLearn');
   }, []);
 
+  /**
+   * Submit profile on-chain after learning languages are done.
+   * Combines basics + spoken + learning into a single setProfile call.
+   */
+  const submitProfileOnChain = useCallback(async (
+    speaks: LanguageEntry[],
+    learns: LanguageEntry[],
+  ) => {
+    if (!bridge || !pkpInfo?.ethAddress || !pkpInfo?.pubkey) {
+      console.warn('[Onboarding] Lit bridge not ready — skipping on-chain profile');
+      return;
+    }
+
+    const basics = basicsDataRef.current;
+    const allLanguages = [
+      ...speaks.map((l) => ({ code: l.code, proficiency: l.proficiency })),
+      ...learns.map((l) => ({ code: l.code, proficiency: l.proficiency })),
+    ];
+
+    try {
+      await createAuthContext();
+      console.log('[Onboarding] Setting profile on-chain...');
+      const result = await setProfile(
+        {
+          age: basics?.age ?? undefined,
+          gender: basics?.gender ?? undefined,
+          languages: allLanguages.length > 0 ? allLanguages : undefined,
+        },
+        pkpInfo.ethAddress as `0x${string}`,
+        bridge,
+        pkpInfo.pubkey,
+        signMessage,
+      );
+      if (!result.success) {
+        console.error('[Onboarding] setProfile failed:', result.error);
+        throw new Error(result.error || 'Failed to set profile on-chain');
+      }
+      console.log('[Onboarding] Profile set on-chain:', result.txHash);
+    } catch (err: any) {
+      console.error('[Onboarding] Profile on-chain error:', err);
+      throw err;
+    }
+  }, [bridge, pkpInfo, createAuthContext, signMessage]);
+
   const handleLanguagesLearnContinue = useCallback(async () => {
     setLanguagesSubmitting(true);
     setLanguagesError(null);
@@ -216,10 +308,17 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete, 
         speaks: spokenLanguages,
         learning: learningLanguages,
       };
-
-      // TODO: Call setProfile with packed languages via Lit bridge
       await AsyncStorage.setItem(storageKeyFor('languages'), JSON.stringify(data));
       console.log('[Onboarding] Languages saved (local):', data);
+
+      // Submit profile on-chain (basics + languages combined)
+      try {
+        await submitProfileOnChain(spokenLanguages, learningLanguages);
+      } catch (err: any) {
+        // Don't block onboarding on profile failure — user can fix via profile edit later
+        console.warn('[Onboarding] On-chain profile failed, continuing anyway:', err?.message);
+      }
+
       setStep('location');
     } catch (err: any) {
       console.error('[Onboarding] Languages save error:', err);
@@ -227,7 +326,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete, 
     } finally {
       setLanguagesSubmitting(false);
     }
-  }, [storageKeyFor, spokenLanguages, learningLanguages]);
+  }, [storageKeyFor, spokenLanguages, learningLanguages, submitProfileOnChain]);
 
   const handleLanguagesLearnSkip = useCallback(async () => {
     setLanguagesSubmitting(true);
@@ -237,9 +336,16 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete, 
         speaks: spokenLanguages,
         learning: [],
       };
-
       await AsyncStorage.setItem(storageKeyFor('languages'), JSON.stringify(data));
       console.log('[Onboarding] Learning languages skipped');
+
+      // Submit profile on-chain (basics + spoken languages only)
+      try {
+        await submitProfileOnChain(spokenLanguages, []);
+      } catch (err: any) {
+        console.warn('[Onboarding] On-chain profile failed, continuing anyway:', err?.message);
+      }
+
       setStep('location');
     } catch (err: any) {
       console.error('[Onboarding] Languages save error:', err);
@@ -247,7 +353,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete, 
     } finally {
       setLanguagesSubmitting(false);
     }
-  }, [storageKeyFor, spokenLanguages]);
+  }, [storageKeyFor, spokenLanguages, submitProfileOnChain]);
 
   // ── Location step ───────────────────────────────────────────
 
@@ -256,9 +362,26 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete, 
     setLocationError(null);
     try {
       setLocationDraft({ query: location, selectedLabel: location });
-      // TODO: Call setTextRecord for heaven.location via Lit bridge
       await AsyncStorage.setItem(storageKeyFor('location'), location);
       console.log('[Onboarding] Location saved (local):', location);
+
+      // Set text record on-chain if we have a claimed name
+      if (bridge && pkpInfo?.pubkey && claimedName) {
+        try {
+          await createAuthContext();
+          const node = computeNode(claimedName);
+          console.log('[Onboarding] Setting location record on-chain...');
+          const result = await setTextRecord(node, 'heaven.location', location, bridge, pkpInfo.pubkey, signMessage);
+          if (!result.success) {
+            console.warn('[Onboarding] setTextRecord failed:', result.error);
+          } else {
+            console.log('[Onboarding] Location record set on-chain:', result.txHash);
+          }
+        } catch (err: any) {
+          console.warn('[Onboarding] Location record on-chain failed, continuing:', err?.message);
+        }
+      }
+
       setStep('music');
     } catch (err: any) {
       console.error('[Onboarding] Location save error:', err);
@@ -266,7 +389,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete, 
     } finally {
       setLocationSubmitting(false);
     }
-  }, [storageKeyFor]);
+  }, [storageKeyFor, bridge, pkpInfo, claimedName, createAuthContext, signMessage]);
 
   // ── Music step ───────────────────────────────────────────────
 

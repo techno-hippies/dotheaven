@@ -1,5 +1,5 @@
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { StyleSheet, Text, View, Image } from 'react-native';
 import { MusicNotes, Play, Pause, SkipForward } from 'phosphor-react-native';
 import { colors } from '../lib/theme';
 import { usePlayer, usePlayerProgress } from '../providers/PlayerProvider';
@@ -20,6 +20,34 @@ const MiniPlayerProgress: React.FC = () => {
 
 export const MiniPlayer: React.FC = () => {
   const { currentTrack, isPlaying, togglePlayPause, skipNext } = usePlayer();
+  const [artworkUri, setArtworkUri] = useState<string | undefined>(undefined);
+  const [artworkFailed, setArtworkFailed] = useState(false);
+
+  useEffect(() => {
+    if (!currentTrack) {
+      setArtworkUri(undefined);
+      setArtworkFailed(false);
+      return;
+    }
+    setArtworkUri(currentTrack.artworkUri);
+    setArtworkFailed(false);
+  }, [currentTrack?.id, currentTrack?.artworkUri, currentTrack?.artworkFallbackUri]);
+
+  const handleArtworkError = useCallback(() => {
+    if (!currentTrack) {
+      setArtworkFailed(true);
+      return;
+    }
+    if (
+      artworkUri === currentTrack.artworkUri &&
+      currentTrack.artworkFallbackUri &&
+      currentTrack.artworkFallbackUri !== artworkUri
+    ) {
+      setArtworkUri(currentTrack.artworkFallbackUri);
+      return;
+    }
+    setArtworkFailed(true);
+  }, [artworkUri, currentTrack]);
 
   if (!currentTrack) return null;
 
@@ -30,7 +58,15 @@ export const MiniPlayer: React.FC = () => {
       <View style={styles.content}>
         {/* Album art placeholder */}
         <View style={styles.albumCover}>
-          <MusicNotes size={20} color={colors.textMuted} />
+          {artworkUri && !artworkFailed ? (
+            <Image
+              source={{ uri: artworkUri }}
+              style={styles.albumCoverImage}
+              onError={handleArtworkError}
+            />
+          ) : (
+            <MusicNotes size={20} color={colors.textMuted} />
+          )}
         </View>
 
         {/* Track info */}
@@ -104,6 +140,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgElevated,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  albumCoverImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
   },
   info: {
     flex: 1,

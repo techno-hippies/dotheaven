@@ -41,7 +41,8 @@ import {
 // ── Constants ─────────────────────────────────────────────────────
 
 const profileAbi = parseAbi([
-  'function getProfile(address user) external view returns (uint8 profileVersion, string displayName, bytes32 nameHash, uint8 age, uint8 heightCm, bytes2 nationality, uint256 languagesPacked, uint8 friendsOpenToMask, bytes32 locationCityId, bytes32 schoolId, bytes32 skillsCommit, bytes32 hobbiesCommit, string photoURI, uint8 gender, uint8 relocate, uint8 degree, uint8 fieldBucket, uint8 profession, uint8 industry, uint8 relationshipStatus, uint8 sexuality, uint8 ethnicity, uint8 datingStyle, uint8 children, uint8 wantsChildren, uint8 drinking, uint8 smoking, uint8 drugs, uint8 lookingFor, uint8 religion, uint8 pets, uint8 diet)',
+  'struct Profile { uint8 profileVersion; bool exists; uint8 age; uint16 heightCm; bytes2 nationality; uint8 friendsOpenToMask; uint256 languagesPacked; bytes32 locationCityId; bytes32 schoolId; bytes32 skillsCommit; bytes32 hobbiesCommit; bytes32 nameHash; uint256 packed; string displayName; string photoURI; }',
+  'function getProfile(address user) external view returns (Profile)',
 ]);
 
 const recordsAbi = parseAbi([
@@ -118,6 +119,29 @@ export interface ProfileData {
   twitter?: string;
   github?: string;
   telegram?: string;
+
+  // Raw numeric enum values (for edit profile)
+  raw?: {
+    gender: number;
+    relocate: number;
+    degree: number;
+    fieldBucket: number;
+    profession: number;
+    industry: number;
+    relationshipStatus: number;
+    sexuality: number;
+    ethnicity: number;
+    datingStyle: number;
+    children: number;
+    wantsChildren: number;
+    drinking: number;
+    smoking: number;
+    drugs: number;
+    lookingFor: number;
+    religion: number;
+    pets: number;
+    diet: number;
+  };
 }
 
 // ── Public API ──────────────────────────────────────────────────
@@ -154,6 +178,9 @@ export async function fetchProfile(
   let heightCm: number | undefined;
   let languages: LanguageEntry[] | undefined;
 
+  // Raw enum values (for edit form)
+  let rawEnums: ProfileData['raw'] | undefined;
+
   // Enum display values
   let relocate: string | undefined;
   let degree: string | undefined;
@@ -175,74 +202,103 @@ export async function fetchProfile(
   let diet: string | undefined;
 
   if (profileResult) {
-    const [
-      , // profileVersion
-      displayName,
-      , // nameHash
-      ageVal,
-      heightCmVal,
-      nationality,
-      languagesPacked,
-      , // friendsOpenToMask
-      , // locationCityId
-      , // schoolId
-      , // skillsCommit
-      , // hobbiesCommit
-      , // photoURI
-      genderVal,
-      relocateVal,
-      degreeVal,
-      fieldBucketVal,
-      professionVal,
-      industryVal,
-      relationshipStatusVal,
-      sexualityVal,
-      ethnicityVal,
-      datingStyleVal,
-      childrenVal,
-      wantsChildrenVal,
-      drinkingVal,
-      smokingVal,
-      drugsVal,
-      lookingForVal,
-      religionVal,
-      petsVal,
-      dietVal,
-    ] = profileResult;
+    const p = profileResult as {
+      profileVersion: number;
+      exists: boolean;
+      age: number;
+      heightCm: number;
+      nationality: `0x${string}`;
+      friendsOpenToMask: number;
+      languagesPacked: bigint;
+      locationCityId: `0x${string}`;
+      schoolId: `0x${string}`;
+      skillsCommit: `0x${string}`;
+      hobbiesCommit: `0x${string}`;
+      nameHash: `0x${string}`;
+      packed: bigint;
+      displayName: string;
+      photoURI: string;
+    };
 
-    if (displayName) name = displayName;
-    if (ageVal > 0) age = ageVal;
-    if (heightCmVal > 0) heightCm = heightCmVal;
+    if (p.exists) {
+      if (p.displayName) name = p.displayName;
+      if (p.age > 0) age = p.age;
+      if (p.heightCm > 0) heightCm = p.heightCm;
 
-    gender = toGenderAbbr(genderVal);
-    genderLabel = NUM_TO_GENDER_LABEL[genderVal];
+      nationalityCode = bytes2ToCode(p.nationality);
 
-    const natHex = typeof nationality === 'string' ? nationality : `0x${Number(nationality).toString(16).padStart(4, '0')}`;
-    nationalityCode = bytes2ToCode(natHex);
+      // Decode languages
+      const langEntries = unpackLanguages(p.languagesPacked);
+      if (langEntries.length > 0) languages = langEntries;
 
-    // Decode languages
-    const langEntries = unpackLanguages(languagesPacked);
-    if (langEntries.length > 0) languages = langEntries;
+      // Extract enums from packed uint256
+      const getByte = (packed: bigint, offset: number): number =>
+        Number((packed >> (BigInt(offset) * 8n)) & 0xFFn);
 
-    // Decode all enum fields (0 = unset, skip)
-    relocate = NUM_TO_RELOCATE[relocateVal];
-    degree = NUM_TO_DEGREE[degreeVal];
-    fieldBucket = NUM_TO_FIELD[fieldBucketVal];
-    profession = NUM_TO_PROFESSION[professionVal];
-    industry = NUM_TO_INDUSTRY[industryVal];
-    relationshipStatus = NUM_TO_RELATIONSHIP[relationshipStatusVal];
-    sexuality = NUM_TO_SEXUALITY[sexualityVal];
-    ethnicity = NUM_TO_ETHNICITY[ethnicityVal];
-    datingStyle = NUM_TO_DATING_STYLE[datingStyleVal];
-    children = NUM_TO_CHILDREN[childrenVal];
-    wantsChildren = NUM_TO_WANTS_CHILDREN[wantsChildrenVal];
-    drinking = NUM_TO_DRINKING[drinkingVal];
-    smoking = NUM_TO_SMOKING[smokingVal];
-    drugs = NUM_TO_DRUGS[drugsVal];
-    lookingFor = NUM_TO_LOOKING_FOR[lookingForVal];
-    religion = NUM_TO_RELIGION[religionVal];
-    pets = NUM_TO_PETS[petsVal];
-    diet = NUM_TO_DIET[dietVal];
+      const genderVal = getByte(p.packed, 0);
+      gender = toGenderAbbr(genderVal);
+      genderLabel = NUM_TO_GENDER_LABEL[genderVal];
+
+      const rawRelocate = getByte(p.packed, 1);
+      const rawDegree = getByte(p.packed, 2);
+      const rawFieldBucket = getByte(p.packed, 3);
+      const rawProfession = getByte(p.packed, 4);
+      const rawIndustry = getByte(p.packed, 5);
+      const rawRelationship = getByte(p.packed, 6);
+      const rawSexuality = getByte(p.packed, 7);
+      const rawEthnicity = getByte(p.packed, 8);
+      const rawDatingStyle = getByte(p.packed, 9);
+      const rawChildren = getByte(p.packed, 10);
+      const rawWantsChildren = getByte(p.packed, 11);
+      const rawDrinking = getByte(p.packed, 12);
+      const rawSmoking = getByte(p.packed, 13);
+      const rawDrugs = getByte(p.packed, 14);
+      const rawLookingFor = getByte(p.packed, 15);
+      const rawReligion = getByte(p.packed, 16);
+      const rawPets = getByte(p.packed, 17);
+      const rawDiet = getByte(p.packed, 18);
+
+      relocate = NUM_TO_RELOCATE[rawRelocate];
+      degree = NUM_TO_DEGREE[rawDegree];
+      fieldBucket = NUM_TO_FIELD[rawFieldBucket];
+      profession = NUM_TO_PROFESSION[rawProfession];
+      industry = NUM_TO_INDUSTRY[rawIndustry];
+      relationshipStatus = NUM_TO_RELATIONSHIP[rawRelationship];
+      sexuality = NUM_TO_SEXUALITY[rawSexuality];
+      ethnicity = NUM_TO_ETHNICITY[rawEthnicity];
+      datingStyle = NUM_TO_DATING_STYLE[rawDatingStyle];
+      children = NUM_TO_CHILDREN[rawChildren];
+      wantsChildren = NUM_TO_WANTS_CHILDREN[rawWantsChildren];
+      drinking = NUM_TO_DRINKING[rawDrinking];
+      smoking = NUM_TO_SMOKING[rawSmoking];
+      drugs = NUM_TO_DRUGS[rawDrugs];
+      lookingFor = NUM_TO_LOOKING_FOR[rawLookingFor];
+      religion = NUM_TO_RELIGION[rawReligion];
+      pets = NUM_TO_PETS[rawPets];
+      diet = NUM_TO_DIET[rawDiet];
+
+      rawEnums = {
+        gender: genderVal,
+        relocate: rawRelocate,
+        degree: rawDegree,
+        fieldBucket: rawFieldBucket,
+        profession: rawProfession,
+        industry: rawIndustry,
+        relationshipStatus: rawRelationship,
+        sexuality: rawSexuality,
+        ethnicity: rawEthnicity,
+        datingStyle: rawDatingStyle,
+        children: rawChildren,
+        wantsChildren: rawWantsChildren,
+        drinking: rawDrinking,
+        smoking: rawSmoking,
+        drugs: rawDrugs,
+        lookingFor: rawLookingFor,
+        religion: rawReligion,
+        pets: rawPets,
+        diet: rawDiet,
+      };
+    }
   }
 
   if (primaryName?.label) {
@@ -348,6 +404,7 @@ export async function fetchProfile(
     twitter,
     github,
     telegram,
+    raw: rawEnums,
     ...followCounts,
   };
 }

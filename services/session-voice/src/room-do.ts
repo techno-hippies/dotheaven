@@ -11,6 +11,7 @@
 import type { Env } from './types'
 import { debitUsage, getBalance } from './credits'
 import { generateShortToken, generateBookedToken, getFreeChannel, getBookedChannel } from './agora'
+import { startCaiAgent, stopCaiAgent } from './agora-cai'
 import {
   HEARTBEAT_INTERVAL_SECONDS,
   TOKEN_TTL_SECONDS,
@@ -38,6 +39,8 @@ interface RoomState {
   channel: string
   chainId: string
   bookingId?: string
+  aiEnabled?: boolean
+  agentId?: string
 }
 
 interface MeterEvent {
@@ -105,6 +108,7 @@ export class RoomDO implements DurableObject {
       channel: string
       chainId: string
       bookingId?: string
+      aiEnabled?: boolean
     }>()
 
     this.room = {
@@ -115,6 +119,7 @@ export class RoomDO implements DurableObject {
       channel: body.channel,
       chainId: body.chainId,
       bookingId: body.bookingId,
+      aiEnabled: body.aiEnabled,
     }
 
     await this.state.storage.put('room', this.room)
@@ -154,6 +159,18 @@ export class RoomDO implements DurableObject {
     const tokenResult = this.room.roomType === 'free'
       ? generateShortToken(this.env.AGORA_APP_ID, this.env.AGORA_APP_CERTIFICATE, this.room.channel, body.agoraUid)
       : generateBookedToken(this.env.AGORA_APP_ID, this.env.AGORA_APP_CERTIFICATE, this.room.channel, body.agoraUid)
+
+    // Start AI agent when first participant joins an AI-enabled room
+    if (this.room.aiEnabled && !this.room.agentId && this.participants.size === 1) {
+      try {
+        const result = await startCaiAgent(this.env, this.room.channel)
+        this.room.agentId = result.agentId
+        await this.state.storage.put('room', this.room)
+      } catch (e) {
+        console.warn('[RoomDO] AI agent start failed (non-blocking):', e)
+        // Don't fail the join — room still works without AI
+      }
+    }
 
     // Start/continue alarm for metering (free rooms only)
     if (this.room.roomType === 'free') {
@@ -257,6 +274,9 @@ export class RoomDO implements DurableObject {
     // If room empty, close
     const closed = this.participants.size === 0
     if (closed) {
+      // Stop AI agent if active
+      await this.stopAgentIfActive()
+
       await this.env.DB.prepare(
         "UPDATE rooms SET status = 'closed', closed_at = ? WHERE room_id = ?",
       ).bind(new Date().toISOString(), this.room.roomId).run()
@@ -310,6 +330,9 @@ export class RoomDO implements DurableObject {
       await this.env.DB.batch(leaveStmts)
     }
 
+    // Stop AI agent if active
+    await this.stopAgentIfActive()
+
     // Clear all participants
     this.participants.clear()
     await this.persistParticipants()
@@ -325,6 +348,7 @@ export class RoomDO implements DurableObject {
 
   /** Hard cleanup for create rollback paths (idempotent). */
   private async handleDestroy(): Promise<Response> {
+    await this.stopAgentIfActive()
     this.participants.clear()
     this.room = null
     await this.state.storage.delete('participants')
@@ -347,6 +371,7 @@ export class RoomDO implements DurableObject {
 
     // Close room if empty (handles disconnects without /leave)
     if (this.participants.size === 0) {
+      await this.stopAgentIfActive()
       await this.env.DB.batch([
         this.env.DB.prepare(
           "UPDATE rooms SET status = 'closed', closed_at = ? WHERE room_id = ? AND status = 'active'",
@@ -374,6 +399,7 @@ export class RoomDO implements DurableObject {
 
     // If eviction emptied the room, close it
     if (this.participants.size === 0) {
+      await this.stopAgentIfActive()
       await this.env.DB.prepare(
         "UPDATE rooms SET status = 'closed', closed_at = ? WHERE room_id = ? AND status = 'active'",
       ).bind(new Date().toISOString(), this.room.roomId).run()
@@ -442,6 +468,14 @@ export class RoomDO implements DurableObject {
       remaining: result.remaining_seconds,
       events,
     }
+  }
+
+  /** Stop AI agent if one is active (idempotent) */
+  private async stopAgentIfActive(): Promise<void> {
+    if (!this.room?.agentId) return
+    await stopCaiAgent(this.env, this.room.agentId)
+    this.room.agentId = undefined
+    await this.state.storage.put('room', this.room)
   }
 
   /** Persist participants to DO storage (fast, survives hibernation) */

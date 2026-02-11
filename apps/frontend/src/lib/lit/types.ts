@@ -19,6 +19,19 @@ export interface AuthData {
   [key: string]: any
 }
 
+export interface LitSessionKeyPair {
+  publicKey: string
+  secretKey: string
+}
+
+export interface LitDelegationAuthSig {
+  sig: string
+  derivedVia: string
+  signedMessage: string
+  address: string
+  algo?: string
+}
+
 /**
  * Auth result from Tauri callback
  */
@@ -32,6 +45,8 @@ export interface AuthResult {
   isNewUser?: boolean
   error?: string
   eoaAddress?: string
+  litSessionKeyPair?: LitSessionKeyPair
+  litDelegationAuthSig?: LitDelegationAuthSig
 }
 
 /**
@@ -45,6 +60,8 @@ export interface PersistedAuth {
   authMethodId?: string
   accessToken?: string
   eoaAddress?: string
+  litSessionKeyPair?: LitSessionKeyPair
+  litDelegationAuthSig?: LitDelegationAuthSig
 }
 
 /**

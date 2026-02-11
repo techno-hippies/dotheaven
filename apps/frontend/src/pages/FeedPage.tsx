@@ -364,7 +364,7 @@ export const FeedPage: Component = () => {
       </Show>
 
       {/* Feed content — centered card column on desktop, full-bleed on mobile */}
-      <div class={!isMobile() ? 'py-4 px-4 flex flex-col gap-3' : ''}>
+      <div class={!isMobile() ? 'py-4 px-4 flex flex-col gap-3 max-w-[680px] mx-auto w-full' : ''}>
         {/* Live rooms row */}
         <div class={cardClass()}>
           <LiveRoomsRow

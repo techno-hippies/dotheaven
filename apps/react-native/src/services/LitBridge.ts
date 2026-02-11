@@ -126,6 +126,19 @@ export class LitBridge {
         return;
       }
 
+      // Forward WebView console messages to Metro
+      if (data.type === 'console') {
+        const prefix = '[WebView]';
+        if (data.level === 'error') {
+          console.error(prefix, data.message);
+        } else if (data.level === 'warn') {
+          console.warn(prefix, data.message);
+        } else {
+          console.log(prefix, data.message);
+        }
+        return;
+      }
+
       // Handle storage requests from WebView
       if (data.type?.startsWith('storage')) {
         this.handleStorageRequest(data);

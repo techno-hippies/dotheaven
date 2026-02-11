@@ -39,11 +39,11 @@ export const MUSIC = '/music'
 /** Chat hub (shows conversation list) */
 export const CHAT = '/chat'
 
-/** Search / discovery page */
-export const SEARCH = '/search'
+/** Community / discovery page */
+export const COMMUNITY = '/community'
 
-/** @deprecated Use SEARCH instead */
-export const COMMUNITY = SEARCH
+/** @deprecated Use COMMUNITY instead */
+export const SEARCH = COMMUNITY
 
 /** Settings page */
 export const SETTINGS = '/settings'

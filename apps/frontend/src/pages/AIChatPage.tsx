@@ -114,12 +114,15 @@ export const AIChatPage: Component = () => {
 
   // Auto-start call when call param is set
   createEffect(() => {
-    if (isCallActive() && voice() && !hasStartedCall() && auth.isAuthenticated()) {
+    const active = isCallActive()
+    const v = voice()
+    const started = hasStartedCall()
+    const authed = auth.isAuthenticated()
+    if (active && v && !started && authed) {
       if (IS_DEV) console.log('[AIChatPage] Starting voice call...')
       setHasStartedCall(true)
-      // Delay to let hook initialize
-      const timer = window.setTimeout(() => voice()?.startCall(), 100)
-      onCleanup(() => clearTimeout(timer))
+      // Use queueMicrotask to escape the reactive tracking scope
+      queueMicrotask(() => v.startCall())
     }
   })
 
@@ -282,8 +285,9 @@ export const AIChatPage: Component = () => {
 
   return (
     <div class="h-full flex flex-col">
-      {/* Chat header */}
-      <div class="flex items-center justify-between px-4 h-16 border-b border-[var(--border-subtle)] flex-shrink-0">
+      {/* Chat header — full-width border, content constrained */}
+      <div class="border-b border-[var(--border-subtle)] flex-shrink-0">
+      <div class="flex items-center justify-between px-4 h-16 max-w-4xl mx-auto">
             <div class="flex items-center gap-3">
               {/* Back button on mobile */}
               <Show when={isMobile()}>
@@ -361,8 +365,10 @@ export const AIChatPage: Component = () => {
               </div>
             </Show>
           </div>
+      </div>
 
-          {/* Messages */}
+      {/* Messages + Input — constrained */}
+      <div class="flex-1 flex flex-col overflow-hidden max-w-4xl mx-auto w-full">
           <div ref={messagesContainer} class="flex-1 overflow-y-auto">
             <MessageList>
               <Show when={messages().length === 0}>
@@ -395,12 +401,12 @@ export const AIChatPage: Component = () => {
             </MessageList>
           </div>
 
-          {/* Input */}
-      <MessageInput
-        placeholder={`Message ${p.name}...`}
-        onSubmit={handleSendMessage}
-        disabled={isSending()}
-      />
+          <MessageInput
+            placeholder={`Message ${p.name}...`}
+            onSubmit={handleSendMessage}
+            disabled={isSending()}
+          />
+      </div>
     </div>
   )
 }

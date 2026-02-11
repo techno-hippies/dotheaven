@@ -1,7 +1,8 @@
 import React from 'react';
-import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Image, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { User } from 'phosphor-react-native';
-import { colors, radii } from '../lib/theme';
+import { colors } from '../lib/theme';
+import { CountryFlag } from './CountryFlag';
 
 export type AvatarSize = 'sm' | 'md' | 'lg' | 'xl' | '2xl';
 
@@ -29,21 +30,14 @@ const BADGE_SIZE_MAP: Record<AvatarSize, number> = {
   '2xl': 28,
 };
 
-const BADGE_FONT_MAP: Record<AvatarSize, number> = {
-  sm: 8,
-  md: 9,
-  lg: 10,
-  xl: 13,
-  '2xl': 16,
+/** Flag SVG size relative to badge container */
+const FLAG_SIZE_MAP: Record<AvatarSize, number> = {
+  sm: 14,
+  md: 16,
+  lg: 18,
+  xl: 22,
+  '2xl': 28,
 };
-
-/** Convert ISO 3166-1 alpha-2 code to emoji flag via regional indicator symbols. */
-function countryCodeToEmoji(code: string): string {
-  const upper = code.toUpperCase();
-  if (upper.length !== 2) return '';
-  const offset = 0x1f1e6 - 65; // 'A' = 65
-  return String.fromCodePoint(upper.charCodeAt(0) + offset, upper.charCodeAt(1) + offset);
-}
 
 export interface AvatarProps {
   /** Image URI */
@@ -54,6 +48,10 @@ export interface AvatarProps {
   nationalityCode?: string;
   /** Custom fallback icon (defaults to User) */
   fallbackIcon?: React.ReactNode;
+  /** Border width applied to the image/fallback circle (not the outer container) */
+  borderWidth?: number;
+  /** Border color applied to the image/fallback circle */
+  borderColor?: string;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -62,23 +60,28 @@ export const Avatar: React.FC<AvatarProps> = ({
   size = 'md',
   nationalityCode,
   fallbackIcon,
+  borderWidth: bw,
+  borderColor: bc,
   style,
 }) => {
   const dim = SIZE_MAP[size];
   const iconSize = ICON_SIZE_MAP[size];
   const badgeSize = BADGE_SIZE_MAP[size];
-  const badgeFont = BADGE_FONT_MAP[size];
+  const flagSize = FLAG_SIZE_MAP[size];
   const borderRadius = dim / 2;
 
+
+  const borderStyle = bw ? { borderWidth: bw, borderColor: bc ?? colors.bgPage } : undefined;
+
   return (
-    <View style={[{ width: dim, height: dim }, style]}>
+    <View style={[{ width: dim, height: dim, overflow: 'visible' }, style]}>
       {src ? (
         <Image
           source={{ uri: src }}
-          style={[styles.image, { width: dim, height: dim, borderRadius }]}
+          style={[styles.image, { width: dim, height: dim, borderRadius }, borderStyle]}
         />
       ) : (
-        <View style={[styles.fallback, { width: dim, height: dim, borderRadius }]}>
+        <View style={[styles.fallback, { width: dim, height: dim, borderRadius }, borderStyle]}>
           {fallbackIcon ?? <User size={iconSize} color={colors.textMuted} />}
         </View>
       )}
@@ -94,9 +97,7 @@ export const Avatar: React.FC<AvatarProps> = ({
             },
           ]}
         >
-          <Text style={{ fontSize: badgeFont, lineHeight: badgeSize }} allowFontScaling={false}>
-            {countryCodeToEmoji(nationalityCode)}
-          </Text>
+          <CountryFlag code={nationalityCode} size={flagSize} />
         </View>
       ) : null}
     </View>

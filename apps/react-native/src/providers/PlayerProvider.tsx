@@ -1,15 +1,20 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Audio, type AVPlaybackStatus } from 'expo-av';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createScrobbleService, type ScrobbleService } from '../services/scrobble-service';
 import { useLitBridge } from './LitProvider';
 import { useAuth } from './AuthProvider';
 import type { MusicTrack } from '../services/music-scanner';
+
+const RECENT_TRACKS_KEY = 'heaven:recent-tracks';
+const MAX_RECENT_TRACKS = 30;
 
 interface PlayerCoreContextValue {
   currentTrack: MusicTrack | null;
   isPlaying: boolean;
   queue: MusicTrack[];
   queueIndex: number;
+  recentTracks: MusicTrack[];
   playTrack: (track: MusicTrack, allTracks: MusicTrack[]) => Promise<void>;
   togglePlayPause: () => Promise<void>;
   skipNext: () => Promise<void>;
@@ -34,6 +39,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [queueIndex, setQueueIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState<PlayerProgressState>({ position: 0, duration: 0 });
+  const [recentTracks, setRecentTracks] = useState<MusicTrack[]>([]);
 
   const soundRef = useRef<Audio.Sound | null>(null);
   const scrobbleServiceRef = useRef<ScrobbleService | null>(null);
@@ -68,6 +74,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
 
+  // Load recent tracks from storage
+  useEffect(() => {
+    AsyncStorage.getItem(RECENT_TRACKS_KEY).then((stored) => {
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) setRecentTracks(parsed);
+        } catch {}
+      }
+    });
+  }, []);
+
   // Initialize audio mode and scrobble service
   useEffect(() => {
     Audio.setAudioModeAsync({
@@ -77,10 +95,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     const service = createScrobbleService(
-      () => authRef.current.createAuthContext(),
+      (options) => authRef.current.createAuthContext(options),
       () => authRef.current.ethAddress,
       () => authRef.current.pkpPubkey,
       () => authRef.current.bridge,
+      (options) => authRef.current.createAuthContext(options),
     );
     scrobbleServiceRef.current = service;
     service.start();
@@ -128,6 +147,13 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setIsPlaying(true);
       setProgress({ position: 0, duration: track.duration ?? 0 });
       isPlayingRef.current = true;
+
+      // Update recent tracks
+      setRecentTracks((prev) => {
+        const next = [track, ...prev.filter((t) => t.id !== track.id)].slice(0, MAX_RECENT_TRACKS);
+        AsyncStorage.setItem(RECENT_TRACKS_KEY, JSON.stringify(next)).catch(() => {});
+        return next;
+      });
 
       // Feed scrobble service
       scrobbleServiceRef.current?.onTrackStart({
@@ -227,6 +253,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     isPlaying,
     queue,
     queueIndex,
+    recentTracks,
     playTrack,
     togglePlayPause,
     skipNext,
@@ -237,6 +264,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     isPlaying,
     queue,
     queueIndex,
+    recentTracks,
     playTrack,
     togglePlayPause,
     skipNext,

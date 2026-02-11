@@ -32,9 +32,7 @@ export const AppShell: Component<AppShellProps> = (props) => {
   return (
     <div
       class={cn(
-        'flex flex-col h-[var(--vh-screen,100vh)] bg-[var(--bg-page)] text-white overflow-hidden',
-        // On desktop, cap width and center
-        'lg:max-w-[1440px] lg:mx-auto lg:w-full',
+        'flex flex-col h-[var(--vh-screen,100vh)] bg-[var(--bg-page)] text-white overflow-hidden w-full',
         props.class
       )}
     >

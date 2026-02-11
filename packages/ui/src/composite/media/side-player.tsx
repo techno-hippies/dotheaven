@@ -5,8 +5,7 @@ import { AlbumCover } from './album-cover'
 import { Scrubber } from './scrubber'
 import { IconButton } from '../../primitives/icon-button'
 import { PlayButton } from '../../primitives/play-button'
-import { DotsThree, MagnifyingGlass, Shuffle, SkipBackFill, SkipForwardFill, Repeat } from '../../icons'
-import { TextField } from '../../primitives/text-field'
+import { DotsThree, Shuffle, SkipBackFill, SkipForwardFill, Repeat } from '../../icons'
 import type { TrackMenuActions } from './track-list'
 import {
   DropdownMenu,
@@ -42,14 +41,6 @@ export interface SidePlayerProps {
   track?: { id: string; title: string; artist: string; album: string; albumCover?: string; duration?: string }
   /** Direct callback for clicking the artist name */
   onArtistClick?: () => void
-  /** Search query value (controlled) */
-  searchQuery?: string
-  /** Callback when search query changes */
-  onSearchChange?: (query: string) => void
-  /** Callback when search is submitted (Enter key) */
-  onSearchSubmit?: (query: string) => void
-  /** Placeholder text for search field */
-  searchPlaceholder?: string
   /** Fallback text when no track is playing */
   noTrackText?: string
   /** Fallback text when artist is unknown */
@@ -71,23 +62,8 @@ export interface SidePlayerProps {
 export const SidePlayer: Component<SidePlayerProps> = (props) => {
   return (
     <div class={cn('flex flex-col h-full', props.class)}>
-      {/* Search bar */}
-      <Show when={props.onSearchChange}>
-        <div class="px-4 pt-4 pb-2">
-          <TextField
-            value={props.searchQuery ?? ''}
-            onChange={(v) => props.onSearchChange?.(v)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') props.onSearchSubmit?.(props.searchQuery ?? '')
-            }}
-            placeholder={props.searchPlaceholder ?? "Search songs, people, rooms..."}
-            icon={<MagnifyingGlass class="w-4 h-4" />}
-          />
-        </div>
-      </Show>
-
       {/* Album Art */}
-      <div class="px-4 pt-2">
+      <div class="px-4 pt-4">
         <div class="w-full aspect-square rounded-md overflow-hidden bg-[var(--bg-elevated)]">
           <Show
             when={props.coverSrc}

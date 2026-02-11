@@ -1,4 +1,4 @@
-import { createWalletClient, custom, getAddress, type WalletClient } from 'viem'
+import { createWalletClient, custom, getAddress, keccak256, stringToBytes, type WalletClient } from 'viem'
 import { mainnet } from 'viem/chains'
 import { WalletClientAuthenticator } from '@lit-protocol/auth'
 import { getLitClient } from './client'
@@ -8,10 +8,95 @@ import type { PKPInfo, AuthData } from './types'
 const LIT_SPONSORSHIP_API_URL =
   import.meta.env.VITE_LIT_SPONSORSHIP_API_URL || 'https://lit-relayer.vercel.app'
 
-/**
- * Connect to an injected wallet (MetaMask, Rabby, etc.) via window.ethereum.
- * Returns a viem WalletClient with account set for use with Lit's WalletClientAuthenticator.
- */
+const AUTH_METHOD_TYPE_ETH_WALLET = 1
+
+// Legacy behavior: some old PKPs were minted with authMethodId=address.toLowerCase()
+// Enable only for compatibility when needed.
+const ENABLE_LEGACY_EOA_AUTH_FALLBACK =
+  import.meta.env.VITE_LIT_EOA_LEGACY_AUTH_FALLBACK === 'true'
+
+function deriveEoaAuthMethodId(address: `0x${string}`): `0x${string}` {
+  const checksumAddress = getAddress(address)
+  return keccak256(stringToBytes(`${checksumAddress}:lit`))
+}
+
+function deriveLegacyEoaAuthMethodId(address: `0x${string}`): `0x${string}` {
+  return address.toLowerCase() as `0x${string}`
+}
+
+function asBigInt(value: unknown): bigint {
+  try {
+    if (typeof value === 'bigint') return value
+    return BigInt(String(value))
+  } catch {
+    return 0n
+  }
+}
+
+function tokenIdEquals(a: unknown, b: unknown): boolean {
+  return asBigInt(a) === asBigInt(b)
+}
+
+function pickLatestPkp(pkps: any[]) {
+  if (pkps.length <= 1) return pkps[0]
+  return [...pkps].sort((a, b) => {
+    const aTokenId = asBigInt(a?.tokenId)
+    const bTokenId = asBigInt(b?.tokenId)
+    if (aTokenId === bTokenId) return 0
+    return aTokenId > bTokenId ? -1 : 1
+  })[0]
+}
+
+async function findPkpsByEoa(
+  litClient: Awaited<ReturnType<typeof getLitClient>>,
+  canonicalAuthMethodId: `0x${string}`,
+  address: `0x${string}`,
+) {
+  const queryByAuthMethodId = (authMethodId: `0x${string}`) =>
+    litClient.viewPKPsByAuthData({
+      authData: {
+        authMethodType: AUTH_METHOD_TYPE_ETH_WALLET,
+        authMethodId,
+      },
+      pagination: { limit: 10, offset: 0 },
+    })
+
+  let pkpsResult = await queryByAuthMethodId(canonicalAuthMethodId)
+  const primaryCount = pkpsResult?.pkps?.length ?? 0
+  console.log('[Lit] Canonical authMethodId lookup result:', primaryCount, 'PKPs')
+
+  if (primaryCount > 0) {
+    return {
+      pkpsResult,
+      matchedAuthMethodId: canonicalAuthMethodId,
+      usedLegacyFallback: false,
+    }
+  }
+
+  const legacyAuthMethodId = deriveLegacyEoaAuthMethodId(address)
+  if (!ENABLE_LEGACY_EOA_AUTH_FALLBACK || legacyAuthMethodId === canonicalAuthMethodId) {
+    if (!ENABLE_LEGACY_EOA_AUTH_FALLBACK) {
+      console.log('[Lit] Legacy EOA auth fallback disabled; skipping raw-address lookup')
+    }
+    return {
+      pkpsResult,
+      matchedAuthMethodId: canonicalAuthMethodId,
+      usedLegacyFallback: false,
+    }
+  }
+
+  console.warn('[Lit] No PKP found for canonical authMethodId, trying legacy raw-address fallback')
+  pkpsResult = await queryByAuthMethodId(legacyAuthMethodId)
+  const fallbackCount = pkpsResult?.pkps?.length ?? 0
+  console.log('[Lit] Legacy fallback lookup result:', fallbackCount, 'PKPs')
+
+  return {
+    pkpsResult,
+    matchedAuthMethodId: fallbackCount > 0 ? legacyAuthMethodId : canonicalAuthMethodId,
+    usedLegacyFallback: fallbackCount > 0,
+  }
+}
+
 /**
  * Connect to an injected wallet (MetaMask, Rabby, etc.) via window.ethereum.
  * Returns a viem WalletClient with account set for use with Lit's WalletClientAuthenticator.
@@ -105,28 +190,37 @@ export async function registerWithEOA(externalWalletClient?: WalletClient): Prom
 
   console.log('[Lit] ✓ PKP registration complete')
 
-  // Ensure authData authMethodId aligns with on-chain auth method if needed
+  const expectedAuthMethodId = deriveEoaAuthMethodId(address as `0x${string}`)
+  console.log('[Lit] Expected EOA authMethodId:', expectedAuthMethodId)
+  console.log('[Lit] Authenticator authMethodId:', authData.authMethodId)
+
+  // Ensure authData authMethodId aligns with on-chain auth method when using legacy fallback
   const litClient = await getLitClient()
-  let pkpsResult = await litClient.viewPKPsByAuthData({
-    authData: {
-      authMethodType: 1,
-      authMethodId: authData.authMethodId,
-    },
-    pagination: { limit: 5, offset: 0 },
-  })
-  if (!pkpsResult?.pkps?.length) {
-    const fallbackId = address.toLowerCase()
-    if (fallbackId !== authData.authMethodId) {
-      console.warn('[Lit] No PKP found for authMethodId hash after register, retrying with address...')
-      pkpsResult = await litClient.viewPKPsByAuthData({
+  const lookup = await findPkpsByEoa(
+    litClient,
+    authData.authMethodId as `0x${string}`,
+    address as `0x${string}`,
+  )
+  if (lookup.usedLegacyFallback) {
+    console.warn('[Lit] Using legacy raw-address authMethodId compatibility mode')
+    authData.authMethodId = lookup.matchedAuthMethodId
+  } else if (!lookup.pkpsResult?.pkps?.length) {
+    // Rollout compatibility: if relayer is still on legacy authMethodId format,
+    // detect the just-minted PKP under raw-address mapping and align authData.
+    const legacyAuthMethodId = deriveLegacyEoaAuthMethodId(address as `0x${string}`)
+    if (legacyAuthMethodId !== authData.authMethodId) {
+      const legacyLookup = await litClient.viewPKPsByAuthData({
         authData: {
-          authMethodType: 1,
-          authMethodId: fallbackId,
+          authMethodType: AUTH_METHOD_TYPE_ETH_WALLET,
+          authMethodId: legacyAuthMethodId,
         },
-        pagination: { limit: 5, offset: 0 },
+        pagination: { limit: 10, offset: 0 },
       })
-      if (pkpsResult?.pkps?.length) {
-        authData.authMethodId = fallbackId
+      const includesMintedPkp =
+        legacyLookup?.pkps?.some((pkp: any) => tokenIdEquals(pkp?.tokenId, pkpInfo.tokenId)) ?? false
+      if (includesMintedPkp) {
+        console.warn('[Lit] Detected legacy relayer authMethodId format for this new PKP; using raw-address authMethodId for this session')
+        authData.authMethodId = legacyAuthMethodId
       }
     }
   }
@@ -176,31 +270,20 @@ export async function authenticateWithEOA(externalWalletClient?: WalletClient): 
   const litClient = await getLitClient()
   console.log('[Lit] ✓ Lit client ready')
 
-  // Prefer authMethodId derived from the SIWE authSig; fall back to raw address if needed
-  let pkpsResult = await litClient.viewPKPsByAuthData({
-    authData: {
-      authMethodType: 1, // AUTH_METHOD_TYPE_ETH_WALLET
-      authMethodId: authData.authMethodId,
-    },
-    pagination: { limit: 5, offset: 0 },
-  })
+  const expectedAuthMethodId = deriveEoaAuthMethodId(address as `0x${string}`)
+  console.log('[Lit] Expected EOA authMethodId:', expectedAuthMethodId)
+  console.log('[Lit] Authenticator authMethodId:', authData.authMethodId)
+  console.log('[Lit] Legacy auth fallback enabled:', ENABLE_LEGACY_EOA_AUTH_FALLBACK)
 
-  if (!pkpsResult?.pkps?.length) {
-    const fallbackId = address.toLowerCase()
-    if (fallbackId !== authData.authMethodId) {
-      console.warn('[Lit] No PKP found for authMethodId hash, retrying with address...')
-      pkpsResult = await litClient.viewPKPsByAuthData({
-        authData: {
-          authMethodType: 1,
-          authMethodId: fallbackId,
-        },
-        pagination: { limit: 5, offset: 0 },
-      })
-      if (pkpsResult?.pkps?.length) {
-        // Align authData with the auth method ID that matched on-chain
-        authData.authMethodId = fallbackId
-      }
-    }
+  const lookup = await findPkpsByEoa(
+    litClient,
+    authData.authMethodId as `0x${string}`,
+    address as `0x${string}`,
+  )
+  const pkpsResult = lookup.pkpsResult
+  if (lookup.usedLegacyFallback) {
+    console.warn('[Lit] Using legacy raw-address authMethodId compatibility mode')
+    authData.authMethodId = lookup.matchedAuthMethodId
   }
 
   console.log('[Lit] Found PKPs for EOA:', pkpsResult)
@@ -209,7 +292,10 @@ export async function authenticateWithEOA(externalWalletClient?: WalletClient): 
     throw new Error('No PKP found for this wallet. Please register first.')
   }
 
-  const pkp = pkpsResult.pkps[0]
+  const pkp = pickLatestPkp(pkpsResult.pkps)
+  if ((pkpsResult.pkps?.length ?? 0) > 1) {
+    console.warn('[Lit] Multiple PKPs found for auth method; selecting latest tokenId:', pkp?.tokenId?.toString?.() ?? pkp?.tokenId)
+  }
   const pkpInfo: PKPInfo = {
     publicKey: pkp.pubkey,
     ethAddress: pkp.ethAddress as `0x${string}`,

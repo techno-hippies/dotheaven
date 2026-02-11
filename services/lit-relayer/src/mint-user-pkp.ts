@@ -51,6 +51,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { createLitClient } = await import('@lit-protocol/lit-client')
     const { nagaDev, nagaTest } = await import('@lit-protocol/networks')
     const { privateKeyToAccount } = await import('viem/accounts')
+    const { getAddress, keccak256, stringToBytes } = await import('viem')
 
     // Determine network
     const networkName = (process.env.LIT_NETWORK || 'naga-dev').trim()
@@ -86,9 +87,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       account: relayerAccount,
     })
 
+    const checksumAddress = getAddress(userAddress as `0x${string}`)
+    const authMethodId = keccak256(stringToBytes(`${checksumAddress}:lit`))
+    console.log(`[mint-user-pkp] EOA checksum address: ${checksumAddress}`)
+    console.log(`[mint-user-pkp] EOA authMethodId: ${authMethodId}`)
+
     await permissionsManager.addPermittedAuthMethod({
       authMethodType: AUTH_METHOD_TYPE_ETH_WALLET,
-      authMethodId: userAddress.toLowerCase(),
+      authMethodId,
       userPubkey: '0x',
       scopes: ['sign-anything'],
     })

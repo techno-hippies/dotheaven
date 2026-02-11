@@ -64,10 +64,18 @@ export interface CommunityMember {
 
 // ── Subgraph query ─────────────────────────────────────────────
 
+/** Gender string → subgraph enum number */
+const GENDER_TO_NUM: Record<string, number> = {
+  woman: 1, man: 2, 'non-binary': 3, 'trans-woman': 4,
+  'trans-man': 5, intersex: 6, other: 7,
+};
+
 export interface FetchMembersOpts {
   first?: number;
   skip?: number;
   locationCityId?: string;
+  /** Gender filter key (e.g. "woman", "man") — subgraph-level */
+  gender?: string;
 }
 
 export async function fetchCommunityMembers(
@@ -79,6 +87,9 @@ export async function fetchCommunityMembers(
   const conditions: string[] = [];
   if (opts.locationCityId) {
     conditions.push(`locationCityId: "${opts.locationCityId}"`);
+  }
+  if (opts.gender && GENDER_TO_NUM[opts.gender]) {
+    conditions.push(`gender: ${GENDER_TO_NUM[opts.gender]}`);
   }
   const where =
     conditions.length > 0 ? `where: { ${conditions.join(', ')} }` : '';

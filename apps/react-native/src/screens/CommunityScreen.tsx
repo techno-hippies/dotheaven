@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useCallback, useState, useContext } from 'react';
 import {
   FlatList,
   RefreshControl,
@@ -6,31 +6,40 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Users } from 'phosphor-react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { SlidersHorizontal, Users } from 'phosphor-react-native';
 import { MobileHeader } from '../components/MobileHeader';
 import { CommunityCard } from '../components/CommunityCard';
+import {
+  CommunityFilterSheet,
+  countActiveFilters,
+  type CommunityFilters,
+} from '../components/CommunityFilterSheet';
 import { useAuth } from '../providers/AuthProvider';
-import { DrawerContext } from '../navigation/TabNavigator';
+import { DrawerContext } from '../navigation/DrawerContext';
+import type { RootStackParamList } from '../navigation/TabNavigator';
 import type { CommunityMember } from '../lib/community';
 import { colors, fontSize } from '../lib/theme';
-import { Spinner, TabBar } from '../ui';
+import { IconButton, Spinner } from '../ui';
 import { useCommunity } from '../hooks/useCommunity';
-
-type CommunityTab = 'all' | 'nearby';
 
 export const CommunityScreen: React.FC = () => {
   const { isAuthenticated, pkpInfo } = useAuth();
   const drawer = useContext(DrawerContext);
-  const [activeTab, setActiveTab] = useState<CommunityTab>('all');
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [filters, setFilters] = useState<CommunityFilters>({});
+  const [filterOpen, setFilterOpen] = useState(false);
   const { members, loading, refreshing, refresh } = useCommunity({
-    activeTab,
+    filters,
     userAddress: pkpInfo?.ethAddress,
   });
 
-  const handleTabChange = (tab: CommunityTab) => {
-    if (tab === activeTab) return;
-    setActiveTab(tab);
-  };
+  const activeCount = countActiveFilters(filters);
+
+  const handleCardPress = useCallback((address: string) => {
+    navigation.navigate('PublicProfile', { address });
+  }, [navigation]);
 
   const renderCard = ({ item }: { item: CommunityMember }) => (
     <CommunityCard
@@ -41,6 +50,7 @@ export const CommunityScreen: React.FC = () => {
       gender={item.gender}
       location={item.location}
       style={styles.card}
+      onPress={() => handleCardPress(item.address)}
     />
   );
 
@@ -50,15 +60,23 @@ export const CommunityScreen: React.FC = () => {
         title="Community"
         isAuthenticated={isAuthenticated}
         onAvatarPress={drawer.open}
-      />
-
-      <TabBar
-        tabs={[
-          { key: 'all', label: 'All' },
-          { key: 'nearby', label: 'Nearby' },
-        ]}
-        activeTab={activeTab}
-        onTabPress={(key) => handleTabChange(key as CommunityTab)}
+        rightSlot={
+          <View>
+            <IconButton
+              variant="soft"
+              size="md"
+              accessibilityLabel="Filter"
+              onPress={() => setFilterOpen(true)}
+            >
+              <SlidersHorizontal size={20} color={colors.textSecondary} />
+            </IconButton>
+            {activeCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{activeCount}</Text>
+              </View>
+            )}
+          </View>
+        }
       />
 
       {/* Content */}
@@ -88,6 +106,13 @@ export const CommunityScreen: React.FC = () => {
           }
         />
       )}
+
+      <CommunityFilterSheet
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        filters={filters}
+        onFiltersChange={setFilters}
+      />
     </View>
   );
 };
@@ -114,5 +139,22 @@ const styles = StyleSheet.create({
   },
   card: {
     // Individual card styles are in CommunityCard — this is for list spacing
+  },
+  badge: {
+    position: 'absolute',
+    top: -2,
+    right: -4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: colors.accentCoral,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.white,
   },
 });

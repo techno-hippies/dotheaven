@@ -210,7 +210,9 @@ async function signUserOpHash(
     },
   }, 120_000)
 
-  const strip0x = (hex: string): string => (hex.startsWith('0x') ? hex.slice(2) : hex)
+  console.log('[AA] Lit Action result:', JSON.stringify(result, null, 2))
+
+  const strip0x = (hex: string): string => (hex?.startsWith('0x') ? hex.slice(2) : hex || '')
 
   const sig = result.signatures?.sig as any
   if (!sig) {
@@ -221,6 +223,8 @@ async function signUserOpHash(
       `No signature returned from PKP for userOpHash (response=${responseStr || 'empty'})`,
     )
   }
+
+  console.log('[AA] Signature object:', JSON.stringify(sig, null, 2))
 
   let r: string
   let s: string

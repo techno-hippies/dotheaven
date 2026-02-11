@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native';
 import { MusicNote, DotsThree } from 'phosphor-react-native';
 import { colors } from '../lib/theme';
@@ -9,9 +9,30 @@ interface TrackItemProps {
   isActive: boolean;
   isPlaying: boolean;
   onPress: () => void;
+  onMenuPress?: () => void;
 }
 
-export const TrackItem: React.FC<TrackItemProps> = React.memo(({ track, isActive, isPlaying, onPress }) => {
+export const TrackItem: React.FC<TrackItemProps> = React.memo(({ track, isActive, isPlaying, onPress, onMenuPress }) => {
+  const [artworkUri, setArtworkUri] = useState<string | undefined>(track.artworkUri);
+  const [artworkFailed, setArtworkFailed] = useState(false);
+
+  useEffect(() => {
+    setArtworkUri(track.artworkUri);
+    setArtworkFailed(false);
+  }, [track.id, track.artworkUri, track.artworkFallbackUri]);
+
+  const handleArtworkError = useCallback(() => {
+    if (
+      artworkUri === track.artworkUri &&
+      track.artworkFallbackUri &&
+      track.artworkFallbackUri !== artworkUri
+    ) {
+      setArtworkUri(track.artworkFallbackUri);
+      return;
+    }
+    setArtworkFailed(true);
+  }, [artworkUri, track.artworkUri, track.artworkFallbackUri]);
+
   return (
     <TouchableOpacity
       style={[styles.container, isActive && styles.active]}
@@ -20,8 +41,12 @@ export const TrackItem: React.FC<TrackItemProps> = React.memo(({ track, isActive
     >
       {/* Album cover placeholder */}
       <View style={styles.albumCover}>
-        {track.artworkUri ? (
-          <Image source={{ uri: track.artworkUri }} style={styles.albumArtImage} />
+        {artworkUri && !artworkFailed ? (
+          <Image
+            source={{ uri: artworkUri }}
+            style={styles.albumArtImage}
+            onError={handleArtworkError}
+          />
         ) : (
           <MusicNote
             size={20}
@@ -42,9 +67,17 @@ export const TrackItem: React.FC<TrackItemProps> = React.memo(({ track, isActive
       </View>
 
       {/* Menu button */}
-      <View style={styles.menuButton}>
+      <TouchableOpacity
+        style={styles.menuButton}
+        onPress={(e) => {
+          e.stopPropagation();
+          onMenuPress?.();
+        }}
+        activeOpacity={0.7}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
         <DotsThree size={20} color={colors.textSecondary} weight="bold" />
-      </View>
+      </TouchableOpacity>
     </TouchableOpacity>
   );
 });

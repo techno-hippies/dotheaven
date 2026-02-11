@@ -36,14 +36,10 @@ export interface PKPInfo {
 const IS_DEV = import.meta.env.DEV
 
 // Session voice service URL
-// In dev: local Bun service on port 3338
-// In production: deployed service URL
-const SESSION_VOICE_URL = import.meta.env.VITE_SESSION_VOICE_URL || (
-  import.meta.env.DEV ? 'http://localhost:3338' : 'https://session-voice.heaven.dev'
-)
+const SESSION_VOICE_URL = import.meta.env.VITE_SESSION_VOICE_URL || 'https://session-voice.deletion-backup782.workers.dev'
 
 // Agora App ID - must match worker config
-export const AGORA_APP_ID = import.meta.env.VITE_AGORA_APP_ID || '3260ad15ace147c88a8bf32da798a114'
+export const AGORA_APP_ID = import.meta.env.VITE_AGORA_APP_ID || 'df4fd87bd1bf4dc9891dbb8626b5b1c5'
 
 // =============================================================================
 // Types

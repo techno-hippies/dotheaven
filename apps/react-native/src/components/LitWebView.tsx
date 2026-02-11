@@ -57,11 +57,36 @@ export const LitWebView: React.FC<LitWebViewProps> = ({
   });
   const allowedPrefix = 'https://appassets.androidplatform.net/assets/';
 
+  // Inject console forwarder so WebView logs appear in Metro
+  const consoleForwarder = `
+    (function() {
+      var origLog = console.log;
+      var origWarn = console.warn;
+      var origError = console.error;
+      function fwd(level, args) {
+        try {
+          var msg = Array.prototype.map.call(args, function(a) {
+            return typeof a === 'object' ? JSON.stringify(a) : String(a);
+          }).join(' ');
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'console', level: level, message: msg }));
+          }
+        } catch(e) {}
+        return msg;
+      }
+      console.log = function() { fwd('log', arguments); origLog.apply(console, arguments); };
+      console.warn = function() { fwd('warn', arguments); origWarn.apply(console, arguments); };
+      console.error = function() { fwd('error', arguments); origError.apply(console, arguments); };
+    })();
+    true;
+  `;
+
   return (
     <View style={debug ? styles.debugContainer : styles.hiddenContainer} pointerEvents="none">
       <WebView
         ref={webViewRef}
         source={{ uri: sourceUri }}
+        injectedJavaScriptBeforeContentLoaded={consoleForwarder}
         onMessage={(event) => bridge.handleMessage(event)}
         onError={(syntheticEvent) => {
           const { nativeEvent } = syntheticEvent;

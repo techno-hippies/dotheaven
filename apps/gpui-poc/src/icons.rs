@@ -1,4 +1,4 @@
-use gpui::{AssetSource, IntoElement, RenderOnce, SharedString, Window, App};
+use gpui::{App, AssetSource, IntoElement, RenderOnce, SharedString, Window};
 use gpui_component::{Icon, IconNamed};
 use rust_embed::RustEmbed;
 use std::borrow::Cow;
@@ -34,6 +34,9 @@ pub enum PhosphorIcon {
     MusicNote,
     VinylRecord,
     SortAscending,
+    PaperPlaneRight,
+    ArrowLeft,
+    PencilSimple,
 }
 
 impl IconNamed for PhosphorIcon {
@@ -67,6 +70,9 @@ impl IconNamed for PhosphorIcon {
             Self::MusicNote => "icons/music-note.svg",
             Self::VinylRecord => "icons/vinyl-record.svg",
             Self::SortAscending => "icons/sort-ascending.svg",
+            Self::PaperPlaneRight => "icons/paper-plane-right.svg",
+            Self::ArrowLeft => "icons/arrow-left.svg",
+            Self::PencilSimple => "icons/pencil-simple.svg",
         }
         .into()
     }
@@ -89,6 +95,7 @@ impl RenderOnce for PhosphorIcon {
 /// Embed our custom Phosphor SVGs.
 #[derive(RustEmbed)]
 #[folder = "assets"]
+#[include = "icons/*.svg"]
 #[include = "icons/**/*.svg"]
 pub struct HeavenAssets;
 

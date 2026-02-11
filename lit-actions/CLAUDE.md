@@ -216,12 +216,6 @@ bun data-scripts/ingest-dateme.ts          # Ingest dateme.directory profiles
 2. Run `bun scripts/setup.ts <actionName>` (uploads to IPFS, adds PKP permission, re-encrypts keys)
 3. New CID saved to `cids/dev.json` automatically
 
-## Environment
-
-`LIT_NETWORK` env var controls which Lit network to use:
-- `naga-dev` - Free dev network (default)
-- `naga-test` - Testnet (requires tstLPX)
-
 ## Files
 
 ```

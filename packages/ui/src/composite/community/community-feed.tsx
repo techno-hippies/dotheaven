@@ -54,7 +54,7 @@ export const CommunityFeed: Component<CommunityFeedProps> = (props) => {
                 )
               }
             >
-              <div class="flex flex-col gap-2 p-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:p-4">
+              <div class="flex flex-col gap-2 py-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:py-4">
                 <For each={Array.from({ length: SKELETON_COUNT })}>
                   {() => <SkeletonCard />}
                 </For>
@@ -62,7 +62,7 @@ export const CommunityFeed: Component<CommunityFeedProps> = (props) => {
             </Show>
           }
         >
-          <div class="flex flex-col gap-2 p-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:p-4">
+          <div class="flex flex-col gap-2 py-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:py-4">
             <For each={props.members}>
               {(member) => <CommunityCard {...member} />}
             </For>

@@ -15,7 +15,7 @@ type EncryptedKey = {
 
 /** Encrypted Filebase covers key — bound to the track-cover-v4 action CID (update after redeploy). */
 const FILEBASE_COVERS_ENCRYPTED_KEY: EncryptedKey | null = {
-  ciphertext: 'i0tTxIToqhfsGBNcor4Cg9l0HOazKVVXnqgsLhqcdo25oklruXV1Hup5T4iplOX4MlrQMXcRnX/4bORb8Z5SH12/mTICqUSJkzTUTe0u1COGAaCC+wIzpsZuMPr5M1Tq47EV71obvyJHTWsJynM9++rezl0yvya6CP7EAbed5thvHqArUqCDMubPkCEz3H5OJUwMZsKs6RmAIvPEqdiG11LuA+dBN4PCI41l4n7DDRESfiJ2C0G6OT1I6cBQgG0M7PWMzx9XvmQh7jWhTOCSqFaX/afsNm8fAg==',
+  ciphertext: 'opMNhXZ61OJ8dRKs8zCYQOiK7f5UJlfJPNJaso/2Bky6bku1ixYnrVZYzKZOrzQ1byVbe5HsmVjGyN1OzGvNz+p6rKg/VGYjaKWZ1PB6rAaGAe98dPHRbh+ITU9Eg6FoolrHU064jiaZtG8mmeWI2WU1MsyYQOS5gKqy+7+Zy2VrjqFASSqB4B9gICarqGbGN8khHoFTjirgnZyetJRHz4Iq/K6b8dNriTgL2dSMq2TMKYsl9ghAJRo5iE1olkpLPmdsCteNREtGIiJGZ42ufECUqM9DArkBAg==',
   dataToEncryptHash: '1fb52374f1a4ec4d9f1a263b1355cedecbe3ef9d52425f76c222f2f5d9993d4f',
   accessControlConditions: [{
     conditionType: 'evmBasic',
@@ -24,7 +24,7 @@ const FILEBASE_COVERS_ENCRYPTED_KEY: EncryptedKey | null = {
     chain: 'ethereum',
     method: '',
     parameters: [':currentActionIpfsId'],
-    returnValueTest: { comparator: '=', value: 'QmSVssbAxCr1xp7mKX1VfcJFNJewQfhCZGiPuhyEjGvUC2' },
+    returnValueTest: { comparator: '=', value: TRACK_COVER_V4_CID },
   }],
 }
 

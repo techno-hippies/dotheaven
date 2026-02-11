@@ -23,21 +23,31 @@ import {
   Cloud,
   MagnifyingGlass,
 } from 'phosphor-react-native';
+import { IconButton } from '../ui/IconButton';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MobileHeader } from '../components/MobileHeader';
 import { TrackItem } from '../components/TrackItem';
+import { TrackMenuDrawer } from '../components/TrackMenuDrawer';
+import { AddFundsDrawer } from '../components/AddFundsDrawer';
+import { AddToPlaylistSheet } from '../components/AddToPlaylistSheet';
 import { useAuth } from '../providers/AuthProvider';
 import { usePlayer } from '../providers/PlayerProvider';
-import { DrawerContext } from '../navigation/TabNavigator';
+import { DrawerContext } from '../navigation/DrawerContext';
 import { scanMediaLibrary, extractArtistFromFilename, type MusicTrack } from '../services/music-scanner';
 import { colors, fontSize, radii } from '../lib/theme';
+import { IPFS_GATEWAY } from '../lib/heaven-constants';
+import { fetchUserPlaylists, type OnChainPlaylist } from '../lib/playlists';
+import { getLocalPlaylists, type LocalPlaylist } from '../lib/local-playlists';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../navigation/TabNavigator';
 
 const H_PADDING = 20;
 const CARD_WIDTH = 140;
 const CARD_GAP = 12;
 const TRACKS_STORAGE_KEY = 'heaven:music-tracks';
 
-type MusicView = 'home' | 'library' | 'shared';
+type MusicView = 'home' | 'library' | 'shared' | 'playlists';
 
 // ── Mock data ───────────────────────────────────────────────────────
 
@@ -195,12 +205,73 @@ const SharedTrackRow: React.FC<{
 // SCREEN 1: Music Home
 // ═════════════════════════════════════════════════════════════════════
 
+// ── Unified playlist item for display ─────────────────────────────
+
+interface PlaylistDisplayItem {
+  id: string;
+  name: string;
+  trackCount: number;
+  coverUri: string | null;
+  isLocal: boolean;
+}
+
+function toDisplayItems(
+  local: LocalPlaylist[],
+  onChain: OnChainPlaylist[],
+): PlaylistDisplayItem[] {
+  const items: PlaylistDisplayItem[] = [];
+  for (const lp of local) {
+    items.push({
+      id: lp.id,
+      name: lp.name,
+      trackCount: lp.tracks.length,
+      coverUri: lp.coverUri ?? lp.tracks[0]?.artworkUri ?? null,
+      isLocal: true,
+    });
+  }
+  for (const p of onChain) {
+    items.push({
+      id: p.id,
+      name: p.name,
+      trackCount: p.trackCount,
+      coverUri: p.coverCid
+        ? `${IPFS_GATEWAY}${p.coverCid}?img-width=140&img-height=140&img-format=webp&img-quality=80`
+        : null,
+      isLocal: false,
+    });
+  }
+  return items;
+}
+
+// ── Playlist Card (horizontal scroll) ──────────────────────────────
+
+const PlaylistCard: React.FC<{
+  playlist: PlaylistDisplayItem;
+  onPress: () => void;
+}> = ({ playlist, onPress }) => (
+  <TouchableOpacity style={styles.albumCard} activeOpacity={0.7} onPress={onPress}>
+    <View style={styles.albumCover}>
+      {playlist.coverUri ? (
+        <Image source={{ uri: playlist.coverUri }} style={styles.albumCoverImage} />
+      ) : (
+        <MusicNotes size={24} color={colors.textMuted} />
+      )}
+    </View>
+    <Text style={styles.albumCardTitle} numberOfLines={1}>{playlist.name}</Text>
+    <Text style={styles.albumCardArtist} numberOfLines={1}>
+      {playlist.trackCount} track{playlist.trackCount !== 1 ? 's' : ''}
+    </Text>
+  </TouchableOpacity>
+);
+
 const MusicHome: React.FC<{
   onNavigate: (view: MusicView) => void;
   trackCount: number;
   sharedCount: number;
   playlistCount: number;
-}> = ({ onNavigate, trackCount, sharedCount, playlistCount }) => (
+  playlists: PlaylistDisplayItem[];
+  onPlaylistPress: (playlist: PlaylistDisplayItem) => void;
+}> = ({ onNavigate, trackCount, sharedCount, playlistCount, playlists, onPlaylistPress }) => (
   <ScrollView
     contentContainerStyle={styles.scrollContent}
     showsVerticalScrollIndicator={false}
@@ -227,6 +298,7 @@ const MusicHome: React.FC<{
         iconBg="#1e3a2a"
         title="Playlists"
         subtitle={`${playlistCount} playlist${playlistCount !== 1 ? 's' : ''}`}
+        onPress={() => onNavigate('playlists')}
       />
     </View>
 
@@ -271,6 +343,30 @@ const MusicHome: React.FC<{
         ))}
       </ScrollView>
     </View>
+
+    {/* Your Playlists */}
+    {playlists.length > 0 && (
+      <View style={styles.section}>
+        <SectionHeader
+          title="Your Playlists"
+          action="See all"
+          onAction={() => onNavigate('playlists')}
+        />
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.hScroll}
+        >
+          {playlists.slice(0, 6).map((pl) => (
+            <PlaylistCard
+              key={pl.id}
+              playlist={pl}
+              onPress={() => onPlaylistPress(pl)}
+            />
+          ))}
+        </ScrollView>
+      </View>
+    )}
   </ScrollView>
 );
 
@@ -283,10 +379,12 @@ const LibraryDetail: React.FC<{
   scanning: boolean;
   onScan: () => void;
   onPlayTrack: (track: MusicTrack) => void;
+  onTrackMenu: (track: MusicTrack) => void;
+  onAddFundsPress: () => void;
   currentTrackId?: string;
   isPlaying: boolean;
   onBack: () => void;
-}> = ({ tracks, scanning, onScan, onPlayTrack, currentTrackId, isPlaying, onBack }) => {
+}> = ({ tracks, scanning, onScan, onPlayTrack, onTrackMenu, onAddFundsPress, currentTrackId, isPlaying, onBack }) => {
   const renderTrackItem = useCallback(({ item }: { item: MusicTrack }) => (
     <TrackItem
       key={item.id}
@@ -294,8 +392,9 @@ const LibraryDetail: React.FC<{
       isActive={currentTrackId === item.id}
       isPlaying={currentTrackId === item.id && isPlaying}
       onPress={() => onPlayTrack(item)}
+      onMenuPress={() => onTrackMenu(item)}
     />
-  ), [currentTrackId, isPlaying, onPlayTrack]);
+  ), [currentTrackId, isPlaying, onPlayTrack, onTrackMenu]);
 
   const keyExtractor = useCallback((item: MusicTrack) => item.id, []);
 
@@ -305,9 +404,14 @@ const LibraryDetail: React.FC<{
         title="Library"
         onBackPress={onBack}
         rightSlot={
-          <TouchableOpacity style={styles.headerSearchBtn} activeOpacity={0.7}>
+          <IconButton
+            variant="soft"
+            size="md"
+            accessibilityLabel="Cloud storage"
+            onPress={onAddFundsPress}
+          >
             <Cloud size={20} color={colors.textSecondary} weight="fill" />
-          </TouchableOpacity>
+          </IconButton>
         }
       />
 
@@ -415,16 +519,91 @@ const SharedWithYou: React.FC<{
 );
 
 // ═════════════════════════════════════════════════════════════════════
+// SCREEN 4: Playlists List
+// ═════════════════════════════════════════════════════════════════════
+
+const PlaylistsList: React.FC<{
+  playlists: PlaylistDisplayItem[];
+  loading: boolean;
+  onPlaylistPress: (playlist: PlaylistDisplayItem) => void;
+  onBack: () => void;
+}> = ({ playlists, loading, onPlaylistPress, onBack }) => {
+  const renderItem = useCallback(({ item }: { item: PlaylistDisplayItem }) => {
+    const coverUri = item.coverUri
+      ? item.coverUri.startsWith('file://') || item.coverUri.startsWith('content://')
+        ? item.coverUri // local URI — use as-is
+        : `${item.coverUri}` // already has IPFS params from toDisplayItems
+      : null;
+
+    return (
+      <TouchableOpacity
+        style={styles.trackRow}
+        activeOpacity={0.7}
+        onPress={() => onPlaylistPress(item)}
+      >
+        <View style={styles.trackRowCover}>
+          {coverUri ? (
+            <Image source={{ uri: coverUri }} style={styles.trackRowCoverImage} />
+          ) : (
+            <MusicNotes size={20} color={colors.textMuted} />
+          )}
+        </View>
+        <View style={styles.trackRowInfo}>
+          <Text style={styles.trackRowTitle} numberOfLines={1}>{item.name}</Text>
+          <Text style={styles.trackRowSubtext} numberOfLines={1}>
+            {item.trackCount} track{item.trackCount !== 1 ? 's' : ''}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }, [onPlaylistPress]);
+
+  return (
+    <View style={styles.flex1}>
+      <MobileHeader title="Playlists" onBackPress={onBack} />
+      {loading ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>Loading playlists...</Text>
+        </View>
+      ) : playlists.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>No playlists yet</Text>
+          <Text style={styles.helperText}>
+            Add tracks to a playlist from the track menu
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={playlists}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.trackListContent}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
+    </View>
+  );
+};
+
+// ═════════════════════════════════════════════════════════════════════
 // Main Component
 // ═════════════════════════════════════════════════════════════════════
 
 export const MusicScreen: React.FC = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, pkpInfo } = useAuth();
   const { currentTrack, isPlaying, playTrack, togglePlayPause } = usePlayer();
   const drawer = useContext(DrawerContext);
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [view, setView] = useState<MusicView>('home');
   const [tracks, setTracks] = useState<MusicTrack[]>([]);
   const [scanning, setScanning] = useState(false);
+  const [trackMenuOpen, setTrackMenuOpen] = useState(false);
+  const [selectedTrack, setSelectedTrack] = useState<MusicTrack | null>(null);
+  const [addFundsOpen, setAddFundsOpen] = useState(false);
+  const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
+  const [localPlaylists, setLocalPlaylists] = useState<LocalPlaylist[]>([]);
+  const [onChainPlaylists, setOnChainPlaylists] = useState<OnChainPlaylist[]>([]);
+  const [playlistsLoading, setPlaylistsLoading] = useState(false);
   const scanningRef = useRef(false);
   const autoSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didInitialSyncRef = useRef(false);
@@ -495,16 +674,97 @@ export const MusicScreen: React.FC = () => {
     void runScan({ silent: true });
   }, [tracks.length, runScan]);
 
+  // Load playlists (local always, on-chain when authenticated)
+  const loadPlaylists = useCallback(async () => {
+    setPlaylistsLoading(true);
+    try {
+      const local = await getLocalPlaylists();
+      setLocalPlaylists(local);
+    } catch (err) {
+      console.warn('[MusicScreen] Failed to load local playlists:', err);
+    }
+    if (isAuthenticated && pkpInfo?.ethAddress) {
+      try {
+        const result = await fetchUserPlaylists(pkpInfo.ethAddress);
+        setOnChainPlaylists(result);
+      } catch (err) {
+        console.warn('[MusicScreen] Failed to fetch on-chain playlists:', err);
+      }
+    }
+    setPlaylistsLoading(false);
+  }, [isAuthenticated, pkpInfo?.ethAddress]);
+
+  useEffect(() => {
+    loadPlaylists();
+  }, [loadPlaylists]);
+
+  const displayPlaylists = toDisplayItems(localPlaylists, onChainPlaylists);
+
   const handlePlayTrack = useCallback(
     (track: MusicTrack) => {
       if (currentTrack?.id === track.id) {
         void togglePlayPause();
-        return;
+      } else {
+        void playTrack(track, tracksRef.current);
       }
-      void playTrack(track, tracksRef.current);
+      // Navigate to full player screen
+      navigation.navigate('Player');
     },
-    [currentTrack, togglePlayPause, playTrack],
+    [currentTrack, togglePlayPause, playTrack, navigation],
   );
+
+  const handleTrackMenu = useCallback((track: MusicTrack) => {
+    setSelectedTrack(track);
+    setTrackMenuOpen(true);
+  }, []);
+
+  const handleAddFundsPress = useCallback(() => {
+    setAddFundsOpen(true);
+  }, []);
+
+  const handleUploadToFilecoin = useCallback((track: MusicTrack) => {
+    console.log('[MusicScreen] Upload to Filecoin:', track);
+    // TODO: Implement upload to Filecoin
+    Alert.alert('Coming Soon', 'Upload to Filecoin will be available soon!');
+  }, []);
+
+  const handleAddToPlaylist = useCallback((track: MusicTrack) => {
+    setSelectedTrack(track);
+    setAddToPlaylistOpen(true);
+  }, []);
+
+  const handlePlaylistPress = useCallback((playlist: PlaylistDisplayItem) => {
+    navigation.navigate('Playlist', { playlistId: playlist.id });
+  }, [navigation]);
+
+  const handlePlaylistSuccess = useCallback((playlistId: string, playlistName: string) => {
+    loadPlaylists();
+    navigation.navigate('Playlist', { playlistId });
+  }, [loadPlaylists, navigation]);
+
+  const handleAddToQueue = useCallback((track: MusicTrack) => {
+    console.log('[MusicScreen] Add to queue:', track);
+    // TODO: Implement add to queue
+    Alert.alert('Coming Soon', 'Add to queue will be available soon!');
+  }, []);
+
+  const handleGoToAlbum = useCallback((track: MusicTrack) => {
+    console.log('[MusicScreen] Go to album:', track);
+    // TODO: Implement go to album
+  }, []);
+
+  const handleGoToArtist = useCallback((track: MusicTrack) => {
+    if (track.artist) {
+      navigation.navigate('Artist', { artistName: track.artist });
+    }
+  }, [navigation]);
+
+  const handleDeposit = useCallback((amount: string) => {
+    console.log('[MusicScreen] Deposit:', amount);
+    // TODO: Implement deposit
+    Alert.alert('Coming Soon', `Deposit $${amount} USDFC will be available soon!`);
+    setAddFundsOpen(false);
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -515,12 +775,14 @@ export const MusicScreen: React.FC = () => {
           isAuthenticated={isAuthenticated}
           onAvatarPress={drawer.open}
           rightSlot={
-            <TouchableOpacity
-              style={styles.headerSearchBtn}
-              activeOpacity={0.7}
+            <IconButton
+              variant="soft"
+              size="md"
+              accessibilityLabel="Search"
+              onPress={() => navigation.navigate('Search')}
             >
               <MagnifyingGlass size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
+            </IconButton>
           }
         />
       )}
@@ -530,7 +792,9 @@ export const MusicScreen: React.FC = () => {
           onNavigate={setView}
           trackCount={tracks.length}
           sharedCount={SHARED_TRACKS.length}
-          playlistCount={0}
+          playlistCount={displayPlaylists.length}
+          playlists={displayPlaylists}
+          onPlaylistPress={handlePlaylistPress}
         />
       )}
 
@@ -540,6 +804,8 @@ export const MusicScreen: React.FC = () => {
           scanning={scanning}
           onScan={handleScan}
           onPlayTrack={handlePlayTrack}
+          onTrackMenu={handleTrackMenu}
+          onAddFundsPress={handleAddFundsPress}
           currentTrackId={currentTrack?.id}
           isPlaying={isPlaying}
           onBack={() => setView('home')}
@@ -549,6 +815,47 @@ export const MusicScreen: React.FC = () => {
       {view === 'shared' && (
         <SharedWithYou onBack={() => setView('home')} />
       )}
+
+      {view === 'playlists' && (
+        <PlaylistsList
+          playlists={displayPlaylists}
+          loading={playlistsLoading}
+          onPlaylistPress={handlePlaylistPress}
+          onBack={() => setView('home')}
+        />
+      )}
+
+      {/* Track Menu Drawer */}
+      <TrackMenuDrawer
+        open={trackMenuOpen}
+        onClose={() => setTrackMenuOpen(false)}
+        track={selectedTrack}
+        onUploadToFilecoin={handleUploadToFilecoin}
+        onAddToPlaylist={handleAddToPlaylist}
+        onAddToQueue={handleAddToQueue}
+        onGoToAlbum={handleGoToAlbum}
+        onGoToArtist={handleGoToArtist}
+      />
+
+      {/* Add Funds Drawer */}
+      <AddFundsDrawer
+        open={addFundsOpen}
+        onClose={() => setAddFundsOpen(false)}
+        currentBalance="$2.50"
+        daysRemaining={45}
+        balanceNum={2.5}
+        monthlyCost="$0.12"
+        loading={false}
+        onDeposit={handleDeposit}
+      />
+
+      {/* Add to Playlist Sheet */}
+      <AddToPlaylistSheet
+        open={addToPlaylistOpen}
+        onClose={() => setAddToPlaylistOpen(false)}
+        track={selectedTrack}
+        onSuccess={handlePlaylistSuccess}
+      />
     </View>
   );
 };
@@ -719,15 +1026,6 @@ const styles = StyleSheet.create({
     color: '#171717',
   },
 
-  // Header search button (Music Home)
-  headerSearchBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.bgElevated,
-  },
 
   // Filter + Sort bar
   filterSortBar: {
@@ -852,5 +1150,43 @@ const styles = StyleSheet.create({
   helperText: {
     fontSize: fontSize.base,
     color: colors.textMuted,
+  },
+
+  // Shared rows (playlists list, matches TrackItem layout)
+  trackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    height: 72,
+    gap: 12,
+  },
+  trackRowCover: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: colors.bgElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  trackRowCoverImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+  },
+  trackRowInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  trackRowTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: colors.textPrimary,
+  },
+  trackRowSubtext: {
+    fontSize: 16,
+    color: colors.textMuted,
+    marginTop: 1,
   },
 });

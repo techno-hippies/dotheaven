@@ -82,7 +82,7 @@ const OPENROUTER_ENCRYPTED_KEY: EncryptedKey = {
 // ── Encrypted keys (bound to lyrics-translate-v1 action CID) ─────
 
 const LYRICS_FILEBASE_ENCRYPTED_KEY: EncryptedKey = {
-  ciphertext: 'hTc9BVulRjf6AY3BEZzfZ/ADNe5sRr3LZF2Ex/6ATB/5U/NEfv8low6Jj0XZkQdhylSSmiYCtm617q+LPphc62XSIMnlVU9wjjVs6YEplw1l+XAaCWOITwMoL3Q6kDk5KR5uaxlZLmXt4giS2yf7pooT20Ta/bRHSvv4QTBUZWG6sMSJRghYBLQ+eoBsgJVZa2rFJBCYp7yaPaVA4RFM2TeWX7RMjGgF6zrVc1vBss+RSIRgYcwC',
+  ciphertext: 'tKYa+oVjx6F2Ja3rm4OWeinfcyENLf3dwSIIMEa7g/XQP/wnGE9nXGiR2JMuXGYpLx03kppJfMdbv25N+yRjORw8KDuKHAMXGZqFbXTmYMxls8tH1zpaHxLlcicKVxIXeReXvSOgJVZ9cELNSMDSByVBNM6ka70jPT6RdFbCrs9mUyQUb0XZaEyzmjTjZ/K2/Uqz7pwkxu+3iBHBnKLCDV8hoBQdXO9CLspRXCycy7LCPNSUpSMC',
   dataToEncryptHash: '23ab539bda3900163da16db23be0e6e6c6003d35bd1ac54aeaada176f8f1e0d4',
   accessControlConditions: [{
     conditionType: 'evmBasic',
@@ -96,7 +96,7 @@ const LYRICS_FILEBASE_ENCRYPTED_KEY: EncryptedKey = {
 }
 
 const LYRICS_OPENROUTER_ENCRYPTED_KEY: EncryptedKey = {
-  ciphertext: 'ode05sCZqoX4Ba6nrsi62JEYUXwz6nfzQhrYAbBFkgnbobLIE3Q47Yr/QTNmMQUsbina8c5q2pdPlxHrf+00z1WlvEC+QCWLT2V0OSoDwt9KJMIqKsY8eEYhbwVRRUNck/ShlpZN5W8mWL2RE939paEZnXhPo7AXfuWoWvv025eRKEDm/q7yJ6CYGc4LYmKkrJeabSsqfA8OkwsC',
+  ciphertext: 'o/7W0AEqLIdlO6GriIAs5iwxPJ/3JG2ctRysJKRZN0j67xW1kl23sD9fkTRCXr2FhnmFMfSoLB5r0cGD7hAEP3J7jCZIJa0k+xrWn7gjnORKqMpZl1G5LR+V9MV1UVSmrydFubnmnNWF3pBGkvUGDVl/RrYGgUJ0G9XOSYqHjxcFZ6VDcKw/ByOMOL/OmM8QDOVnV5Va6E+76EUC',
   dataToEncryptHash: '2ca783d51c4bfd1a8b80e1c8aee5e94d3f17c3089f8bca45e48d40b3435ae092',
   accessControlConditions: [{
     conditionType: 'evmBasic',

@@ -9,6 +9,9 @@ import {
   PageHero,
   FilterSortBar,
   SongPublishForm,
+  PUBLISH_STEPS,
+  isPublishFormStep,
+  isPublishNextDisabled,
   AddFundsDialog,
   useIsMobile,
   type SongFormData,
@@ -396,22 +399,27 @@ export const LibraryPage: Component = () => {
     >
       {/* ── Unified Library tab ──────────────────────────────────────── */}
       <Show when={tab() === 'library'}>
-        {/* Mobile: compact header bar */}
+        {/* Mobile: compact header bar — full-width border */}
         <Show when={isMobile()}>
-          <PageHeader
-            compact
-            title="Library"
-            leftSlot={
-              <IconButton variant="soft" size="md" aria-label="Back" onClick={() => navigate(MUSIC)}>
-                <ChevronLeft class="w-5 h-5" />
-              </IconButton>
-            }
-            rightSlot={
-              <IconButton variant="soft" size="md" aria-label="Cloud storage" onClick={() => setAddFundsOpen(true)}>
-                <CloudFill class="w-5 h-5" />
-              </IconButton>
-            }
-          />
+          <div class="border-b border-[var(--border-subtle)]">
+            <div class="max-w-4xl mx-auto w-full px-4 md:px-8">
+              <PageHeader
+                compact
+                title="Library"
+                class="border-b-0"
+                leftSlot={
+                  <IconButton variant="soft" size="md" aria-label="Back" onClick={() => navigate(MUSIC)}>
+                    <ChevronLeft class="w-5 h-5" />
+                  </IconButton>
+                }
+                rightSlot={
+                  <IconButton variant="soft" size="md" aria-label="Cloud storage" onClick={() => setAddFundsOpen(true)}>
+                    <CloudFill class="w-5 h-5" />
+                  </IconButton>
+                }
+              />
+            </div>
+          </div>
         </Show>
 
         {/* Desktop: full gradient hero */}
@@ -428,6 +436,7 @@ export const LibraryPage: Component = () => {
           />
         </Show>
 
+        <div class="max-w-4xl mx-auto w-full px-4 md:px-8">
         <FilterSortBar
           filter={libraryFilter()}
           filterLabels={filterLabels}
@@ -460,28 +469,35 @@ export const LibraryPage: Component = () => {
             menuActions={menuActionsLocal}
           />
         </Show>
+        </div>
       </Show>
 
       {/* ── Shared with Me tab ──────────────────────────────────────── */}
       <Show when={tab() === 'shared'}>
-        {/* Header */}
-        <PageHeader
-          compact
-          title="Shared with Me"
-          leftSlot={
-            <IconButton variant="soft" size="md" aria-label="Back" onClick={() => navigate(MUSIC)}>
-              <ChevronLeft class="w-5 h-5" />
-            </IconButton>
-          }
-          rightSlot={
-            <Show when={(sharedTracks()?.length ?? 0) > 0}>
-              <span class="h-[22px] px-2 rounded-full bg-[var(--accent-blue)] text-[11px] font-semibold text-[#171717] flex items-center">
-                {sharedTracks()?.length} new
-              </span>
-            </Show>
-          }
-        />
+        {/* Header — full-width border, content constrained */}
+        <div class="border-b border-[var(--border-subtle)]">
+          <div class="max-w-4xl mx-auto w-full px-4 md:px-8">
+            <PageHeader
+              compact
+              title="Shared with Me"
+              class="border-b-0 bg-transparent"
+              leftSlot={
+                <IconButton variant="soft" size="md" aria-label="Back" onClick={() => navigate(MUSIC)}>
+                  <ChevronLeft class="w-5 h-5" />
+                </IconButton>
+              }
+              rightSlot={
+                <Show when={(sharedTracks()?.length ?? 0) > 0}>
+                  <span class="h-[22px] px-2 rounded-full bg-[var(--accent-blue)] text-[11px] font-semibold text-[#171717] flex items-center">
+                    {sharedTracks()?.length} new
+                  </span>
+                </Show>
+              }
+            />
+          </div>
+        </div>
 
+        <div class="max-w-4xl mx-auto w-full px-4 md:px-8">
         <Show when={sharedTracks.loading}>
           <div class="flex items-center justify-center py-20 text-[var(--text-muted)]">
             <div class="flex items-center gap-3">
@@ -509,6 +525,7 @@ export const LibraryPage: Component = () => {
             <p class="text-base text-[var(--text-muted)]">Songs shared to you appear here</p>
           </div>
         </Show>
+        </div>
       </Show>
 
       {/* ── Legacy: Local Files tab (direct access via /music/local) ── */}
@@ -597,20 +614,46 @@ export const LibraryPage: Component = () => {
 
       {/* Publish tab */}
       <Show when={tab() === 'publish'}>
-        <div class="max-w-2xl mx-auto py-8 px-4">
-          <SongPublishForm
-            step={publishStep()}
-            formData={publishForm()}
-            onFormChange={(partial) => setPublishForm((prev) => ({ ...prev, ...partial }))}
-            onNext={handlePublishNext}
-            onBack={handlePublishBack}
-            onSkip={handlePublishSkip}
-            onPublish={handlePublish}
-            onDone={handlePublishDone}
-            progress={publishProgress()}
-            error={publishError()}
-            result={publishResult()}
-          />
+        <div class="flex flex-col min-h-full">
+          <div class="flex-1 max-w-2xl mx-auto w-full py-8 px-4">
+            <SongPublishForm
+              step={publishStep()}
+              formData={publishForm()}
+              onFormChange={(partial) => setPublishForm((prev) => ({ ...prev, ...partial }))}
+              onNext={handlePublishNext}
+              onBack={handlePublishBack}
+              onSkip={handlePublishSkip}
+              onPublish={handlePublish}
+              onDone={handlePublishDone}
+              progress={publishProgress()}
+              error={publishError()}
+              result={publishResult()}
+            />
+          </div>
+          {/* Footer — border full width, buttons constrained */}
+          <Show when={isPublishFormStep(publishStep())}>
+            <div class="sticky bottom-0 border-t border-[var(--border-subtle)] bg-[var(--bg-page)]">
+              <div class="max-w-2xl mx-auto w-full px-4 py-4 flex items-center gap-3">
+                <Show when={PUBLISH_STEPS.indexOf(publishStep()) > 0}>
+                  <Button variant="secondary" onClick={handlePublishBack} class="flex-1">
+                    Back
+                  </Button>
+                </Show>
+                <Show
+                  when={publishStep() !== 'license'}
+                  fallback={
+                    <Button disabled={isPublishNextDisabled(publishStep(), publishForm())} onClick={handlePublish} class="flex-1">
+                      Publish Song
+                    </Button>
+                  }
+                >
+                  <Button disabled={isPublishNextDisabled(publishStep(), publishForm())} onClick={handlePublishNext} class="flex-1">
+                    Next
+                  </Button>
+                </Show>
+              </div>
+            </div>
+          </Show>
         </div>
       </Show>
 
@@ -668,21 +711,28 @@ export const LibraryPage: Component = () => {
 
       {/* Cloud tab */}
       <Show when={tab() === 'cloud'}>
-        <PageHeader
-          compact
-          title="Cloud Library"
-          leftSlot={
-            <IconButton variant="soft" size="md" aria-label="Back" onClick={() => navigate(MUSIC)}>
-              <ChevronLeft class="w-5 h-5" />
-            </IconButton>
-          }
-          rightSlot={
-            <IconButton variant="soft" size="md" aria-label="Add Funds" onClick={() => setAddFundsOpen(true)}>
-              <Wallet class="w-5 h-5" />
-            </IconButton>
-          }
-        />
+        {/* Header — full-width border, content constrained */}
+        <div class="border-b border-[var(--border-subtle)]">
+          <div class="max-w-4xl mx-auto w-full px-4 md:px-8">
+            <PageHeader
+              compact
+              title="Cloud Library"
+              class="border-b-0 bg-transparent"
+              leftSlot={
+                <IconButton variant="soft" size="md" aria-label="Back" onClick={() => navigate(MUSIC)}>
+                  <ChevronLeft class="w-5 h-5" />
+                </IconButton>
+              }
+              rightSlot={
+                <IconButton variant="soft" size="md" aria-label="Add Funds" onClick={() => setAddFundsOpen(true)}>
+                  <Wallet class="w-5 h-5" />
+                </IconButton>
+              }
+            />
+          </div>
+        </div>
 
+        <div class="max-w-4xl mx-auto w-full px-4 md:px-8">
         <Show when={uploadedTracks.loading}>
           <div class="flex items-center justify-center py-20 text-[var(--text-muted)]">
             <div class="flex items-center gap-3">
@@ -712,6 +762,7 @@ export const LibraryPage: Component = () => {
             )}
           </Show>
         </Show>
+        </div>
 
       </Show>
 

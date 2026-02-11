@@ -221,6 +221,12 @@ async function handleArtist(mbid: string, env: Env, ctx?: ExecutionContext): Pro
     if (imageUrl) links.image = imageUrl
   }
 
+  // Fallback: resolve image from Wikidata P18 property if no direct image relation
+  if (!links.image && links.wikidata) {
+    const wikidataImage = await resolveWikidataImage(links.wikidata, env)
+    if (wikidataImage) links.image = wikidataImage
+  }
+
   const result = {
     mbid: data.id,
     name: data.name,
@@ -992,6 +998,53 @@ async function resolveCommonsImage(pageUrl: string, env: Env): Promise<string | 
     // Cache the result (use 'null' string for negative cache)
     await env.CACHE.put(cacheKey, imageUrl ?? 'null', { expirationTtl: CACHE_TTL_POSITIVE })
 
+    return imageUrl
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Resolve an image from Wikidata's P18 (image) property.
+ * Input: https://www.wikidata.org/wiki/Q1848854
+ * Flow: extract QID → Wikidata API → P18 filename → Commons API → thumb URL
+ */
+async function resolveWikidataImage(wikidataUrl: string, env: Env): Promise<string | null> {
+  const qidMatch = wikidataUrl.match(/\/(Q\d+)$/)
+  if (!qidMatch) return null
+  const qid = qidMatch[1]
+
+  const cacheKey = `wikidata-image:${qid}`
+  const cached = await env.CACHE.get(cacheKey)
+  if (cached) return cached === 'null' ? null : cached
+
+  try {
+    // Query Wikidata for P18 (image) property
+    const apiUrl = `https://www.wikidata.org/w/api.php?action=wbgetclaims&entity=${qid}&property=P18&format=json`
+    const res = await fetch(apiUrl, {
+      headers: { 'User-Agent': env.MB_USER_AGENT },
+    })
+    if (!res.ok) return null
+
+    const data = await res.json() as {
+      claims?: {
+        P18?: Array<{
+          mainsnak?: { datavalue?: { value?: string } }
+        }>
+      }
+    }
+
+    const filename = data.claims?.P18?.[0]?.mainsnak?.datavalue?.value
+    if (!filename) {
+      await env.CACHE.put(cacheKey, 'null', { expirationTtl: CACHE_TTL_NEGATIVE })
+      return null
+    }
+
+    // Resolve the Commons filename to an actual image URL
+    const commonsPageUrl = `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(filename)}`
+    const imageUrl = await resolveCommonsImage(commonsPageUrl, env)
+
+    await env.CACHE.put(cacheKey, imageUrl ?? 'null', { expirationTtl: CACHE_TTL_POSITIVE })
     return imageUrl
   } catch {
     return null

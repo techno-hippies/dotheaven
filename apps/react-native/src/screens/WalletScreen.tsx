@@ -13,7 +13,7 @@ import Svg, { Circle, G, Path, SvgProps, Text as SvgText } from 'react-native-sv
 import { Copy, Fingerprint, Key, SignIn, Wallet } from 'phosphor-react-native';
 import { MobileHeader } from '../components/MobileHeader';
 import { useAuth } from '../providers/AuthProvider';
-import { DrawerContext } from '../navigation/TabNavigator';
+import { DrawerContext } from '../navigation/DrawerContext';
 import { colors, spacing, fontSize, radii } from '../lib/theme';
 import { Button } from '../ui';
 

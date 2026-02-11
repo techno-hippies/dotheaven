@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "session-voice"
-database_id = "PLACEHOLDER"
+database_id = "ac26bc37-8329-4695-a733-fe54a6bd05e0"
 
 [durable_objects]
 bindings = [
@@ -24,10 +24,15 @@ ESCROW_ADDRESS = "0x132212B78C4a7A3F19DE1BF63f119848c765c1d2"
 REGISTRY_ADDRESS = "0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2"
 VERIFICATION_MIRROR_ADDRESS = "0xb0864603A4d6b62eACB53fbFa32E7665BADCc7Fb"
 CHAIN_ID = "6343"
+LLM_BASE_URL = "https://openrouter.ai/api/v1"
+ELEVENLABS_VOICE_ID = "rf0RyZGEDtFGS4U6yghI"
 
 # Secrets (set via wrangler secret put):
 # AGORA_APP_ID
 # AGORA_APP_CERTIFICATE
+# AGORA_REST_AUTH (key:secret for Agora REST API — needed for CAI agent)
 # JWT_SECRET
+# LLM_API_KEY (OpenRouter)
+# ELEVENLABS_API_KEY
 # ORACLE_PRIVATE_KEY
 # ORACLE_SERVICE_TOKEN

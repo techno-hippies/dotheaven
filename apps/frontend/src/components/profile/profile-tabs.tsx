@@ -43,7 +43,7 @@ const PostsIcon = () => (
 const tabs: TabItem[] = [
   {
     id: 'posts',
-    label: 'Posts',
+    label: 'Timeline',
     icon: <PostsIcon />,
   },
   {
@@ -55,11 +55,6 @@ const tabs: TabItem[] = [
     id: 'music',
     label: 'Music',
     icon: <MusicIcon />,
-  },
-  {
-    id: 'wallet',
-    label: 'Wallet',
-    icon: <WalletIcon />,
   },
   {
     id: 'schedule',
@@ -84,7 +79,6 @@ export const ProfileTabs: Component<ProfileTabsProps> = (props) => {
       tabs={tabs}
       activeTab={props.activeTab}
       onTabChange={(tabId) => props.onTabChange?.(tabId as ProfileTab)}
-      padded
     />
   )
 }

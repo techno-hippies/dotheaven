@@ -4,15 +4,14 @@ import {
   fetchUserLocationCityId,
   type CommunityMember,
 } from '../lib/community';
-
-type CommunityTab = 'all' | 'nearby';
+import type { CommunityFilters } from '../components/CommunityFilterSheet';
 
 interface UseCommunityParams {
-  activeTab: CommunityTab;
+  filters: CommunityFilters;
   userAddress?: string;
 }
 
-export function useCommunity({ activeTab, userAddress }: UseCommunityParams) {
+export function useCommunity({ filters, userAddress }: UseCommunityParams) {
   const [members, setMembers] = useState<CommunityMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -28,11 +27,16 @@ export function useCommunity({ activeTab, userAddress }: UseCommunityParams) {
 
   const loadMembers = useCallback(async () => {
     try {
-      const opts =
-        activeTab === 'nearby' && userCityId
-          ? { locationCityId: userCityId }
-          : {};
-      const data = await fetchCommunityMembers({ first: 50, ...opts });
+      const opts: Parameters<typeof fetchCommunityMembers>[0] = { first: 50 };
+
+      // Subgraph-level filters
+      if (filters.gender) opts.gender = filters.gender;
+      if (filters.sameCity && userCityId) opts.locationCityId = userCityId;
+
+      const data = await fetchCommunityMembers(opts);
+      // Client-side filtering for fields not indexed in subgraph
+      // (nativeLanguage, learningLanguage, verified require unpacking — skip for now,
+      //  as the web app also does these client-side with additional RPC calls)
       setMembers(data);
     } catch (err) {
       console.error('Failed to load community:', err);
@@ -40,7 +44,7 @@ export function useCommunity({ activeTab, userAddress }: UseCommunityParams) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [activeTab, userCityId]);
+  }, [filters, userCityId]);
 
   useEffect(() => {
     setLoading(true);

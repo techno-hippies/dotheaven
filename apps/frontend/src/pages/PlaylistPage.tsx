@@ -155,7 +155,7 @@ export const PlaylistPage: Component = () => {
         </div>
       }>
         {(p) => (
-          <div class="h-full overflow-y-auto">
+          <div class="h-full overflow-y-auto max-w-5xl mx-auto w-full">
             <MediaHeader
                 type="playlist"
                 title={p().name}

@@ -190,20 +190,27 @@ export const MusicPage: Component = () => {
 
   return (
     <div class="h-full overflow-y-auto">
-      <PageHeader
-        title={isMobile() ? t('nav.music') : t('music.discover')}
-        rightSlot={isMobile() ? (
-          <IconButton
-            variant="soft"
-            size="md"
-            aria-label="Search library"
-            onClick={() => navigate(musicTab('library'))}
-          >
-            <MagnifyingGlass class="w-5 h-5" />
-          </IconButton>
-        ) : undefined}
-      />
+      {/* Header — full-width border, content constrained */}
+      <div class="border-b border-[var(--border-subtle)]">
+        <div class="max-w-4xl mx-auto w-full px-4 md:px-8">
+          <PageHeader
+            title={isMobile() ? t('nav.music') : t('music.discover')}
+            class="border-b-0"
+            rightSlot={isMobile() ? (
+              <IconButton
+                variant="soft"
+                size="md"
+                aria-label="Search library"
+                onClick={() => navigate(musicTab('library'))}
+              >
+                <MagnifyingGlass class="w-5 h-5" />
+              </IconButton>
+            ) : undefined}
+          />
+        </div>
+      </div>
 
+      <div class="max-w-4xl mx-auto w-full px-4 md:px-8">
       <div class="h-4" />
 
       {/* Library entry rows — mobile only (sidebar handles these on desktop) */}
@@ -276,6 +283,7 @@ export const MusicPage: Component = () => {
             {(artist) => <ArtistCircle name={artist.name} avatar={artist.avatar} />}
           </For>
         </div>
+      </div>
       </div>
     </div>
   )

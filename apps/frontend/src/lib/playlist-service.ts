@@ -21,8 +21,8 @@ type EncryptedKey = {
 
 /** Encrypted Filebase covers key — bound to the playlist-v1 action CID (update after redeploy). */
 const FILEBASE_COVERS_ENCRYPTED_KEY: EncryptedKey | null = {
-  ciphertext: 'qxpLzowVxe4MX3/jxS8k42JhPEXhS4ScIwQf61bg1UjFbnXAJ4WFIXufSJY1v2a8pKfStJ/npn4ZUuoq+EKZwN3zHWRRLAuszzok+Z29lK5tDBIXanoPXz2ynTrB4B84CudO4SAmG3rwPKJMLqlvMu7fRJYvjsJlM+89/IHcG0n1dXlNsOPAomtr5+YG0hzUfPYlTw5MNdw9Fw7SPSUVvFd8jZ/ftgCwq5jJPUyKQ5Ez0Y2wZvDLDwXu3xZ+CAI=',
-  dataToEncryptHash: 'c90b8bc304ece7f65c9af66ee9ca10472888cf1c0c324eaccead9f7edf6e1856',
+  ciphertext: 'kmcO4LYNJN2N7qNXh3hlNeKJJRsyan3GH35TRzbkGAMZ6ohbujG+QenMouzYam4ByOsrPW0R+FLG/tBQ2jEv0gvsuIgbJA0NJgGkeK5TAD6GAcbBWuR9DndB61X8QyNdhrRvwiLE2jAmgmqRHSu0P4ozXj4hRUjmDMsr7RS/yvtT0/CaJG9rODkDPA2UJpCFNLfx47k7ghqPNztx8rE0xY7kOTTYPF4A3dO5zZfmLkd+horBfentydzBIGI+qHlx8O+OwZzR40SvWUD7XoV8VCo3Ckf28pWQAg==',
+  dataToEncryptHash: '1fb52374f1a4ec4d9f1a263b1355cedecbe3ef9d52425f76c222f2f5d9993d4f',
   accessControlConditions: [{
     conditionType: 'evmBasic',
     contractAddress: '',
@@ -30,7 +30,7 @@ const FILEBASE_COVERS_ENCRYPTED_KEY: EncryptedKey | null = {
     chain: 'ethereum',
     method: '',
     parameters: [':currentActionIpfsId'],
-    returnValueTest: { comparator: '=', value: 'QmYvozSnyUb3QCmsDLWQ1caYecokqeHpc8Cck5uqnuNf9R' },
+    returnValueTest: { comparator: '=', value: PLAYLIST_V1_CID },
   }],
 }
 

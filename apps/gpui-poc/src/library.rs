@@ -5,35 +5,80 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use gpui::*;
-use gpui_component::menu::ContextMenuExt;
+use gpui_component::menu::PopupMenuItem;
 use gpui_component::StyledExt;
 
 use crate::audio::AudioHandle;
+use crate::auth;
 use crate::music_db::{MusicDb, ScanProgress, TrackRow};
-
-// =============================================================================
-// Actions for track context menu
-// =============================================================================
-
-actions!(
-    track_menu,
-    [AddToQueue, AddToPlaylist, GoToArtist, GoToAlbum]
-);
+use crate::scrobble::{now_epoch_sec, ScrobbleService};
+use crate::synapse_sidecar::{SynapseSidecarService, TrackMetaInput};
+use crate::ui::overflow_menu::track_row_overflow_menu;
 
 // =============================================================================
 // Colors
 // =============================================================================
 
-const BG_ELEVATED: Hsla = Hsla { h: 0., s: 0., l: 0.15, a: 1. };
-const BG_HIGHLIGHT: Hsla = Hsla { h: 0., s: 0., l: 0.16, a: 1. };
-const BG_HOVER: Hsla = Hsla { h: 0., s: 0., l: 0.19, a: 1. };
-const TEXT_PRIMARY: Hsla = Hsla { h: 0., s: 0., l: 0.98, a: 1. };
-const TEXT_SECONDARY: Hsla = Hsla { h: 0., s: 0., l: 0.83, a: 1. };
-const TEXT_MUTED: Hsla = Hsla { h: 0., s: 0., l: 0.64, a: 1. };
-const TEXT_DIM: Hsla = Hsla { h: 0., s: 0., l: 0.45, a: 1. };
-const ACCENT_BLUE: Hsla = Hsla { h: 0.62, s: 0.93, l: 0.76, a: 1. };
-const BORDER_SUBTLE: Hsla = Hsla { h: 0., s: 0., l: 0.21, a: 1. };
-const HERO_BG: Hsla = Hsla { h: 0.73, s: 0.50, l: 0.22, a: 1. };
+const BG_ELEVATED: Hsla = Hsla {
+    h: 0.,
+    s: 0.,
+    l: 0.15,
+    a: 1.,
+};
+const BG_HIGHLIGHT: Hsla = Hsla {
+    h: 0.,
+    s: 0.,
+    l: 0.16,
+    a: 1.,
+};
+const BG_HOVER: Hsla = Hsla {
+    h: 0.,
+    s: 0.,
+    l: 0.19,
+    a: 1.,
+};
+const TEXT_PRIMARY: Hsla = Hsla {
+    h: 0.,
+    s: 0.,
+    l: 0.98,
+    a: 1.,
+};
+const TEXT_SECONDARY: Hsla = Hsla {
+    h: 0.,
+    s: 0.,
+    l: 0.83,
+    a: 1.,
+};
+const TEXT_MUTED: Hsla = Hsla {
+    h: 0.,
+    s: 0.,
+    l: 0.64,
+    a: 1.,
+};
+const TEXT_DIM: Hsla = Hsla {
+    h: 0.,
+    s: 0.,
+    l: 0.45,
+    a: 1.,
+};
+const ACCENT_BLUE: Hsla = Hsla {
+    h: 0.62,
+    s: 0.93,
+    l: 0.76,
+    a: 1.,
+};
+const BORDER_SUBTLE: Hsla = Hsla {
+    h: 0.,
+    s: 0.,
+    l: 0.21,
+    a: 1.,
+};
+const HERO_BG: Hsla = Hsla {
+    h: 0.73,
+    s: 0.50,
+    l: 0.22,
+    a: 1.,
+};
 
 // =============================================================================
 // Constants
@@ -58,6 +103,12 @@ pub struct LibraryView {
     scan_progress: Option<ScanProgress>,
     error: Option<String>,
     active_index: Option<usize>,
+    track_started_at_sec: Option<u64>,
+    last_scrobbled_key: Option<String>,
+    scrobble_service: Option<Arc<Mutex<ScrobbleService>>>,
+    sidecar: Arc<Mutex<SynapseSidecarService>>,
+    upload_busy: bool,
+    status_message: Option<String>,
 }
 
 impl LibraryView {
@@ -65,6 +116,14 @@ impl LibraryView {
         let data_dir = dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join("heaven-gpui");
+
+        let scrobble_service = match ScrobbleService::new() {
+            Ok(s) => Some(Arc::new(Mutex::new(s))),
+            Err(e) => {
+                log::warn!("[Scrobble] service disabled: {}", e);
+                None
+            }
+        };
 
         let mut this = Self {
             db: None,
@@ -77,6 +136,12 @@ impl LibraryView {
             scan_progress: None,
             error: None,
             active_index: None,
+            track_started_at_sec: None,
+            last_scrobbled_key: None,
+            scrobble_service,
+            sidecar: Arc::new(Mutex::new(SynapseSidecarService::new())),
+            upload_busy: false,
+            status_message: None,
         };
 
         match MusicDb::open(&data_dir) {
@@ -179,6 +244,13 @@ impl LibraryView {
 
     fn play_track(&mut self, index: usize, _cx: &mut Context<Self>) {
         if let Some(track) = self.tracks.get(index) {
+            log::info!(
+                "[Playback] play_track: index={}, title='{}', artist='{}', file='{}'",
+                index,
+                track.title,
+                track.artist,
+                track.file_path
+            );
             self.audio.play(
                 &track.file_path,
                 None,
@@ -186,7 +258,54 @@ impl LibraryView {
                 track.cover_path.clone(),
             );
             self.active_index = Some(index);
+            self.track_started_at_sec = Some(now_epoch_sec());
         }
+    }
+
+    fn submit_scrobble_for_track(
+        &mut self,
+        track: TrackRow,
+        played_at_sec: u64,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(auth) = auth::load_from_disk() else {
+            log::warn!("[Scrobble] skipped: user not authenticated");
+            return;
+        };
+
+        let dedupe_key = format!("{}:{}:{}", track.file_path, track.title, played_at_sec);
+        if self.last_scrobbled_key.as_deref() == Some(dedupe_key.as_str()) {
+            return;
+        }
+        self.last_scrobbled_key = Some(dedupe_key);
+
+        let Some(service) = self.scrobble_service.clone() else {
+            log::warn!("[Scrobble] skipped: scrobble service unavailable");
+            return;
+        };
+        cx.spawn(async move |_this: WeakEntity<Self>, _cx: &mut AsyncApp| {
+            let result = smol::unblock(move || {
+                let mut service = service
+                    .lock()
+                    .map_err(|e| format!("scrobble service lock failed: {e}"))?;
+                service.submit_track(&auth, &track, played_at_sec)
+            })
+            .await;
+
+            match result {
+                Ok(ok) => {
+                    log::info!(
+                        "[Scrobble] submitted: userOpHash={} sender={}",
+                        ok.user_op_hash,
+                        ok.sender
+                    );
+                }
+                Err(err) => {
+                    log::error!("[Scrobble] submit failed: {}", err);
+                }
+            }
+        })
+        .detach();
     }
 
     /// Auto-advance to next track if current one ended.
@@ -197,13 +316,43 @@ impl LibraryView {
             if let Some(dur) = state.duration {
                 if state.position >= dur - 0.5 && dur > 0.0 {
                     if let Some(idx) = self.active_index {
+                        if let Some(track) = self.tracks.get(idx).cloned() {
+                            let played_at_sec =
+                                self.track_started_at_sec.unwrap_or_else(now_epoch_sec);
+                            self.submit_scrobble_for_track(track, played_at_sec, cx);
+                        }
+
                         let next = idx + 1;
                         if next < self.tracks.len() {
+                            log::info!(
+                                "[Playback] auto_advance: from_index={} to_index={}",
+                                idx,
+                                next
+                            );
                             self.play_track(next, cx);
                             cx.notify();
                         }
                     }
                 }
+            }
+        }
+    }
+
+    pub fn play_next(&mut self, cx: &mut Context<Self>) {
+        if let Some(idx) = self.active_index {
+            let next = idx + 1;
+            if next < self.tracks.len() {
+                self.play_track(next, cx);
+                cx.notify();
+            }
+        }
+    }
+
+    pub fn play_prev(&mut self, cx: &mut Context<Self>) {
+        if let Some(idx) = self.active_index {
+            if idx > 0 {
+                self.play_track(idx - 1, cx);
+                cx.notify();
             }
         }
     }
@@ -334,6 +483,100 @@ impl LibraryView {
         })
         .detach();
     }
+
+    fn set_status_message(&mut self, message: impl Into<String>, cx: &mut Context<Self>) {
+        self.status_message = Some(message.into());
+        cx.notify();
+    }
+
+    fn encrypt_upload_track(&mut self, track: TrackRow, cx: &mut Context<Self>) {
+        if self.upload_busy {
+            return;
+        }
+
+        let auth = match auth::load_from_disk() {
+            Some(auth) => auth,
+            None => {
+                self.set_status_message("Sign in from Wallet before uploading.", cx);
+                return;
+            }
+        };
+
+        if track.file_path.is_empty() || !std::path::Path::new(&track.file_path).exists() {
+            self.set_status_message("Track file is missing on disk; upload cancelled.", cx);
+            return;
+        }
+
+        let track_title = track.title.clone();
+        let track_meta = TrackMetaInput {
+            title: Some(track.title.clone()),
+            artist: Some(track.artist.clone()),
+            album: Some(track.album.clone()),
+            mbid: None,
+        };
+        let path = track.file_path.clone();
+
+        self.upload_busy = true;
+        self.set_status_message(
+            format!("Encrypting + uploading \"{}\" to Synapse...", track_title),
+            cx,
+        );
+
+        let sidecar = self.sidecar.clone();
+        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            let result = smol::unblock(move || {
+                let mut svc = sidecar.lock().map_err(|e| format!("sidecar lock: {e}"))?;
+                match svc.content_encrypt_upload_register(&auth, &path, true, track_meta) {
+                    Ok(resp) => Ok(resp),
+                    Err(upload_err) => {
+                        let health = svc.health().ok();
+                        let storage_status = svc.storage_status(&auth).ok();
+                        let diagnostic = serde_json::json!({
+                            "uploadError": upload_err,
+                            "sidecarHealth": health,
+                            "storageStatus": storage_status,
+                        });
+                        Err(
+                            serde_json::to_string_pretty(&diagnostic).unwrap_or_else(|_| {
+                                "Upload failed (diagnostic encoding failed)".to_string()
+                            }),
+                        )
+                    }
+                }
+            })
+            .await;
+
+            let _ = this.update(cx, |this, cx| {
+                this.upload_busy = false;
+                match result {
+                    Ok(resp) => {
+                        log::info!(
+                            "[Library] encrypt+upload success for '{}': {}",
+                            track_title,
+                            serde_json::to_string(&resp)
+                                .unwrap_or_else(|_| "<invalid response>".to_string())
+                        );
+                        this.set_status_message(
+                            format!("Encrypt + upload complete for \"{}\".", track_title),
+                            cx,
+                        );
+                    }
+                    Err(err) => {
+                        log::error!(
+                            "[Library] encrypt+upload failed for '{}': {}",
+                            track_title,
+                            err
+                        );
+                        this.set_status_message(
+                            format!("Encrypt + upload failed for \"{}\".", track_title),
+                            cx,
+                        );
+                    }
+                }
+            });
+        })
+        .detach();
+    }
 }
 
 impl Render for LibraryView {
@@ -347,74 +590,68 @@ impl Render for LibraryView {
 
         // No folder selected — empty state
         if self.folder.is_none() && !self.loading {
-            return container
-                .items_center()
-                .justify_center()
-                .child(
-                    div()
-                        .v_flex()
-                        .items_center()
-                        .gap_4()
-                        .child(
-                            gpui::svg()
-                                .path("icons/music-notes.svg")
-                                .size(px(64.))
-                                .text_color(TEXT_DIM),
-                        )
-                        .child(
-                            div()
-                                .text_xl()
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(TEXT_PRIMARY)
-                                .child("Your Library"),
-                        )
-                        .child(
-                            div()
-                                .text_color(TEXT_MUTED)
-                                .child("Select a folder to start playing your music"),
-                        )
-                        .child(
-                            div()
-                                .id("browse-btn")
-                                .h_flex()
-                                .items_center()
-                                .gap_2()
-                                .px_5()
-                                .py(px(10.))
-                                .rounded_full()
-                                .bg(ACCENT_BLUE)
-                                .cursor_pointer()
-                                .on_click(cx.listener(|this, _, _window, cx| {
-                                    this.browse_folder(cx);
-                                }))
-                                .child(
-                                    gpui::svg()
-                                        .path("icons/folder-open.svg")
-                                        .size(px(18.))
-                                        .text_color(hsla(0., 0., 0.09, 1.)),
-                                )
-                                .child(
-                                    div()
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .text_color(hsla(0., 0., 0.09, 1.))
-                                        .child("Choose Folder"),
-                                ),
-                        ),
-                );
+            return container.items_center().justify_center().child(
+                div()
+                    .v_flex()
+                    .items_center()
+                    .gap_4()
+                    .child(
+                        gpui::svg()
+                            .path("icons/music-notes.svg")
+                            .size(px(64.))
+                            .text_color(TEXT_DIM),
+                    )
+                    .child(
+                        div()
+                            .text_xl()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(TEXT_PRIMARY)
+                            .child("Your Library"),
+                    )
+                    .child(
+                        div()
+                            .text_color(TEXT_MUTED)
+                            .child("Select a folder to start playing your music"),
+                    )
+                    .child(
+                        div()
+                            .id("browse-btn")
+                            .h_flex()
+                            .items_center()
+                            .gap_2()
+                            .px_5()
+                            .py(px(10.))
+                            .rounded_full()
+                            .bg(ACCENT_BLUE)
+                            .cursor_pointer()
+                            .on_click(cx.listener(|this, _, _window, cx| {
+                                this.browse_folder(cx);
+                            }))
+                            .child(
+                                gpui::svg()
+                                    .path("icons/folder-open.svg")
+                                    .size(px(18.))
+                                    .text_color(hsla(0., 0., 0.09, 1.)),
+                            )
+                            .child(
+                                div()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(hsla(0., 0., 0.09, 1.))
+                                    .child("Choose Folder"),
+                            ),
+                    ),
+            );
         }
 
         if let Some(err) = &self.error {
-            return container
-                .items_center()
-                .justify_center()
-                .child(
-                    div()
-                        .v_flex()
-                        .items_center()
-                        .gap_2()
-                        .child(div().text_color(TEXT_MUTED).child("Error"))
-                        .child(div().text_xs().text_color(TEXT_DIM).child(err.clone())),
-                );
+            return container.items_center().justify_center().child(
+                div()
+                    .v_flex()
+                    .items_center()
+                    .gap_2()
+                    .child(div().text_color(TEXT_MUTED).child("Error"))
+                    .child(div().text_xs().text_color(TEXT_DIM).child(err.clone())),
+            );
         }
 
         let folder_display = self
@@ -431,6 +668,8 @@ impl Render for LibraryView {
         let loading = self.loading;
         let active_index = self.active_index;
         let total_rows = self.tracks.len();
+        let upload_busy = self.upload_busy;
+        let status_message = self.status_message.clone();
 
         // Clone tracks + entity handle for the uniform_list closure
         let tracks_snapshot = self.tracks.clone();
@@ -445,27 +684,24 @@ impl Render for LibraryView {
                 scanning,
                 loading,
                 scan_progress.as_ref(),
+                status_message.as_deref(),
                 cx,
             ))
             // Column header (fixed at top of track area)
             .child(render_table_header())
             // Virtualized track rows
             .child(
-                uniform_list(
-                    "track-list",
-                    total_rows,
-                    move |range, _window, _cx| {
-                        let mut items = Vec::new();
-                        for i in range {
-                            if let Some(track) = tracks_snapshot.get(i) {
-                                let is_active = active_index == Some(i);
-                                let ent = entity.clone();
-                                items.push(render_track_row(track, i, is_active, ent));
-                            }
+                uniform_list("track-list", total_rows, move |range, _window, _cx| {
+                    let mut items = Vec::new();
+                    for i in range {
+                        if let Some(track) = tracks_snapshot.get(i) {
+                            let is_active = active_index == Some(i);
+                            let ent = entity.clone();
+                            items.push(render_track_row(track, i, is_active, upload_busy, ent));
                         }
-                        items
-                    },
-                )
+                    }
+                    items
+                })
                 .flex_1()
                 .w_full(),
             )
@@ -483,6 +719,7 @@ fn render_hero(
     scanning: bool,
     loading: bool,
     progress: Option<&ScanProgress>,
+    status_message: Option<&str>,
     cx: &mut Context<LibraryView>,
 ) -> impl IntoElement {
     let subtitle = if scanning {
@@ -497,7 +734,7 @@ fn render_hero(
         format!("{} tracks in {}", count, title)
     };
 
-    div()
+    let mut hero = div()
         .w_full()
         .px_6()
         .pt_8()
@@ -527,18 +764,51 @@ fn render_hero(
             div()
                 .h_flex()
                 .gap_2()
-                .child(hero_button("play-all", "icons/play-fill.svg", "Play All", true, cx.listener(|this, _, _w, cx| {
-                    this.play_all(cx);
-                    cx.notify();
-                })))
-                .child(hero_button_passive("shuffle", "icons/shuffle.svg", "Shuffle"))
-                .child(hero_button("pick-folder", "icons/folder-open.svg", "Pick Folder", false, cx.listener(|this, _, _w, cx| {
-                    this.browse_folder(cx);
-                })))
-                .child(hero_button("rescan", "icons/sort-ascending.svg", "Rescan", false, cx.listener(|this, _, _w, cx| {
-                    this.rescan(cx);
-                }))),
-        )
+                .child(hero_button(
+                    "play-all",
+                    "icons/play-fill.svg",
+                    "Play All",
+                    true,
+                    cx.listener(|this, _, _w, cx| {
+                        this.play_all(cx);
+                        cx.notify();
+                    }),
+                ))
+                .child(hero_button_passive(
+                    "shuffle",
+                    "icons/shuffle.svg",
+                    "Shuffle",
+                ))
+                .child(hero_button(
+                    "pick-folder",
+                    "icons/folder-open.svg",
+                    "Pick Folder",
+                    false,
+                    cx.listener(|this, _, _w, cx| {
+                        this.browse_folder(cx);
+                    }),
+                ))
+                .child(hero_button(
+                    "rescan",
+                    "icons/sort-ascending.svg",
+                    "Rescan",
+                    false,
+                    cx.listener(|this, _, _w, cx| {
+                        this.rescan(cx);
+                    }),
+                )),
+        );
+
+    if let Some(status) = status_message.filter(|s| !s.is_empty()) {
+        hero = hero.child(
+            div()
+                .text_sm()
+                .text_color(hsla(0., 0., 0.87, 1.))
+                .child(status.to_string()),
+        );
+    }
+
+    hero
 }
 
 fn hero_button(
@@ -590,7 +860,12 @@ fn hero_button_passive(
         .rounded_full()
         .bg(hsla(0., 0., 1., 0.15))
         .cursor_pointer()
-        .child(gpui::svg().path(icon).size(px(16.)).text_color(TEXT_PRIMARY))
+        .child(
+            gpui::svg()
+                .path(icon)
+                .size(px(16.))
+                .text_color(TEXT_PRIMARY),
+        )
         .child(
             div()
                 .text_sm()
@@ -618,7 +893,7 @@ fn render_table_header() -> impl IntoElement {
         .font_weight(FontWeight::MEDIUM)
         .child(div().w(px(48.)).child("#"))
         .child(div().flex_1().min_w_0().child("TITLE"))
-        .child(div().w(px(180.)).child("ARTIST"))
+        .child(div().w(px(180.)).mr_4().child("ARTIST"))
         .child(div().w(px(180.)).child("ALBUM"))
         .child(
             div()
@@ -626,16 +901,12 @@ fn render_table_header() -> impl IntoElement {
                 .items_center()
                 .gap_2()
                 .child(
-                    div()
-                        .w(px(52.))
-                        .h_flex()
-                        .justify_end()
-                        .child(
-                            gpui::svg()
-                                .path("icons/clock.svg")
-                                .size(px(14.))
-                                .text_color(TEXT_DIM),
-                        ),
+                    div().w(px(52.)).h_flex().justify_end().child(
+                        gpui::svg()
+                            .path("icons/clock.svg")
+                            .size(px(14.))
+                            .text_color(TEXT_DIM),
+                    ),
                 )
                 // Spacer matching the three-dot column
                 .child(div().w(px(36.))),
@@ -650,6 +921,7 @@ fn render_track_row(
     track: &TrackRow,
     index: usize,
     is_active: bool,
+    upload_busy: bool,
     entity: Entity<LibraryView>,
 ) -> impl IntoElement {
     let row_id = ElementId::Name(format!("track-{}", index).into());
@@ -658,12 +930,29 @@ fn render_track_row(
     let row_bg = if is_active {
         BG_HIGHLIGHT
     } else {
-        Hsla { h: 0., s: 0., l: 0., a: 0. }
+        Hsla {
+            h: 0.,
+            s: 0.,
+            l: 0.,
+            a: 0.,
+        }
     };
 
     let g = group_name.clone();
     let g2 = group_name.clone();
-    let g3 = group_name.clone();
+
+    let play_entity = entity.clone();
+    let queue_entity = entity.clone();
+    let playlist_entity = entity.clone();
+    let artist_entity = entity.clone();
+    let album_entity = entity.clone();
+    let upload_entity = entity;
+
+    let queue_title = track.title.clone();
+    let playlist_title = track.title.clone();
+    let artist_name = track.artist.clone();
+    let album_name = track.album.clone();
+    let upload_track = track.clone();
 
     div()
         .id(row_id)
@@ -676,11 +965,18 @@ fn render_track_row(
         .cursor_pointer()
         .bg(row_bg)
         .hover(|s| s.bg(BG_HOVER))
-        .on_click(move |_, _window, cx| {
-            entity.update(cx, |this, cx| {
-                this.play_track(index, cx);
-                cx.notify();
-            });
+        .on_click(move |ev, _window, cx| {
+            // Double-click to play
+            let is_double = match ev {
+                ClickEvent::Mouse(m) => m.down.click_count == 2,
+                _ => false,
+            };
+            if is_double {
+                play_entity.update(cx, |this, cx| {
+                    this.play_track(index, cx);
+                    cx.notify();
+                });
+            }
         })
         // # column — shows track number normally, play icon on hover
         .child(
@@ -751,6 +1047,7 @@ fn render_track_row(
         .child(
             div()
                 .w(px(180.))
+                .mr_4()
                 .text_sm()
                 .text_color(TEXT_SECONDARY)
                 .truncate()
@@ -782,33 +1079,87 @@ fn render_track_row(
                         .child(track.duration.clone()),
                 )
                 // Three-dot menu button — hidden at rest, visible on hover
-                .child(
-                    div()
-                        .id(ElementId::Name(format!("dots-{}", index).into()))
-                        .w(px(36.))
-                        .h(px(28.))
-                        .rounded(px(6.))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .opacity(0.)
-                        .group_hover(g2, |s| s.opacity(1.))
-                        .hover(|s| s.bg(BG_HOVER))
-                        .context_menu(move |menu, _window, _cx| {
-                            menu.menu("Add to Queue", Box::new(AddToQueue))
-                                .menu("Add to Playlist", Box::new(AddToPlaylist))
-                                .separator()
-                                .menu("Go to Artist", Box::new(GoToArtist))
-                                .menu("Go to Album", Box::new(GoToAlbum))
-                        })
-                        .child(
-                            gpui::svg()
-                                .path("icons/dots-three.svg")
-                                .size(px(18.))
-                                .text_color(TEXT_SECONDARY)
-                                .group_hover(g3, |s| s.text_color(TEXT_PRIMARY)),
-                        ),
-                ),
+                .child(track_row_overflow_menu(
+                    ("dots", index),
+                    g2,
+                    false,
+                    move |menu, _window, _cx| {
+                        menu.item(PopupMenuItem::new("Add to playlist").on_click({
+                            let playlist_entity = playlist_entity.clone();
+                            let playlist_title = playlist_title.clone();
+                            move |_, _, cx| {
+                                let _ = playlist_entity.update(cx, |this, cx| {
+                                    this.set_status_message(
+                                        format!(
+                                            "Add to playlist is not wired yet (\"{}\").",
+                                            playlist_title
+                                        ),
+                                        cx,
+                                    );
+                                });
+                            }
+                        }))
+                        .item(PopupMenuItem::new("Add to queue").on_click({
+                            let queue_entity = queue_entity.clone();
+                            let queue_title = queue_title.clone();
+                            move |_, _, cx| {
+                                let _ = queue_entity.update(cx, |this, cx| {
+                                    this.set_status_message(
+                                        format!(
+                                            "Add to queue is not wired yet (\"{}\").",
+                                            queue_title
+                                        ),
+                                        cx,
+                                    );
+                                });
+                            }
+                        }))
+                        .item(PopupMenuItem::new("Go to artist").on_click({
+                            let artist_entity = artist_entity.clone();
+                            let artist_name = artist_name.clone();
+                            move |_, _, cx| {
+                                let _ = artist_entity.update(cx, |this, cx| {
+                                    this.set_status_message(
+                                        format!(
+                                            "Artist navigation is not wired yet ({}).",
+                                            artist_name
+                                        ),
+                                        cx,
+                                    );
+                                });
+                            }
+                        }))
+                        .item(PopupMenuItem::new("Go to album").on_click({
+                            let album_entity = album_entity.clone();
+                            let album_name = album_name.clone();
+                            move |_, _, cx| {
+                                let _ = album_entity.update(cx, |this, cx| {
+                                    this.set_status_message(
+                                        format!(
+                                            "Album navigation is not wired yet ({}).",
+                                            album_name
+                                        ),
+                                        cx,
+                                    );
+                                });
+                            }
+                        }))
+                        .separator()
+                        .item(
+                            PopupMenuItem::new("Encrypt & Upload")
+                                .disabled(upload_busy)
+                                .on_click({
+                                    let upload_entity = upload_entity.clone();
+                                    let upload_track = upload_track.clone();
+                                    move |_, _, cx| {
+                                        let _ = upload_entity.update(cx, |this, cx| {
+                                            this.encrypt_upload_track(upload_track.clone(), cx);
+                                        });
+                                    }
+                                }),
+                        )
+                    },
+                )),
         )
 }
 
@@ -826,22 +1177,17 @@ fn render_album_art_thumbnail(cover_path: &Option<String>) -> impl IntoElement {
         .overflow_hidden();
 
     match cover_path {
-        Some(path) if !path.is_empty() && std::path::Path::new(path).exists() => container
-            .child(
-                gpui::img(PathBuf::from(path))
-                    .size(px(40.))
-                    .object_fit(ObjectFit::Cover),
-            ),
-        _ => container
-            .flex()
-            .items_center()
-            .justify_center()
-            .child(
-                gpui::svg()
-                    .path("icons/music-note.svg")
-                    .size(px(16.))
-                    .text_color(TEXT_DIM),
-            ),
+        Some(path) if !path.is_empty() && std::path::Path::new(path).exists() => container.child(
+            gpui::img(PathBuf::from(path))
+                .size(px(40.))
+                .object_fit(ObjectFit::Cover),
+        ),
+        _ => container.flex().items_center().justify_center().child(
+            gpui::svg()
+                .path("icons/music-note.svg")
+                .size(px(16.))
+                .text_color(TEXT_DIM),
+        ),
     }
 }
 

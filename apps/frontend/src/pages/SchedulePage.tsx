@@ -262,18 +262,24 @@ export const SchedulePage: Component = () => {
 
   return (
     <div class="h-full overflow-y-auto">
-      <PageHeader
-        title={t('nav.schedule')}
-        rightSlot={
-          <Show when={view() === 'upcoming'}>
-            <IconButton variant="soft" size="xl" aria-label={t('schedule.availability')} onClick={() => navigate(SCHEDULE_AVAILABILITY)}>
-              <CalendarBlank class="w-5 h-5" />
-            </IconButton>
-          </Show>
-        }
-      />
+      {/* Header — full-width border, content constrained */}
+      <div class="border-b border-[var(--border-subtle)]">
+        <div class="max-w-4xl mx-auto w-full px-4 md:px-8">
+          <PageHeader
+            title={t('nav.schedule')}
+            class="border-b-0"
+            rightSlot={
+              <Show when={view() === 'upcoming'}>
+                <IconButton variant="soft" size="xl" aria-label={t('schedule.availability')} onClick={() => navigate(SCHEDULE_AVAILABILITY)}>
+                  <CalendarBlank class="w-5 h-5" />
+                </IconButton>
+              </Show>
+            }
+          />
+        </div>
+      </div>
 
-      <div class="w-full max-w-4xl mx-auto px-4 py-6">
+      <div class="w-full max-w-4xl mx-auto px-4 md:px-8 py-6">
         {/* Error toast */}
         <Show when={txError()}>
           <div class="mb-4 px-4 py-3 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-base flex items-center justify-between">

@@ -53,7 +53,7 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
         {/* Location row */}
         {location ? (
           <View style={styles.locationRow}>
-            <MapPin size={14} color={colors.textMuted} />
+            <MapPin size={16} color={colors.textMuted} />
             <Text style={styles.location} numberOfLines={1}>
               {location}
             </Text>
@@ -90,7 +90,8 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   ageGender: {
-    fontSize: fontSize.sm,
+    fontSize: fontSize.base,
+    fontWeight: '600',
     color: colors.textMuted,
     flexShrink: 0,
   },
@@ -100,7 +101,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   location: {
-    fontSize: fontSize.sm,
+    fontSize: fontSize.base,
     color: colors.textMuted,
     flex: 1,
   },

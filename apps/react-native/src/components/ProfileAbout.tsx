@@ -1,15 +1,12 @@
 import React from 'react';
-import { Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import {
-  GlobeSimple,
   GraduationCap,
   Heart,
   Lightning,
-  LinkSimple,
+  MapPin,
   Translate,
-  TwitterLogo,
-  GithubLogo,
-  TelegramLogo,
+  User,
 } from 'phosphor-react-native';
 import { colors, fontSize, radii } from '../lib/theme';
 import { Card } from '../ui';
@@ -41,6 +38,7 @@ const SectionHeader: React.FC<{
 // ── Main component ────────────────────────────────────────────────
 
 export const ProfileAbout: React.FC<{ profile: ProfileData }> = ({ profile }) => {
+  const hasBasics = profile.age || profile.genderLabel || profile.location;
   const hasLanguages = profile.languages && profile.languages.length > 0;
   const hasEducation = profile.school || profile.degree || profile.fieldBucket || profile.profession || profile.industry;
   const hasDating = profile.relationshipStatus || profile.heightCm || profile.relocate ||
@@ -48,13 +46,26 @@ export const ProfileAbout: React.FC<{ profile: ProfileData }> = ({ profile }) =>
     profile.children || profile.wantsChildren || profile.lookingFor;
   const hasLifestyle = profile.hobbies || profile.skills || profile.drinking ||
     profile.smoking || profile.drugs || profile.religion || profile.pets || profile.diet;
-  const hasLinks = profile.url || profile.twitter || profile.github || profile.telegram;
-
-  const hasAnySections = hasLanguages || hasEducation || hasDating || hasLifestyle || hasLinks;
+  const hasAnySections = hasBasics || hasLanguages || hasEducation || hasDating || hasLifestyle;
   if (!hasAnySections) return null;
 
   return (
     <View style={styles.container}>
+      {/* Basics */}
+      {hasBasics ? (
+        <Card style={styles.card}>
+          <View style={styles.cardInner}>
+            <SectionHeader
+              icon={<User size={16} color={colors.accentBlue} />}
+              title="Basics"
+            />
+            <Row label="Age" value={profile.age ? String(profile.age) : undefined} />
+            <Row label="Gender" value={profile.genderLabel} />
+            <Row label="Location" value={profile.location} />
+          </View>
+        </Card>
+      ) : null}
+
       {/* Languages */}
       {hasLanguages ? (
         <Card style={styles.card}>
@@ -133,66 +144,9 @@ export const ProfileAbout: React.FC<{ profile: ProfileData }> = ({ profile }) =>
         </Card>
       ) : null}
 
-      {/* Links */}
-      {hasLinks ? (
-        <Card style={styles.card}>
-          <View style={styles.cardInner}>
-            <SectionHeader
-              icon={<LinkSimple size={16} color={colors.accentBlue} />}
-              title="Links"
-            />
-            {profile.url ? (
-              <LinkRow
-                icon={<GlobeSimple size={14} color={colors.textMuted} />}
-                label={profile.url.replace(/^https?:\/\//, '')}
-                url={profile.url}
-              />
-            ) : null}
-            {profile.twitter ? (
-              <LinkRow
-                icon={<TwitterLogo size={14} color={colors.textMuted} />}
-                label={`@${profile.twitter}`}
-                url={`https://x.com/${profile.twitter}`}
-              />
-            ) : null}
-            {profile.github ? (
-              <LinkRow
-                icon={<GithubLogo size={14} color={colors.textMuted} />}
-                label={profile.github}
-                url={`https://github.com/${profile.github}`}
-              />
-            ) : null}
-            {profile.telegram ? (
-              <LinkRow
-                icon={<TelegramLogo size={14} color={colors.textMuted} />}
-                label={`@${profile.telegram}`}
-                url={`https://t.me/${profile.telegram}`}
-              />
-            ) : null}
-          </View>
-        </Card>
-      ) : null}
     </View>
   );
 };
-
-const LinkRow: React.FC<{
-  icon: React.ReactNode;
-  label: string;
-  url: string;
-}> = ({ icon, label, url }) => (
-  <TouchableOpacity
-    style={styles.linkRow}
-    onPress={() => {
-      const href = url.startsWith('http') ? url : `https://${url}`;
-      Linking.openURL(href).catch(() => {});
-    }}
-    activeOpacity={0.7}
-  >
-    {icon}
-    <Text style={styles.linkText} numberOfLines={1}>{label}</Text>
-  </TouchableOpacity>
-);
 
 // ── Styles ────────────────────────────────────────────────────────
 
@@ -214,7 +168,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   sectionTitle: {
-    fontSize: fontSize.sm,
+    fontSize: fontSize.base,
     fontWeight: '600',
     color: colors.textSecondary,
     textTransform: 'uppercase',
@@ -252,23 +206,12 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
   },
   langName: {
-    fontSize: fontSize.sm,
+    fontSize: fontSize.base,
     color: colors.textPrimary,
     fontWeight: '500',
   },
   langProf: {
-    fontSize: fontSize.xs,
-    color: colors.textMuted,
-  },
-  linkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 4,
-  },
-  linkText: {
     fontSize: fontSize.base,
-    color: colors.accentBlue,
-    flex: 1,
+    color: colors.textMuted,
   },
 });

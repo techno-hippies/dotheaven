@@ -11,7 +11,7 @@ import type { PKPAuthContext } from '../lit/types'
 
 /** Encrypted Filebase key — only decryptable by the avatar upload Lit Action CID */
 const FILEBASE_ENCRYPTED_KEY = {
-  ciphertext: 'pfbkdwk48PntH/CrTFsyRFLDxDak2yPMIvQMSss8iboeaa3bRGoY3M3ng11b1Ve5tH9A1lN7mVKpoDMYFGS+TClXG1JZKcKLIp9O8YVmBOxl8jGK+zGqCHiIU7JF/cFPpL5xAeZHgPjJL0XUlTWJiApU7lUqOGweTAwIiynpiEpfffxvcZM3Vt/oEIOvvbZfj/XXgOBHsQICM76Afx3r5rd9u1EwjjUAw1Az0qmtCRbvf43Kk7gC',
+  ciphertext: 'uPCvvNTzGAf2924hvE8+0W7DNjZQNkUlye+zQWkOfK4YpShWfw+Pwx8+0zGAIM4Amvu68nUz/+Ie65Wk9hsDQq8L61O0qbLfdyr8Nx2nR+BlgMlneDO7uL92s7o3422JmH8v22Nazy+jCXDNNyzNFIEUvQ7FeLmlC2cVPGosKhZeA1EWX3Mdropmss6s4IZM3qjw+mYRXYHbzMOzek7gpsrUFJ1ilNnXKwUPcKFzDJ5aoUQw7oQC',
   dataToEncryptHash: '23ab539bda3900163da16db23be0e6e6c6003d35bd1ac54aeaada176f8f1e0d4',
   accessControlConditions: [
     {
@@ -31,7 +31,7 @@ const FILEBASE_ENCRYPTED_KEY = {
 
 /** Encrypted OpenRouter key — only decryptable by the avatar upload Lit Action CID */
 const OPENROUTER_ENCRYPTED_KEY = {
-  ciphertext: 'iffXu9nj0mqXhp5FNoKJK6sShEeHqmpUx+ksYHf0a7Gd/13OwPyHB2Xnv4P9NRZPdmniU+lb7nUv6ELo+cdPs7I/DtijzO21qqllwqZRDRVKe++CDpVbYV0xtsmckoBZtWLYFydbWJasPdSv3EmUmklAH6NQKLGOJXAeQcHW/SSDM4fL1gQXq4pwmr+Ac/j3vxMdyukB2gFDuioC',
+  ciphertext: 'ohXZVCRGljiCLwqlq7SOsCS29E1X0GR8PlAwmtAzoZOUQ3YQYaNT0vT+OXmAYduQyKfcVQeptpog4O2cw53iCOI72Eb7mu6cG0WuqZgXxzVKC7Mc/UKOV7DzQtvjy9RcW+UpSheW626Q+RlLqyNY0uIyeR6EWywjYrpc9n59GZ6I8JLkR5geeit02OxZE9LeCIQdHlvnLj92QSEC',
   dataToEncryptHash: '2ca783d51c4bfd1a8b80e1c8aee5e94d3f17c3089f8bca45e48d40b3435ae092',
   accessControlConditions: [
     {

@@ -32,10 +32,16 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
           <CaretLeft size={20} color={colors.textPrimary} weight="bold" />
         </IconButton>
       ) : (
-        <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.7}>
+        <TouchableOpacity
+          onPress={onAvatarPress}
+          activeOpacity={0.7}
+          style={styles.avatarWrap}
+        >
           <Avatar
             src={avatarUrl}
             size="sm"
+            borderWidth={1}
+            borderColor={colors.borderDefault}
             fallbackIcon={
               <User
                 size={20}
@@ -70,7 +76,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
   },
+  avatarWrap: {
+    height: 36,
+    justifyContent: 'center',
+  },
   spacer: {
-    width: 32,
+    width: 36,
+    height: 36,
   },
 });

@@ -251,7 +251,7 @@ export const PostPage: Component = () => {
   }
 
   return (
-    <>
+    <div class="h-full max-w-[680px] mx-auto w-full">
       <Show
         when={postProps()}
         fallback={
@@ -277,6 +277,6 @@ export const PostPage: Component = () => {
         onSend={handleShareSend}
         isSending={isSending()}
       />
-    </>
+    </div>
   )
 }

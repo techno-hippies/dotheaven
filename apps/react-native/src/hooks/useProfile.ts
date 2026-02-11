@@ -2,11 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { fetchProfile, type ProfileData } from '../lib/profile';
 
 interface UseProfileParams {
-  isAuthenticated: boolean;
+  /** Whether fetch is enabled. For own profile, pass isAuthenticated. For public profiles, pass true. */
+  enabled?: boolean;
   address?: string;
 }
 
-export function useProfile({ isAuthenticated, address }: UseProfileParams) {
+export function useProfile({ enabled = true, address }: UseProfileParams) {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -25,7 +26,7 @@ export function useProfile({ isAuthenticated, address }: UseProfileParams) {
   }, [address]);
 
   useEffect(() => {
-    if (isAuthenticated && address) {
+    if (enabled && address) {
       setProfileLoading(true);
       loadProfile();
       return;
@@ -33,7 +34,7 @@ export function useProfile({ isAuthenticated, address }: UseProfileParams) {
     setProfile(null);
     setProfileLoading(false);
     setRefreshing(false);
-  }, [isAuthenticated, address, loadProfile]);
+  }, [enabled, address, loadProfile]);
 
   const refresh = useCallback(() => {
     if (!address) return;

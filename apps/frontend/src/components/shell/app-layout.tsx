@@ -9,7 +9,7 @@
  */
 
 import type { ParentComponent } from 'solid-js'
-import { Show, createMemo, createEffect } from 'solid-js'
+import { Show, createSignal, createMemo, createEffect } from 'solid-js'
 import { useLocation, useNavigate } from '@solidjs/router'
 import {
   HOME, WALLET, SCHEDULE, CHAT, SEARCH, MUSIC, ONBOARDING, SETTINGS,
@@ -105,7 +105,7 @@ export const AppLayout: ParentComponent = (props) => {
   const player = usePlayer()
   const location = useLocation()
   const navigate = useNavigate()
-  const isChatRoute = createMemo(() => location.pathname.startsWith('/chat'))
+  const isChatRoute = () => false // sidebar no longer collapses on chat
   const isActiveChat = createMemo(() => location.pathname !== '/chat' && location.pathname.startsWith('/chat'))
   const isPost = createMemo(() => location.pathname.startsWith('/post/'))
   const isPublicProfile = createMemo(() => location.pathname.startsWith('/u/'))
@@ -188,7 +188,7 @@ export const AppLayout: ParentComponent = (props) => {
   const activeTab = createMemo(() => {
     const path = location.pathname
     if (path === '/') return 'home'
-    if (path.startsWith('/search')) return 'search'
+    if (path.startsWith(SEARCH)) return 'search'
     if (path.startsWith('/music')) return 'music'
     if (path.startsWith('/chat')) return 'chat'
     if (path.startsWith('/wallet')) return 'wallet'

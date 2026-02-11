@@ -68,6 +68,13 @@ VITE_LIT_NETWORK=naga-test   # (default) — stable, requires tstLPX tokens
 VITE_LIT_NETWORK=naga-dev    # free but less stable (can have 500 errors)
 ```
 
+Preferred one-command switch (repo root):
+
+```bash
+bun run lit:env:dev   # sets naga-dev in apps/frontend/.env + lit-actions/.env
+bun run lit:env:test  # sets naga-test in apps/frontend/.env + lit-actions/.env
+```
+
 **How it works:**
 - `config.ts` reads `VITE_LIT_NETWORK` → selects network object, auth service URL
 - `action-cids.ts` embeds both CID maps (mirroring `lit-actions/cids/dev.json` and `test.json`) → selects correct CIDs per network

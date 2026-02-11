@@ -63,6 +63,7 @@ function isStale(updatedAt?: number) {
 // ============ Component ============
 export const WalletPage: Component = () => {
   const auth = useAuth()
+  const embeddedAddress = () => auth.pkpAddress() ?? auth.eoaAddress()
 
   // Store for each asset's state
   const [assets, setAssets] = createStore<Record<string, AssetState>>({})
@@ -124,14 +125,14 @@ export const WalletPage: Component = () => {
 
   // Hydrate from cache and refresh stale data
   createEffect(() => {
-    const pkp = auth.pkpAddress()
-    if (!pkp) return
+    const address = embeddedAddress()
+    if (!address) return
 
     const toRefresh: AssetConfig[] = []
 
     // Hydrate all assets from cache first
     for (const config of ASSET_CONFIGS) {
-      const cached = readCache(pkp, config.key)
+      const cached = readCache(address, config.key)
       if (cached) {
         setAssets(config.key, cached)
       } else {
@@ -146,20 +147,20 @@ export const WalletPage: Component = () => {
 
     // Start refreshes
     for (const config of toRefresh) {
-      refreshAsset(config, pkp)
+      refreshAsset(config, address)
     }
   })
 
   // Refresh on window focus if stale
   onMount(() => {
     const handleFocus = () => {
-      const pkp = auth.pkpAddress()
-      if (!pkp) return
+      const address = embeddedAddress()
+      if (!address) return
 
       for (const config of ASSET_CONFIGS) {
         const state = assets[config.key]
         if (isStale(state?.updatedAt)) {
-          refreshAsset(config, pkp)
+          refreshAsset(config, address)
         }
       }
     }
@@ -317,15 +318,23 @@ export const WalletPage: Component = () => {
 
   return (
     <div class="h-full overflow-y-auto">
-      <PageHeader title={t('nav.wallet')} />
-      <WalletAssets
-        address={auth.pkpAddress() || '0x0000000000000000000000000000000000000000'}
-        totalBalance={auth.isAuthenticated() ? totalBalanceUSD() : '$0.00'}
-        assets={auth.isAuthenticated() ? walletAssets() : zeroAssets()}
-        connectedWallet={connectedWallet()}
-        onSend={() => console.log('Send clicked')}
-        onReceive={() => console.log('Receive clicked')}
-      />
+      {/* Header — full-width border, content constrained */}
+      <div class="border-b border-[var(--border-subtle)]">
+        <div class="max-w-4xl mx-auto w-full px-4 md:px-8">
+          <PageHeader title={t('nav.wallet')} class="border-b-0 !px-0" />
+        </div>
+      </div>
+      {/* Content — constrained */}
+      <div class="max-w-4xl mx-auto w-full px-4 md:px-8">
+        <WalletAssets
+          address={embeddedAddress() || '0x0000000000000000000000000000000000000000'}
+          totalBalance={auth.isAuthenticated() ? totalBalanceUSD() : '$0.00'}
+          assets={auth.isAuthenticated() ? walletAssets() : zeroAssets()}
+          connectedWallet={connectedWallet()}
+          onSend={() => console.log('Send clicked')}
+          onReceive={() => console.log('Receive clicked')}
+        />
+      </div>
     </div>
   )
 }

@@ -114,30 +114,39 @@ export const App: Component = () => {
 
   return (
     <div class="h-full overflow-y-auto">
-      <PageHeader
-        title={t('nav.community')}
-        rightSlot={
-          <div class="relative">
-            <IconButton
-              variant="soft"
-              size="md"
-              aria-label={t('common.filter')}
-              onClick={() => setFilterOpen(true)}
-            >
-              <Sliders class="w-5 h-5" />
-            </IconButton>
-            <Show when={activeFilterCount() > 0}>
-              <span class="absolute -top-0.5 -right-1.5 w-4 h-4 bg-[var(--accent-coral)] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                {activeFilterCount()}
-              </span>
-            </Show>
-          </div>
-        }
-      />
+      {/* Header — full-width border, content constrained to match profile */}
+      <div class="border-b border-[var(--border-subtle)]">
+        <div class="max-w-4xl mx-auto w-full px-4 md:px-8">
+          <PageHeader
+            title={t('nav.community')}
+            class="border-b-0"
+            rightSlot={
+              <div class="relative">
+                <IconButton
+                  variant="soft"
+                  size="md"
+                  aria-label={t('common.filter')}
+                  onClick={() => setFilterOpen(true)}
+                >
+                  <Sliders class="w-5 h-5" />
+                </IconButton>
+                <Show when={activeFilterCount() > 0}>
+                  <span class="absolute -top-0.5 -right-1.5 w-4 h-4 bg-[var(--accent-coral)] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                    {activeFilterCount()}
+                  </span>
+                </Show>
+              </div>
+            }
+          />
+        </div>
+      </div>
+      {/* Content container — constrained, matching profile page */}
+      <div class="max-w-4xl mx-auto w-full px-4 md:px-8">
       <CommunityFeed
         members={members()}
         isLoading={membersQuery.isPending}
       />
+      </div>
       <CommunityFilterDialog
         open={filterOpen()}
         onOpenChange={setFilterOpen}

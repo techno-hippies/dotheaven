@@ -2,10 +2,13 @@ import { Show, For, type Component } from 'solid-js'
 import { ProfileSidebarCard, ProfileSidebarRow } from './profile-sidebar-card'
 import { getLanguageName, proficiencyLabel } from '../../data/languages'
 import { getTagLabel, stringToTagIds } from '../../data/tags'
+import { MapPin } from '../../icons'
+import { abbreviateLocation } from '../../primitives'
 import type { SelectOption } from '../../primitives'
 import type { ProfileInput } from './profile-info-section'
 import type { LanguageEntry } from '../../data/languages'
 import {
+  GENDER_OPTIONS,
   DEGREE_OPTIONS,
   FIELD_OPTIONS,
   PROFESSION_OPTIONS,
@@ -34,11 +37,37 @@ function optionLabel(options: SelectOption[], value: string | undefined): string
 
 export interface ProfileAboutSidebarProps {
   profile: ProfileInput
+  /** Location string (city label) */
+  location?: string
+  /** Follower count */
+  followerCount?: number
+  /** Following count */
+  followingCount?: number
+  onFollowerCountClick?: () => void
+  onFollowingCountClick?: () => void
+  /** Age */
+  age?: number
+  /** Gender */
+  gender?: string
+}
+
+const GENDER_ABBREV: Record<string, string> = {
+  woman: 'F', man: 'M', 'non-binary': 'NB',
+  'trans-woman': 'TW', 'trans-man': 'TM', intersex: 'IX', other: 'O',
 }
 
 export const ProfileAboutSidebar: Component<ProfileAboutSidebarProps> = (props) => {
   const languages = () => props.profile.languages ?? []
   const hasLanguages = () => languages().length > 0
+  const hasAbout = () => hasLanguages() || !!props.location || props.followerCount !== undefined || props.followingCount !== undefined || props.age || props.gender
+
+  const ageGenderDisplay = () => {
+    const parts = []
+    if (props.age && props.age > 0) parts.push(String(props.age))
+    const genderAbbrev = GENDER_ABBREV[props.gender ?? ''] ?? props.gender
+    if (genderAbbrev) parts.push(genderAbbrev)
+    return parts.join('')
+  }
 
   const school = () => props.profile.school
   const degree = () => optionLabel(DEGREE_OPTIONS, props.profile.degree)
@@ -72,17 +101,58 @@ export const ProfileAboutSidebar: Component<ProfileAboutSidebarProps> = (props) 
 
   return (
     <div class="flex flex-col gap-3">
-      {/* Languages */}
-      <Show when={hasLanguages()}>
-        <ProfileSidebarCard title="Languages">
-          <For each={languages()}>
-            {(lang: LanguageEntry) => (
-              <ProfileSidebarRow
-                label={getLanguageName(lang.code)}
-                value={proficiencyLabel(lang.proficiency)}
-              />
-            )}
-          </For>
+      {/* About — age/gender, location, followers/following, languages */}
+      <Show when={hasAbout()}>
+        <ProfileSidebarCard title="About">
+          <Show when={ageGenderDisplay()}>
+            <ProfileSidebarRow label="Age / Gender" value={ageGenderDisplay()} />
+          </Show>
+          <Show when={props.location}>
+            <ProfileSidebarRow label="Location">
+              <span class="flex items-center gap-1.5 text-base text-[var(--text-secondary)]">
+                <MapPin class="w-[16px] h-[16px] flex-shrink-0" />
+                {abbreviateLocation(props.location!)}
+              </span>
+            </ProfileSidebarRow>
+          </Show>
+          <Show when={props.followerCount !== undefined}>
+            <ProfileSidebarRow label="Followers">
+              <button
+                type="button"
+                class="hover:underline text-base text-[var(--text-secondary)] font-semibold"
+                onClick={() => props.onFollowerCountClick?.()}
+              >
+                {props.followerCount ?? 0}
+              </button>
+            </ProfileSidebarRow>
+          </Show>
+          <Show when={props.followingCount !== undefined}>
+            <ProfileSidebarRow label="Following">
+              <button
+                type="button"
+                class="hover:underline text-base text-[var(--text-secondary)] font-semibold"
+                onClick={() => props.onFollowingCountClick?.()}
+              >
+                {props.followingCount ?? 0}
+              </button>
+            </ProfileSidebarRow>
+          </Show>
+          <Show when={hasLanguages()}>
+            <ProfileSidebarRow label="Languages">
+              <span class="text-base text-[var(--text-secondary)]">
+                {languages().map((lang: LanguageEntry) => {
+                  const name = getLanguageName(lang.code)
+                  const prof = proficiencyLabel(lang.proficiency)
+                  // Native (proficiency 7) vs Learning (proficiency 1-6)
+                  if (lang.proficiency === 7) {
+                    return `Native ${name}`
+                  } else {
+                    return `Learning ${name} (${prof})`
+                  }
+                }).join(', ')}
+              </span>
+            </ProfileSidebarRow>
+          </Show>
         </ProfileSidebarCard>
       </Show>
 

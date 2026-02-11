@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { FeedScreen } from '../screens/FeedScreen';
 import { CommunityScreen } from '../screens/CommunityScreen';
 import { MusicScreen } from '../screens/MusicScreen';
@@ -8,12 +9,43 @@ import { ChatScreen } from '../screens/ChatScreen';
 import { ScheduleScreen } from '../screens/ScheduleScreen';
 import { WalletScreen } from '../screens/WalletScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { PlayerScreen } from '../screens/PlayerScreen';
+import { PublicProfileScreen } from '../screens/PublicProfileScreen';
+import { ProfileScreen } from '../screens/ProfileScreen';
+import { RoomScreen } from '../screens/RoomScreen';
+import { EditProfileScreen } from '../screens/EditProfileScreen';
+import { SearchScreen } from '../screens/SearchScreen';
+import { PlaylistScreen } from '../screens/PlaylistScreen';
+import { ArtistScreen } from '../screens/ArtistScreen';
+import { ComposeScreen } from '../screens/ComposeScreen';
 import { BottomTabBar, type TabItem } from '../components/BottomTabBar';
 import { MiniPlayer } from '../components/MiniPlayer';
 import { SideMenuDrawer } from '../components/SideMenuDrawer';
 import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { useAuth } from '../providers/AuthProvider';
+import { DrawerContext } from './DrawerContext';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
+export type RootStackParamList = {
+  Tabs: undefined;
+  Player: undefined;
+  Profile: undefined;
+  EditProfile: undefined;
+  PublicProfile: { address: string };
+  Search: undefined;
+  Playlist: { playlistId: string };
+  Artist: { mbid?: string; artistName?: string };
+  Compose: undefined;
+  Room: {
+    mode: 'create' | 'join';
+    roomId?: string;
+    visibility?: 'open' | 'private';
+    ai_enabled?: boolean;
+  };
+};
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator();
 
 const TABS: TabItem[] = [
@@ -25,21 +57,17 @@ const TABS: TabItem[] = [
   { key: 'Wallet', label: 'Wallet', icon: 'wallet' },
 ];
 
-// Shared context so FeedScreen can open the drawer
-export const DrawerContext = React.createContext<{ open: () => void }>({ open: () => {} });
-
-export const TabNavigator: React.FC = () => {
+const TabsNavigator: React.FC = () => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const { isAuthenticated, isNewUser, pkpInfo, logout, register, authenticate, completeOnboarding } = useAuth();
+  const { isAuthenticated, isNewUser, logout, register, authenticate, completeOnboarding } = useAuth();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const openDrawer = useCallback(() => setDrawerOpen(true), []);
 
-  const shortAddress = pkpInfo?.ethAddress
-    ? `${pkpInfo.ethAddress.slice(0, 6)}...${pkpInfo.ethAddress.slice(-4)}`
-    : pkpInfo?.pubkey
-      ? `${pkpInfo.pubkey.slice(0, 10)}...${pkpInfo.pubkey.slice(-8)}`
-      : undefined;
+  const handleMiniPlayerPress = useCallback(() => {
+    navigation.navigate('Player');
+  }, [navigation]);
 
   return (
     <DrawerContext.Provider value={{ open: openDrawer }}>
@@ -54,7 +82,9 @@ export const TabNavigator: React.FC = () => {
 
             return (
               <>
-                <MiniPlayer />
+                <TouchableOpacity activeOpacity={0.9} onPress={handleMiniPlayerPress}>
+                  <MiniPlayer />
+                </TouchableOpacity>
                 <BottomTabBar
                   tabs={TABS}
                   activeTab={focusedRoute.name}
@@ -77,10 +107,10 @@ export const TabNavigator: React.FC = () => {
           open={drawerOpen}
           onClose={() => setDrawerOpen(false)}
           isAuthenticated={isAuthenticated}
-          displayName={shortAddress}
           onLogout={logout}
           onSignUp={register}
           onSignIn={authenticate}
+          onProfile={() => navigation.navigate('Profile')}
           onSettings={() => setSettingsOpen(true)}
         />
 
@@ -99,6 +129,68 @@ export const TabNavigator: React.FC = () => {
         )}
       </View>
     </DrawerContext.Provider>
+  );
+};
+
+export const TabNavigator: React.FC = () => {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Tabs" component={TabsNavigator} />
+      <Stack.Screen
+        name="Player"
+        component={PlayerScreen}
+        options={{
+          presentation: 'fullScreenModal',
+          animation: 'slide_from_bottom',
+        }}
+      />
+      <Stack.Screen
+        name="Compose"
+        component={ComposeScreen}
+        options={{
+          presentation: 'fullScreenModal',
+          animation: 'slide_from_bottom',
+        }}
+      />
+      <Stack.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="EditProfile"
+        component={EditProfileScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="PublicProfile"
+        component={PublicProfileScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="Search"
+        component={SearchScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="Playlist"
+        component={PlaylistScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="Artist"
+        component={ArtistScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="Room"
+        component={RoomScreen}
+        options={{
+          presentation: 'fullScreenModal',
+          animation: 'slide_from_bottom',
+        }}
+      />
+    </Stack.Navigator>
   );
 };
 

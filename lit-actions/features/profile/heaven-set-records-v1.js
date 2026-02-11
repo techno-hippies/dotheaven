@@ -38,10 +38,10 @@ const RPC_URL = "https://carrot.megaeth.com/rpc";
 
 const RECORDS_V1 = "0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3";
 
-// Sponsor PKP
+// Sponsor PKP (naga-dev)
 const SPONSOR_PKP_PUBLIC_KEY =
-  "041b762c8813a1d9ad63be588846ae6df642110bec9bc2f42a4f06864cad39266b6eaa615c65ce83d2a4b22d14ce72c7b8de3285011831e54c35fd97a923f75ef6";
-const SPONSOR_PKP_ADDRESS = "0x7222c04A7C626261D2255Cc40e6Be8BB4Aa8e171";
+  "04fb425233a6b6c7628c42570d074d53fc7b4211464c9fc05f84a0f15f7d10cc2b149a2fca26f69539310b0ee129577b9d368015f207ce8719e5ef9040e340a0a5";
+const SPONSOR_PKP_ADDRESS = "0xF2a9Ea42e5eD701AE5E7532d4217AE94D3F03455";
 
 // MegaETH gas config
 const GAS_PRICE = "1000000";
@@ -100,6 +100,7 @@ const main = async () => {
       value,
       keys,
       values,
+      signature: preSignedSig,
       dryRun = false,
     } = jsParams || {};
 
@@ -141,23 +142,31 @@ const main = async () => {
       message = `heaven:records:${node.toLowerCase()}:${key}:${valueHash}:${nonce}`;
     }
 
-    const msgHash = ethers.utils.hashMessage(message);
-    const sigResult = await Lit.Actions.signAndCombineEcdsa({
-      toSign: Array.from(ethers.utils.arrayify(msgHash)),
-      publicKey: userPkpPublicKey,
-      sigName: "user_records_sig",
-    });
-    if (typeof sigResult === "string" && sigResult.startsWith("[ERROR]")) {
-      throw new Error(`User PKP signing failed: ${sigResult}`);
+    let signature;
+
+    if (preSignedSig) {
+      // Use pre-signed signature (e.g. from frontend PKP signing)
+      signature = preSignedSig;
+    } else {
+      // Sign within Lit Action using user's PKP
+      const msgHash = ethers.utils.hashMessage(message);
+      const sigResult = await Lit.Actions.signAndCombineEcdsa({
+        toSign: Array.from(ethers.utils.arrayify(msgHash)),
+        publicKey: userPkpPublicKey,
+        sigName: "user_records_sig",
+      });
+      if (typeof sigResult === "string" && sigResult.startsWith("[ERROR]")) {
+        throw new Error(`User PKP signing failed: ${sigResult}`);
+      }
+      const sigObj = JSON.parse(sigResult);
+      let userV = Number(sigObj.recid ?? sigObj.recoveryId ?? sigObj.v);
+      if (userV === 0 || userV === 1) userV += 27;
+      signature = ethers.utils.joinSignature({
+        r: `0x${strip0x(sigObj.r)}`,
+        s: `0x${strip0x(sigObj.s)}`,
+        v: userV,
+      });
     }
-    const sigObj = JSON.parse(sigResult);
-    let userV = Number(sigObj.recid ?? sigObj.recoveryId ?? sigObj.v);
-    if (userV === 0 || userV === 1) userV += 27;
-    const signature = ethers.utils.joinSignature({
-      r: `0x${strip0x(sigObj.r)}`,
-      s: `0x${strip0x(sigObj.s)}`,
-      v: userV,
-    });
 
     // Verify signature locally
     const recovered = ethers.utils.verifyMessage(message, signature);

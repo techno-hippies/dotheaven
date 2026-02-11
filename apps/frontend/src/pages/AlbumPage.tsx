@@ -156,7 +156,7 @@ export const AlbumPage: Component = () => {
           )
 
           return (
-            <div class="h-full overflow-y-auto">
+            <div class="h-full overflow-y-auto max-w-5xl mx-auto w-full">
               <MediaHeader
                 title={albumInfo().title}
                 coverSrc={coverUrl()}

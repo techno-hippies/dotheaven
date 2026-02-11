@@ -7,8 +7,14 @@ export const REGISTRY_V1 = '0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2' as const
 export const RECORDS_V1 = '0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3' as const;
 export const PROFILE_V2 = '0xa31545D33f6d656E62De67fd020A26608d4601E5' as const;
 export const FOLLOW_V1 = '0x3F32cF9e70EF69DFFed74Dfe07034cb03cF726cb' as const;
+export const PLAYLIST_V1 = '0xF0337C4A335cbB3B31c981945d3bE5B914F7B329' as const;
 export const HEAVEN_NODE =
   '0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27' as const;
+
+export const SUBGRAPH_PLAYLISTS =
+  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-playlists/1.0.0/gn';
+export const SUBGRAPH_ACTIVITY =
+  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/14.0.0/gn';
 
 export const ZERO_HASH =
   '0x0000000000000000000000000000000000000000000000000000000000000000' as const;
@@ -151,6 +157,39 @@ export const NUM_TO_DIET: Record<number, string> = {
   1: 'Omnivore', 2: 'Vegetarian', 3: 'Vegan', 4: 'Pescatarian',
   5: 'Halal', 6: 'Kosher', 7: 'Other',
 };
+
+// ── Reverse mappings (label → number) for saving ─────────────────
+
+function invert(map: Record<number, string>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(map)) out[v] = Number(k);
+  return out;
+}
+
+export const LABEL_TO_GENDER = invert(NUM_TO_GENDER_LABEL);
+export const LABEL_TO_RELOCATE = invert(NUM_TO_RELOCATE);
+export const LABEL_TO_DEGREE = invert(NUM_TO_DEGREE);
+export const LABEL_TO_FIELD = invert(NUM_TO_FIELD);
+export const LABEL_TO_PROFESSION = invert(NUM_TO_PROFESSION);
+export const LABEL_TO_INDUSTRY = invert(NUM_TO_INDUSTRY);
+export const LABEL_TO_RELATIONSHIP = invert(NUM_TO_RELATIONSHIP);
+export const LABEL_TO_SEXUALITY = invert(NUM_TO_SEXUALITY);
+export const LABEL_TO_ETHNICITY = invert(NUM_TO_ETHNICITY);
+export const LABEL_TO_DATING_STYLE = invert(NUM_TO_DATING_STYLE);
+export const LABEL_TO_CHILDREN = invert(NUM_TO_CHILDREN);
+export const LABEL_TO_WANTS_CHILDREN = invert(NUM_TO_WANTS_CHILDREN);
+export const LABEL_TO_DRINKING = invert(NUM_TO_DRINKING);
+export const LABEL_TO_SMOKING = invert(NUM_TO_SMOKING);
+export const LABEL_TO_DRUGS = invert(NUM_TO_DRUGS);
+export const LABEL_TO_LOOKING_FOR = invert(NUM_TO_LOOKING_FOR);
+export const LABEL_TO_RELIGION = invert(NUM_TO_RELIGION);
+export const LABEL_TO_PETS = invert(NUM_TO_PETS);
+export const LABEL_TO_DIET = invert(NUM_TO_DIET);
+
+/** Convert a NUM_TO_* map into picker-friendly options array */
+export function toOptions(map: Record<number, string>): { value: number; label: string }[] {
+  return Object.entries(map).map(([k, v]) => ({ value: Number(k), label: v }));
+}
 
 // ── Language helpers ──────────────────────────────────────────────
 

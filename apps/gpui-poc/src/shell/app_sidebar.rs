@@ -8,9 +8,24 @@ use crate::auth;
 use crate::icons::PhosphorIcon;
 use crate::pages::Page;
 
-const ACCENT_BLUE: Hsla = Hsla { h: 0.62, s: 0.93, l: 0.76, a: 1. };
-const BG_ELEVATED: Hsla = Hsla { h: 0., s: 0., l: 0.15, a: 1. };
-const TEXT_PRIMARY: Hsla = Hsla { h: 0., s: 0., l: 0.98, a: 1. };
+const ACCENT_BLUE: Hsla = Hsla {
+    h: 0.62,
+    s: 0.93,
+    l: 0.76,
+    a: 1.,
+};
+const BG_ELEVATED: Hsla = Hsla {
+    h: 0.,
+    s: 0.,
+    l: 0.15,
+    a: 1.,
+};
+const TEXT_PRIMARY: Hsla = Hsla {
+    h: 0.,
+    s: 0.,
+    l: 0.98,
+    a: 1.,
+};
 
 /// Abbreviate a hex address: 0x1234...abcd
 fn abbreviate_address(addr: &str) -> String {
@@ -30,12 +45,48 @@ pub fn build_sidebar(
 ) -> impl IntoElement {
     // Main nav
     let main_menu = SidebarMenu::new().children([
-        nav_item("Home", PhosphorIcon::House, Page::Home, active_page, &nav_tx),
-        nav_item("Search", PhosphorIcon::MagnifyingGlass, Page::Community, active_page, &nav_tx),
-        nav_item("Messages", PhosphorIcon::ChatCircle, Page::Messages, active_page, &nav_tx),
-        nav_item("Wallet", PhosphorIcon::Wallet, Page::Wallet, active_page, &nav_tx),
-        nav_item("Schedule", PhosphorIcon::CalendarBlank, Page::Schedule, active_page, &nav_tx),
-        nav_item("Profile", PhosphorIcon::User, Page::Profile, active_page, &nav_tx),
+        nav_item(
+            "Home",
+            PhosphorIcon::House,
+            Page::Home,
+            active_page,
+            &nav_tx,
+        ),
+        nav_item(
+            "Search",
+            PhosphorIcon::MagnifyingGlass,
+            Page::Community,
+            active_page,
+            &nav_tx,
+        ),
+        nav_item(
+            "Messages",
+            PhosphorIcon::ChatCircle,
+            Page::Messages,
+            active_page,
+            &nav_tx,
+        ),
+        nav_item(
+            "Wallet",
+            PhosphorIcon::Wallet,
+            Page::Wallet,
+            active_page,
+            &nav_tx,
+        ),
+        nav_item(
+            "Schedule",
+            PhosphorIcon::CalendarBlank,
+            Page::Schedule,
+            active_page,
+            &nav_tx,
+        ),
+        nav_item(
+            "Profile",
+            PhosphorIcon::User,
+            Page::Profile,
+            active_page,
+            &nav_tx,
+        ),
     ]);
 
     // Music section — styled with top border to act as divider
@@ -45,17 +96,46 @@ pub fn build_sidebar(
         .border_t_1()
         .border_color(hsla(0., 0., 0.21, 1.)) // --border-subtle
         .children([
-            nav_item("Discover", PhosphorIcon::Compass, Page::MusicDiscover, active_page, &nav_tx),
-            nav_item("Library", PhosphorIcon::List, Page::MusicLibrary, active_page, &nav_tx),
-            nav_item("Shared With Me", PhosphorIcon::ShareNetwork, Page::MusicShared, active_page, &nav_tx),
+            nav_item(
+                "Discover",
+                PhosphorIcon::Compass,
+                Page::MusicDiscover,
+                active_page,
+                &nav_tx,
+            ),
+            nav_item(
+                "Library",
+                PhosphorIcon::List,
+                Page::MusicLibrary,
+                active_page,
+                &nav_tx,
+            ),
+            nav_item(
+                "Shared With Me",
+                PhosphorIcon::ShareNetwork,
+                Page::MusicShared,
+                active_page,
+                &nav_tx,
+            ),
         ]);
 
     // Bottom actions — separate menu, stacked vertically
-    let bottom_menu = SidebarMenu::new()
-        .children([
-            nav_item("Download", PhosphorIcon::DownloadSimple, Page::Download, active_page, &nav_tx),
-            nav_item("Settings", PhosphorIcon::Gear, Page::Settings, active_page, &nav_tx),
-        ]);
+    let bottom_menu = SidebarMenu::new().children([
+        nav_item(
+            "Download",
+            PhosphorIcon::DownloadSimple,
+            Page::Download,
+            active_page,
+            &nav_tx,
+        ),
+        nav_item(
+            "Settings",
+            PhosphorIcon::Gear,
+            Page::Settings,
+            active_page,
+            &nav_tx,
+        ),
+    ]);
 
     // Auth button — show wallet address if logged in, or "Sign In" button
     let auth_state = cx.global::<auth::AuthState>();
@@ -110,10 +190,12 @@ pub fn build_sidebar(
                     let result = auth::run_auth_callback_server().await;
                     match result {
                         Ok(auth_result) => {
+                            auth::log_auth_result("Sidebar sign-in callback", &auth_result);
                             let persisted = auth::to_persisted(&auth_result);
                             if let Err(e) = auth::save_to_disk(&persisted) {
                                 log::error!("Failed to persist auth: {e}");
                             }
+                            auth::log_persisted_auth("Sidebar sign-in persisted", &persisted);
                             let _ = cx.update_global::<auth::AuthState, _>(|state, _cx| {
                                 state.persisted = Some(persisted);
                                 state.authing = false;
@@ -168,20 +250,16 @@ pub fn build_sidebar(
         .child(music_menu)
         // Footer: Download, Settings, then auth button
         .footer(
-            div()
-                .v_flex()
-                .w_full()
-                .pb_3()
-                .gap_2()
-                .child(bottom_menu)
-                .child(
-                    div()
-                        .px_3()
-                        .pt_2()
-                        .border_t_1()
-                        .border_color(hsla(0., 0., 0.21, 1.))
-                        .child(auth_button),
-                ),
+            div().v_flex().w_full().gap_2().child(bottom_menu).child(
+                div()
+                    .h(px(60.))
+                    .flex()
+                    .items_center()
+                    .px_3()
+                    .border_t_1()
+                    .border_color(hsla(0., 0., 0.21, 1.))
+                    .child(auth_button),
+            ),
         )
 }
 

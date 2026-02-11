@@ -7,7 +7,7 @@
  * Flow: RN → LitBridge.sendRequest() → WebView → litClient.executeJs()
  */
 
-import { createPublicClient, http, parseAbi, keccak256, encodePacked, toBytes, defineChain } from 'viem';
+import { createPublicClient, http, parseAbi, keccak256, encodePacked, encodeAbiParameters, toBytes, defineChain } from 'viem';
 import type { LitBridge } from '../services/LitBridge';
 import {
   MEGA_RPC,
@@ -24,9 +24,10 @@ export { REGISTRY_V1, RECORDS_V1, PROFILE_V2, HEAVEN_NODE };
 
 // ── Lit Action CIDs ────────────────────────────────────────────────
 
-const HEAVEN_CLAIM_NAME_CID = 'QmQztQzc3tfZCwyyxXC9N9fK8bimiMWaaYapkJufHLjgg7';
-const HEAVEN_SET_PROFILE_CID = 'QmWNyRKDjPUvG5RDinyep76Cyqr2zEKm9shUg6uJLzrUKS';
-const HEAVEN_SET_RECORDS_CID = 'QmRhWGzCWYiDhbKSZ5Z9gmv5sr6nBTk5u8kAnM7YAKZ2sk';
+// CIDs must match lit-actions/cids/dev.json (naga-dev network)
+const HEAVEN_CLAIM_NAME_CID = 'QmQB5GsQVaNbD8QS8zcXkjBMAZUjpADfbcWVaPgL3PygSA';
+const HEAVEN_SET_PROFILE_CID = 'QmUJnDz9Q92bSLvNQMLyPDNSkw69MA3fpYsSCnAeMAJtuy';
+const HEAVEN_SET_RECORDS_CID = 'QmaXJcjGbPWQ1ypKnQB3vfnDwaQ1NLEGFmN3t7gQisw9g5';
 
 // ── Chain + client ─────────────────────────────────────────────────
 
@@ -70,7 +71,7 @@ function getClient() {
   return _client;
 }
 
-// ── Enum mappings (minimal set for onboarding) ─────────────────────
+// ── Enum mappings ─────────────────────────────────────────────────
 
 const GENDER_TO_NUM: Record<string, number> = {
   '': 0, woman: 1, man: 2, 'non-binary': 3, 'trans-woman': 4, 'trans-man': 5, intersex: 6, other: 7,
@@ -130,20 +131,24 @@ export interface RegisterResult {
 
 /**
  * Register a .heaven name via Lit Action (gasless).
- *
- * 1. Sign message with PKP via bridge (signMessage)
- * 2. Execute Lit Action via bridge (executeLitAction)
+ * The Lit Action signs internally via signAndCombineEcdsa.
  */
 export async function registerHeavenName(
   label: string,
   recipientAddress: `0x${string}`,
   bridge: LitBridge,
   pkpPublicKey: string,
+  signMessage: (message: string) => Promise<string>,
 ): Promise<RegisterResult> {
   const timestamp = Date.now();
   const nonce = Math.floor(Math.random() * 1_000_000_000);
 
-  // Execute Lit Action — it signs internally via signAndCombineEcdsa
+  // Pre-sign the EIP-191 message from the frontend (same as SolidJS web app).
+  // This avoids signAndCombineEcdsa inside the Lit Action which is unreliable
+  // with WebAuthn auth contexts.
+  const message = `heaven:register:${label}:${recipientAddress}:${timestamp}:${nonce}`;
+  const signature = await signMessage(message);
+
   const execResult = await bridge.sendRequest('executeLitAction', {
     ipfsId: HEAVEN_CLAIM_NAME_CID,
     jsParams: {
@@ -152,6 +157,7 @@ export async function registerHeavenName(
       userPkpPublicKey: pkpPublicKey,
       timestamp,
       nonce,
+      signature,
     },
   }, 120000);
 
@@ -166,14 +172,63 @@ export interface SetProfileResult {
 }
 
 /**
+ * Pack up to 8 LanguageEntry into a decimal string for ProfileV2.
+ * Layout: 8 x 32-bit slots from MSB.
+ * Each slot: [langCode:16][proficiency:8][reserved:8]
+ * Must match packages/ui/src/data/languages.ts packLanguages().
+ */
+export function packLanguages(entries: Array<{ code: string; proficiency: number }>): string {
+  let packed = BigInt(0);
+  const slots = entries.slice(0, 8);
+  for (let i = 0; i < slots.length; i++) {
+    const { code, proficiency } = slots[i];
+    const upper = code.slice(0, 2).toUpperCase();
+    const langCode = (upper.charCodeAt(0) << 8) | upper.charCodeAt(1);
+    if (!langCode) continue;
+    const slotVal = BigInt(((langCode & 0xffff) << 16) | ((proficiency & 0xff) << 8));
+    const shift = BigInt((7 - i) * 32);
+    packed |= slotVal << shift;
+  }
+  return packed.toString();
+}
+
+export interface SetProfileData {
+  age?: number;
+  gender?: string;         // string key like 'woman' (for onboarding compat)
+  genderNum?: number;      // numeric enum value (for edit profile)
+  heightCm?: number;
+  languages?: Array<{ code: string; proficiency: number }>;
+  relocate?: number;
+  degree?: number;
+  fieldBucket?: number;
+  profession?: number;
+  industry?: number;
+  relationshipStatus?: number;
+  sexuality?: number;
+  ethnicity?: number;
+  datingStyle?: number;
+  children?: number;
+  wantsChildren?: number;
+  drinking?: number;
+  smoking?: number;
+  drugs?: number;
+  lookingFor?: number;
+  religion?: number;
+  pets?: number;
+  diet?: number;
+}
+
+/**
  * Set user's on-chain profile via Lit Action (gasless).
- * Simplified for onboarding — only sets age, gender, languages.
+ * Pre-signs the EIP-191 message from frontend to avoid signAndCombineEcdsa
+ * inside the Lit Action (unreliable with WebAuthn auth via WebView bridge).
  */
 export async function setProfile(
-  data: { age?: number; gender?: string; nativeLanguage?: string; learningLanguage?: string },
+  data: SetProfileData,
   userAddress: `0x${string}`,
   bridge: LitBridge,
   pkpPublicKey: string,
+  signMessage: (message: string) => Promise<string>,
 ): Promise<SetProfileResult> {
   const client = getClient();
 
@@ -185,39 +240,15 @@ export async function setProfile(
     args: [userAddress],
   });
 
-  // Build minimal profile input
-  // Pack languages: native (proficiency 7) + learning (proficiency 1)
-  // Each entry: 16 bits lang code + 8 bits proficiency, packed into uint256
-  let languagesPacked = '0';
-  const langEntries: Array<{ code: string; proficiency: number }> = [];
-  if (data.nativeLanguage) {
-    langEntries.push({ code: data.nativeLanguage, proficiency: 7 });
-  }
-  if (data.learningLanguage) {
-    langEntries.push({ code: data.learningLanguage, proficiency: 1 });
-  }
-  if (langEntries.length > 0) {
-    // Pack languages into uint256: each entry is 24 bits (16 lang + 8 prof)
-    // Big-endian from high bits
-    let packed = BigInt(0);
-    for (let i = 0; i < langEntries.length && i < 8; i++) {
-      const { code, proficiency } = langEntries[i];
-      const c1 = code.toUpperCase().charCodeAt(0);
-      const c2 = code.toUpperCase().charCodeAt(1);
-      const langCode = (c1 << 8) | c2;
-      const entry = BigInt((langCode << 8) | proficiency);
-      const shift = BigInt((7 - i) * 24);
-      packed |= entry << shift;
-    }
-    languagesPacked = packed.toString();
-  }
+  const languagesPacked = data.languages?.length ? packLanguages(data.languages) : '0';
+  const genderVal = data.genderNum ?? (GENDER_TO_NUM[data.gender || ''] ?? 0);
 
   const profileInput = {
     profileVersion: 2,
     displayName: '',
     nameHash: ZERO_HASH,
     age: data.age || 0,
-    heightCm: 0,
+    heightCm: data.heightCm || 0,
     nationality: '0x0000',
     languagesPacked,
     friendsOpenToMask: 0,
@@ -226,26 +257,105 @@ export async function setProfile(
     skillsCommit: ZERO_HASH,
     hobbiesCommit: ZERO_HASH,
     photoURI: '',
-    gender: GENDER_TO_NUM[data.gender || ''] ?? 0,
-    relocate: 0,
-    degree: 0,
-    fieldBucket: 0,
-    profession: 0,
-    industry: 0,
-    relationshipStatus: 0,
-    sexuality: 0,
-    ethnicity: 0,
-    datingStyle: 0,
-    children: 0,
-    wantsChildren: 0,
-    drinking: 0,
-    smoking: 0,
-    drugs: 0,
-    lookingFor: 0,
-    religion: 0,
-    pets: 0,
-    diet: 0,
+    gender: genderVal,
+    relocate: data.relocate || 0,
+    degree: data.degree || 0,
+    fieldBucket: data.fieldBucket || 0,
+    profession: data.profession || 0,
+    industry: data.industry || 0,
+    relationshipStatus: data.relationshipStatus || 0,
+    sexuality: data.sexuality || 0,
+    ethnicity: data.ethnicity || 0,
+    datingStyle: data.datingStyle || 0,
+    children: data.children || 0,
+    wantsChildren: data.wantsChildren || 0,
+    drinking: data.drinking || 0,
+    smoking: data.smoking || 0,
+    drugs: data.drugs || 0,
+    lookingFor: data.lookingFor || 0,
+    religion: data.religion || 0,
+    pets: data.pets || 0,
+    diet: data.diet || 0,
   };
+
+  // Compute profileHash = keccak256(abi.encode(profileTuple))
+  // Must match the Lit Action's encoding exactly (tuple encoding)
+  const profileTuple = [
+    profileInput.profileVersion,
+    profileInput.displayName,
+    profileInput.nameHash,
+    profileInput.age,
+    profileInput.heightCm,
+    profileInput.nationality,
+    BigInt(profileInput.languagesPacked),
+    profileInput.friendsOpenToMask,
+    profileInput.locationCityId,
+    profileInput.schoolId,
+    profileInput.skillsCommit,
+    profileInput.hobbiesCommit,
+    profileInput.photoURI,
+    profileInput.gender,
+    profileInput.relocate,
+    profileInput.degree,
+    profileInput.fieldBucket,
+    profileInput.profession,
+    profileInput.industry,
+    profileInput.relationshipStatus,
+    profileInput.sexuality,
+    profileInput.ethnicity,
+    profileInput.datingStyle,
+    profileInput.children,
+    profileInput.wantsChildren,
+    profileInput.drinking,
+    profileInput.smoking,
+    profileInput.drugs,
+    profileInput.lookingFor,
+    profileInput.religion,
+    profileInput.pets,
+    profileInput.diet,
+  ] as const;
+
+  const profileEncoded = encodeAbiParameters(
+    [{ type: 'tuple', components: [
+      { type: 'uint8', name: 'profileVersion' },
+      { type: 'string', name: 'displayName' },
+      { type: 'bytes32', name: 'nameHash' },
+      { type: 'uint8', name: 'age' },
+      { type: 'uint16', name: 'heightCm' },
+      { type: 'bytes2', name: 'nationality' },
+      { type: 'uint256', name: 'languagesPacked' },
+      { type: 'uint8', name: 'friendsOpenToMask' },
+      { type: 'bytes32', name: 'locationCityId' },
+      { type: 'bytes32', name: 'schoolId' },
+      { type: 'bytes32', name: 'skillsCommit' },
+      { type: 'bytes32', name: 'hobbiesCommit' },
+      { type: 'string', name: 'photoURI' },
+      { type: 'uint8', name: 'gender' },
+      { type: 'uint8', name: 'relocate' },
+      { type: 'uint8', name: 'degree' },
+      { type: 'uint8', name: 'fieldBucket' },
+      { type: 'uint8', name: 'profession' },
+      { type: 'uint8', name: 'industry' },
+      { type: 'uint8', name: 'relationshipStatus' },
+      { type: 'uint8', name: 'sexuality' },
+      { type: 'uint8', name: 'ethnicity' },
+      { type: 'uint8', name: 'datingStyle' },
+      { type: 'uint8', name: 'children' },
+      { type: 'uint8', name: 'wantsChildren' },
+      { type: 'uint8', name: 'drinking' },
+      { type: 'uint8', name: 'smoking' },
+      { type: 'uint8', name: 'drugs' },
+      { type: 'uint8', name: 'lookingFor' },
+      { type: 'uint8', name: 'religion' },
+      { type: 'uint8', name: 'pets' },
+      { type: 'uint8', name: 'diet' },
+    ]}],
+    [profileTuple],
+  );
+  const profileHash = keccak256(profileEncoded);
+
+  const message = `heaven:profile:${userAddress.toLowerCase()}:${profileHash}:${Number(nonce)}`;
+  const signature = await signMessage(message);
 
   const execResult = await bridge.sendRequest('executeLitAction', {
     ipfsId: HEAVEN_SET_PROFILE_CID,
@@ -254,6 +364,7 @@ export async function setProfile(
       userPkpPublicKey: pkpPublicKey,
       profileInput,
       nonce: Number(nonce),
+      signature,
     },
   }, 120000);
 
@@ -269,6 +380,8 @@ export interface SetTextRecordResult {
 
 /**
  * Set a text record on a .heaven name via Lit Action (gasless).
+ * Pre-signs the EIP-191 message from frontend to avoid signAndCombineEcdsa
+ * inside the Lit Action (unreliable with WebAuthn auth via WebView bridge).
  */
 export async function setTextRecord(
   node: string,
@@ -276,6 +389,7 @@ export async function setTextRecord(
   value: string,
   bridge: LitBridge,
   pkpPublicKey: string,
+  signMessage: (message: string) => Promise<string>,
 ): Promise<SetTextRecordResult> {
   const client = getClient();
 
@@ -286,6 +400,11 @@ export async function setTextRecord(
     args: [node as `0x${string}`],
   });
 
+  // heaven:records:{node}:{key}:{valueHash}:{nonce}
+  const valueHash = keccak256(toBytes(value));
+  const message = `heaven:records:${node.toLowerCase()}:${key}:${valueHash}:${Number(nonce)}`;
+  const signature = await signMessage(message);
+
   const execResult = await bridge.sendRequest('executeLitAction', {
     ipfsId: HEAVEN_SET_RECORDS_CID,
     jsParams: {
@@ -294,6 +413,7 @@ export async function setTextRecord(
       nonce: Number(nonce),
       key,
       value,
+      signature,
     },
   }, 120000);
 

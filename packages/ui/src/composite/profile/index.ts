@@ -5,3 +5,4 @@ export { VerificationBadge, type VerificationBadgeProps, type VerificationState 
 export { VerifyIdentityDialog, type VerifyIdentityDialogProps, type VerifyStep } from './verify-identity-dialog'
 export { ProfileSidebarCard, ProfileSidebarRow, type ProfileSidebarCardProps, type ProfileSidebarRowProps } from './profile-sidebar-card'
 export { ProfileAboutSidebar, type ProfileAboutSidebarProps } from './profile-about-sidebar'
+export { ProfileIntroCard } from './profile-intro-card'

@@ -1,5 +1,5 @@
 {
-  "ciphertext": "i0tTxIToqhfsGBNcor4Cg9l0HOazKVVXnqgsLhqcdo25oklruXV1Hup5T4iplOX4MlrQMXcRnX/4bORb8Z5SH12/mTICqUSJkzTUTe0u1COGAaCC+wIzpsZuMPr5M1Tq47EV71obvyJHTWsJynM9++rezl0yvya6CP7EAbed5thvHqArUqCDMubPkCEz3H5OJUwMZsKs6RmAIvPEqdiG11LuA+dBN4PCI41l4n7DDRESfiJ2C0G6OT1I6cBQgG0M7PWMzx9XvmQh7jWhTOCSqFaX/afsNm8fAg==",
+  "ciphertext": "opMNhXZ61OJ8dRKs8zCYQOiK7f5UJlfJPNJaso/2Bky6bku1ixYnrVZYzKZOrzQ1byVbe5HsmVjGyN1OzGvNz+p6rKg/VGYjaKWZ1PB6rAaGAe98dPHRbh+ITU9Eg6FoolrHU064jiaZtG8mmeWI2WU1MsyYQOS5gKqy+7+Zy2VrjqFASSqB4B9gICarqGbGN8khHoFTjirgnZyetJRHz4Iq/K6b8dNriTgL2dSMq2TMKYsl9ghAJRo5iE1olkpLPmdsCteNREtGIiJGZ42ufECUqM9DArkBAg==",
   "dataToEncryptHash": "1fb52374f1a4ec4d9f1a263b1355cedecbe3ef9d52425f76c222f2f5d9993d4f",
   "accessControlConditions": [
     {
@@ -13,10 +13,10 @@
       ],
       "returnValueTest": {
         "comparator": "=",
-        "value": "QmSVssbAxCr1xp7mKX1VfcJFNJewQfhCZGiPuhyEjGvUC2"
+        "value": "QmcwLxoNyuV5KrJALfaAEBa4zspoxedEfPJba2Y3uhWYx7"
       }
     }
   ],
-  "encryptedAt": "2026-02-05T14:02:54.247Z",
-  "cid": "QmSVssbAxCr1xp7mKX1VfcJFNJewQfhCZGiPuhyEjGvUC2"
+  "encryptedAt": "2026-02-10T18:36:41.434Z",
+  "cid": "QmcwLxoNyuV5KrJALfaAEBa4zspoxedEfPJba2Y3uhWYx7"
 }

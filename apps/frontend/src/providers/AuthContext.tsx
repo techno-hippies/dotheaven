@@ -82,11 +82,8 @@ export const AuthProvider: ParentComponent = (props) => {
                 accessToken: auth.accessToken || '',
               }
               setAuthData(restoredAuthData)
-              // Restore persisted EOA address if present
-              if ((auth as any).eoaAddress) {
-                setStoredEoaAddress((auth as any).eoaAddress as `0x${string}`)
-              }
             }
+            setStoredEoaAddress(auth.eoaAddress ? auth.eoaAddress as `0x${string}` : null)
           }
         } catch (err) {
           console.error('[Auth] Failed to restore from Tauri:', err)
@@ -100,9 +97,7 @@ export const AuthProvider: ParentComponent = (props) => {
             setPkpInfo(session.pkpInfo)
             setAuthData(session.authData)
             if (session.authData?.authMethodType) setLastAuthMethodType(session.authData.authMethodType)
-            if (session.eoaAddress) {
-              setStoredEoaAddress(session.eoaAddress as `0x${string}`)
-            }
+            setStoredEoaAddress(session.eoaAddress ? session.eoaAddress as `0x${string}` : null)
           }
         } catch (err) {
           console.error('[Auth] Failed to restore from localStorage:', err)
@@ -149,6 +144,7 @@ export const AuthProvider: ParentComponent = (props) => {
             }
             setAuthData(eventAuthData)
             setLastAuthMethodType(eventAuthData.authMethodType)
+            setStoredEoaAddress(payload.eoaAddress ? payload.eoaAddress as `0x${string}` : null)
             setIsAuthenticating(false)
           }
         })
@@ -205,6 +201,7 @@ export const AuthProvider: ParentComponent = (props) => {
         setPkpInfo(result.pkpInfo)
         setAuthData(result.authData)
         setLastAuthMethodType(result.authData.authMethodType)
+        setStoredEoaAddress(null)
         saveWebSession(result.pkpInfo, result.authData)
         setIsAuthenticating(false)
       }
@@ -234,6 +231,7 @@ export const AuthProvider: ParentComponent = (props) => {
         setPkpInfo(result.pkpInfo)
         setAuthData(result.authData)
         setLastAuthMethodType(result.authData.authMethodType)
+        setStoredEoaAddress(null)
         saveWebSession(result.pkpInfo, result.authData)
         setIsAuthenticating(false)
       }
@@ -396,6 +394,7 @@ export const AuthProvider: ParentComponent = (props) => {
         const result = await authenticateWithWebAuthn()
         setPkpInfo(result.pkpInfo)
         setAuthData(result.authData)
+        setStoredEoaAddress(null)
         if (!platform.isTauri) saveWebSession(result.pkpInfo, result.authData)
         currentAuthData = result.authData
       }

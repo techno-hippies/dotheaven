@@ -8,3 +8,6 @@ export { Card, type CardProps } from './Card';
 export { Spinner, type SpinnerProps } from './Spinner';
 export { Divider, type DividerProps } from './Divider';
 export { TabBar, type Tab } from './TabBar';
+export { BottomSheet } from './BottomSheet';
+export { OptionPicker, type OptionPickerOption } from './OptionPicker';
+export { CountryFlag, type CountryFlagProps } from './CountryFlag';

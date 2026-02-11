@@ -144,7 +144,7 @@ export const ChatLayout: ParentComponent = (props) => {
     <div class="flex h-full">
       {/* Left: Conversation list - hidden on mobile when viewing a chat */}
       <Show when={!isMobile() || !hasActiveChat()}>
-        <div class={`${isMobile() ? 'w-full' : 'w-[360px]'} flex-shrink-0 border-r border-[var(--border-subtle)] flex flex-col h-full overflow-hidden`}>
+        <div class={`${isMobile() ? 'w-full' : 'w-[420px]'} flex-shrink-0 border-r border-[var(--border-subtle)] flex flex-col h-full overflow-hidden`}>
           {/* Header */}
           <PageHeader
             title="Messages"

@@ -9,9 +9,7 @@ import { getWorkerToken } from '../worker-auth'
 
 const IS_DEV = import.meta.env.DEV
 
-const SESSION_VOICE_URL = import.meta.env.VITE_SESSION_VOICE_URL || (
-  import.meta.env.DEV ? 'http://localhost:3338' : 'https://session-voice.heaven.dev'
-)
+const SESSION_VOICE_URL = import.meta.env.VITE_SESSION_VOICE_URL || 'https://session-voice.deletion-backup782.workers.dev'
 
 // =============================================================================
 // Types

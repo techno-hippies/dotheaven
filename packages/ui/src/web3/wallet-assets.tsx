@@ -3,8 +3,8 @@ import { createSignal, For, Show } from 'solid-js'
 import { cn } from '../lib/classnames'
 import { Avatar } from '../primitives/avatar'
 import { Button } from '../primitives/button'
-import { WalletAddress } from './wallet-address'
-import { ArrowUpRight, ArrowDownLeft } from '../icons'
+import { IconButton } from '../primitives/icon-button'
+import { ArrowUpRight, ArrowDownLeft, Copy, Check } from '../icons'
 
 export interface WalletAsset {
   id: string
@@ -36,9 +36,14 @@ export interface WalletAssetsProps {
   onReceive?: () => void
 }
 
+function shortenAddress(addr: string) {
+  if (addr.length <= 13) return addr
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`
+}
+
 /** Reusable asset row */
 const AssetRow: Component<{ asset: WalletAsset }> = (props) => (
-  <div class="flex items-center gap-3 px-4 py-3 w-full">
+  <div class="flex items-center gap-3 px-4 py-2.5 w-full hover:bg-[var(--bg-highlight-hover)] transition-colors">
     <div class="flex-shrink-0">
       <Avatar
         src={typeof props.asset.icon === 'string' ? props.asset.icon : undefined}
@@ -60,7 +65,63 @@ const AssetRow: Component<{ asset: WalletAsset }> = (props) => (
   </div>
 )
 
-/** Single wallet view (balance, address, actions, assets) */
+/** Compact balance card with address + actions */
+const BalanceCard: Component<{
+  address: string
+  totalBalance: string
+  readOnly?: boolean
+  onSend?: () => void
+  onReceive?: () => void
+}> = (props) => {
+  const [copied, setCopied] = createSignal(false)
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(props.address)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div class="rounded-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-5 mt-4">
+      {/* Balance */}
+      <div class="flex flex-col gap-1 mb-4">
+        <div class="text-base text-[var(--text-muted)] uppercase tracking-wider">Total Balance</div>
+        <div class="text-3xl font-bold text-[var(--text-primary)]">{props.totalBalance}</div>
+      </div>
+
+      {/* Address row */}
+      <div class="flex items-center gap-2 mb-4">
+        <span class="text-base font-mono text-[var(--text-muted)]">
+          {shortenAddress(props.address)}
+        </span>
+        <IconButton
+          onClick={handleCopy}
+          variant="soft"
+          size="md"
+          aria-label={copied() ? 'Copied!' : 'Copy address'}
+        >
+          {copied() ? <Check class="w-5 h-5" /> : <Copy class="w-5 h-5" />}
+        </IconButton>
+      </div>
+
+      {/* Action buttons */}
+      <Show when={!props.readOnly}>
+        <div class="flex items-center gap-3">
+          <Button onClick={props.onReceive} class="gap-2 flex-1">
+            <ArrowDownLeft class="w-5 h-5" />
+            Receive
+          </Button>
+          <Button onClick={props.onSend} variant="secondary" class="gap-2 flex-1">
+            <ArrowUpRight class="w-5 h-5" />
+            Send
+          </Button>
+        </div>
+      </Show>
+    </div>
+  )
+}
+
+/** Single wallet view (balance card + assets list) */
 const WalletView: Component<{
   address: string
   totalBalance: string
@@ -70,36 +131,23 @@ const WalletView: Component<{
   onReceive?: () => void
 }> = (props) => (
   <>
-    {/* Header with balance */}
-    <div class="flex flex-col items-center gap-6 px-4 py-12">
-      <div class="flex flex-col items-center gap-3">
-        <div class="text-base text-[var(--text-muted)]">Total Balance</div>
-        <div class="text-6xl font-bold text-[var(--text-primary)]">{props.totalBalance}</div>
-      </div>
-      <WalletAddress address={props.address} variant="compact" class="w-full max-w-lg" />
-    </div>
+    <BalanceCard
+      address={props.address}
+      totalBalance={props.totalBalance}
+      readOnly={props.readOnly}
+      onSend={props.onSend}
+      onReceive={props.onReceive}
+    />
 
-    {/* Action buttons — hidden in read-only mode */}
-    <Show when={!props.readOnly}>
-      <div class="flex items-center justify-center gap-4 pb-12">
-        <Button onClick={props.onSend} class="gap-2 w-40">
-          <ArrowUpRight class="w-5 h-5" />
-          Send
-        </Button>
-        <Button onClick={props.onReceive} variant="secondary" class="gap-2 w-40">
-          <ArrowDownLeft class="w-5 h-5" />
-          Receive
-        </Button>
+    {/* Assets list */}
+    <div class="flex flex-col w-full mt-6">
+      <div class="flex items-center justify-between px-4 mb-2">
+        <h2 class="text-lg font-semibold text-[var(--text-primary)]">Assets</h2>
       </div>
-    </Show>
-
-    {/* Assets */}
-    <div class="flex flex-col w-full">
-      <h2 class="text-2xl font-bold text-[var(--text-primary)] mb-2 px-4">Assets</h2>
       <Show when={props.assets.length > 0} fallback={
         <div class="text-center py-8 text-[var(--text-muted)]">No assets found</div>
       }>
-        <div class="flex flex-col divide-y divide-[var(--border-subtle)] border-y border-[var(--border-subtle)]">
+        <div class="flex flex-col divide-y divide-[var(--border-subtle)] rounded-md border border-[var(--border-subtle)] overflow-hidden">
           <For each={props.assets}>
             {(asset) => <AssetRow asset={asset} />}
           </For>
@@ -120,12 +168,12 @@ export const WalletAssets: Component<WalletAssetsProps> = (props) => {
     <div class={cn('flex flex-col w-full max-w-4xl mx-auto', props.class)}>
       {/* Tabs - only shown for EOA users */}
       <Show when={props.connectedWallet}>
-        <div class="flex items-center gap-1 mx-auto mt-6 p-1 rounded-md bg-[var(--bg-elevated)]">
+        <div class="flex items-center gap-1 mx-auto mt-4 p-1 rounded-full bg-[var(--bg-elevated)]">
           <button
             class={cn(
-              'px-6 py-2 rounded-md text-base font-medium transition-colors',
+              'px-6 py-2 rounded-full text-base font-medium transition-colors',
               activeTab() === 'heaven'
-                ? 'bg-[var(--bg-highlight)] text-[var(--text-primary)]'
+                ? 'bg-[var(--bg-highlight-hover)] text-[var(--text-primary)]'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
             )}
             onClick={() => setActiveTab('heaven')}
@@ -134,9 +182,9 @@ export const WalletAssets: Component<WalletAssetsProps> = (props) => {
           </button>
           <button
             class={cn(
-              'px-6 py-2 rounded-md text-base font-medium transition-colors',
+              'px-6 py-2 rounded-full text-base font-medium transition-colors',
               activeTab() === 'wallet'
-                ? 'bg-[var(--bg-highlight)] text-[var(--text-primary)]'
+                ? 'bg-[var(--bg-highlight-hover)] text-[var(--text-primary)]'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
             )}
             onClick={() => setActiveTab('wallet')}

@@ -1,6 +1,7 @@
 import * as MediaLibrary from 'expo-media-library';
 import * as DocumentPicker from 'expo-document-picker';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface MusicTrack {
   id: string;
@@ -11,6 +12,7 @@ export interface MusicTrack {
   uri: string;
   filename: string;
   artworkUri?: string;
+  artworkFallbackUri?: string;
 }
 
 const PERMISSION_TIMEOUT_MS = 10000;
@@ -33,25 +35,53 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): 
   });
 }
 
+type MediaPermissions = {
+  audioGranted: boolean;
+  artworkGranted: boolean;
+};
+
 /**
- * Request audio permission through expo-media-library.
- * This keeps permissions and media queries on the same native module path.
+ * Request media permissions through expo-media-library.
+ * Audio is required for scanning; photo permission is optional and used for album art URIs.
  */
-async function requestAudioPermission(): Promise<boolean> {
+async function requestMediaPermissions(): Promise<MediaPermissions> {
   if (Platform.OS === 'android') {
-    const current = await withTimeout(
+    const currentAudio = await withTimeout(
       MediaLibrary.getPermissionsAsync(false, ['audio']),
       PERMISSION_TIMEOUT_MS,
       'Media permission check',
     );
-    if (current.granted) return true;
+    let audioGranted = currentAudio.granted;
+    if (!audioGranted) {
+      const requestedAudio = await withTimeout(
+        MediaLibrary.requestPermissionsAsync(false, ['audio']),
+        PERMISSION_TIMEOUT_MS,
+        'Media permission request',
+      );
+      audioGranted = requestedAudio.granted;
+    }
 
-    const requested = await withTimeout(
-      MediaLibrary.requestPermissionsAsync(false, ['audio']),
+    if (!audioGranted) {
+      return { audioGranted: false, artworkGranted: false };
+    }
+
+    const currentArtwork = await withTimeout(
+      MediaLibrary.getPermissionsAsync(false, ['audio', 'photo']),
       PERMISSION_TIMEOUT_MS,
-      'Media permission request',
+      'Artwork permission check',
     );
-    return requested.granted;
+
+    let artworkGranted = currentArtwork.granted;
+    if (!artworkGranted && currentArtwork.canAskAgain) {
+      const requestedArtwork = await withTimeout(
+        MediaLibrary.requestPermissionsAsync(false, ['audio', 'photo']),
+        PERMISSION_TIMEOUT_MS,
+        'Artwork permission request',
+      );
+      artworkGranted = requestedArtwork.granted;
+    }
+
+    return { audioGranted: true, artworkGranted };
   }
 
   const current = await withTimeout(
@@ -59,13 +89,39 @@ async function requestAudioPermission(): Promise<boolean> {
     PERMISSION_TIMEOUT_MS,
     'Media permission check',
   );
-  if (current.granted) return true;
+  if (current.granted) {
+    return { audioGranted: true, artworkGranted: true };
+  }
   const requested = await withTimeout(
     MediaLibrary.requestPermissionsAsync(),
     PERMISSION_TIMEOUT_MS,
     'Media permission request',
   );
-  return requested.granted;
+  return {
+    audioGranted: requested.granted,
+    artworkGranted: requested.granted,
+  };
+}
+
+function buildArtworkUris(
+  asset: MediaLibrary.Asset,
+  artworkGranted: boolean,
+): { artworkUri?: string; artworkFallbackUri?: string } {
+  if (Platform.OS !== 'android' || !artworkGranted) {
+    return {};
+  }
+
+  const fallback = `content://media/external/audio/media/${asset.id}/albumart`;
+  if (!asset.albumId) {
+    return { artworkUri: fallback };
+  }
+
+  const primary = `content://media/external/audio/albumart/${asset.albumId}`;
+  if (primary === fallback) {
+    return { artworkUri: primary };
+  }
+
+  return { artworkUri: primary, artworkFallbackUri: fallback };
 }
 
 /**
@@ -73,9 +129,13 @@ async function requestAudioPermission(): Promise<boolean> {
  */
 export async function scanMediaLibrary(): Promise<MusicTrack[]> {
   console.log('[music-scanner] starting scanMediaLibrary');
-  const granted = await requestAudioPermission();
-  console.log('[music-scanner] permission granted:', granted);
-  if (!granted) {
+  const permissions = await requestMediaPermissions();
+  console.log(
+    '[music-scanner] permissions:',
+    `audio=${permissions.audioGranted}`,
+    `artwork=${permissions.artworkGranted}`,
+  );
+  if (!permissions.audioGranted) {
     throw new Error('Media library permission denied');
   }
 
@@ -104,10 +164,7 @@ export async function scanMediaLibrary(): Promise<MusicTrack[]> {
     );
 
     for (const asset of result.assets) {
-      const artworkUri =
-        Platform.OS === 'android' && asset.albumId
-          ? `content://media/external/audio/albumart/${asset.albumId}`
-          : undefined;
+      const { artworkUri, artworkFallbackUri } = buildArtworkUris(asset, permissions.artworkGranted);
 
       tracks.push({
         id: asset.id,
@@ -118,6 +175,7 @@ export async function scanMediaLibrary(): Promise<MusicTrack[]> {
         uri: asset.uri,
         filename: asset.filename,
         artworkUri,
+        artworkFallbackUri,
       });
     }
 
@@ -190,4 +248,41 @@ export function extractArtistFromFilename(filename: string): string {
     return name.slice(0, dashIdx).trim();
   }
   return 'Unknown Artist';
+}
+
+// ── Local library track resolution ──────────────────────────────────
+
+const TRACKS_STORAGE_KEY = 'heaven:music-tracks';
+
+/**
+ * Load cached library tracks from AsyncStorage.
+ */
+export async function getCachedLibraryTracks(): Promise<MusicTrack[]> {
+  try {
+    const raw = await AsyncStorage.getItem(TRACKS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Find a local library track matching by artist + title (case-insensitive).
+ * Returns the full MusicTrack (with valid uri) or null.
+ */
+export function findLocalMatch(
+  library: MusicTrack[],
+  artist: string,
+  title: string,
+): MusicTrack | null {
+  const a = artist.toLowerCase();
+  const t = title.toLowerCase();
+  return library.find(
+    (track) =>
+      track.uri &&
+      track.title.toLowerCase() === t &&
+      track.artist.toLowerCase() === a,
+  ) ?? null;
 }

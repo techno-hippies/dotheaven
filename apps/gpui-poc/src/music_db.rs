@@ -39,9 +39,7 @@ pub struct ScanProgress {
 // Audio extensions
 // =============================================================================
 
-const AUDIO_EXTENSIONS: &[&str] = &[
-    "mp3", "m4a", "flac", "wav", "ogg", "aac", "opus", "wma",
-];
+const AUDIO_EXTENSIONS: &[&str] = &["mp3", "m4a", "flac", "wav", "ogg", "aac", "opus", "wma"];
 
 fn is_audio_file(path: &Path) -> bool {
     path.extension()
@@ -110,8 +108,8 @@ impl MusicDb {
         std::fs::create_dir_all(app_data_dir)
             .map_err(|e| format!("Failed to create app data dir: {e}"))?;
         let db_path = app_data_dir.join("music.db");
-        let conn = Connection::open(&db_path)
-            .map_err(|e| format!("Failed to open music.db: {e}"))?;
+        let conn =
+            Connection::open(&db_path).map_err(|e| format!("Failed to open music.db: {e}"))?;
 
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS tracks (
@@ -285,10 +283,7 @@ impl MusicDb {
                     if !cover_file_missing {
                         cache_hits += 1;
                         if i % 100 == 0 {
-                            progress_cb(ScanProgress {
-                                done: i + 1,
-                                total,
-                            });
+                            progress_cb(ScanProgress { done: i + 1, total });
                         }
                         continue;
                     }
@@ -321,10 +316,7 @@ impl MusicDb {
                 .ok();
 
             if i % 50 == 0 {
-                progress_cb(ScanProgress {
-                    done: i + 1,
-                    total,
-                });
+                progress_cb(ScanProgress { done: i + 1, total });
             }
         }
 
@@ -350,10 +342,7 @@ impl MusicDb {
         for db_path in &db_paths {
             if !seen_paths.contains(db_path) {
                 self.conn
-                    .execute(
-                        "DELETE FROM tracks WHERE file_path = ?1",
-                        params![db_path],
-                    )
+                    .execute("DELETE FROM tracks WHERE file_path = ?1", params![db_path])
                     .ok();
                 pruned += 1;
             }
@@ -378,7 +367,14 @@ fn extract_metadata(
     path: &Path,
     path_str: &str,
     covers_dir: &Path,
-) -> (String, String, String, Option<u64>, Option<String>, Option<String>) {
+) -> (
+    String,
+    String,
+    String,
+    Option<u64>,
+    Option<String>,
+    Option<String>,
+) {
     let file_name = path
         .file_name()
         .and_then(|n| n.to_str())

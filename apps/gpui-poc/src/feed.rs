@@ -198,13 +198,48 @@ fn format_time_ago(timestamp_str: &str) -> String {
 // Colors
 // =============================================================================
 
-const BG_SURFACE: Hsla = Hsla { h: 0., s: 0., l: 0.11, a: 1. };
-const BG_ELEVATED: Hsla = Hsla { h: 0., s: 0., l: 0.15, a: 1. };
-const TEXT_PRIMARY: Hsla = Hsla { h: 0., s: 0., l: 0.98, a: 1. };
-const TEXT_SECONDARY: Hsla = Hsla { h: 0., s: 0., l: 0.83, a: 1. };
-const TEXT_MUTED: Hsla = Hsla { h: 0., s: 0., l: 0.64, a: 1. };
-const TEXT_DIM: Hsla = Hsla { h: 0., s: 0., l: 0.45, a: 1. };
-const ACCENT_BLUE: Hsla = Hsla { h: 0.62, s: 0.93, l: 0.76, a: 1. };
+const BG_SURFACE: Hsla = Hsla {
+    h: 0.,
+    s: 0.,
+    l: 0.11,
+    a: 1.,
+};
+const BG_ELEVATED: Hsla = Hsla {
+    h: 0.,
+    s: 0.,
+    l: 0.15,
+    a: 1.,
+};
+const TEXT_PRIMARY: Hsla = Hsla {
+    h: 0.,
+    s: 0.,
+    l: 0.98,
+    a: 1.,
+};
+const TEXT_SECONDARY: Hsla = Hsla {
+    h: 0.,
+    s: 0.,
+    l: 0.83,
+    a: 1.,
+};
+const TEXT_MUTED: Hsla = Hsla {
+    h: 0.,
+    s: 0.,
+    l: 0.64,
+    a: 1.,
+};
+const TEXT_DIM: Hsla = Hsla {
+    h: 0.,
+    s: 0.,
+    l: 0.45,
+    a: 1.,
+};
+const ACCENT_BLUE: Hsla = Hsla {
+    h: 0.62,
+    s: 0.93,
+    l: 0.76,
+    a: 1.,
+};
 
 // =============================================================================
 // Feed view
@@ -218,8 +253,8 @@ pub struct FeedView {
 
 impl FeedView {
     pub fn new(cx: &mut Context<Self>) -> Self {
-        cx.spawn(async |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            match fetch_posts().await {
+        cx.spawn(
+            async |this: WeakEntity<Self>, cx: &mut AsyncApp| match fetch_posts().await {
                 Ok(posts) => {
                     let _ = this.update(cx, |this, cx| {
                         this.posts = posts;
@@ -235,8 +270,8 @@ impl FeedView {
                         cx.notify();
                     });
                 }
-            }
-        })
+            },
+        )
         .detach();
 
         Self {
@@ -266,17 +301,14 @@ impl Render for FeedView {
         }
 
         if let Some(err) = &self.error {
-            return container
-                .items_center()
-                .justify_center()
-                .child(
-                    div()
-                        .v_flex()
-                        .items_center()
-                        .gap_2()
-                        .child(div().text_color(TEXT_MUTED).child("Failed to load feed"))
-                        .child(div().text_xs().text_color(TEXT_DIM).child(err.clone())),
-                );
+            return container.items_center().justify_center().child(
+                div()
+                    .v_flex()
+                    .items_center()
+                    .gap_2()
+                    .child(div().text_color(TEXT_MUTED).child("Failed to load feed"))
+                    .child(div().text_xs().text_color(TEXT_DIM).child(err.clone())),
+            );
         }
 
         if self.posts.is_empty() {
@@ -543,11 +575,7 @@ fn render_post_card(post: &FeedPost) -> impl IntoElement {
                 ),
         )
         // Post text
-        .child(
-            div()
-                .text_color(TEXT_SECONDARY)
-                .child(post.text.clone()),
-        )
+        .child(div().text_color(TEXT_SECONDARY).child(post.text.clone()))
         // Engagement bar — 5 items equally spaced across full width
         .child(render_engagement_bar(post))
 }
@@ -564,36 +592,34 @@ fn render_engagement_bar(post: &FeedPost) -> impl IntoElement {
         .pt_2()
         .justify_between()
         // 1. Comment
-        .child(engagement_item("icons/chat-circle.svg", &post.comment_count.to_string()))
+        .child(engagement_item(
+            "icons/chat-circle.svg",
+            &post.comment_count.to_string(),
+        ))
         // 2. Repost
         .child(engagement_item("icons/share-fat.svg", "0"))
         // 3. Like
-        .child(engagement_item("icons/heart.svg", &post.like_count.to_string()))
+        .child(engagement_item(
+            "icons/heart.svg",
+            &post.like_count.to_string(),
+        ))
         // 4. Globe (translate)
         .child(
-            div()
-                .rounded_full()
-                .p(px(6.))
-                .cursor_pointer()
-                .child(
-                    gpui::svg()
-                        .path("icons/globe.svg")
-                        .size(px(20.))
-                        .text_color(TEXT_MUTED),
-                ),
+            div().rounded_full().p(px(6.)).cursor_pointer().child(
+                gpui::svg()
+                    .path("icons/globe.svg")
+                    .size(px(20.))
+                    .text_color(TEXT_MUTED),
+            ),
         )
         // 5. Share
         .child(
-            div()
-                .rounded_full()
-                .p(px(6.))
-                .cursor_pointer()
-                .child(
-                    gpui::svg()
-                        .path("icons/share-network.svg")
-                        .size(px(20.))
-                        .text_color(TEXT_MUTED),
-                ),
+            div().rounded_full().p(px(6.)).cursor_pointer().child(
+                gpui::svg()
+                    .path("icons/share-network.svg")
+                    .size(px(20.))
+                    .text_color(TEXT_MUTED),
+            ),
         )
 }
 
@@ -612,9 +638,5 @@ fn engagement_item(icon_path: &'static str, count: &str) -> impl IntoElement {
                 .size(px(20.))
                 .text_color(TEXT_MUTED),
         )
-        .child(
-            div()
-                .text_sm()
-                .child(count.to_string()),
-        )
+        .child(div().text_sm().child(count.to_string()))
 }

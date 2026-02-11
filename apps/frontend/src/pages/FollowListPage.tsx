@@ -46,15 +46,17 @@ export const FollowListPage: Component = () => {
   const hasMore = () => members().length >= loadedCount()
 
   return (
-    <FollowList
-      title={title()}
-      members={members()}
-      loading={listQuery.isLoading}
-      hasMore={hasMore()}
-      loadingMore={listQuery.isFetching && !listQuery.isLoading}
-      onLoadMore={() => setLoadedCount((c) => c + PAGE_SIZE)}
-      onMemberClick={(address) => navigate(publicProfile(address))}
-      onBack={() => navigate(publicProfile(params.id ?? ''))}
-    />
+    <div class="h-full max-w-3xl mx-auto w-full">
+      <FollowList
+        title={title()}
+        members={members()}
+        loading={listQuery.isLoading}
+        hasMore={hasMore()}
+        loadingMore={listQuery.isFetching && !listQuery.isLoading}
+        onLoadMore={() => setLoadedCount((c) => c + PAGE_SIZE)}
+        onMemberClick={(address) => navigate(publicProfile(address))}
+        onBack={() => navigate(publicProfile(params.id ?? ''))}
+      />
+    </div>
   )
 }

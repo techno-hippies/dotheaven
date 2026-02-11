@@ -7,6 +7,9 @@
     "dev": "bun --filter @heaven/frontend dev",
     "dev:web": "bun --filter @heaven/frontend dev:web",
     "dev:tauri": "bun --filter @heaven/frontend tauri dev",
+    "lit:env": "bun scripts/switch-lit-env.ts",
+    "lit:env:dev": "bun scripts/switch-lit-env.ts naga-dev",
+    "lit:env:test": "bun scripts/switch-lit-env.ts naga-test",
     "build": "bun --filter @heaven/frontend build",
     "build:web": "bun --filter @heaven/frontend build:web",
     "build:tauri": "bun --filter @heaven/frontend tauri build",
@@ -20,6 +23,7 @@
     "@tauri-apps/plugin-shell": "2.3.4"
   },
   "dependencies": {
+    "@react-navigation/native-stack": "7.12.0",
     "@selfxyz/sdk-common": "1.0.0",
     "agora-rtc-sdk-ng": "4.24.2",
     "buffer": "6.0.3",

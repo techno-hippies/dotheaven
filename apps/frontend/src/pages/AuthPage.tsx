@@ -52,11 +52,16 @@ export const AuthPage: Component = () => {
     }
   }
 
-  const handleAuthSuccess = async (pkpInfo: PKPInfo, authData: AuthData, isNewUser: boolean) => {
+  const handleAuthSuccess = async (
+    pkpInfo: PKPInfo,
+    authData: AuthData,
+    isNewUser: boolean,
+    eoaAddress?: `0x${string}`
+  ) => {
     console.log('[AuthPage] handleAuthSuccess:', pkpInfo.ethAddress, 'isNewUser:', isNewUser)
     console.log('[AuthPage] authData keys:', Object.keys(authData))
     console.log('[AuthPage] authData full:', authData)
-    const sent = await sendCallback({
+    const callbackPayload: Record<string, unknown> = {
       pkpPublicKey: pkpInfo.publicKey,
       pkpAddress: pkpInfo.ethAddress,
       pkpTokenId: pkpInfo.tokenId,
@@ -64,7 +69,29 @@ export const AuthPage: Component = () => {
       authMethodId: authData.authMethodId,
       accessToken: authData.accessToken,
       isNewUser,
-    })
+      eoaAddress,
+    }
+
+    try {
+      // Pre-generate delegation auth materials while accessToken challenge is fresh.
+      // Native GPUI can later restore from these without needing a fresh WebAuthn challenge.
+      const { createPKPAuthContext } = await import('../lib/lit')
+      const authContext = await createPKPAuthContext(pkpInfo, authData)
+      if (authContext?.sessionKeyPair) {
+        callbackPayload.litSessionKeyPair = authContext.sessionKeyPair
+      }
+      if (typeof authContext?.authNeededCallback === 'function') {
+        const delegationAuthSig = await authContext.authNeededCallback()
+        if (delegationAuthSig) {
+          callbackPayload.litDelegationAuthSig = delegationAuthSig
+        }
+      }
+      console.log('[AuthPage] Prepared pre-generated Lit delegation auth material for callback')
+    } catch (e) {
+      console.warn('[AuthPage] Failed to pre-generate Lit delegation auth material; falling back to raw authData only:', e)
+    }
+
+    const sent = await sendCallback(callbackPayload)
 
     if (sent) {
       setStatus('success')
@@ -141,7 +168,7 @@ export const AuthPage: Component = () => {
     try {
       const { authenticateWithEOA } = await import('../lib/lit')
       const result = await authenticateWithEOA()
-      await handleAuthSuccess(result.pkpInfo, result.authData, false)
+      await handleAuthSuccess(result.pkpInfo, result.authData, false, result.eoaAddress)
     } catch (e: unknown) {
       const err = e as Error
       // If no PKP found, auto-register
@@ -151,7 +178,7 @@ export const AuthPage: Component = () => {
         try {
           const { registerWithEOA } = await import('../lib/lit')
           const result = await registerWithEOA()
-          await handleAuthSuccess(result.pkpInfo, result.authData, true)
+          await handleAuthSuccess(result.pkpInfo, result.authData, true, result.eoaAddress)
         } catch (regErr: unknown) {
           console.error('[Auth] EOA registration failed:', regErr)
           await handleAuthError(regErr as Error)

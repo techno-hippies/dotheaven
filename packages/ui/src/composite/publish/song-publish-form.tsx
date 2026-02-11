@@ -759,7 +759,27 @@ const STEP_CONFIG: Record<string, { title: string; subtitle: string }> = {
   license: { title: 'License & Publish', subtitle: 'Choose how others can use your music' },
 }
 
-const PUBLISH_STEPS: PublishStep[] = ['song', 'canvas', 'details', 'license']
+export const PUBLISH_STEPS: PublishStep[] = ['song', 'canvas', 'details', 'license']
+
+export function isPublishFormStep(step: PublishStep): boolean {
+  return PUBLISH_STEPS.includes(step)
+}
+
+export function isPublishNextDisabled(step: PublishStep, formData: SongFormData): boolean {
+  switch (step) {
+    case 'song':
+      return !formData.title.trim()
+        || !formData.artist.trim()
+        || !formData.audioFile
+        || !formData.instrumentalFile
+    case 'details':
+      return !formData.primaryLanguage
+    case 'license':
+      return !formData.attestation
+    default:
+      return false
+  }
+}
 
 // ── Main Component ─────────────────────────────────────────────────
 
@@ -785,7 +805,7 @@ export const SongPublishForm: Component<SongPublishFormProps> = (props) => {
   })
 
   return (
-    <div class={cn('w-full px-4 pb-24 [&_.text-base]:text-base', props.class)}>
+    <div class={cn('w-full [&_.text-base]:text-base', props.class)}>
       {/* Progress bar — thin segments */}
       <Show when={isFormStep()}>
         <div class="flex gap-1.5 mb-5">
@@ -849,28 +869,6 @@ export const SongPublishForm: Component<SongPublishFormProps> = (props) => {
         <ErrorStep error={props.error} onBack={props.onBack} />
       </Show>
 
-      {/* Footer — fixed to viewport bottom */}
-      <Show when={isFormStep()}>
-        <div class="fixed bottom-0 left-0 right-0 bg-[var(--bg-page)] border-t border-[var(--bg-elevated)] px-4 pt-3 pb-5 flex items-center gap-3">
-          <Show when={stepIndex() > 0} fallback={<div class="flex-1" />}>
-            <Button variant="secondary" onClick={props.onBack} class="flex-1">
-              Back
-            </Button>
-          </Show>
-          <Show
-            when={props.step !== 'license'}
-            fallback={
-              <Button disabled={nextDisabled()} onClick={props.onPublish} class="flex-1">
-                Publish Song
-              </Button>
-            }
-          >
-            <Button disabled={nextDisabled()} onClick={props.onNext} class="flex-1">
-              Next
-            </Button>
-          </Show>
-        </div>
-      </Show>
     </div>
   )
 }

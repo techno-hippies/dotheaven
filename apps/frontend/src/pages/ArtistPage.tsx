@@ -141,7 +141,7 @@ export const ArtistPage: Component = () => {
 
   return (
     <Show when={!query.isLoading} fallback={
-      <div class="h-full overflow-y-auto">
+      <div class="h-full overflow-y-auto max-w-5xl mx-auto w-full">
         {/* Skeleton loader */}
         <div class="pb-4">
           {/* Hero skeleton */}
@@ -179,7 +179,7 @@ export const ArtistPage: Component = () => {
           // Filter to only entries that have a known icon (excludes 'image' key etc.)
           const linkEntries = () => Object.entries(artistInfo().links).filter(([key]) => getLinkIcon(key))
           return (
-            <div class="h-full overflow-y-auto">
+            <div class="h-full overflow-y-auto max-w-5xl mx-auto w-full">
               <div class="pb-4">
                 <PageHero
                   title={artist().name}

@@ -1,6 +1,7 @@
 import { Show, For, type Component, type JSX, createSignal, createMemo } from 'solid-js'
 import {
   AlbumCover,
+  Avatar,
   ProfileInfoSection,
   ProfileAboutSidebar,
   Scheduler,
@@ -24,6 +25,7 @@ export interface ProfileScrobble {
   timestamp: string
   trackId: string
   coverUrl?: string
+  durationSec?: number
 }
 
 export interface ProfilePageProps extends Omit<ProfileHeaderProps, 'class' | 'isEditing' | 'isSaving' | 'onEditClick' | 'onSaveClick' | 'onWalletClick'> {
@@ -34,6 +36,8 @@ export interface ProfilePageProps extends Omit<ProfileHeaderProps, 'class' | 'is
   scrobbles?: ProfileScrobble[]
   scrobblesLoading?: boolean
   onScrobbleClick?: (scrobble: ProfileScrobble) => void
+  onArtistClick?: (artist: string) => void
+  onTrackClick?: (trackId: string) => void
   // Profile editing (only shown on own profile)
   profileData?: ProfileInput | null
   profileLoading?: boolean
@@ -130,6 +134,178 @@ function findSlotByDateTime(slots: SessionSlotData[], date: string, startTime: s
     const m = String(d.getMinutes()).padStart(2, '0')
     return dateStr === date && `${h}:${m}` === startTime
   })
+}
+
+/**
+ * Music tab — scrobble dashboard with KPI strip, two-column layout (recent feed + sidebar tops)
+ */
+interface TopArtistEntry { artist: string; count: number; coverUrl?: string }
+interface TopTrackEntry { title: string; artist: string; count: number; coverUrl?: string; trackId: string }
+interface TopAlbumEntry { album: string; artist: string; count: number; coverUrl?: string }
+
+const formatHours = (totalSec: number) => {
+  const h = Math.floor(totalSec / 3600)
+  if (h < 1) return `${Math.round(totalSec / 60)}m`
+  return `${h.toLocaleString()}h`
+}
+
+const MusicTabContent: Component<{
+  scrobbles: ProfileScrobble[]
+  onArtistClick?: (artist: string) => void
+  onTrackClick?: (trackId: string) => void
+}> = (tabProps) => {
+  const totalSec = createMemo(() => {
+    let sum = 0
+    for (const s of tabProps.scrobbles) sum += s.durationSec || 0
+    return sum
+  })
+
+  const uniqueArtists = createMemo(() => new Set(tabProps.scrobbles.map(s => s.artist)).size)
+  const uniqueTracks = createMemo(() => new Set(tabProps.scrobbles.map(s => `${s.title}|||${s.artist}`)).size)
+
+  const topArtists = createMemo<TopArtistEntry[]>(() => {
+    const map = new Map<string, { count: number; coverUrl?: string }>()
+    for (const s of tabProps.scrobbles) {
+      const entry = map.get(s.artist) || { count: 0 }
+      entry.count++
+      if (!entry.coverUrl && s.coverUrl) entry.coverUrl = s.coverUrl
+      map.set(s.artist, entry)
+    }
+    return [...map.entries()]
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 5)
+      .map(([a, d]) => ({ artist: a, ...d }))
+  })
+
+  const topTracks = createMemo<TopTrackEntry[]>(() => {
+    const map = new Map<string, TopTrackEntry>()
+    for (const s of tabProps.scrobbles) {
+      const key = `${s.title}|||${s.artist}`
+      const entry = map.get(key) || { title: s.title, artist: s.artist, count: 0, trackId: s.trackId }
+      entry.count++
+      if (!entry.coverUrl && s.coverUrl) entry.coverUrl = s.coverUrl
+      map.set(key, entry)
+    }
+    return [...map.values()].sort((a, b) => b.count - a.count).slice(0, 5)
+  })
+
+  const topAlbums = createMemo<TopAlbumEntry[]>(() => {
+    const map = new Map<string, TopAlbumEntry>()
+    for (const s of tabProps.scrobbles) {
+      if (!s.album) continue
+      const key = `${s.album}|||${s.artist}`
+      const entry = map.get(key) || { album: s.album, artist: s.artist, count: 0 }
+      entry.count++
+      if (!entry.coverUrl && s.coverUrl) entry.coverUrl = s.coverUrl
+      map.set(key, entry)
+    }
+    return [...map.values()].sort((a, b) => b.count - a.count).slice(0, 5)
+  })
+
+  /* Consistent row: rank (w-6, center) + image (w-12 h-12) + text (flex-1 min-w-0) + meta (right) */
+  const rowClass = 'flex items-center gap-3 h-[56px] border-b border-[var(--border-subtle)] hover:bg-[var(--bg-highlight)] transition-colors cursor-pointer'
+  const rankClass = 'text-base text-[var(--text-muted)] w-6 text-center flex-shrink-0'
+  const titleClass = 'text-base font-medium text-[var(--text-primary)] truncate'
+  const subClass = 'text-base text-[var(--text-muted)] truncate'
+  const metaClass = 'text-base text-[var(--text-muted)] flex-shrink-0'
+
+  return (
+    <div class="space-y-6">
+      {/* KPI Strip */}
+      <div style={{ display: 'grid', 'grid-template-columns': 'repeat(4, 1fr)', gap: '0.75rem' }}>
+        <div class="rounded-md bg-[var(--bg-surface)] px-4 py-3 text-center">
+          <div class="text-xl font-bold text-[var(--text-primary)]">{tabProps.scrobbles.length.toLocaleString()}</div>
+          <div class="text-base text-[var(--text-muted)]">scrobbles</div>
+        </div>
+        <div class="rounded-md bg-[var(--bg-surface)] px-4 py-3 text-center">
+          <div class="text-xl font-bold text-[var(--text-primary)]">{formatHours(totalSec())}</div>
+          <div class="text-base text-[var(--text-muted)]">listened</div>
+        </div>
+        <div class="rounded-md bg-[var(--bg-surface)] px-4 py-3 text-center">
+          <div class="text-xl font-bold text-[var(--text-primary)]">{uniqueArtists().toLocaleString()}</div>
+          <div class="text-base text-[var(--text-muted)]">artists</div>
+        </div>
+        <div class="rounded-md bg-[var(--bg-surface)] px-4 py-3 text-center">
+          <div class="text-xl font-bold text-[var(--text-primary)]">{uniqueTracks().toLocaleString()}</div>
+          <div class="text-base text-[var(--text-muted)]">tracks</div>
+        </div>
+      </div>
+
+      {/* 2x2 grid */}
+      <div style={{ display: 'grid', 'grid-template-columns': '1fr 1fr', gap: '1.5rem' }}>
+        {/* Top Artists — rank + avatar + name + count */}
+        <div>
+          <h3 class="text-base font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-1">Top Artists</h3>
+          <For each={topArtists()}>
+            {(entry, i) => (
+              <div class={rowClass} onClick={() => tabProps.onArtistClick?.(entry.artist)}>
+                <span class={rankClass}>{i() + 1}</span>
+                <Avatar src={entry.coverUrl} alt={entry.artist} size="lg" />
+                <div class="flex-1 min-w-0">
+                  <div class={titleClass}>{entry.artist}</div>
+                </div>
+                <span class={metaClass}>{entry.count}</span>
+              </div>
+            )}
+          </For>
+        </div>
+
+        {/* Top Tracks — rank + cover + title/artist + count */}
+        <div>
+          <h3 class="text-base font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-1">Top Tracks</h3>
+          <For each={topTracks()}>
+            {(track, i) => (
+              <div class={rowClass} onClick={() => tabProps.onTrackClick?.(track.trackId)}>
+                <span class={rankClass}>{i() + 1}</span>
+                <AlbumCover src={track.coverUrl} alt={track.title} class="w-12 h-12 flex-shrink-0" />
+                <div class="flex-1 min-w-0">
+                  <div class={titleClass}>{track.title}</div>
+                  <div class={subClass}>{track.artist}</div>
+                </div>
+                <span class={metaClass}>{track.count}</span>
+              </div>
+            )}
+          </For>
+        </div>
+
+        {/* Top Albums — rank + cover + album/artist + count */}
+        <div>
+          <h3 class="text-base font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-1">Top Albums</h3>
+          <For each={topAlbums()}>
+            {(album, i) => (
+              <div class={rowClass} onClick={() => tabProps.onArtistClick?.(album.artist)}>
+                <span class={rankClass}>{i() + 1}</span>
+                <AlbumCover src={album.coverUrl} alt={album.album} class="w-12 h-12 flex-shrink-0" />
+                <div class="flex-1 min-w-0">
+                  <div class={titleClass}>{album.album}</div>
+                  <div class={subClass}>{album.artist}</div>
+                </div>
+                <span class={metaClass}>{album.count}</span>
+              </div>
+            )}
+          </For>
+        </div>
+
+        {/* Recent — rank + cover + title/artist + timestamp */}
+        <div>
+          <h3 class="text-base font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-1">Recent</h3>
+          <For each={tabProps.scrobbles.slice(0, 10)}>
+            {(scrobble, i) => (
+              <div class={rowClass} onClick={() => tabProps.onTrackClick?.(scrobble.trackId)}>
+                <span class={rankClass}>{i() + 1}</span>
+                <AlbumCover src={scrobble.coverUrl} alt={scrobble.album || scrobble.title} class="w-12 h-12 flex-shrink-0" />
+                <div class="flex-1 min-w-0">
+                  <div class={titleClass}>{scrobble.title}</div>
+                  <div class={subClass}>{scrobble.artist}</div>
+                </div>
+                <span class={metaClass}>{scrobble.timestamp}</span>
+              </div>
+            )}
+          </For>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -254,12 +430,13 @@ export const ProfilePage: Component<ProfilePageProps> = (props) => {
           location={props.profileData?.locationCityId}
         />
 
+        <div class="max-w-4xl mx-auto px-4 md:px-8">
         <ProfileTabs
           activeTab={props.activeTab}
           onTabChange={props.onTabChange}
         />
 
-        <div class="p-4 md:p-8">
+        <div class="py-4 md:py-8">
           {/* About Tab — full-width profile details */}
           <Show when={props.activeTab === 'about'}>
             <Show
@@ -343,19 +520,28 @@ export const ProfilePage: Component<ProfilePageProps> = (props) => {
             </Show>
           </Show>
 
-          {/* Music Tab */}
+          {/* Music Tab — Last.fm-style scrobble history */}
           <Show when={props.activeTab === 'music'}>
-            <div class="text-center text-[var(--text-secondary)] py-20">
-              <svg
-                class="w-20 h-20 mx-auto mb-4 opacity-40"
-                fill="currentColor"
-                viewBox="0 0 256 256"
-              >
-                <path d="M212.92,25.69a8,8,0,0,0-6.86-1.45l-128,32A8,8,0,0,0,72,64V174.08A36,36,0,1,0,88,204V70.25l112-28v99.83A36,36,0,1,0,216,172V32A8,8,0,0,0,212.92,25.69ZM52,224a20,20,0,1,1,20-20A20,20,0,0,1,52,224Zm128-32a20,20,0,1,1,20-20A20,20,0,0,1,180,192Z" />
-              </svg>
-              <p class="text-lg font-medium">Music Collection</p>
-              <p class="text-base mt-2">Coming soon...</p>
-            </div>
+            <Show when={props.scrobblesLoading}>
+              <div class="py-12 text-center text-[var(--text-muted)]">
+                Loading music...
+              </div>
+            </Show>
+            <Show when={!props.scrobblesLoading && (!props.scrobbles || props.scrobbles.length === 0)}>
+              <div class="py-12 text-center text-[var(--text-muted)]">
+                <svg class="w-16 h-16 mx-auto mb-3 opacity-40" fill="currentColor" viewBox="0 0 256 256">
+                  <path d="M212.92,25.69a8,8,0,0,0-6.86-1.45l-128,32A8,8,0,0,0,72,64V174.08A36,36,0,1,0,88,204V70.25l112-28v99.83A36,36,0,1,0,216,172V32A8,8,0,0,0,212.92,25.69ZM52,224a20,20,0,1,1,20-20A20,20,0,0,1,52,224Zm128-32a20,20,0,1,1,20-20A20,20,0,0,1,180,192Z" />
+                </svg>
+                <p class="text-base">No scrobbles yet</p>
+              </div>
+            </Show>
+            <Show when={!props.scrobblesLoading && props.scrobbles && props.scrobbles.length > 0}>
+              <MusicTabContent
+                scrobbles={props.scrobbles!}
+                onArtistClick={props.onArtistClick}
+                onTrackClick={props.onTrackClick}
+              />
+            </Show>
           </Show>
 
           {/* Wallet Tab — rendered without parent padding for edge-to-edge parity with /wallet */}
@@ -375,6 +561,7 @@ export const ProfilePage: Component<ProfilePageProps> = (props) => {
             />
           </Show>
 
+        </div>
         </div>
     </div>
   )

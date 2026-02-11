@@ -1,15 +1,23 @@
 mod audio;
 mod auth;
+mod chat;
 mod feed;
 mod icons;
 mod library;
 mod lit_wallet;
 mod music_db;
 mod pages;
+mod scrobble;
+mod settings;
 mod shell;
+mod synapse_sidecar;
 mod theme;
+mod ui;
+mod voice;
 mod wallet;
+mod xmtp_service;
 
+use gpui::prelude::FluentBuilder;
 use gpui::*;
 use gpui_component::theme::Theme;
 use gpui_component::{ActiveTheme, Root, StyledExt};
@@ -48,19 +56,23 @@ struct HeavenApp {
     sidebar_collapsed: bool,
     nav_channel: Entity<NavChannel>,
     feed_view: Entity<feed::FeedView>,
+    chat_view: Entity<chat::ChatView>,
     library_view: Entity<library::LibraryView>,
     wallet_view: Entity<wallet::WalletView>,
+    settings_view: Entity<settings::SettingsView>,
     audio: AudioHandle,
 }
 
 impl HeavenApp {
-    fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let nav_channel = cx.new(|_| NavChannel::new());
         let feed_view = cx.new(|cx| feed::FeedView::new(cx));
+        let chat_view = cx.new(|cx| chat::ChatView::new(window, cx));
         let audio = AudioHandle::new();
         let audio2 = audio.clone();
         let library_view = cx.new(|cx| library::LibraryView::new(audio2, cx));
         let wallet_view = cx.new(|cx| wallet::WalletView::new(cx));
+        let settings_view = cx.new(|cx| settings::SettingsView::new(cx));
 
         // Observe the nav channel for navigation events
         let ch = nav_channel.clone();
@@ -108,8 +120,10 @@ impl HeavenApp {
             sidebar_collapsed: false,
             nav_channel,
             feed_view,
+            chat_view,
             library_view,
             wallet_view,
+            settings_view,
             audio,
         }
     }
@@ -158,22 +172,13 @@ impl Render for HeavenApp {
             .h_flex()
             .size_full()
             .bg(theme.background)
-            // Left sidebar (300px) — flush, bg difference is the separator
-            .child(
-                div()
-                    .v_flex()
-                    .w(px(300.))
-                    .h_full()
-                    .flex_shrink_0()
-                    .bg(theme.sidebar)
-                    .overflow_hidden()
-                    .child(build_sidebar(
-                        self.active_page,
-                        self.sidebar_collapsed,
-                        self.nav_channel.clone(),
-                        cx,
-                    )),
-            )
+            // Left sidebar — Sidebar component sets its own width (255px)
+            .child(build_sidebar(
+                self.active_page,
+                self.sidebar_collapsed,
+                self.nav_channel.clone(),
+                cx,
+            ))
             // Main content (center — flex)
             .child(
                 div()
@@ -182,11 +187,16 @@ impl Render for HeavenApp {
                     .h_full()
                     .min_w_0()
                     .overflow_hidden()
-                    .bg(theme.background)
+                    // Chat manages its own panel backgrounds; other pages use page bg
+                    .when(self.active_page != Page::Messages, |el| {
+                        el.bg(theme.background)
+                    })
                     .child(match self.active_page {
                         Page::Home => self.feed_view.clone().into_any_element(),
+                        Page::Messages => self.chat_view.clone().into_any_element(),
                         Page::MusicLibrary => self.library_view.clone().into_any_element(),
                         Page::Wallet => self.wallet_view.clone().into_any_element(),
+                        Page::Settings => self.settings_view.clone().into_any_element(),
                         _ => div()
                             .id("main-content")
                             .flex_1()
@@ -207,35 +217,31 @@ impl Render for HeavenApp {
                     .overflow_hidden()
                     // Search bar at the very top
                     .child(
-                        div()
-                            .h_flex()
-                            .px_5()
-                            .py_3()
-                            .child(
-                                div()
-                                    .h_flex()
-                                    .w_full()
-                                    .px_3()
-                                    .py(px(8.))
-                                    .rounded_full()
-                                    .bg(theme.background)
-                                    .items_center()
-                                    .gap_2()
-                                    .child(
-                                        gpui::svg()
-                                            .path("icons/magnifying-glass.svg")
-                                            .size(px(16.))
-                                            .text_color(hsla(0., 0., 0.64, 1.)),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_color(hsla(0., 0., 0.45, 1.))
-                                            .child("Search..."),
-                                    ),
-                            ),
+                        div().h_flex().px_5().py_3().child(
+                            div()
+                                .h_flex()
+                                .w_full()
+                                .px_3()
+                                .py(px(8.))
+                                .rounded_full()
+                                .bg(theme.background)
+                                .items_center()
+                                .gap_2()
+                                .child(
+                                    gpui::svg()
+                                        .path("icons/magnifying-glass.svg")
+                                        .size(px(16.))
+                                        .text_color(hsla(0., 0., 0.64, 1.)),
+                                )
+                                .child(div().text_color(hsla(0., 0., 0.45, 1.)).child("Search...")),
+                        ),
                     )
                     // Album player — shows current track info
-                    .child(build_side_player_with_state(&playback, &self.audio))
+                    .child(build_side_player_with_state(
+                        &playback,
+                        &self.audio,
+                        &self.library_view,
+                    ))
                     // Spacer
                     .child(div().flex_1()),
             )
@@ -246,6 +252,7 @@ impl Render for HeavenApp {
 fn build_side_player_with_state(
     playback: &audio::PlaybackState,
     audio: &AudioHandle,
+    library_view: &Entity<library::LibraryView>,
 ) -> impl IntoElement {
     let track_name = playback
         .track_path
@@ -278,8 +285,10 @@ fn build_side_player_with_state(
         0.0
     };
 
-    // Clone audio handle for play/pause click handler
+    // Clone handles for click handlers
     let audio_toggle = audio.clone();
+    let lib_prev = library_view.clone();
+    let lib_next = library_view.clone();
 
     div()
         .v_flex()
@@ -359,11 +368,20 @@ fn build_side_player_with_state(
                         .cursor_pointer(),
                 )
                 .child(
-                    gpui::svg()
-                        .path("icons/skip-back-fill.svg")
-                        .size(px(20.))
-                        .text_color(hsla(0., 0., 0.98, 1.))
-                        .cursor_pointer(),
+                    div()
+                        .id("skip-back-btn")
+                        .cursor_pointer()
+                        .on_click(move |_, _, cx| {
+                            lib_prev.update(cx, |lib, cx| {
+                                lib.play_prev(cx);
+                            });
+                        })
+                        .child(
+                            gpui::svg()
+                                .path("icons/skip-back-fill.svg")
+                                .size(px(20.))
+                                .text_color(hsla(0., 0., 0.98, 1.)),
+                        ),
                 )
                 .child(
                     // Play/Pause toggle
@@ -395,11 +413,20 @@ fn build_side_player_with_state(
                         ),
                 )
                 .child(
-                    gpui::svg()
-                        .path("icons/skip-forward-fill.svg")
-                        .size(px(20.))
-                        .text_color(hsla(0., 0., 0.98, 1.))
-                        .cursor_pointer(),
+                    div()
+                        .id("skip-fwd-btn")
+                        .cursor_pointer()
+                        .on_click(move |_, _, cx| {
+                            lib_next.update(cx, |lib, cx| {
+                                lib.play_next(cx);
+                            });
+                        })
+                        .child(
+                            gpui::svg()
+                                .path("icons/skip-forward-fill.svg")
+                                .size(px(20.))
+                                .text_color(hsla(0., 0., 0.98, 1.)),
+                        ),
                 )
                 .child(
                     gpui::svg()
@@ -425,20 +452,17 @@ fn render_side_player_art(cover_path: &Option<String>) -> impl IntoElement {
                 .size(px(360.))
                 .object_fit(ObjectFit::Cover),
         ),
-        _ => container
-            .flex()
-            .items_center()
-            .justify_center()
-            .child(
-                gpui::svg()
-                    .path("icons/music-notes.svg")
-                    .size(px(72.))
-                    .text_color(hsla(0., 0., 0.25, 1.)),
-            ),
+        _ => container.flex().items_center().justify_center().child(
+            gpui::svg()
+                .path("icons/music-notes.svg")
+                .size(px(72.))
+                .text_color(hsla(0., 0., 0.25, 1.)),
+        ),
     }
 }
 
 fn main() {
+    dotenvy::dotenv().ok();
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let app = Application::new().with_assets(CombinedAssets);
@@ -454,10 +478,7 @@ fn main() {
         // Initialize auth state — load persisted session from disk
         let mut initial_auth = auth::AuthState::default();
         if let Some(persisted) = auth::load_from_disk() {
-            log::info!(
-                "Loaded persisted auth: {:?}",
-                persisted.pkp_address
-            );
+            auth::log_persisted_auth("App startup", &persisted);
             initial_auth.persisted = Some(persisted);
         }
         cx.set_global(initial_auth);

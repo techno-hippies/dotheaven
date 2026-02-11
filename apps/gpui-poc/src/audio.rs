@@ -75,7 +75,13 @@ impl AudioHandle {
         Self { sender, state }
     }
 
-    pub fn play(&self, path: &str, seek: Option<f64>, artist: Option<String>, cover_path: Option<String>) {
+    pub fn play(
+        &self,
+        path: &str,
+        seek: Option<f64>,
+        artist: Option<String>,
+        cover_path: Option<String>,
+    ) {
         let _ = self.sender.send(Command::Play {
             path: path.to_string(),
             seek,
@@ -211,8 +217,7 @@ impl ResamplerState {
                 break;
             }
 
-            let input_refs: Vec<&[f32]> =
-                self.input_buf.iter().map(|ch| &ch[..needed]).collect();
+            let input_refs: Vec<&[f32]> = self.input_buf.iter().map(|ch| &ch[..needed]).collect();
 
             let out_frames = self.resampler.output_frames_next();
             let mut output_buf: Vec<Vec<f32>> = vec![vec![0.0; out_frames]; channels];
@@ -299,12 +304,22 @@ struct AudioInner {
 }
 
 enum Command {
-    Play { path: String, seek: Option<f64>, artist: Option<String>, cover_path: Option<String> },
+    Play {
+        path: String,
+        seek: Option<f64>,
+        artist: Option<String>,
+        cover_path: Option<String>,
+    },
     Pause,
     Resume,
     Stop,
-    Seek { position: f64, play: bool },
-    Volume { volume: f64 },
+    Seek {
+        position: f64,
+        play: bool,
+    },
+    Volume {
+        volume: f64,
+    },
 }
 
 // =============================================================================
@@ -322,7 +337,10 @@ fn open_decoder(path: &str, seek: Option<f64>) -> Result<DecoderState, String> {
     let mss = MediaSourceStream::new(Box::new(file), Default::default());
 
     let mut hint = Hint::new();
-    if let Some(ext) = std::path::Path::new(path).extension().and_then(|e| e.to_str()) {
+    if let Some(ext) = std::path::Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+    {
         hint.with_extension(ext);
     }
 
@@ -556,7 +574,18 @@ fn handle_command(
     shared: &Arc<Mutex<PlaybackState>>,
 ) -> Result<(), String> {
     match command {
-        Command::Play { path, seek, artist, cover_path } => {
+        Command::Play {
+            path,
+            seek,
+            artist,
+            cover_path,
+        } => {
+            log::info!(
+                "[Audio] play command: path='{}', seek={:?}, artist={:?}",
+                path,
+                seek,
+                artist
+            );
             let decoder = open_decoder(&path, seek)?;
 
             if inner.output.is_none() {
@@ -568,8 +597,7 @@ fn handle_command(
             let out_ch = output.channels as usize;
 
             if decoder.sample_rate != out_rate {
-                inner.resampler =
-                    Some(ResamplerState::new(decoder.sample_rate, out_rate, out_ch)?);
+                inner.resampler = Some(ResamplerState::new(decoder.sample_rate, out_rate, out_ch)?);
             } else {
                 inner.resampler = None;
             }
@@ -596,6 +624,7 @@ fn handle_command(
             s.position = seek.unwrap_or(0.0);
         }
         Command::Pause => {
+            log::info!("[Audio] pause command");
             inner.paused = true;
             inner.clock.pause();
             inner.pending = None;
@@ -605,6 +634,7 @@ fn handle_command(
             shared.lock().unwrap().playing = false;
         }
         Command::Resume => {
+            log::info!("[Audio] resume command");
             if inner.decoder.is_some() {
                 inner.paused = false;
                 inner.clock.start();
@@ -612,6 +642,7 @@ fn handle_command(
             }
         }
         Command::Stop => {
+            log::info!("[Audio] stop command");
             inner.decoder = None;
             inner.resampler = None;
             inner.current_path = None;
@@ -627,6 +658,11 @@ fn handle_command(
             s.position = 0.0;
         }
         Command::Seek { position, play } => {
+            log::info!(
+                "[Audio] seek command: position={:.3}s, play={}",
+                position,
+                play
+            );
             let path = match inner.current_path.clone() {
                 Some(path) => path,
                 None => return Ok(()),
@@ -655,6 +691,7 @@ fn handle_command(
             s.position = position;
         }
         Command::Volume { volume } => {
+            log::info!("[Audio] volume command: {:.2}", volume);
             inner.volume = volume.clamp(0.0, 1.0) as f32;
             shared.lock().unwrap().volume = volume.clamp(0.0, 1.0);
         }
@@ -710,6 +747,8 @@ fn run_audio_thread(
                         inner.pending_index = 0;
                     }
                     Ok(None) => {
+                        let ended_path = shared.lock().ok().and_then(|s| s.track_path.clone());
+                        log::info!("[Audio] track ended: path={:?}", ended_path);
                         if let Some(rs) = inner.resampler.as_mut() {
                             match rs.drain() {
                                 Ok(mut tail) if !tail.is_empty() => {
@@ -744,9 +783,7 @@ fn run_audio_thread(
                 }
             }
 
-            if let (Some(samples), Some(output)) =
-                (inner.pending.as_ref(), inner.output.as_mut())
-            {
+            if let (Some(samples), Some(output)) = (inner.pending.as_ref(), inner.output.as_mut()) {
                 let start = inner.pending_index.min(samples.len());
                 let written = output.producer.push_slice(&samples[start..]);
                 inner.pending_index = start + written;

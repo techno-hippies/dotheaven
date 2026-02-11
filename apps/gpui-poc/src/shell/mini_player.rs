@@ -85,8 +85,18 @@ pub fn build_side_player() -> impl IntoElement {
                 .justify_center()
                 .items_center()
                 .gap_2()
-                .child(Button::new("shuffle").ghost().icon(PhosphorIcon::Shuffle).small())
-                .child(Button::new("prev").ghost().icon(PhosphorIcon::SkipBackFill).small())
+                .child(
+                    Button::new("shuffle")
+                        .ghost()
+                        .icon(PhosphorIcon::Shuffle)
+                        .small(),
+                )
+                .child(
+                    Button::new("prev")
+                        .ghost()
+                        .icon(PhosphorIcon::SkipBackFill)
+                        .small(),
+                )
                 .child(
                     // Large play button — white bg, dark icon
                     div()
@@ -104,7 +114,17 @@ pub fn build_side_player() -> impl IntoElement {
                                 .text_color(hsla(0., 0., 0.09, 1.)), // dark
                         ),
                 )
-                .child(Button::new("next").ghost().icon(PhosphorIcon::SkipForwardFill).small())
-                .child(Button::new("repeat").ghost().icon(PhosphorIcon::Repeat).small()),
+                .child(
+                    Button::new("next")
+                        .ghost()
+                        .icon(PhosphorIcon::SkipForwardFill)
+                        .small(),
+                )
+                .child(
+                    Button::new("repeat")
+                        .ghost()
+                        .icon(PhosphorIcon::Repeat)
+                        .small(),
+                ),
         )
 }

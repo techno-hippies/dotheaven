@@ -12,4 +12,10 @@ export interface Env {
   VERIFICATION_MIRROR_ADDRESS: string
   ORACLE_PRIVATE_KEY?: string
   ORACLE_SERVICE_TOKEN?: string
+  // CAI agent (AI in rooms)
+  AGORA_REST_AUTH?: string
+  LLM_BASE_URL?: string
+  LLM_API_KEY?: string
+  ELEVENLABS_API_KEY?: string
+  ELEVENLABS_VOICE_ID?: string
 }

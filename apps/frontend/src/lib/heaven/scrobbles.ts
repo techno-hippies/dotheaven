@@ -224,7 +224,7 @@ function decodeString(data: string, offset: number): string {
   for (let i = 0; i < hexStr.length; i += 2) {
     bytes[i / 2] = parseInt(hexStr.slice(i, i + 2), 16)
   }
-  return new TextDecoder().decode(bytes)
+  return new TextDecoder().decode(bytes).replace(/\0/g, '')
 }
 
 async function rpcCall(method: string, params: unknown[]): Promise<any> {

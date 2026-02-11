@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   RefreshControl,
@@ -8,22 +8,53 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../navigation/TabNavigator';
 import { Fingerprint, Key, SignIn } from 'phosphor-react-native';
 import { useAuth } from '../providers/AuthProvider';
-import { colors, spacing, fontSize } from '../lib/theme';
+import { colors, fontSize } from '../lib/theme';
 import { Button, Spinner } from '../ui';
-import { ProfileHeader } from '../components/ProfileHeader';
+import { ProfileHeader, type ProfileTab } from '../components/ProfileHeader';
 import { ProfileAbout } from '../components/ProfileAbout';
+import { ProfileMusicTab } from '../components/ProfileMusicTab';
 import { useProfile } from '../hooks/useProfile';
+import { fetchScrobbleEntries, type ScrobbleEntry } from '../lib/scrobbles';
 
 export const ProfileScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { isAuthenticated, isLoading: authLoading, pkpInfo, register, authenticate } = useAuth();
   const [actionLoading, setActionLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<ProfileTab>('timeline');
   const { profile, profileLoading, refreshing, refresh } = useProfile({
-    isAuthenticated,
+    enabled: isAuthenticated,
     address: pkpInfo?.ethAddress,
   });
+
+  // Scrobble data
+  const [scrobbles, setScrobbles] = useState<ScrobbleEntry[]>([]);
+  const [scrobblesLoading, setScrobblesLoading] = useState(false);
+
+  const loadScrobbles = useCallback(async () => {
+    const addr = pkpInfo?.ethAddress;
+    if (!addr) return;
+    setScrobblesLoading(true);
+    try {
+      const entries = await fetchScrobbleEntries(addr);
+      setScrobbles(entries);
+    } catch (err) {
+      console.error('[Profile] Failed to load scrobbles:', err);
+    } finally {
+      setScrobblesLoading(false);
+    }
+  }, [pkpInfo?.ethAddress]);
+
+  useEffect(() => {
+    if (isAuthenticated && pkpInfo?.ethAddress) {
+      loadScrobbles();
+    }
+  }, [isAuthenticated, pkpInfo?.ethAddress, loadScrobbles]);
 
   const handleRegister = async () => {
     setActionLoading(true);
@@ -62,8 +93,8 @@ export const ProfileScreen: React.FC = () => {
   if (!isAuthenticated) {
     return (
       <View style={styles.container}>
-        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-          <Text style={styles.headerTitle}>Profile</Text>
+        <View style={[styles.authHeader, { paddingTop: insets.top + 12 }]}>
+          <Text style={styles.authHeaderTitle}>Profile</Text>
         </View>
         <View style={[styles.centered, { flex: 1 }]}>
           <View style={styles.welcomeIcon}>
@@ -104,10 +135,6 @@ export const ProfileScreen: React.FC = () => {
   // Authenticated — show profile
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Text style={styles.headerTitle}>Profile</Text>
-      </View>
-
       {profileLoading && !profile ? (
         <View style={[styles.centered, { flex: 1 }]}>
           <Spinner label="Loading profile..." />
@@ -118,7 +145,7 @@ export const ProfileScreen: React.FC = () => {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={refresh}
+              onRefresh={() => { refresh(); loadScrobbles(); }}
               tintColor={colors.accentBlue}
               colors={[colors.accentBlue]}
             />
@@ -130,14 +157,39 @@ export const ProfileScreen: React.FC = () => {
             name={profile?.name ?? 'Unknown'}
             handle={profile?.handle}
             bio={profile?.bio}
-            location={profile?.location}
+            nationalityCode={profile?.nationalityCode}
             followerCount={profile?.followerCount}
             followingCount={profile?.followingCount}
-            nationalityCode={profile?.nationalityCode}
+            url={profile?.url}
+            twitter={profile?.twitter}
+            github={profile?.github}
+            telegram={profile?.telegram}
+            isOwnProfile={true}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            onBackPress={() => navigation.goBack()}
+            onEditPress={() => navigation.navigate('EditProfile')}
           />
 
-          {profile ? <ProfileAbout profile={profile} /> : null}
-
+          {activeTab === 'about' && profile ? <ProfileAbout profile={profile} /> : null}
+          {activeTab === 'timeline' ? (
+            <View style={styles.tabPlaceholder}>
+              <Text style={styles.tabPlaceholderText}>Timeline coming soon</Text>
+            </View>
+          ) : null}
+          {activeTab === 'music' ? (
+            <ProfileMusicTab
+              scrobbles={scrobbles}
+              loading={scrobblesLoading}
+              onArtistPress={(artist) => navigation.navigate('Artist' as any, { name: artist })}
+              onTrackPress={(trackId) => console.log('[Profile] track press:', trackId)}
+            />
+          ) : null}
+          {activeTab === 'schedule' ? (
+            <View style={styles.tabPlaceholder}>
+              <Text style={styles.tabPlaceholderText}>Schedule coming soon</Text>
+            </View>
+          ) : null}
         </ScrollView>
       )}
     </View>
@@ -153,22 +205,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  header: {
+  scrollContent: {
+    paddingBottom: 140,
+  },
+  authHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.headerPaddingHorizontal,
-    paddingBottom: spacing.headerPaddingBottom,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderSubtle,
   },
-  headerTitle: {
+  authHeaderTitle: {
     fontSize: fontSize['2xl'],
     fontWeight: '700',
     color: colors.textPrimary,
-  },
-  scrollContent: {
-    paddingBottom: 140,
   },
   welcomeIcon: {
     width: 80,
@@ -197,5 +249,13 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingHorizontal: 24,
     gap: 12,
+  },
+  tabPlaceholder: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  tabPlaceholderText: {
+    fontSize: fontSize.base,
+    color: colors.textMuted,
   },
 });

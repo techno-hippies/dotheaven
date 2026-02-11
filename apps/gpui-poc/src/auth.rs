@@ -9,6 +9,7 @@
 //! Ported from apps/frontend/src-tauri/src/auth.rs (tokio → smol)
 
 use futures_lite::io::{AsyncReadExt, AsyncWriteExt};
+use lit_rust_sdk::{AuthSig as LitAuthSig, SessionKeyPair};
 use serde::{Deserialize, Serialize};
 use smol::net::TcpListener;
 use std::path::PathBuf;
@@ -40,6 +41,10 @@ pub struct AuthResult {
     pub error: Option<String>,
     #[serde(default)]
     pub eoa_address: Option<String>,
+    #[serde(default)]
+    pub lit_session_key_pair: Option<SessionKeyPair>,
+    #[serde(default)]
+    pub lit_delegation_auth_sig: Option<LitAuthSig>,
 }
 
 /// Persisted auth data (stored on disk)
@@ -54,6 +59,10 @@ pub struct PersistedAuth {
     pub access_token: Option<String>,
     #[serde(default)]
     pub eoa_address: Option<String>,
+    #[serde(default)]
+    pub lit_session_key_pair: Option<SessionKeyPair>,
+    #[serde(default)]
+    pub lit_delegation_auth_sig: Option<LitAuthSig>,
 }
 
 /// Global auth state observable by UI
@@ -75,6 +84,46 @@ impl AuthState {
     pub fn display_address(&self) -> Option<&str> {
         self.persisted.as_ref()?.pkp_address.as_deref()
     }
+}
+
+fn short_hex(value: &str) -> String {
+    if value.len() <= 14 {
+        value.to_string()
+    } else {
+        format!("{}...{}", &value[..8], &value[value.len() - 6..])
+    }
+}
+
+pub fn log_auth_result(context: &str, result: &AuthResult) {
+    log::info!(
+        "[Auth] {}: pkp_address={:?}, pkp_public_key={}, pkp_token_id={:?}, eoa_address={:?}, auth_method_type={:?}, is_new_user={:?}",
+        context,
+        result.pkp_address,
+        result
+            .pkp_public_key
+            .as_deref()
+            .map(short_hex)
+            .unwrap_or_else(|| "-".to_string()),
+        result.pkp_token_id,
+        result.eoa_address,
+        result.auth_method_type,
+        result.is_new_user
+    );
+}
+
+pub fn log_persisted_auth(context: &str, auth: &PersistedAuth) {
+    log::info!(
+        "[Auth] {}: pkp_address={:?}, pkp_public_key={}, pkp_token_id={:?}, eoa_address={:?}, auth_method_type={:?}",
+        context,
+        auth.pkp_address,
+        auth.pkp_public_key
+            .as_deref()
+            .map(short_hex)
+            .unwrap_or_else(|| "-".to_string()),
+        auth.pkp_token_id,
+        auth.eoa_address,
+        auth.auth_method_type
+    );
 }
 
 // =============================================================================
@@ -108,13 +157,10 @@ pub async fn run_auth_callback_server() -> Result<AuthResult, String> {
     open::that(&auth_url).map_err(|e| format!("Failed to open browser: {}", e))?;
 
     // Wait for callback with 2 minute timeout
-    let result = smol::future::race(
-        handle_auth_callback(listener),
-        async {
-            smol::Timer::after(Duration::from_secs(120)).await;
-            Err("Authentication timed out after 2 minutes".to_string())
-        },
-    )
+    let result = smol::future::race(handle_auth_callback(listener), async {
+        smol::Timer::after(Duration::from_secs(120)).await;
+        Err("Authentication timed out after 2 minutes".to_string())
+    })
     .await;
 
     result
@@ -155,7 +201,7 @@ async fn handle_auth_callback(listener: TcpListener) -> Result<AuthResult, Strin
         }
 
         if let Some(result) = parse_callback(&request) {
-            log::info!("Parsed callback: pkp_address={:?}", result.pkp_address);
+            log_auth_result("Parsed callback", &result);
             let response = build_json_response(true);
             let _ = stream.write_all(response.as_bytes()).await;
 
@@ -240,6 +286,7 @@ pub fn save_to_disk(auth: &PersistedAuth) -> Result<(), String> {
     std::fs::write(&path, json).map_err(|e| format!("Failed to write: {}", e))?;
 
     log::info!("Saved auth to {:?}", path);
+    log_persisted_auth("Saved auth", auth);
     Ok(())
 }
 
@@ -249,12 +296,17 @@ pub fn load_from_disk() -> Option<PersistedAuth> {
         return None;
     }
     let contents = std::fs::read_to_string(&path).ok()?;
-    serde_json::from_str(&contents).ok()
+    let parsed: PersistedAuth = serde_json::from_str(&contents).ok()?;
+    log_persisted_auth("Loaded auth from disk", &parsed);
+    Some(parsed)
 }
 
 pub fn delete_from_disk() {
     let path = app_data_dir().join(AUTH_FILE);
-    let _ = std::fs::remove_file(&path);
+    match std::fs::remove_file(&path) {
+        Ok(_) => log::info!("[Auth] Removed persisted auth file: {:?}", path),
+        Err(e) => log::warn!("[Auth] Failed to remove auth file {:?}: {}", path, e),
+    }
 }
 
 /// Convert AuthResult → PersistedAuth (strips transient fields)
@@ -267,5 +319,7 @@ pub fn to_persisted(result: &AuthResult) -> PersistedAuth {
         auth_method_id: result.auth_method_id.clone(),
         access_token: result.access_token.clone(),
         eoa_address: result.eoa_address.clone(),
+        lit_session_key_pair: result.lit_session_key_pair.clone(),
+        lit_delegation_auth_sig: result.lit_delegation_auth_sig.clone(),
     }
 }

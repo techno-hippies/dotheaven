@@ -118,74 +118,75 @@ export const ChatPage: Component = () => {
 
       {/* Chat content */}
       <Show when={auth.isAuthenticated()}>
-        <div class="h-full overflow-y-auto">
-          <div class="h-full flex flex-col">
-            {/* Chat Header */}
-            <div class="h-16 flex items-center justify-between px-4 border-b border-[var(--border-subtle)] flex-shrink-0">
-              <div class="flex items-center gap-3">
-                {/* Back button on mobile */}
-                <Show when={isMobile()}>
-                  <IconButton
-                    variant="soft"
-                    size="md"
-                    aria-label="Back to messages"
-                    onClick={() => navigate(CHAT)}
-                  >
-                    <ChevronLeftIcon />
-                  </IconButton>
-                </Show>
-                <Avatar size="md" />
-                <span class="text-base font-semibold text-[var(--text-primary)]">
-                  {formatAddress(peerAddressOrId())}
-                </span>
-              </div>
-              <IconButton variant="soft" size="md" aria-label="Open menu">
-                <MoreIcon />
-              </IconButton>
-            </div>
-
-            {/* Messages */}
-            <div ref={messagesContainer} class="flex-1 overflow-y-auto">
-              <Show when={xmtp.isConnecting()}>
-                <div class="flex items-center justify-center h-full">
-                  <p class="text-[var(--text-muted)]">Connecting to XMTP...</p>
-                </div>
-              </Show>
-              <Show when={xmtp.isConnected()}>
-                <MessageList>
-                  <Show when={messages().length === 0}>
-                    <div class="flex items-center justify-center py-12">
-                      <p class="text-[var(--text-muted)]">No messages yet. Start a conversation!</p>
-                    </div>
+        <div class="h-full flex flex-col">
+            {/* Chat Header — full-width border, content constrained */}
+            <div class="border-b border-[var(--border-subtle)] flex-shrink-0">
+              <div class="h-16 flex items-center justify-between px-4 max-w-4xl mx-auto">
+                <div class="flex items-center gap-3">
+                  {/* Back button on mobile */}
+                  <Show when={isMobile()}>
+                    <IconButton
+                      variant="soft"
+                      size="md"
+                      aria-label="Back to messages"
+                      onClick={() => navigate(CHAT)}
+                    >
+                      <ChevronLeftIcon />
+                    </IconButton>
                   </Show>
-                  <For each={messages()}>
-                    {(msg, index) => {
-                      const isOwn = msg.sender === 'user'
-                      const prev = messages()[index() - 1]
-                      const isFirstInGroup = !prev || prev.sender !== msg.sender
-
-                      return (
-                        <MessageBubble
-                          message={msg.content}
-                          username={isFirstInGroup ? (isOwn ? 'You' : formatAddress(peerAddressOrId())) : undefined}
-                          timestamp={isFirstInGroup ? formatTime(msg.timestamp) : undefined}
-                          isOwn={isOwn}
-                          isFirstInGroup={isFirstInGroup}
-                        />
-                      )
-                    }}
-                  </For>
-                </MessageList>
-              </Show>
+                  <Avatar size="md" />
+                  <span class="text-base font-semibold text-[var(--text-primary)]">
+                    {formatAddress(peerAddressOrId())}
+                  </span>
+                </div>
+                <IconButton variant="soft" size="md" aria-label="Open menu">
+                  <MoreIcon />
+                </IconButton>
+              </div>
             </div>
 
-            {/* Input */}
-            <MessageInput
-              onSubmit={handleSubmit}
-              placeholder={`Message ${formatAddress(peerAddressOrId())}...`}
-              disabled={isSending() || !xmtp.isConnected()}
-            />
-          </div>
+            {/* Messages + Input — constrained */}
+            <div class="flex-1 flex flex-col overflow-hidden max-w-4xl mx-auto w-full">
+              <div ref={messagesContainer} class="flex-1 overflow-y-auto">
+                <Show when={xmtp.isConnecting()}>
+                  <div class="flex items-center justify-center h-full">
+                    <p class="text-[var(--text-muted)]">Connecting to XMTP...</p>
+                  </div>
+                </Show>
+                <Show when={xmtp.isConnected()}>
+                  <MessageList>
+                    <Show when={messages().length === 0}>
+                      <div class="flex items-center justify-center py-12">
+                        <p class="text-[var(--text-muted)]">No messages yet. Start a conversation!</p>
+                      </div>
+                    </Show>
+                    <For each={messages()}>
+                      {(msg, index) => {
+                        const isOwn = msg.sender === 'user'
+                        const prev = messages()[index() - 1]
+                        const isFirstInGroup = !prev || prev.sender !== msg.sender
+
+                        return (
+                          <MessageBubble
+                            message={msg.content}
+                            username={isFirstInGroup ? (isOwn ? 'You' : formatAddress(peerAddressOrId())) : undefined}
+                            timestamp={isFirstInGroup ? formatTime(msg.timestamp) : undefined}
+                            isOwn={isOwn}
+                            isFirstInGroup={isFirstInGroup}
+                          />
+                        )
+                      }}
+                    </For>
+                  </MessageList>
+                </Show>
+              </div>
+
+              <MessageInput
+                onSubmit={handleSubmit}
+                placeholder={`Message ${formatAddress(peerAddressOrId())}...`}
+                disabled={isSending() || !xmtp.isConnected()}
+              />
+            </div>
         </div>
       </Show>
     </>

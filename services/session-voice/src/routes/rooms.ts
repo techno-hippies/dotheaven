@@ -142,6 +142,7 @@ roomRoutes.post('/create', async (c) => {
       capacity: ROOM_CAPACITY_FREE,
       channel,
       chainId: c.env.CHAIN_ID,
+      aiEnabled,
     }),
   }))
 

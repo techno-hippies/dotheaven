@@ -11,7 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { User, Gear, SignOut, SignIn, Key } from 'phosphor-react-native';
 import { colors } from '../lib/theme';
-import { Avatar, Button } from '../ui';
+import { Button } from '../ui';
 
 const DRAWER_WIDTH = Math.min(280, Dimensions.get('window').width * 0.85);
 
@@ -19,9 +19,6 @@ interface SideMenuDrawerProps {
   open: boolean;
   onClose: () => void;
   isAuthenticated?: boolean;
-  displayName?: string;
-  username?: string;
-  avatarUrl?: string;
   onProfile?: () => void;
   onSettings?: () => void;
   onLogout?: () => void;
@@ -33,9 +30,6 @@ export const SideMenuDrawer: React.FC<SideMenuDrawerProps> = ({
   open,
   onClose,
   isAuthenticated,
-  displayName,
-  username,
-  avatarUrl,
   onProfile,
   onSettings,
   onLogout,
@@ -99,18 +93,6 @@ export const SideMenuDrawer: React.FC<SideMenuDrawerProps> = ({
           <Text style={styles.logoText}>heaven</Text>
         </View>
 
-        {/* User info */}
-        {isAuthenticated && displayName ? (
-          <View style={styles.userRow}>
-            <Avatar src={avatarUrl} size="sm" />
-            <View style={styles.userInfo}>
-              <Text style={styles.displayName} numberOfLines={1}>{displayName}</Text>
-              {username ? (
-                <Text style={styles.username} numberOfLines={1}>{username}</Text>
-              ) : null}
-            </View>
-          </View>
-        ) : null}
 
         {/* Nav items */}
         <View style={styles.nav}>
@@ -217,28 +199,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: colors.textPrimary,
-  },
-  userRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderSubtle,
-  },
-  userInfo: {
-    flex: 1,
-    minWidth: 0,
-  },
-  displayName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  username: {
-    fontSize: 12,
-    color: colors.textMuted,
-    marginTop: 1,
   },
   nav: {
     paddingTop: 16,

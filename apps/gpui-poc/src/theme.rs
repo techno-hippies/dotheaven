@@ -9,26 +9,26 @@ pub fn apply_heaven_theme(cx: &mut App) {
     let theme = Theme::global_mut(cx);
 
     // -- Backgrounds --
-    theme.background = hex_color("#171717");       // bg-page
-    theme.foreground = hex_color("#fafafa");        // text-primary
-    theme.border = hex_color("#363636");            // border-subtle
-    theme.muted = hex_color("#262626");             // bg-elevated
-    theme.muted_foreground = hex_color("#a3a3a3");  // text-muted
+    theme.background = hex_color("#171717"); // bg-page
+    theme.foreground = hex_color("#fafafa"); // text-primary
+    theme.border = hex_color("#363636"); // border-subtle
+    theme.muted = hex_color("#262626"); // bg-elevated
+    theme.muted_foreground = hex_color("#a3a3a3"); // text-muted
 
     // -- Sidebar --
-    theme.sidebar = hex_color("#1c1c1c");           // bg-surface
+    theme.sidebar = hex_color("#1c1c1c"); // bg-surface
     theme.sidebar_foreground = hex_color("#d4d4d4"); // text-secondary
     theme.sidebar_border = hex_color("#363636");
-    theme.sidebar_accent = hex_color("#262626");     // bg-highlight (active item)
+    theme.sidebar_accent = hex_color("#262626"); // bg-highlight (active item)
     theme.sidebar_accent_foreground = hex_color("#fafafa");
-    theme.sidebar_primary = hex_color("#89b4fa");    // accent-blue
+    theme.sidebar_primary = hex_color("#89b4fa"); // accent-blue
     theme.sidebar_primary_foreground = hex_color("#171717");
 
     // -- Primary accent (Catppuccin blue) --
     theme.primary = hex_color("#89b4fa");
     theme.primary_foreground = hex_color("#171717");
-    theme.primary_hover = hex_color("#b4befe");     // lavender
-    theme.primary_active = hex_color("#74c7ec");    // sapphire
+    theme.primary_hover = hex_color("#b4befe"); // lavender
+    theme.primary_active = hex_color("#74c7ec"); // sapphire
 
     // -- Secondary --
     theme.secondary = hex_color("#262626");
@@ -41,7 +41,7 @@ pub fn apply_heaven_theme(cx: &mut App) {
     theme.accent_foreground = hex_color("#fafafa");
 
     // -- Input --
-    theme.input = hex_color("#404040");             // border-default
+    theme.input = hex_color("#404040"); // border-default
     theme.ring = hex_color("#89b4fa");
 
     // -- List --
@@ -115,8 +115,5 @@ fn hex_color(hex: &str) -> Hsla {
         _ => (0, 0, 0, 255),
     };
 
-    rgba(
-        (r as u32) << 24 | (g as u32) << 16 | (b as u32) << 8 | a as u32,
-    )
-    .into()
+    rgba((r as u32) << 24 | (g as u32) << 16 | (b as u32) << 8 | a as u32).into()
 }

@@ -4,7 +4,7 @@ import { ProfilePage } from './profile-page'
 import type { ProfileTab } from './profile-tabs'
 import type { ProfileScrobble } from './profile-page'
 const meta = {
-  title: 'Components/ProfilePage',
+  title: 'Profile/ProfilePage',
   component: ProfilePage,
   parameters: {
     layout: 'fullscreen',
@@ -47,51 +47,34 @@ const sampleProfileData = {
   religion: 'agnostic',
   pets: 'love-dogs',
   diet: 'omnivore',
-  hobbiesCommit: '1,5,12,23,45',
-  skillsCommit: '1001,1005,1010,1020',
+  hobbiesCommit: '1,5,12,13',
+  skillsCommit: '1001,1005,1010',
   languages: [
-    { code: 'ja', name: 'Japanese', proficiency: 'native' },
-    { code: 'en', name: 'English', proficiency: 'c1' },
+    { code: 'ja', proficiency: 7 },
+    { code: 'en', proficiency: 5 },
   ],
 }
 
-// Sample scrobbles data
+// Sample scrobbles data — enough repeats for meaningful top artists/tracks
 const sampleScrobbles: ProfileScrobble[] = [
-  {
-    id: '1',
-    title: 'Blinding Lights',
-    artist: 'The Weeknd',
-    album: 'After Hours',
-    trackId: '0x123',
-    timestamp: '2h ago',
-    coverUrl: 'https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36',
-  },
-  {
-    id: '2',
-    title: 'Levitating',
-    artist: 'Dua Lipa',
-    album: 'Future Nostalgia',
-    trackId: '0x124',
-    timestamp: '5h ago',
-    coverUrl: 'https://i.scdn.co/image/ab67616d0000b273c85a19d3d1ebba4f86b1c3bd',
-  },
-  {
-    id: '3',
-    title: 'Stay',
-    artist: 'The Kid LAROI & Justin Bieber',
-    album: 'F*ck Love 3: Over You',
-    trackId: '0x125',
-    timestamp: '1d ago',
-  },
-  {
-    id: '4',
-    title: 'Good 4 U',
-    artist: 'Olivia Rodrigo',
-    album: 'SOUR',
-    trackId: '0x126',
-    timestamp: '2d ago',
-    coverUrl: 'https://i.scdn.co/image/ab67616d0000b273a91c10fe9472d9bd89802e5a',
-  },
+  { id: '1', title: 'Blinding Lights', artist: 'The Weeknd', album: 'After Hours', trackId: '0x123', timestamp: '2h', durationSec: 200, coverUrl: 'https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36' },
+  { id: '2', title: 'Levitating', artist: 'Dua Lipa', album: 'Future Nostalgia', trackId: '0x124', timestamp: '3h', durationSec: 203, coverUrl: 'https://i.scdn.co/image/ab67616d0000b273c85a19d3d1ebba4f86b1c3bd' },
+  { id: '3', title: 'Save Your Tears', artist: 'The Weeknd', album: 'After Hours', trackId: '0x127', timestamp: '5h', durationSec: 215, coverUrl: 'https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36' },
+  { id: '4', title: 'Blinding Lights', artist: 'The Weeknd', album: 'After Hours', trackId: '0x123', timestamp: '8h', durationSec: 200, coverUrl: 'https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36' },
+  { id: '5', title: 'Stay', artist: 'The Kid LAROI & Justin Bieber', album: 'F*ck Love 3: Over You', trackId: '0x125', timestamp: '1d', durationSec: 141 },
+  { id: '6', title: 'Good 4 U', artist: 'Olivia Rodrigo', album: 'SOUR', trackId: '0x126', timestamp: '1d', durationSec: 178, coverUrl: 'https://i.scdn.co/image/ab67616d0000b273a91c10fe9472d9bd89802e5a' },
+  { id: '7', title: 'Levitating', artist: 'Dua Lipa', album: 'Future Nostalgia', trackId: '0x124', timestamp: '1d', durationSec: 203, coverUrl: 'https://i.scdn.co/image/ab67616d0000b273c85a19d3d1ebba4f86b1c3bd' },
+  { id: '8', title: 'Blinding Lights', artist: 'The Weeknd', album: 'After Hours', trackId: '0x123', timestamp: '2d', durationSec: 200, coverUrl: 'https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36' },
+  { id: '9', title: 'Peaches', artist: 'Justin Bieber', album: 'Justice', trackId: '0x128', timestamp: '2d', durationSec: 198, coverUrl: 'https://i.scdn.co/image/ab67616d0000b273e6f407c7f3a0ec98845e4431' },
+  { id: '10', title: 'Montero', artist: 'Lil Nas X', album: 'Montero', trackId: '0x129', timestamp: '3d', durationSec: 137, coverUrl: 'https://i.scdn.co/image/ab67616d0000b273be82673b5f79d9658ec0a9fd' },
+  { id: '11', title: 'Good 4 U', artist: 'Olivia Rodrigo', album: 'SOUR', trackId: '0x126', timestamp: '3d', durationSec: 178, coverUrl: 'https://i.scdn.co/image/ab67616d0000b273a91c10fe9472d9bd89802e5a' },
+  { id: '12', title: 'Levitating', artist: 'Dua Lipa', album: 'Future Nostalgia', trackId: '0x124', timestamp: '4d', durationSec: 203, coverUrl: 'https://i.scdn.co/image/ab67616d0000b273c85a19d3d1ebba4f86b1c3bd' },
+  { id: '13', title: 'Kiss Me More', artist: 'Doja Cat', album: 'Planet Her', trackId: '0x130', timestamp: '4d', durationSec: 209, coverUrl: 'https://i.scdn.co/image/ab67616d0000b2734df3245f26298a1579ecc321' },
+  { id: '14', title: 'Save Your Tears', artist: 'The Weeknd', album: 'After Hours', trackId: '0x127', timestamp: '5d', durationSec: 215, coverUrl: 'https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36' },
+  { id: '15', title: 'drivers license', artist: 'Olivia Rodrigo', album: 'SOUR', trackId: '0x131', timestamp: '5d', durationSec: 242, coverUrl: 'https://i.scdn.co/image/ab67616d0000b273a91c10fe9472d9bd89802e5a' },
+  { id: '16', title: 'Peaches', artist: 'Justin Bieber', album: 'Justice', trackId: '0x128', timestamp: '6d', durationSec: 198, coverUrl: 'https://i.scdn.co/image/ab67616d0000b273e6f407c7f3a0ec98845e4431' },
+  { id: '17', title: 'Butter', artist: 'BTS', album: 'Butter', trackId: '0x132', timestamp: '1w', durationSec: 165, coverUrl: 'https://i.scdn.co/image/ab67616d0000b273750f2b4209696f01f6d4fa18' },
+  { id: '18', title: 'Montero', artist: 'Lil Nas X', album: 'Montero', trackId: '0x129', timestamp: '1w', durationSec: 137, coverUrl: 'https://i.scdn.co/image/ab67616d0000b273be82673b5f79d9658ec0a9fd' },
 ]
 
 // Sample schedule data
@@ -155,6 +138,10 @@ export const PublicProfile: Story = {
         verificationState="verified"
         isFollowing={isFollowing()}
         isOwnProfile={false}
+        followerCount={42}
+        followingCount={128}
+        onFollowerCountClick={() => console.log('[Story] Followers clicked')}
+        onFollowingCountClick={() => console.log('[Story] Following clicked')}
         onFollowClick={() => setIsFollowing(!isFollowing())}
         onMessageClick={() => console.log('[Story] Message clicked')}
         onAvatarClick={() => console.log('[Story] Avatar clicked')}
@@ -165,10 +152,44 @@ export const PublicProfile: Story = {
         }}
         profileData={sampleProfileData}
         scrobbles={sampleScrobbles}
+        onArtistClick={(artist) => console.log('[Story] Artist clicked:', artist)}
+        onTrackClick={(trackId) => console.log('[Story] Track clicked:', trackId)}
         scheduleBasePrice="0.05"
         scheduleSlots={sampleSlots}
         onBookSlot={(slotId) => console.log('[Story] Book slot:', slotId)}
         onRequestCustomTime={(params) => console.log('[Story] Request custom time:', params)}
+      />
+    )
+  },
+}
+
+// Public Profile - Music Tab Active
+export const PublicProfileMusic: Story = {
+  render: () => {
+    const [activeTab, setActiveTab] = createSignal<ProfileTab>('music')
+    const [isFollowing, setIsFollowing] = createSignal(false)
+
+    return (
+      <ProfilePage
+        username="samantha.heaven"
+        displayName="Samantha"
+        avatarUrl="https://i.pravatar.cc/300?img=1"
+        nationalityCode="JP"
+        verificationState="verified"
+        isFollowing={isFollowing()}
+        isOwnProfile={false}
+        followerCount={42}
+        followingCount={128}
+        onFollowerCountClick={() => console.log('[Story] Followers clicked')}
+        onFollowingCountClick={() => console.log('[Story] Following clicked')}
+        onFollowClick={() => setIsFollowing(!isFollowing())}
+        onMessageClick={() => console.log('[Story] Message clicked')}
+        activeTab={activeTab()}
+        onTabChange={(tab) => setActiveTab(tab)}
+        profileData={sampleProfileData}
+        scrobbles={sampleScrobbles}
+        onArtistClick={(artist) => console.log('[Story] Artist clicked:', artist)}
+        onTrackClick={(trackId) => console.log('[Story] Track clicked:', trackId)}
       />
     )
   },
@@ -189,6 +210,10 @@ export const PublicProfileSchedule: Story = {
         verificationState="verified"
         isFollowing={isFollowing()}
         isOwnProfile={false}
+        followerCount={42}
+        followingCount={128}
+        onFollowerCountClick={() => console.log('[Story] Followers clicked')}
+        onFollowingCountClick={() => console.log('[Story] Following clicked')}
         onFollowClick={() => setIsFollowing(!isFollowing())}
         onMessageClick={() => console.log('[Story] Message clicked')}
         activeTab={activeTab()}
@@ -216,6 +241,10 @@ export const OwnProfile: Story = {
         nationalityCode="JP"
         verificationState="verified"
         isOwnProfile={true}
+        followerCount={42}
+        followingCount={128}
+        onFollowerCountClick={() => console.log('[Story] Followers clicked')}
+        onFollowingCountClick={() => console.log('[Story] Following clicked')}
         onAvatarClick={() => console.log('[Story] Avatar clicked')}
         activeTab={activeTab()}
         onTabChange={(tab) => setActiveTab(tab)}
