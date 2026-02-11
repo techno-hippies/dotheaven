@@ -52,6 +52,11 @@ mod imp {
             handle: *mut HeavenAgoraHandle,
             out_event: *mut HeavenAgoraEvent,
         ) -> i32;
+        fn heaven_agora_last_error(
+            handle: *mut HeavenAgoraHandle,
+            out_message: *mut c_char,
+            out_size: usize,
+        ) -> i32;
     }
 
     pub struct AgoraNativeEngine {
@@ -61,11 +66,28 @@ mod imp {
     unsafe impl Send for AgoraNativeEngine {}
 
     impl AgoraNativeEngine {
+        fn last_error_message(&self) -> Option<String> {
+            let mut buf = [0_i8; 512];
+            let rc =
+                unsafe { heaven_agora_last_error(self.handle, buf.as_mut_ptr(), buf.len()) };
+            if rc != 0 {
+                return None;
+            }
+            let msg = unsafe { CStr::from_ptr(buf.as_ptr()) }
+                .to_string_lossy()
+                .trim()
+                .to_string();
+            if msg.is_empty() { None } else { Some(msg) }
+        }
+
         pub fn new(app_id: &str) -> Result<Self, String> {
             let app_id_c = CString::new(app_id).map_err(|_| "invalid Agora app id".to_string())?;
             let mut handle = std::ptr::null_mut();
             let rc = unsafe { heaven_agora_create(app_id_c.as_ptr(), &mut handle) };
             if rc != 0 || handle.is_null() {
+                if rc == -77 {
+                    return Err("Agora fallback mode is active on this Linux SDK build. Restart the app before starting another Scarlett call.".to_string());
+                }
                 return Err(format!("agora create failed: rc={rc}"));
             }
             Ok(Self { handle })
@@ -78,6 +100,9 @@ mod imp {
                 heaven_agora_join(self.handle, channel_c.as_ptr(), token_c.as_ptr(), uid)
             };
             if rc != 0 {
+                if let Some(detail) = self.last_error_message() {
+                    return Err(format!("agora join failed: rc={rc}; {detail}"));
+                }
                 return Err(format!("agora join failed: rc={rc}"));
             }
             Ok(())
@@ -86,6 +111,9 @@ mod imp {
         pub fn leave(&mut self) -> Result<(), String> {
             let rc = unsafe { heaven_agora_leave(self.handle) };
             if rc != 0 {
+                if let Some(detail) = self.last_error_message() {
+                    return Err(format!("agora leave failed: rc={rc}; {detail}"));
+                }
                 return Err(format!("agora leave failed: rc={rc}"));
             }
             Ok(())
@@ -94,6 +122,9 @@ mod imp {
         pub fn set_mic_enabled(&mut self, enabled: bool) -> Result<(), String> {
             let rc = unsafe { heaven_agora_set_mic_enabled(self.handle, enabled) };
             if rc != 0 {
+                if let Some(detail) = self.last_error_message() {
+                    return Err(format!("agora mute failed: rc={rc}; {detail}"));
+                }
                 return Err(format!("agora mute failed: rc={rc}"));
             }
             Ok(())
@@ -102,6 +133,9 @@ mod imp {
         pub fn set_cn_only(&mut self, enabled: bool) -> Result<(), String> {
             let rc = unsafe { heaven_agora_set_area_cn(self.handle, enabled) };
             if rc != 0 {
+                if let Some(detail) = self.last_error_message() {
+                    return Err(format!("agora area config failed: rc={rc}; {detail}"));
+                }
                 return Err(format!("agora area config failed: rc={rc}"));
             }
             Ok(())

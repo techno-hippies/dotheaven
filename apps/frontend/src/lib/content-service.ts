@@ -4,7 +4,7 @@
  * Upload flow:
  *   1. Encrypt audio (AES-GCM + Lit-encrypted key) → combined blob
  *   2. Upload blob to Synapse (caller provides Synapse context)
- *   3. Call content-register-v1 Lit Action to register on ContentRegistry
+ *   3. Call content-register Lit Action (v2 preferred, v1 fallback) to register on ContentRegistry
  *
  * Download flow:
  *   1. Fetch encrypted blob from Beam CDN
@@ -22,6 +22,7 @@ import { getLitClient } from './lit/client'
 import type { PKPAuthContext } from './lit'
 import {
   CONTENT_REGISTER_V1_CID,
+  CONTENT_REGISTER_V2_CID,
   CONTENT_ACCESS_V1_CID,
   LINK_EOA_V1_CID,
 } from './lit/action-cids'
@@ -56,6 +57,9 @@ import {
 } from './content-crypto'
 
 export { computeContentId } from './content-crypto'
+
+const ACTIVE_CONTENT_REGISTER_CID = CONTENT_REGISTER_V2_CID || CONTENT_REGISTER_V1_CID
+const ACTIVE_CONTENT_REGISTER_VERSION = CONTENT_REGISTER_V2_CID ? 'v2' : 'v1'
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -99,8 +103,10 @@ export async function registerContent(
   algo?: number,
   coverImage?: { base64: string; contentType: string },
 ): Promise<{ contentId: string; txHash: string; blockNumber: number; coverCid?: string; coverTxHash?: string }> {
-  if (!CONTENT_REGISTER_V1_CID) {
-    throw new Error('CONTENT_REGISTER_V1_CID not set — deploy content-register-v1 first')
+  if (!ACTIVE_CONTENT_REGISTER_CID) {
+    throw new Error(
+      'No content-register CID set — deploy content-register-v2 (preferred) or content-register-v1',
+    )
   }
   const litClient = await getLitClient()
   const timestamp = Date.now().toString()
@@ -121,13 +127,15 @@ export async function registerContent(
   }
 
   // Add cover image if provided (uses encrypted key — no plaintext in frontend)
-  if (coverImage) {
+  if (coverImage && ACTIVE_CONTENT_REGISTER_VERSION === 'v1') {
     jsParams.coverImage = coverImage
     jsParams.filebaseEncryptedKey = FILEBASE_COVERS_ENCRYPTED_KEY
+  } else if (coverImage && ACTIVE_CONTENT_REGISTER_VERSION === 'v2') {
+    console.warn('[ContentService] coverImage ignored for content-register-v2 (use track-cover-v4)')
   }
 
   const result = await litClient.executeJs({
-    ipfsId: CONTENT_REGISTER_V1_CID,
+    ipfsId: ACTIVE_CONTENT_REGISTER_CID,
     authContext,
     jsParams,
   })

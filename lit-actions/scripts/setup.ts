@@ -121,6 +121,12 @@ const ACTIONS: Record<string, ActionDef> = {
       { name: 'filebase_covers_key', envVar: 'FILEBASE_COVERS_KEY' },
     ],
   },
+  contentRegisterV2: {
+    name: 'contentRegisterV2',
+    path: 'features/music/content-register-v2.js',
+    displayName: 'Content Register v2',
+    keys: [], // Decoupled from cover upload and track registration
+  },
   contentAccessV1: {
     name: 'contentAccessV1',
     path: 'features/music/content-access-v1.js',

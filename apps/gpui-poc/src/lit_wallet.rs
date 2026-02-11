@@ -302,6 +302,31 @@ impl LitWalletService {
             .map_err(|e| format!("executeJs failed: {e}"))
     }
 
+    pub fn execute_js_ipfs(
+        &mut self,
+        ipfs_id: String,
+        js_params: Option<serde_json::Value>,
+    ) -> Result<ExecuteJsResponse, String> {
+        let client = self
+            .client
+            .as_ref()
+            .ok_or("Lit client is not initialized")?
+            .clone();
+        let auth_context = self
+            .auth_context
+            .as_ref()
+            .ok_or("Lit auth context is not initialized")?
+            .clone();
+
+        self.runtime
+            .block_on(async move {
+                client
+                    .execute_js(None, Some(ipfs_id), js_params, &auth_context)
+                    .await
+            })
+            .map_err(|e| format!("executeJs(ipfs) failed: {e}"))
+    }
+
     /// Sign bytes with PKP through executeJs + Lit.Actions.signEcdsa.
     /// This mirrors the Solid/Tauri path and avoids the pkpSign endpoint.
     pub fn pkp_sign_via_execute_js(&mut self, payload: &[u8]) -> Result<serde_json::Value, String> {

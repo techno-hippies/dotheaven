@@ -36,6 +36,7 @@ hex = { package = "const-hex", version = "1.14" }
 dotenvy = "0.15"
 prost = { version = "0.14", default-features = false }
 futures = "0.3"
+base64 = "0.22"
 
 # Audio playback (ported from Tauri audio.rs)
 symphonia = { version = "0.5", features = ["mp3", "aac", "isomp4", "flac", "ogg", "vorbis", "pcm", "wav"] }

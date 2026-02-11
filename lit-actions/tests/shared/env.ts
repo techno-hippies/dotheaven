@@ -43,6 +43,7 @@ interface CIDs {
   scrobbleSubmitV3: string;
   playlistV1: string;
   contentRegisterV1: string;
+  contentRegisterV2: string;
   contentAccessV1: string;
   contentDecryptV1: string;
   postCreateV1: string;
@@ -91,6 +92,7 @@ let cids: CIDs = {
   scrobbleSubmitV3: '',
   playlistV1: '',
   contentRegisterV1: '',
+  contentRegisterV2: '',
   contentAccessV1: '',
   contentDecryptV1: '',
   postCreateV1: '',

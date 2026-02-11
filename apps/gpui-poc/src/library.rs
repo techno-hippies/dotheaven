@@ -79,6 +79,18 @@ const HERO_BG: Hsla = Hsla {
     l: 0.22,
     a: 1.,
 };
+const TEXT_AMBER: Hsla = Hsla {
+    h: 0.10,
+    s: 0.90,
+    l: 0.65,
+    a: 1.,
+};
+const TEXT_GREEN: Hsla = Hsla {
+    h: 0.40,
+    s: 0.70,
+    l: 0.60,
+    a: 1.,
+};
 
 // =============================================================================
 // Constants
@@ -109,6 +121,11 @@ pub struct LibraryView {
     sidecar: Arc<Mutex<SynapseSidecarService>>,
     upload_busy: bool,
     status_message: Option<String>,
+    storage_balance: Option<String>,
+    storage_monthly: Option<String>,
+    storage_days: Option<i64>,
+    storage_loading: bool,
+    add_funds_busy: bool,
 }
 
 impl LibraryView {
@@ -142,6 +159,11 @@ impl LibraryView {
             sidecar: Arc::new(Mutex::new(SynapseSidecarService::new())),
             upload_busy: false,
             status_message: None,
+            storage_balance: None,
+            storage_monthly: None,
+            storage_days: None,
+            storage_loading: false,
+            add_funds_busy: false,
         };
 
         match MusicDb::open(&data_dir) {
@@ -162,6 +184,7 @@ impl LibraryView {
             }
         }
 
+        this.fetch_storage_status(cx);
         this
     }
 
@@ -484,6 +507,81 @@ impl LibraryView {
         .detach();
     }
 
+    fn fetch_storage_status(&mut self, cx: &mut Context<Self>) {
+        let auth = match auth::load_from_disk() {
+            Some(a) => a,
+            None => return,
+        };
+        self.storage_loading = true;
+        cx.notify();
+
+        let sidecar = self.sidecar.clone();
+        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            let result = smol::unblock(move || {
+                let mut svc = sidecar.lock().map_err(|e| format!("lock: {e}"))?;
+                svc.storage_status(&auth)
+            })
+            .await;
+
+            let _ = this.update(cx, |this, cx| {
+                this.storage_loading = false;
+                match result {
+                    Ok(val) => {
+                        this.storage_balance = val.get("balance").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        this.storage_monthly = val.get("monthlyCost").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        this.storage_days = val.get("daysRemaining").and_then(|v| v.as_i64());
+                    }
+                    Err(e) => {
+                        log::warn!("[Library] storage status fetch failed: {}", e);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn add_funds(&mut self, cx: &mut Context<Self>) {
+        let auth = match auth::load_from_disk() {
+            Some(a) => a,
+            None => {
+                self.set_status_message("Sign in from Wallet before adding funds.", cx);
+                return;
+            }
+        };
+        if self.add_funds_busy {
+            return;
+        }
+        self.add_funds_busy = true;
+        self.set_status_message("Depositing 1 USDFC into Synapse storage...", cx);
+
+        let sidecar = self.sidecar.clone();
+        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            let result = smol::unblock(move || {
+                let mut svc = sidecar.lock().map_err(|e| format!("lock: {e}"))?;
+                svc.storage_deposit_and_approve(&auth, "1")
+            })
+            .await;
+
+            let _ = this.update(cx, |this, cx| {
+                this.add_funds_busy = false;
+                match result {
+                    Ok(val) => {
+                        let tx_hash = val.get("txHash").and_then(|v| v.as_str()).unwrap_or("unknown");
+                        log::info!("[Library] deposit success: txHash={}", tx_hash);
+                        this.set_status_message("Deposit complete! Refreshing storage status...", cx);
+                        this.fetch_storage_status(cx);
+                    }
+                    Err(e) => {
+                        log::error!("[Library] deposit failed: {}", e);
+                        this.set_status_message(format!("Deposit failed: {}", e), cx);
+                    }
+                }
+            });
+        })
+        .detach();
+    }
+
     fn set_status_message(&mut self, message: impl Into<String>, cx: &mut Context<Self>) {
         self.status_message = Some(message.into());
         cx.notify();
@@ -670,6 +768,11 @@ impl Render for LibraryView {
         let total_rows = self.tracks.len();
         let upload_busy = self.upload_busy;
         let status_message = self.status_message.clone();
+        let storage_balance = self.storage_balance.clone();
+        let storage_monthly = self.storage_monthly.clone();
+        let storage_days = self.storage_days;
+        let storage_loading = self.storage_loading;
+        let add_funds_busy = self.add_funds_busy;
 
         // Clone tracks + entity handle for the uniform_list closure
         let tracks_snapshot = self.tracks.clone();
@@ -685,6 +788,11 @@ impl Render for LibraryView {
                 loading,
                 scan_progress.as_ref(),
                 status_message.as_deref(),
+                storage_balance.as_deref(),
+                storage_monthly.as_deref(),
+                storage_days,
+                storage_loading,
+                add_funds_busy,
                 cx,
             ))
             // Column header (fixed at top of track area)
@@ -720,6 +828,11 @@ fn render_hero(
     loading: bool,
     progress: Option<&ScanProgress>,
     status_message: Option<&str>,
+    storage_balance: Option<&str>,
+    storage_monthly: Option<&str>,
+    storage_days: Option<i64>,
+    storage_loading: bool,
+    add_funds_busy: bool,
     cx: &mut Context<LibraryView>,
 ) -> impl IntoElement {
     let subtitle = if scanning {
@@ -796,8 +909,19 @@ fn render_hero(
                     cx.listener(|this, _, _w, cx| {
                         this.rescan(cx);
                     }),
+                ))
+                .child(hero_button(
+                    "add-funds",
+                    "icons/wallet.svg",
+                    if add_funds_busy { "Depositing..." } else { "Add Funds" },
+                    false,
+                    cx.listener(|this, _, _w, cx| {
+                        this.add_funds(cx);
+                    }),
                 )),
-        );
+        )
+        // Storage stats bar
+        .child(render_storage_stats(storage_balance, storage_monthly, storage_days, storage_loading));
 
     if let Some(status) = status_message.filter(|s| !s.is_empty()) {
         hero = hero.child(
@@ -873,6 +997,118 @@ fn hero_button_passive(
                 .text_color(TEXT_PRIMARY)
                 .child(label),
         )
+}
+
+// =============================================================================
+// Storage stats bar
+// =============================================================================
+
+fn render_storage_stats(
+    balance: Option<&str>,
+    monthly: Option<&str>,
+    days: Option<i64>,
+    loading: bool,
+) -> impl IntoElement {
+    if loading {
+        return div()
+            .h_flex()
+            .px_6()
+            .py_2()
+            .child(
+                div()
+                    .text_color(TEXT_MUTED)
+                    .child("Loading storage status..."),
+            )
+            .into_any_element();
+    }
+
+    let balance_str = balance.unwrap_or("--");
+    let monthly_str = monthly.unwrap_or("--");
+    let days_str = days
+        .map(|d| d.to_string())
+        .unwrap_or_else(|| "--".to_string());
+
+    let days_color = match days {
+        Some(d) if d > 30 => TEXT_GREEN,
+        Some(d) if d > 0 => TEXT_AMBER,
+        Some(_) => TEXT_AMBER,
+        None => TEXT_MUTED,
+    };
+
+    div()
+        .h_flex()
+        .items_center()
+        .gap_3()
+        .px_6()
+        .pb_2()
+        .bg(HERO_BG)
+        // Balance
+        .child(
+            div()
+                .h_flex()
+                .items_center()
+                .gap(px(6.))
+                .child(
+                    div()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(TEXT_PRIMARY)
+                        .child(balance_str.to_string()),
+                )
+                .child(
+                    div()
+                        .text_color(TEXT_MUTED)
+                        .child("Balance"),
+                ),
+        )
+        // Separator
+        .child(
+            div()
+                .text_color(TEXT_DIM)
+                .child("|"),
+        )
+        // Monthly
+        .child(
+            div()
+                .h_flex()
+                .items_center()
+                .gap(px(6.))
+                .child(
+                    div()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(TEXT_PRIMARY)
+                        .child(monthly_str.to_string()),
+                )
+                .child(
+                    div()
+                        .text_color(TEXT_MUTED)
+                        .child("Monthly"),
+                ),
+        )
+        // Separator
+        .child(
+            div()
+                .text_color(TEXT_DIM)
+                .child("|"),
+        )
+        // Days Left
+        .child(
+            div()
+                .h_flex()
+                .items_center()
+                .gap(px(6.))
+                .child(
+                    div()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(days_color)
+                        .child(days_str),
+                )
+                .child(
+                    div()
+                        .text_color(TEXT_MUTED)
+                        .child("Days Left"),
+                ),
+        )
+        .into_any_element()
 }
 
 // =============================================================================

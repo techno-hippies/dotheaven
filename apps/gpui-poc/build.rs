@@ -5,6 +5,8 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=native/agora_bridge/include/heaven_agora_bridge.h");
     println!("cargo:rerun-if-changed=native/agora_bridge/src/heaven_agora_bridge.cpp");
+    println!("cargo:rerun-if-env-changed=AGORA_SDK_ROOT");
+    println!("cargo:rerun-if-env-changed=AGORA_SDK_LIB_NAME");
 
     if env::var("CARGO_FEATURE_AGORA_NATIVE").is_err() {
         return;
@@ -19,6 +21,10 @@ Set it to the Agora native Voice/RTC SDK root containing include/ and lib/."
     let sdk_root = PathBuf::from(sdk_root);
     let include_dir = sdk_root.join("include");
     let lib_dir = sdk_root.join("lib");
+
+    // Rebuild when SDK contents change (same path, different extracted version).
+    println!("cargo:rerun-if-changed={}", include_dir.display());
+    println!("cargo:rerun-if-changed={}", lib_dir.display());
 
     if !include_dir.exists() {
         panic!(

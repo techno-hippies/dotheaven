@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -32,6 +33,7 @@ int32_t heaven_agora_leave(heaven_agora_handle* handle);
 int32_t heaven_agora_set_mic_enabled(heaven_agora_handle* handle, bool enabled);
 int32_t heaven_agora_set_area_cn(heaven_agora_handle* handle, bool enabled);
 int32_t heaven_agora_poll_event(heaven_agora_handle* handle, heaven_agora_event* out_event);
+int32_t heaven_agora_last_error(heaven_agora_handle* handle, char* out_message, size_t out_size);
 
 #ifdef __cplusplus
 }

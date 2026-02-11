@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 use super::auth::WorkerAuthContext;
 
@@ -63,6 +64,10 @@ pub fn start_agent(
     );
 
     let mut response = ureq::post(&url)
+        .config()
+        .http_status_as_error(false)
+        .timeout_global(Some(Duration::from_secs(20)))
+        .build()
         .header("content-type", "application/json")
         .header("authorization", &format!("Bearer {token}"))
         .send_json(serde_json::json!({}))
@@ -94,6 +99,10 @@ pub fn stop_agent(
     );
 
     let mut response = ureq::post(&url)
+        .config()
+        .http_status_as_error(false)
+        .timeout_global(Some(Duration::from_secs(20)))
+        .build()
         .header("content-type", "application/json")
         .header("authorization", &format!("Bearer {token}"))
         .send_json(serde_json::json!({}))
@@ -125,6 +134,10 @@ pub fn send_chat_message(
     });
 
     let mut response = ureq::post(&url)
+        .config()
+        .http_status_as_error(false)
+        .timeout_global(Some(Duration::from_secs(20)))
+        .build()
         .header("content-type", "application/json")
         .header("authorization", &format!("Bearer {token}"))
         .send_json(payload)

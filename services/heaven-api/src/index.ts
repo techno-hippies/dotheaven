@@ -22,6 +22,7 @@ import photos from './routes/photos'
 import meal from './routes/meal'
 import self from './routes/self'
 import wallet from './routes/wallet'
+import upload from './routes/upload'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -46,6 +47,7 @@ app.route('/api/photos', photos)
 app.route('/api/meal', meal)
 app.route('/api/self', self)
 app.route('/api/wallet', wallet)
+app.route('/api/upload', upload)
 
 // 404 fallback
 app.notFound((c) => c.json({ error: 'Not found' }, 404))

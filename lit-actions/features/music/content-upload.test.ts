@@ -15,7 +15,8 @@
  *
  * Prerequisites:
  *   - Deployer EOA funded with tFIL + USDFC on Filecoin Calibration (chain 314159)
- *   - Test PKP set up with content-register-v1 Lit Action deployed
+ *   - Test PKP set up with content-register-v2 Lit Action deployed
+ *     (or local code fallback from features/music/content-register-v2.js)
  *
  * Usage:
  *   bun tests/content-upload.test.ts
@@ -27,6 +28,9 @@ import { createAuthManager, storagePlugins, ViemAccountAuthenticator } from "@li
 import { privateKeyToAccount } from "viem/accounts";
 import { Env } from "../../tests/shared/env";
 import { ethers } from "ethers";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -37,6 +41,7 @@ const USDFC_DECIMALS = 18;
 const DEPOSIT_AMOUNT = ethers.parseUnits("1", USDFC_DECIMALS); // 1 USDFC
 
 const CONTENT_ACCESS_MIRROR = "0xd4D3baB38a11D72e36F49a73D50Dbdc3c1Aa4e9A";
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Min upload size for Filecoin
 const MIN_PIECE_SIZE = 127;
@@ -76,10 +81,14 @@ async function main() {
   const pkpCreds = Env.loadPkpCreds();
   console.log(`   PKP:         ${pkpCreds.ethAddress}`);
 
-  const registerCid = Env.cids["contentRegisterV1"];
-  console.log(`   Register CID: ${registerCid || "(not deployed)"}`);
-  if (!registerCid) {
-    console.error("\nMissing register action CID. Run setup.ts first.");
+  const registerCidV2 = Env.cids["contentRegisterV2"];
+  const registerCid = registerCidV2;
+  const usingV2Cid = !!registerCidV2;
+  const registerCodePath = join(__dirname, "content-register-v2.js");
+  const registerCode = !usingV2Cid ? readFileSync(registerCodePath, "utf-8") : null;
+  console.log(`   Register:    ${usingV2Cid ? `CID(v2) ${registerCidV2}` : "local code content-register-v2.js"}`);
+  if (!usingV2Cid && !registerCode?.trim()) {
+    console.error("\nMissing content-register-v2 code fallback.");
     process.exit(1);
   }
 
@@ -314,13 +323,14 @@ async function main() {
   console.log("\n── Step 6: Register on-chain ──");
 
   const registerResult = await litClient.executeJs({
-    ipfsId: registerCid,
+    ...(usingV2Cid ? { ipfsId: registerCid } : { code: registerCode! }),
     authContext,
     jsParams: {
       userPkpPublicKey,
       trackId,
       pieceCid: String(pieceCid),
       algo: 1,
+      // v2 intentionally does not require title/artist/album.
       timestamp: Date.now(),
       nonce: Math.floor(Math.random() * 1e6).toString(),
     },
@@ -329,6 +339,9 @@ async function main() {
   const registerResp = JSON.parse(registerResult.response as string);
   if (!registerResp.success) {
     throw new Error(`Register failed: ${registerResp.error}`);
+  }
+  if (registerResp.version !== "content-register-v2") {
+    throw new Error(`Expected content-register-v2, got ${registerResp.version || "(missing version)"}`);
   }
   console.log(`   ✓ Registered on both chains`);
 

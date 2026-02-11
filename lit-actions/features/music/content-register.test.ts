@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 /**
- * Test Content Register v1 Lit Action
+ * Test Content Register Lit Action (v2 preferred, v1 fallback)
  *
  * Verifies:
  *  - EIP-191 signature verification
  *  - Dual-broadcast: Base mirror first, then MegaETH ContentRegistry
  *  - ContentAccessMirror.canAccess() returns true for owner on Base
  *  - ContentRegistry.canAccess() returns true for owner on MegaETH
- *  - Cover image upload to Filebase + setTrackCoverBatch on ScrobbleV3
+ *  - (v1 only) Cover image upload to Filebase + setTrackCoverBatch on ScrobbleV3
  *  - Returns contentId, txHash, mirrorTxHash, coverCid, coverTxHash
  *
  * Usage:
@@ -21,6 +21,7 @@ import { createAuthManager, storagePlugins, ViemAccountAuthenticator } from "@li
 import { privateKeyToAccount } from "viem/accounts";
 import { Env } from "../../tests/shared/env";
 import { randomBytes, hexlify, keccak256, AbiCoder, Contract, JsonRpcProvider } from "ethers";
+import { readFileSync } from "node:fs";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -72,14 +73,14 @@ async function main() {
   const pkpCreds = Env.loadPkpCreds();
   console.log(`   PKP:         ${pkpCreds.ethAddress}`);
 
-  const actionCid = Env.cids["contentRegisterV1"];
-  console.log(`   Action CID:  ${actionCid || "(not deployed)"}`);
-
-  if (!actionCid) {
-    console.error("\nNo contentRegisterV1 action CID found. Run setup.ts first:");
-    console.error("   bun scripts/setup.ts contentRegisterV1");
-    process.exit(1);
-  }
+  const actionCidV2 = Env.cids["contentRegisterV2"];
+  const actionCidV1 = Env.cids["contentRegisterV1"];
+  const usingV2Cid = !!actionCidV2;
+  const usingV1Cid = !usingV2Cid && !!actionCidV1;
+  const actionCodePath = `${__dirname}/content-register-v2.js`;
+  const actionCode = !usingV2Cid && !usingV1Cid ? readFileSync(actionCodePath, "utf-8") : null;
+  const actionRef = usingV2Cid ? `CID(v2) ${actionCidV2}` : usingV1Cid ? `CID(v1) ${actionCidV1}` : "local code content-register-v2.js";
+  console.log(`   Action:      ${actionRef}`);
 
   let pk = process.env.PRIVATE_KEY;
   if (!pk) throw new Error("PRIVATE_KEY not found in environment");
@@ -195,7 +196,7 @@ async function main() {
 
   try {
     const result = await litClient.executeJs({
-      ipfsId: actionCid,
+      ...(usingV2Cid ? { ipfsId: actionCidV2 } : usingV1Cid ? { ipfsId: actionCidV1 } : { code: actionCode! }),
       authContext,
       jsParams,
     });
@@ -228,8 +229,8 @@ async function main() {
     }
 
     // Version
-    if (response.version !== "content-register-v1") {
-      throw new Error(`Unexpected version: ${response.version}`);
+    if (response.version !== "content-register-v1" && response.version !== "content-register-v2") {
+      throw new Error(`Unexpected version: ${response.version || "(missing)"}`);
     }
     console.log("   ✓ Version correct");
 
@@ -288,52 +289,53 @@ async function main() {
       }
       console.log("   ✓ Base ContentAccessMirror.canAccess() = true");
 
-      // Check ScrobbleV3 track registration
-      const scrobbleAbi = [
-        "function isRegistered(bytes32 trackId) view returns (bool)",
-        "function getTrack(bytes32 trackId) view returns (string title, string artist, string album, uint8 kind, bytes32 payload, uint64 registeredAt, string coverCid)",
-      ];
-      const scrobbleContract = new Contract(SCROBBLE_V3, scrobbleAbi, megaProvider);
-      const isReg = await scrobbleContract.isRegistered(trackId);
-      if (!isReg) {
-        throw new Error("ScrobbleV3.isRegistered() returned false for trackId");
-      }
-      console.log("   ✓ ScrobbleV3.isRegistered() = true");
-
-      const trackData = await scrobbleContract.getTrack(trackId);
-      console.log(`   ✓ ScrobbleV3 title: "${trackData.title}"`);
-      console.log(`   ✓ ScrobbleV3 artist: "${trackData.artist}"`);
-
-      // Verify cover CID if we uploaded one
-      if (withCover && response.coverCid) {
-        if (!response.coverCid.startsWith("Qm") && !response.coverCid.startsWith("baf")) {
-          throw new Error(`Invalid cover CID format: ${response.coverCid}`);
+      if (response.version === "content-register-v1") {
+        // Legacy v1 behavior includes ScrobbleV3 + optional cover side effects.
+        const scrobbleAbi = [
+          "function isRegistered(bytes32 trackId) view returns (bool)",
+          "function getTrack(bytes32 trackId) view returns (string title, string artist, string album, uint8 kind, bytes32 payload, uint64 registeredAt, string coverCid)",
+        ];
+        const scrobbleContract = new Contract(SCROBBLE_V3, scrobbleAbi, megaProvider);
+        const isReg = await scrobbleContract.isRegistered(trackId);
+        if (!isReg) {
+          throw new Error("ScrobbleV3.isRegistered() returned false for trackId");
         }
-        console.log("   ✓ Cover CID is valid IPFS hash");
+        console.log("   ✓ ScrobbleV3.isRegistered() = true");
 
-        // Check on-chain coverCid
-        const onChainCover = trackData.coverCid || trackData[6]; // coverCid is 7th element (index 6)
-        if (onChainCover && onChainCover.length > 0) {
-          console.log(`   ✓ ScrobbleV3 coverCid: "${onChainCover}"`);
-          if (onChainCover !== response.coverCid) {
-            console.log(`   ⚠ Cover CID mismatch: action returned ${response.coverCid}, on-chain has ${onChainCover}`);
+        const trackData = await scrobbleContract.getTrack(trackId);
+        console.log(`   ✓ ScrobbleV3 title: "${trackData.title}"`);
+        console.log(`   ✓ ScrobbleV3 artist: "${trackData.artist}"`);
+
+        if (withCover && response.coverCid) {
+          if (!response.coverCid.startsWith("Qm") && !response.coverCid.startsWith("baf")) {
+            throw new Error(`Invalid cover CID format: ${response.coverCid}`);
           }
-        } else {
-          console.log("   ⚠ On-chain coverCid is empty (cover TX may still be pending)");
-        }
+          console.log("   ✓ Cover CID is valid IPFS hash");
 
-        // Verify Filebase gateway accessibility
-        const filebaseUrl = `https://heaven.myfilebase.com/ipfs/${response.coverCid}`;
-        try {
-          const imgRes = await fetch(filebaseUrl, { method: "HEAD" });
-          if (imgRes.ok) {
-            console.log(`   ✓ Cover accessible via Filebase: ${filebaseUrl}`);
+          const onChainCover = trackData.coverCid || trackData[6];
+          if (onChainCover && onChainCover.length > 0) {
+            console.log(`   ✓ ScrobbleV3 coverCid: "${onChainCover}"`);
+            if (onChainCover !== response.coverCid) {
+              console.log(`   ⚠ Cover CID mismatch: action returned ${response.coverCid}, on-chain has ${onChainCover}`);
+            }
           } else {
-            console.log(`   ⚠ Filebase returned ${imgRes.status} (may need propagation time)`);
+            console.log("   ⚠ On-chain coverCid is empty (cover TX may still be pending)");
           }
-        } catch (e) {
-          console.log(`   ⚠ Could not verify Filebase URL: ${e}`);
+
+          const filebaseUrl = `https://heaven.myfilebase.com/ipfs/${response.coverCid}`;
+          try {
+            const imgRes = await fetch(filebaseUrl, { method: "HEAD" });
+            if (imgRes.ok) {
+              console.log(`   ✓ Cover accessible via Filebase: ${filebaseUrl}`);
+            } else {
+              console.log(`   ⚠ Filebase returned ${imgRes.status} (may need propagation time)`);
+            }
+          } catch (e) {
+            console.log(`   ⚠ Could not verify Filebase URL: ${e}`);
+          }
         }
+      } else {
+        console.log("   ✓ v2 decoupled mode: no ScrobbleV3 registration/cover checks");
       }
     }
 

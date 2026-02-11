@@ -95,6 +95,10 @@ impl WorkerAuthContext {
 
         let nonce_url = format!("{}/auth/nonce", worker_url.trim_end_matches('/'));
         let mut nonce_resp = ureq::post(&nonce_url)
+            .config()
+            .http_status_as_error(false)
+            .timeout_global(Some(Duration::from_secs(20)))
+            .build()
             .header("content-type", "application/json")
             .send_json(serde_json::json!(NonceRequest {
                 wallet: &self.wallet,
@@ -115,6 +119,10 @@ impl WorkerAuthContext {
 
         let verify_url = format!("{}/auth/verify", worker_url.trim_end_matches('/'));
         let mut verify_resp = ureq::post(&verify_url)
+            .config()
+            .http_status_as_error(false)
+            .timeout_global(Some(Duration::from_secs(20)))
+            .build()
             .header("content-type", "application/json")
             .send_json(serde_json::json!(VerifyRequest {
                 wallet: &self.wallet,

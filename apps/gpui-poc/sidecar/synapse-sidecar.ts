@@ -23,6 +23,7 @@
 
 import { createInterface } from 'node:readline'
 import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { ethers } from 'ethers'
 import { Synapse, RPC_URLS } from '@filoz/synapse-sdk'
 import { createLitClient } from '@lit-protocol/lit-client'
@@ -49,10 +50,19 @@ const ALGO_AES_GCM_256 = 1
 const CONTENT_ACCESS_MIRROR =
   process.env.HEAVEN_CONTENT_ACCESS_MIRROR || '0xd4D3baB38a11D72e36F49a73D50Dbdc3c1Aa4e9A'
 const LIT_CHAIN = process.env.HEAVEN_LIT_CHAIN || 'baseSepolia'
-const CONTENT_REGISTER_CID_BY_NETWORK: Record<string, string> = {
+const CONTENT_REGISTER_V1_CID_BY_NETWORK: Record<string, string> = {
   'naga-dev': 'QmcyVkadHqJnFDhkrAPu4UjyPtYBbcLKqfMuYoHJnaQvde',
   'naga-test': 'QmdPHymWEbh4H8zBEhup9vWpCPwR5hTLK2Kb3H8hcjDga1',
 }
+const CONTENT_REGISTER_V2_CID_BY_NETWORK: Record<string, string> = {
+  'naga-dev': '',
+  'naga-test': '',
+}
+const CONTENT_REGISTER_V2_LOCAL_PATH = '../../../lit-actions/features/music/content-register-v2.js'
+
+type ContentRegisterActionSpec =
+  | { mode: 'ipfs'; value: string; source: string }
+  | { mode: 'code'; value: string; source: string }
 
 type Json = Record<string, unknown>
 
@@ -95,6 +105,7 @@ let cachedSynapse: CachedContext | null = null
 let cachedAuthContext: { key: string; authContext: any } | null = null
 let litClientSingleton: Awaited<ReturnType<typeof createLitClient>> | null = null
 let authManagerSingleton: ReturnType<typeof createAuthManager> | null = null
+let cachedContentRegisterAction: ContentRegisterActionSpec | null = null
 
 const litNetworkName = (process.env.LIT_NETWORK || process.env.VITE_LIT_NETWORK || 'naga-dev').trim()
 const litNetwork = litNetworkName === 'naga-test' ? nagaTest : nagaDev
@@ -299,7 +310,16 @@ class PKPEthersSigner extends ethers.AbstractSigner {
         from: this._pkp.ethAddress,
       })
     }
-    if (txToSign.gasPrice === undefined && txToSign.maxFeePerGas === undefined && this.provider) {
+    // Force legacy (type 0) — strip EIP-1559 fields and ensure gasPrice is set
+    if (txToSign.maxFeePerGas !== undefined || txToSign.maxPriorityFeePerGas !== undefined) {
+      if (txToSign.gasPrice === undefined && this.provider) {
+        const feeData = await this.provider.getFeeData()
+        txToSign.gasPrice = feeData.gasPrice
+      }
+      delete txToSign.maxFeePerGas
+      delete txToSign.maxPriorityFeePerGas
+      delete txToSign.accessList
+    } else if (txToSign.gasPrice === undefined && this.provider) {
       const feeData = await this.provider.getFeeData()
       txToSign.gasPrice = feeData.gasPrice
     }
@@ -479,10 +499,98 @@ async function resolvePayload(params: Json | undefined): Promise<{
   }
 }
 
-function getContentRegisterCid(): string {
-  const override = process.env.HEAVEN_CONTENT_REGISTER_V1_CID
-  if (override && override.trim()) return override.trim()
-  return CONTENT_REGISTER_CID_BY_NETWORK[litNetworkName] || ''
+async function getContentRegisterAction(): Promise<ContentRegisterActionSpec> {
+  if (cachedContentRegisterAction) return cachedContentRegisterAction
+
+  const v2Override = process.env.HEAVEN_CONTENT_REGISTER_V2_CID?.trim() || ''
+  if (v2Override) {
+    cachedContentRegisterAction = {
+      mode: 'ipfs',
+      value: v2Override,
+      source: 'HEAVEN_CONTENT_REGISTER_V2_CID',
+    }
+    sidecarLog('content.register.action', {
+      mode: 'ipfs',
+      source: cachedContentRegisterAction.source,
+      cid: v2Override,
+    })
+    return cachedContentRegisterAction
+  }
+
+  const v2Mapped = (CONTENT_REGISTER_V2_CID_BY_NETWORK[litNetworkName] || '').trim()
+  if (v2Mapped) {
+    cachedContentRegisterAction = {
+      mode: 'ipfs',
+      value: v2Mapped,
+      source: `contentRegisterV2Map:${litNetworkName}`,
+    }
+    sidecarLog('content.register.action', {
+      mode: 'ipfs',
+      source: cachedContentRegisterAction.source,
+      cid: v2Mapped,
+    })
+    return cachedContentRegisterAction
+  }
+
+  const localCodePath = resolve(
+    process.cwd(),
+    process.env.HEAVEN_CONTENT_REGISTER_V2_CODE_PATH?.trim() || CONTENT_REGISTER_V2_LOCAL_PATH,
+  )
+  try {
+    const code = await readFile(localCodePath, 'utf-8')
+    if (code.trim()) {
+      cachedContentRegisterAction = {
+        mode: 'code',
+        value: code,
+        source: localCodePath,
+      }
+      sidecarLog('content.register.action', {
+        mode: 'code',
+        source: cachedContentRegisterAction.source,
+      })
+      return cachedContentRegisterAction
+    }
+  } catch {
+    // Fall back to v1 CID for compatibility.
+  }
+
+  const v1Override = process.env.HEAVEN_CONTENT_REGISTER_V1_CID?.trim() || ''
+  if (v1Override) {
+    cachedContentRegisterAction = {
+      mode: 'ipfs',
+      value: v1Override,
+      source: 'HEAVEN_CONTENT_REGISTER_V1_CID',
+    }
+    sidecarLog('content.register.action', {
+      mode: 'ipfs',
+      source: cachedContentRegisterAction.source,
+      cid: v1Override,
+      legacy: true,
+    })
+    return cachedContentRegisterAction
+  }
+
+  const v1Mapped = (CONTENT_REGISTER_V1_CID_BY_NETWORK[litNetworkName] || '').trim()
+  if (v1Mapped) {
+    cachedContentRegisterAction = {
+      mode: 'ipfs',
+      value: v1Mapped,
+      source: `contentRegisterV1Map:${litNetworkName}`,
+    }
+    sidecarLog('content.register.action', {
+      mode: 'ipfs',
+      source: cachedContentRegisterAction.source,
+      cid: v1Mapped,
+      legacy: true,
+    })
+    return cachedContentRegisterAction
+  }
+
+  throw new Error(
+    `Missing content-register action: set HEAVEN_CONTENT_REGISTER_V2_CID, ` +
+      `or provide HEAVEN_CONTENT_REGISTER_V2_CODE_PATH, ` +
+      `or set HEAVEN_CONTENT_REGISTER_V1_CID (network=${litNetworkName})`,
+  )
 }
 
 function buildBlob(
@@ -832,16 +940,13 @@ async function contentEncryptUploadRegister(params: Json | undefined) {
   const uploadResult = await ctx.upload(encryptedBlob)
   const pieceCid = uploadResult.pieceCid.toString()
 
-  const contentRegisterCid = getContentRegisterCid()
-  if (!contentRegisterCid) {
-    throw new Error(
-      `Missing content-register CID. Set HEAVEN_CONTENT_REGISTER_V1_CID (network=${litNetworkName})`,
-    )
-  }
+  const contentRegisterAction = await getContentRegisterAction()
 
   const litClient = await getLitClient()
   const executeResult = await litClient.executeJs({
-    ipfsId: contentRegisterCid,
+    ...(contentRegisterAction.mode === 'ipfs'
+      ? { ipfsId: contentRegisterAction.value }
+      : { code: contentRegisterAction.value }),
     authContext,
     jsParams: {
       userPkpPublicKey: input.pkp.publicKey,
@@ -868,13 +973,23 @@ async function contentEncryptUploadRegister(params: Json | undefined) {
     pieceCid,
     blobSize: encryptedBlob.length,
     uploadSize: uploadResult.size,
+    registerVersion: response.version || null,
     txHash: response.txHash,
     blockNumber: response.blockNumber,
   }
 }
 
 function writeResponse(payload: unknown) {
-  process.stdout.write(`${JSON.stringify(payload)}\n`)
+  try {
+    process.stdout.write(`${JSON.stringify(payload)}\n`)
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException | undefined)?.code
+    if (code === 'EPIPE') {
+      // Parent process closed stdout pipe; this is an expected shutdown path.
+      process.exit(0)
+    }
+    throw err
+  }
 }
 
 function asError(err: unknown): { message: string } {
@@ -914,6 +1029,14 @@ async function handleRequest(req: RpcRequest) {
 }
 
 async function main() {
+  process.stdout.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EPIPE') {
+      process.exit(0)
+      return
+    }
+    throw err
+  })
+
   const rl = createInterface({
     input: process.stdin,
     crlfDelay: Infinity,

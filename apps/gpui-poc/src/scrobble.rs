@@ -11,6 +11,7 @@
 //! 8) send signed UserOp
 
 use std::env;
+use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use alloy_primitives::aliases::U192;
@@ -27,6 +28,13 @@ const DEFAULT_ENTRYPOINT: &str = "0x0000000071727De22E5E9d8BAf0edAc6f37da032";
 const DEFAULT_FACTORY: &str = "0xB66BF4066F40b36Da0da34916799a069CBc79408";
 const DEFAULT_SCROBBLE_V4: &str = "0xBcD4EbBb964182ffC5EA03FF70761770a326Ccf1";
 const DEFAULT_GATEWAY_URL: &str = "http://127.0.0.1:3337";
+const DEFAULT_TRACK_COVER_V4_CID_NAGA_DEV: &str = "QmcwLxoNyuV5KrJALfaAEBa4zspoxedEfPJba2Y3uhWYx7";
+const DEFAULT_TRACK_COVER_V4_CID_NAGA_TEST: &str = "QmYhskK5XKmrREZBaGMpvzvTEYdaicUURjNLBhSV72U1Nm";
+
+const FILEBASE_COVERS_ENCRYPTED_CIPHERTEXT: &str = "opMNhXZ61OJ8dRKs8zCYQOiK7f5UJlfJPNJaso/2Bky6bku1ixYnrVZYzKZOrzQ1byVbe5HsmVjGyN1OzGvNz+p6rKg/VGYjaKWZ1PB6rAaGAe98dPHRbh+ITU9Eg6FoolrHU064jiaZtG8mmeWI2WU1MsyYQOS5gKqy+7+Zy2VrjqFASSqB4B9gICarqGbGN8khHoFTjirgnZyetJRHz4Iq/K6b8dNriTgL2dSMq2TMKYsl9ghAJRo5iE1olkpLPmdsCteNREtGIiJGZ42ufECUqM9DArkBAg==";
+const FILEBASE_COVERS_ENCRYPTED_HASH: &str =
+    "1fb52374f1a4ec4d9f1a263b1355cedecbe3ef9d52425f76c222f2f5d9993d4f";
+const MAX_COVER_BYTES: usize = 5 * 1024 * 1024;
 
 const VERIFICATION_GAS_LIMIT: u128 = 2_000_000;
 const CALL_GAS_LIMIT: u128 = 2_000_000;
@@ -66,6 +74,16 @@ sol! {
         bytes32[] trackIds,
         uint64[] timestamps
     );
+    function getTrack(bytes32 trackId) view returns (
+        string title,
+        string artist,
+        string album,
+        uint8 kind,
+        bytes32 payload,
+        uint64 registeredAt,
+        string coverCid,
+        uint32 durationSec
+    );
     function execute(address dest, uint256 value, bytes func);
 }
 
@@ -75,6 +93,9 @@ pub struct ScrobbleService {
 
 #[derive(Debug, Clone)]
 pub struct SubmitScrobbleInput {
+    pub file_path: String,
+    pub cover_path: Option<String>,
+    pub user_pkp_public_key: Option<String>,
     pub artist: String,
     pub title: String,
     pub album: Option<String>,
@@ -152,6 +173,9 @@ impl ScrobbleService {
             .parse::<Address>()
             .map_err(|e| format!("Invalid PKP address: {e}"))?;
         let input = SubmitScrobbleInput {
+            file_path: track.file_path.clone(),
+            cover_path: track.cover_path.clone(),
+            user_pkp_public_key: auth.pkp_public_key.clone(),
             artist: track.artist.clone(),
             title: track.title.clone(),
             album: if track.album.trim().is_empty() {
@@ -166,7 +190,17 @@ impl ScrobbleService {
 
         for attempt in 0..=STALE_RETRY_COUNT {
             match submit_scrobble_aa(&mut self.lit, user_address, &input) {
-                Ok(result) => return Ok(result),
+                Ok(result) => {
+                    if let Err(err) = submit_track_cover_via_lit(&mut self.lit, &input) {
+                        log::warn!(
+                            "[Cover] skipped/failed for '{}' by '{}': {}",
+                            input.title,
+                            input.artist,
+                            err
+                        );
+                    }
+                    return Ok(result);
+                }
                 Err(e) if is_stale_session_error(&e) && attempt < STALE_RETRY_COUNT => {
                     let retry_idx = attempt + 1;
                     let delay_ms = STALE_RETRY_BASE_DELAY_MS * retry_idx as u64;
@@ -366,6 +400,223 @@ fn submit_scrobble_aa(
         user_op_hash: result_hash,
         sender: user_op.sender,
     })
+}
+
+fn submit_track_cover_via_lit(
+    lit: &mut LitWalletService,
+    track: &SubmitScrobbleInput,
+) -> Result<(), String> {
+    let Some(action_cid) = resolve_track_cover_action_cid() else {
+        return Ok(());
+    };
+    let Some(user_pkp_public_key) = track
+        .user_pkp_public_key
+        .as_ref()
+        .map(|v| v.trim())
+        .filter(|v| !v.is_empty())
+    else {
+        return Err("missing user PKP public key for cover action".to_string());
+    };
+
+    let (kind, payload) = derive_track_kind_and_payload(track)?;
+    let track_id = compute_track_id(kind, payload);
+    let track_id_hex = to_hex_h256(track_id).to_lowercase();
+
+    let rpc_url =
+        env_or("HEAVEN_AA_RPC_URL", "AA_RPC_URL").unwrap_or_else(|| DEFAULT_AA_RPC_URL.to_string());
+    let scrobble_v4 = env_or("HEAVEN_AA_SCROBBLE_V4", "AA_SCROBBLE_V4")
+        .unwrap_or_else(|| DEFAULT_SCROBBLE_V4.to_string())
+        .parse::<Address>()
+        .map_err(|e| format!("Invalid ScrobbleV4 address: {e}"))?;
+
+    if let Ok(Some(existing_cover_cid)) = call_get_track_cover_cid(&rpc_url, scrobble_v4, track_id)
+    {
+        log::info!(
+            "[Cover] already set on-chain for trackId={}: {}",
+            track_id_hex,
+            existing_cover_cid
+        );
+        return Ok(());
+    }
+
+    let Some(cover_path) = track
+        .cover_path
+        .as_ref()
+        .map(|v| v.trim())
+        .filter(|v| !v.is_empty())
+    else {
+        return Ok(());
+    };
+
+    let cover_file = Path::new(cover_path);
+    if !cover_file.exists() {
+        return Ok(());
+    }
+
+    let cover_bytes =
+        std::fs::read(cover_file).map_err(|e| format!("failed to read cover image file: {e}"))?;
+    if cover_bytes.is_empty() {
+        return Ok(());
+    }
+    if cover_bytes.len() > MAX_COVER_BYTES {
+        log::warn!(
+            "[Cover] image too large ({} bytes > {}), skipping {}",
+            cover_bytes.len(),
+            MAX_COVER_BYTES,
+            cover_path
+        );
+        return Ok(());
+    }
+
+    let cover_base64 =
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &cover_bytes);
+    let content_type = cover_content_type(cover_path);
+
+    let timestamp = now_epoch_millis().to_string();
+    let nonce = format!(
+        "{}-{}-{}",
+        now_epoch_sec(),
+        std::process::id(),
+        track_id_hex.trim_start_matches("0x")
+    );
+
+    let mut js_params = serde_json::json!({
+        "userPkpPublicKey": user_pkp_public_key,
+        "tracks": [{
+            "trackId": track_id_hex,
+            "coverImage": {
+                "base64": cover_base64,
+                "contentType": content_type,
+            }
+        }],
+        "timestamp": timestamp,
+        "nonce": nonce,
+    });
+
+    if let Some(filebase_plaintext_key) =
+        env_or("HEAVEN_FILEBASE_COVERS_KEY", "FILEBASE_COVERS_API_KEY")
+    {
+        js_params["filebasePlaintextKey"] = serde_json::Value::String(filebase_plaintext_key);
+    } else {
+        js_params["filebaseEncryptedKey"] = build_filebase_encrypted_key(&action_cid);
+    }
+
+    let response = lit.execute_js_ipfs(action_cid, Some(js_params))?;
+    let payload = parse_lit_action_response_payload(&response.response)?;
+    let success = payload
+        .get("success")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if !success {
+        return Err(payload
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("cover action failed")
+            .to_string());
+    }
+
+    let returned_cover_cid = payload
+        .get("coverCid")
+        .and_then(|v| v.as_str())
+        .filter(|v| is_valid_cid(v))
+        .map(str::to_string)
+        .or_else(|| {
+            payload
+                .get("coverCids")
+                .and_then(|v| v.get(&track_id_hex))
+                .and_then(|v| v.as_str())
+                .filter(|v| is_valid_cid(v))
+                .map(str::to_string)
+        });
+
+    if let Some(cid) = returned_cover_cid {
+        log::info!(
+            "[Cover] submitted for trackId={} file='{}' cid={}",
+            track_id_hex,
+            track.file_path,
+            cid
+        );
+    } else {
+        log::info!(
+            "[Cover] action succeeded for trackId={} file='{}'",
+            track_id_hex,
+            track.file_path
+        );
+    }
+
+    Ok(())
+}
+
+fn resolve_track_cover_action_cid() -> Option<String> {
+    env_or("HEAVEN_TRACK_COVER_V4_CID", "TRACK_COVER_V4_CID").or_else(|| {
+        let network = env_or("HEAVEN_LIT_NETWORK", "LIT_NETWORK")
+            .unwrap_or_else(|| "naga-dev".to_string())
+            .to_lowercase();
+        match network.as_str() {
+            "naga-dev" => Some(DEFAULT_TRACK_COVER_V4_CID_NAGA_DEV.to_string()),
+            "naga-test" => Some(DEFAULT_TRACK_COVER_V4_CID_NAGA_TEST.to_string()),
+            _ => None,
+        }
+    })
+}
+
+fn build_filebase_encrypted_key(action_cid: &str) -> serde_json::Value {
+    serde_json::json!({
+        "ciphertext": FILEBASE_COVERS_ENCRYPTED_CIPHERTEXT,
+        "dataToEncryptHash": FILEBASE_COVERS_ENCRYPTED_HASH,
+        "accessControlConditions": [{
+            "conditionType": "evmBasic",
+            "contractAddress": "",
+            "standardContractType": "",
+            "chain": "ethereum",
+            "method": "",
+            "parameters": [":currentActionIpfsId"],
+            "returnValueTest": { "comparator": "=", "value": action_cid },
+        }],
+    })
+}
+
+fn parse_lit_action_response_payload(raw: &serde_json::Value) -> Result<serde_json::Value, String> {
+    match raw {
+        serde_json::Value::Object(_) => Ok(raw.clone()),
+        serde_json::Value::String(s) => serde_json::from_str::<serde_json::Value>(s)
+            .map_err(|e| format!("cover action response parse failed: {e}; raw={}", s)),
+        other => Err(format!("unexpected cover action response shape: {other}")),
+    }
+}
+
+fn call_get_track_cover_cid(
+    rpc_url: &str,
+    scrobble_v4: Address,
+    track_id: B256,
+) -> Result<Option<String>, String> {
+    let data = getTrackCall { trackId: track_id }.abi_encode();
+    let out = eth_call(rpc_url, scrobble_v4, &data)?;
+    let decoded = getTrackCall::abi_decode_returns(&out)
+        .map_err(|e| format!("getTrack decode failed: {e}"))?;
+    let cover_cid = decoded.coverCid.trim().to_string();
+    if is_valid_cid(&cover_cid) {
+        Ok(Some(cover_cid))
+    } else {
+        Ok(None)
+    }
+}
+
+fn is_valid_cid(cid: &str) -> bool {
+    cid.starts_with("Qm") || cid.starts_with("bafy")
+}
+
+fn cover_content_type(path: &str) -> &'static str {
+    let lower = path.to_ascii_lowercase();
+    if lower.ends_with(".png") {
+        "image/png"
+    } else if lower.ends_with(".webp") {
+        "image/webp"
+    } else if lower.ends_with(".bmp") {
+        "image/bmp"
+    } else {
+        "image/jpeg"
+    }
 }
 
 fn derive_track_kind_and_payload(track: &SubmitScrobbleInput) -> Result<(u8, B256), String> {
@@ -852,5 +1103,12 @@ pub fn now_epoch_sec() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+fn now_epoch_millis() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
         .unwrap_or(0)
 }

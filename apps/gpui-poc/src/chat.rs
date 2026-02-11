@@ -842,6 +842,9 @@ impl ChatView {
     }
 
     fn select_conversation(&mut self, id: String, cx: &mut Context<Self>) {
+        if self.is_scarlett_active() && id != SCARLETT_CONVERSATION_ID {
+            self.end_scarlett_call(cx);
+        }
         self.active_conversation_id = Some(id.clone());
         if id == SCARLETT_CONVERSATION_ID {
             self.messages = self.scarlett_messages.clone();

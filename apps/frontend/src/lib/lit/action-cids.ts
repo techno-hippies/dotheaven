@@ -21,6 +21,7 @@ const CID_MAP = {
     heavenSetRecords:     'QmaXJcjGbPWQ1ypKnQB3vfnDwaQ1NLEGFmN3t7gQisw9g5',
     avatarUpload:         'QmTWwoC5zX2pUuSExsra5RVzChE9nCYRAkVVgppjvc196A',
     contentRegisterV1:    'QmcyVkadHqJnFDhkrAPu4UjyPtYBbcLKqfMuYoHJnaQvde',
+    contentRegisterV2:    '',
     contentAccessV1:      'QmeFDbYinv28a26uVELqSpYk2SBF27j3Ci7EfdnJ8xDVhA',
     linkEoaV1:            'QmXFkjpHT95ZWQYtz2GVdhEqh8oZscXSkDBiEpK6VEy4k1',
     postRegisterV1:       'QmduQNBGLfEB1bkCFMXLjRcpBJ3wfcV675KMWWYQe5k477',
@@ -41,6 +42,7 @@ const CID_MAP = {
     heavenSetRecords:     'QmYdvepsZD3XGis7n3qCKEGHU559qeszxqD8DGgbXTPN2n',
     avatarUpload:         'QmTWwoC5zX2pUuSExsra5RVzChE9nCYRAkVVgppjvc196A',
     contentRegisterV1:    'QmdPHymWEbh4H8zBEhup9vWpCPwR5hTLK2Kb3H8hcjDga1',
+    contentRegisterV2:    '',
     contentAccessV1:      'QmcgN7ed4ePaCfpkzcwxiTG6WkvfgkPmNK26FZW67kbdau',
     linkEoaV1:            'Qmac1ELMUarSwmpnjg29KoKo3zHc1SVWTTUFyXBZyMgchb',
     postRegisterV1:       'Qma4SVQpBy2hnN9Hcf3ZpGzo9U5PGxJusDjpXrDnBKRc9z',
@@ -81,6 +83,9 @@ export const AVATAR_UPLOAD_CID = cid('VITE_AVATAR_UPLOAD_CID', 'avatarUpload')
 
 /** Content Register v1 — register Filecoin content entry on ContentRegistry + upload cover art */
 export const CONTENT_REGISTER_V1_CID = cid('VITE_CONTENT_REGISTER_V1_CID', 'contentRegisterV1')
+
+/** Content Register v2 — register Filecoin content entry only (decoupled from track registry/cover) */
+export const CONTENT_REGISTER_V2_CID = cid('VITE_CONTENT_REGISTER_V2_CID', 'contentRegisterV2')
 
 /** Content Access v1 — grant/revoke access on ContentRegistry */
 export const CONTENT_ACCESS_V1_CID = cid('VITE_CONTENT_ACCESS_V1_CID', 'contentAccessV1')

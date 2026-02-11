@@ -146,19 +146,6 @@ const STORY_EIP712_TYPES = {
 
 // ── Helpers ────────────────────────────────────────────────────────
 
-async function fileToBase64(file: File): Promise<{ base64: string; contentType: string }> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const dataUrl = reader.result as string
-      const base64 = dataUrl.split(',')[1]
-      resolve({ base64, contentType: file.type })
-    }
-    reader.onerror = () => reject(new Error(`Failed to read file: ${file.name}`))
-    reader.readAsDataURL(file)
-  })
-}
-
 async function sha256Hex(data: Uint8Array): Promise<string> {
   const hash = await crypto.subtle.digest('SHA-256', data as ArrayBufferView<ArrayBuffer>)
   return Array.from(new Uint8Array(hash))
@@ -168,13 +155,6 @@ async function sha256Hex(data: Uint8Array): Promise<string> {
 
 async function sha256HexString(text: string): Promise<string> {
   return sha256Hex(new TextEncoder().encode(text))
-}
-
-function base64ToBytes(base64: string): Uint8Array {
-  const binaryStr = atob(base64)
-  const bytes = new Uint8Array(binaryStr.length)
-  for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i)
-  return bytes
 }
 
 function licenseToRevShare(license: LicenseType, revShare: number): number {
@@ -229,6 +209,84 @@ async function signTypedDataWithPKP(
 
 const IPFS_GATEWAY = 'https://ipfs.filebase.io/ipfs/'
 
+// ── Presigned upload via heaven-api backend ─────────────────────────
+
+const HEAVEN_API_URL = import.meta.env.VITE_HEAVEN_API_URL || 'http://localhost:8787'
+
+interface UploadSlot {
+  slot: string
+  contentType: string
+  size: number
+}
+
+interface PresignedSlot {
+  slot: string
+  url: string
+  key: string
+}
+
+/**
+ * Pre-upload files to Filebase via presigned URLs from heaven-api.
+ * 1. Request presigned PUT URLs from backend (no secrets in browser)
+ * 2. Upload directly to Filebase S3 using presigned URLs
+ * 3. Call backend /complete/:key to get CID (avoids CORS header issues)
+ *
+ * Returns map of slot → { cid, gatewayUrl }
+ */
+async function presignAndUpload(
+  files: Array<{ slot: string; data: Uint8Array; contentType: string }>,
+): Promise<Map<string, string>> {
+  // Step 1: Get presigned URLs from backend
+  const slots: UploadSlot[] = files.map((f) => ({
+    slot: f.slot,
+    contentType: f.contentType,
+    size: f.data.byteLength,
+  }))
+
+  const presignResp = await fetch(`${HEAVEN_API_URL}/api/upload/presign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slots }),
+  })
+  if (!presignResp.ok) {
+    const err = await presignResp.text()
+    throw new Error(`Presign failed: ${presignResp.status} ${err}`)
+  }
+  const { slots: presigned } = (await presignResp.json()) as { slots: PresignedSlot[] }
+
+  // Step 2: Upload files directly to Filebase using presigned URLs
+  await Promise.all(
+    files.map(async (f) => {
+      const ps = presigned.find((p) => p.slot === f.slot)
+      if (!ps) throw new Error(`No presigned URL for slot: ${f.slot}`)
+
+      const uploadResp = await fetch(ps.url, {
+        method: 'PUT',
+        headers: { 'Content-Type': f.contentType },
+        body: f.data,
+      })
+      if (!uploadResp.ok) {
+        throw new Error(`Upload failed for ${f.slot}: ${uploadResp.status}`)
+      }
+    }),
+  )
+
+  // Step 3: Get CIDs from backend (HEAD object server-side)
+  const cidMap = new Map<string, string>()
+  await Promise.all(
+    presigned.map(async (ps) => {
+      const completeResp = await fetch(`${HEAVEN_API_URL}/api/upload/complete/${ps.key}`)
+      if (!completeResp.ok) {
+        throw new Error(`Failed to get CID for ${ps.slot}: ${completeResp.status}`)
+      }
+      const { cid } = (await completeResp.json()) as { cid: string }
+      cidMap.set(ps.slot, cid)
+    }),
+  )
+
+  return cidMap
+}
+
 // ── Main publish function ──────────────────────────────────────────
 
 export async function publishSong(
@@ -242,23 +300,49 @@ export async function publishSong(
 
   const userAddress = pkpInfo.ethAddress
 
-  // ── Step 1: Convert files to base64 (0-10%) ──────────────────────
+  // ── Step 1: Read files + pre-upload large ones to Filebase (0-15%) ─
   onProgress(2)
 
   if (!formData.audioFile) throw new Error('Audio file is required')
   if (!formData.instrumentalFile) throw new Error('Instrumental file is required')
   if (!formData.coverFile) throw new Error('Cover image is required')
 
-  const [audioInline, instrumentalInline, coverInline] = await Promise.all([
-    fileToBase64(formData.audioFile),
-    fileToBase64(formData.instrumentalFile),
-    fileToBase64(formData.coverFile),
+  // Read all files into bytes
+  const [audioBuffer, instrumentalBuffer, coverBuffer] = await Promise.all([
+    formData.audioFile.arrayBuffer(),
+    formData.instrumentalFile.arrayBuffer(),
+    formData.coverFile.arrayBuffer(),
   ])
-  const canvasInline = formData.canvasFile ? await fileToBase64(formData.canvasFile) : null
+  const audioBytes = new Uint8Array(audioBuffer)
+  const instrumentalBytes = new Uint8Array(instrumentalBuffer)
+  const coverBytes = new Uint8Array(coverBuffer)
+  const canvasBytes = formData.canvasFile
+    ? new Uint8Array(await formData.canvasFile.arrayBuffer())
+    : null
 
-  onProgress(10)
+  onProgress(5)
 
-  // ── Step 2: Build metadata JSONs (10-15%) ────────────────────────
+  // Pre-upload files to Filebase via presigned URLs from heaven-api
+  // Lit nodes fetch via URL instead of receiving inline base64 (avoids 413)
+  const uploadFiles: Array<{ slot: string; data: Uint8Array; contentType: string }> = [
+    { slot: 'audio', data: audioBytes, contentType: formData.audioFile.type },
+    { slot: 'instrumental', data: instrumentalBytes, contentType: formData.instrumentalFile.type },
+    { slot: 'cover', data: coverBytes, contentType: formData.coverFile.type },
+  ]
+  if (canvasBytes && formData.canvasFile) {
+    uploadFiles.push({ slot: 'canvas', data: canvasBytes, contentType: formData.canvasFile.type })
+  }
+
+  const cidMap = await presignAndUpload(uploadFiles)
+
+  const audioUrl = `${IPFS_GATEWAY}${cidMap.get('audio')}`
+  const instrumentalUrl = `${IPFS_GATEWAY}${cidMap.get('instrumental')}`
+  const coverUrl = `${IPFS_GATEWAY}${cidMap.get('cover')}`
+  const canvasUrl = cidMap.has('canvas') ? `${IPFS_GATEWAY}${cidMap.get('canvas')}` : null
+
+  onProgress(15)
+
+  // ── Step 2: Build metadata JSONs (15-20%) ────────────────────────
   const sourceLanguageName = LANG_CODE_TO_NAME[formData.primaryLanguage] || formData.primaryLanguage
   const targetLanguage = formData.secondaryLanguage || (formData.primaryLanguage !== 'en' ? 'en' : 'es')
 
@@ -287,12 +371,7 @@ export async function publishSong(
 
   onProgress(15)
 
-  // ── Step 3: Hash all content (15-20%) ────────────────────────────
-  const audioBytes = base64ToBytes(audioInline.base64)
-  const instrumentalBytes = base64ToBytes(instrumentalInline.base64)
-  const coverBytes = base64ToBytes(coverInline.base64)
-  const canvasBytes = canvasInline ? base64ToBytes(canvasInline.base64) : null
-
+  // ── Step 3: Hash all content (20-25%) ────────────────────────────
   const [audioHash, coverHash, instrumentalHash, songMetadataHash, ipaMetadataHash, nftMetadataHash, lyricsHash] =
     await Promise.all([
       sha256Hex(audioBytes),
@@ -305,9 +384,9 @@ export async function publishSong(
     ])
   const canvasHash = canvasBytes ? await sha256Hex(canvasBytes) : ''
 
-  onProgress(20)
+  onProgress(25)
 
-  // ── Step 4: Sign EIP-191 binding message (20-25%) ────────────────
+  // ── Step 4: Sign EIP-191 binding message (25-30%) ────────────────
   const timestamp = Date.now()
   const nonce = Math.floor(Math.random() * 1_000_000).toString()
   const lyricsText = formData.lyrics || '(instrumental)'
@@ -316,9 +395,9 @@ export async function publishSong(
 
   const signature = await signMessageWithPKP(pkpInfo, authContext, message)
 
-  onProgress(25)
+  onProgress(30)
 
-  // ── Step 5: Call song-publish-v1 Lit Action (25-65%) ─────────────
+  // ── Step 5: Call song-publish-v1 Lit Action (30-65%) ─────────────
   const litClient = await getLitClient()
 
   const publishResult = await litClient.executeJs({
@@ -326,10 +405,10 @@ export async function publishSong(
     authContext,
     jsParams: {
       userPkpPublicKey: pkpInfo.publicKey,
-      audioUrl: audioInline,
-      coverUrl: coverInline,
-      instrumentalUrl: instrumentalInline,
-      canvasUrl: canvasInline || undefined,
+      audioUrl,
+      coverUrl,
+      instrumentalUrl,
+      canvasUrl: canvasUrl || undefined,
       songMetadataJson: songMetadata,
       ipaMetadataJson: ipaMetadata,
       nftMetadataJson: nftMetadata,

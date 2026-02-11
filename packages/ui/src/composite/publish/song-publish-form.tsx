@@ -71,6 +71,7 @@ const GENRE_OPTIONS: SelectOption[] = [
   { value: 'hip-hop', label: 'Hip-Hop / Rap' },
   { value: 'rnb', label: 'R&B / Soul' },
   { value: 'electronic', label: 'Electronic / Dance' },
+  { value: 'blues', label: 'Blues' },
   { value: 'jazz', label: 'Jazz' },
   { value: 'classical', label: 'Classical' },
   { value: 'country', label: 'Country' },
@@ -373,16 +374,6 @@ const CanvasStep: Component<{
               >
                 <Plus class="w-6 h-6 text-[var(--text-muted)]" />
                 <span class="text-base text-[var(--text-muted)]">Add video</span>
-                <Show when={props.formData.title}>
-                  <div class="text-center mt-4 px-3">
-                    <p class="text-base font-semibold text-[var(--text-primary)] truncate">
-                      {props.formData.title}
-                    </p>
-                    <p class="text-base text-[var(--text-secondary)] truncate">
-                      {props.formData.artist}
-                    </p>
-                  </div>
-                </Show>
               </button>
             }
           >
@@ -428,9 +419,6 @@ const CanvasStep: Component<{
               ))}
             </ul>
           </div>
-          <p class="text-base text-[var(--text-muted)] italic">
-            Canvas is optional — a short looping video that plays behind your cover art.
-          </p>
         </div>
       </div>
     </div>
