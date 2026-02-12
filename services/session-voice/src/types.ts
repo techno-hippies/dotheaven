@@ -1,6 +1,7 @@
 export interface Env {
   DB: D1Database
   ROOM_DO: DurableObjectNamespace
+  DUET_ROOM_DO: DurableObjectNamespace
   ENVIRONMENT: string
   AGORA_APP_ID: string
   AGORA_APP_CERTIFICATE: string
@@ -12,6 +13,9 @@ export interface Env {
   VERIFICATION_MIRROR_ADDRESS: string
   ORACLE_PRIVATE_KEY?: string
   ORACLE_SERVICE_TOKEN?: string
+  X402_FACILITATOR_MODE?: 'mock' | 'cdp'
+  X402_FACILITATOR_BASE_URL?: string
+  X402_FACILITATOR_AUTH_TOKEN?: string
   // CAI agent (AI in rooms)
   AGORA_REST_AUTH?: string
   LLM_BASE_URL?: string

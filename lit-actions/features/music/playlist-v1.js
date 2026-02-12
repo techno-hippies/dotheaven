@@ -476,6 +476,7 @@ const main = async () => {
       // create / updateMeta
       name,
       coverCid,
+      coverImage,
       visibility,
       // create / setTracks
       tracks,
@@ -528,6 +529,51 @@ const main = async () => {
     }
 
     // ========================================
+    // STEP 1c: Optional updateMeta cover upload (coverImage -> coverCid)
+    // ========================================
+    let resolvedMetaCoverCid = coverCid || "";
+    if (operation === "updateMeta" && coverImage) {
+      const base64 = coverImage.base64;
+      const contentType = (coverImage.contentType || "").split(";")[0].trim().toLowerCase();
+      if (!base64) throw new Error("updateMeta coverImage.base64 is required");
+      if (!contentType || !ALLOWED_IMAGE_TYPES.includes(contentType)) {
+        throw new Error(`Unsupported updateMeta cover image contentType: ${coverImage.contentType || "unknown"}`);
+      }
+
+      const bytes = decodeBase64ToBytes(base64);
+      if (bytes.byteLength > MAX_COVER_BYTES) {
+        throw new Error(`updateMeta cover image exceeds ${MAX_COVER_BYTES} bytes`);
+      }
+
+      let filebaseKey = null;
+      const { filebaseEncryptedKey, filebasePlaintextKey } = jsParams || {};
+      if (filebasePlaintextKey) {
+        filebaseKey = filebasePlaintextKey;
+      } else if (filebaseEncryptedKey) {
+        filebaseKey = await Lit.Actions.decryptAndCombine({
+          accessControlConditions: filebaseEncryptedKey.accessControlConditions,
+          ciphertext: filebaseEncryptedKey.ciphertext,
+          dataToEncryptHash: filebaseEncryptedKey.dataToEncryptHash,
+          authSig: null,
+          chain: "ethereum",
+        });
+      }
+      if (!filebaseKey) {
+        throw new Error("updateMeta coverImage requires filebaseEncryptedKey or filebasePlaintextKey");
+      }
+
+      const hash = await sha256HexFromBuffer(bytes);
+      const ext = contentType.split("/")[1] || "jpg";
+      const objectKey = `playlist-covers/${hash}.${ext}`;
+      resolvedMetaCoverCid = await Lit.Actions.runOnce(
+        { waitForResponse: true, name: `uploadPlaylistCover_${hash.slice(0, 8)}` },
+        async () => {
+          return await uploadToFilebase(filebaseKey, bytes, contentType, objectKey);
+        }
+      );
+    }
+
+    // ========================================
     // STEP 2: Build message + verify signature
     // ========================================
     let message;
@@ -573,7 +619,7 @@ const main = async () => {
     } else if (operation === "updateMeta") {
       must(playlistId, "playlistId");
       must(name, "name");
-      const cid = coverCid || "";
+      const cid = resolvedMetaCoverCid || "";
       const vis = visibility !== undefined ? Number(visibility) : 0;
 
       const payload = { name, coverCid: cid, visibility: vis };
@@ -751,7 +797,7 @@ const main = async () => {
     } else if (operation === "setTracks") {
       txData = iface.encodeFunctionData("setTracks", [playlistId, trackIds]);
     } else if (operation === "updateMeta") {
-      const cid = coverCid || "";
+      const cid = resolvedMetaCoverCid || "";
       const vis = visibility !== undefined ? Number(visibility) : 0;
       txData = iface.encodeFunctionData("updateMeta", [playlistId, name, cid, vis]);
     } else if (operation === "delete") {
@@ -856,6 +902,7 @@ const main = async () => {
         ...(registeredCount > 0 ? { registered: registeredCount } : {}),
         ...(coversSet > 0 ? { coversSet } : {}),
         ...(coverTxHash ? { coverTxHash } : {}),
+        ...(operation === "updateMeta" ? { coverCid: resolvedMetaCoverCid || "" } : {}),
         ...(Object.keys(uploadedCoverCids).length > 0 ? { coverCids: uploadedCoverCids } : {}),
       }),
     });

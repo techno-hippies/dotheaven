@@ -54,7 +54,6 @@ const RPC_SEPOLIA: &str =
     "https://g.w.lavanet.xyz:443/gateway/sep1/rpc-http/69b66aca774b0ee62a86d26675365f07";
 const RPC_MEGA_TESTNET_V2: &str = "https://carrot.megaeth.com/rpc";
 const RPC_MEGA_MAINNET: &str = "https://mainnet.megaeth.com/rpc";
-const RPC_FILECOIN: &str = "https://api.node.glif.io/rpc/v1";
 
 pub struct WalletView {
     status: String,
@@ -320,34 +319,12 @@ struct WalletAssetConfig {
 
 #[derive(Clone, Copy)]
 enum WalletIcon {
-    Filecoin,
-    Usdfc,
     Usdm,
     Ethereum,
     MegaEth,
 }
 
-const WALLET_ASSETS: [WalletAssetConfig; 5] = [
-    WalletAssetConfig {
-        symbol: "FIL",
-        network: "Filecoin",
-        icon: WalletIcon::Filecoin,
-        chain_badge: WalletIcon::Filecoin,
-        rpc_url: RPC_FILECOIN,
-        token_address: None,
-        token_decimals: 18,
-        price_usd: 5.0,
-    },
-    WalletAssetConfig {
-        symbol: "USDFC",
-        network: "Filecoin",
-        icon: WalletIcon::Usdfc,
-        chain_badge: WalletIcon::Filecoin,
-        rpc_url: RPC_FILECOIN,
-        token_address: Some("0x80B98d3aa09ffff255c3ba4A241111Ff1262F045"),
-        token_decimals: 18,
-        price_usd: 1.0,
-    },
+const WALLET_ASSETS: [WalletAssetConfig; 3] = [
     WalletAssetConfig {
         symbol: "ETH",
         network: "Ethereum",
@@ -689,12 +666,6 @@ fn render_wallet_icon(icon: WalletIcon, size: f32) -> AnyElement {
             .path("icons/megaeth.svg")
             .size(px(size))
             .into_any_element(),
-        WalletIcon::Filecoin => {
-            render_wallet_png_or_fallback("filecoin.png", "F", hsla(0.60, 0.70, 0.62, 1.0), size)
-        }
-        WalletIcon::Usdfc => {
-            render_wallet_png_or_fallback("usdfc.png", "U", hsla(0.12, 0.70, 0.58, 1.0), size)
-        }
         WalletIcon::Usdm => {
             render_wallet_png_or_fallback("usdm.png", "M", hsla(0.0, 0.0, 0.80, 1.0), size)
         }

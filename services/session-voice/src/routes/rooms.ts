@@ -326,9 +326,10 @@ roomRoutes.post('/token/renew', async (c) => {
 /** GET /active — list open active rooms (no auth required for discovery) */
 roomRoutes.get('/active', async (c) => {
   const rows = await c.env.DB.prepare(
-    `SELECT r.room_id, r.host_wallet, r.created_at, r.metadata_json, rc.participant_count
+    `SELECT r.room_id, r.host_wallet, r.created_at, r.metadata_json,
+            COALESCE(rc.participant_count, 0) AS participant_count
      FROM rooms r
-     JOIN (
+     LEFT JOIN (
        SELECT room_id, COUNT(*) as participant_count
        FROM room_participants
        WHERE left_at_epoch IS NULL

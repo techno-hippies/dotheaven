@@ -17,7 +17,7 @@ export async function registerWithWebAuthn(): Promise<{
   const result = await WebAuthnAuthenticator.registerAndMintPKP({
     username: LIT_CONFIG.displayName,
     authServiceBaseUrl: LIT_CONFIG.authServiceUrl,
-    scopes: ['sign-anything'],
+    scopes: ['sign-anything', 'personal-sign'],
   })
 
   console.log('[Lit] PKP minted:', result.pkpInfo.ethAddress)

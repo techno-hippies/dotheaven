@@ -30,7 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { userAddress } = req.body
+    const { userAddress, litNetwork } = req.body
 
     if (!userAddress || typeof userAddress !== 'string') {
       return res.status(400).json({ error: 'Missing userAddress in request body' })
@@ -53,8 +53,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { privateKeyToAccount } = await import('viem/accounts')
     const { getAddress, keccak256, stringToBytes } = await import('viem')
 
-    // Determine network
-    const networkName = (process.env.LIT_NETWORK || 'naga-dev').trim()
+    // Determine network: request-level override wins, then env default.
+    const requestedNetwork = typeof litNetwork === 'string' ? litNetwork.trim() : ''
+    const envNetwork = (process.env.LIT_NETWORK || 'naga-dev').trim()
+    const networkName = (requestedNetwork || envNetwork)
+    if (networkName !== 'naga-dev' && networkName !== 'naga-test') {
+      return res.status(400).json({ error: `Invalid litNetwork "${networkName}"` })
+    }
     const network = networkName === 'naga-test' ? nagaTest : nagaDev
 
     console.log(`[mint-user-pkp] Minting PKP for ${userAddress} on ${networkName}`)
@@ -80,7 +85,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { tokenId, pubkey, ethAddress } = mintResult.data
     console.log(`[mint-user-pkp] PKP minted: ${ethAddress}`)
 
-    // Step 2: Add user's EOA as auth method with SignAnything scope
+    // Step 2: Add user's EOA as auth method with both signing scopes.
+    // `personal-sign` (scope 2) is required for PKP session key signing in current SDK/node flows.
     console.log(`[mint-user-pkp] Adding user EOA as auth method...`)
     const permissionsManager = await litClient.getPKPPermissionsManager({
       pkpIdentifier: { tokenId },
@@ -96,7 +102,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       authMethodType: AUTH_METHOD_TYPE_ETH_WALLET,
       authMethodId,
       userPubkey: '0x',
-      scopes: ['sign-anything'],
+      scopes: ['sign-anything', 'personal-sign'],
     })
 
     console.log(`[mint-user-pkp] ✓ Auth method added for ${userAddress}`)
@@ -137,6 +143,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({
       success: true,
       existing: false,
+      network: networkName,
       pkpTokenId: tokenId.toString(),
       pkpPublicKey: pubkey,
       pkpEthAddress: ethAddress,

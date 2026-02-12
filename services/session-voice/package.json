@@ -6,7 +6,14 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "migrate:local": "wrangler d1 execute session-voice --local --file=migrations/0001_credits_rooms.sql",
-    "migrate:remote": "wrangler d1 execute session-voice --remote --file=migrations/0001_credits_rooms.sql"
+    "migrate:remote": "wrangler d1 execute session-voice --remote --file=migrations/0001_credits_rooms.sql",
+    "test:smoke": "bun src/smoke-test.ts",
+    "test:facilitator": "bun test src/x402-facilitator.test.ts",
+    "test:rooms": "bun src/smoke-test-rooms.ts",
+    "test:visibility": "bun src/smoke-test-visibility.ts",
+    "test:duet": "bun src/smoke-test-duet.ts",
+    "test:e2e:local": "bun src/e2e-local.ts",
+    "test:e2e:local:full": "bun src/e2e-local.ts --full"
   },
   "dependencies": {
     "agora-token": "^2.0.3",

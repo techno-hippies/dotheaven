@@ -111,6 +111,13 @@ pub fn build_sidebar(
                 &nav_tx,
             ),
             nav_item(
+                "Rooms",
+                PhosphorIcon::MusicNotes,
+                Page::Rooms,
+                active_page,
+                &nav_tx,
+            ),
+            nav_item(
                 "Shared With Me",
                 PhosphorIcon::ShareNetwork,
                 Page::MusicShared,

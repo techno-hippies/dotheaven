@@ -5,7 +5,7 @@ Vercel-hosted relayer API that sponsors PKP minting for Heaven users. The relaye
 ## Features
 
 - **Free PKP minting** - Relayer pays gas on Chronicle testnet
-- **EOA auth method** - User's wallet address added with `sign-anything` scope
+- **EOA auth method** - User's wallet address added with `sign-anything` + `personal-sign` scopes
 - **CORS-enabled** - Works from any origin
 
 ## Endpoints
@@ -17,7 +17,8 @@ Mints a PKP for a user's EOA address.
 **Request:**
 ```json
 {
-  "userAddress": "0x03626B945ec2713Ea50AcE6b42a6f8650E0611B5"
+  "userAddress": "0x03626B945ec2713Ea50AcE6b42a6f8650E0611B5",
+  "litNetwork": "naga-dev"
 }
 ```
 
@@ -26,6 +27,7 @@ Mints a PKP for a user's EOA address.
 {
   "success": true,
   "existing": false,
+  "network": "naga-dev",
   "pkpTokenId": "123456",
   "pkpPublicKey": "0x04...",
   "pkpEthAddress": "0x59bA1D3988c80d2f2a21a5De1f3272a82A304dD5"
@@ -104,6 +106,6 @@ User (EOA) → Frontend → Relayer API → Lit Protocol
 1. User connects wallet (no network switch needed)
 2. Frontend calls relayer API with user's address
 3. Relayer mints a new PKP (every call mints a new one)
-4. Relayer adds user's EOA as auth method with `sign-anything` scope
+4. Relayer adds user's EOA as auth method with `sign-anything` + `personal-sign` scopes
 5. User signs SIWE message to prove ownership (no gas)
 6. User can now use PKP for signing

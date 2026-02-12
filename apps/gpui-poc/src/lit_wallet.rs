@@ -17,8 +17,9 @@ use ethers::utils::parse_ether;
 
 use lit_rust_sdk::{
     create_eth_wallet_auth_data, create_lit_client, naga_dev, naga_mainnet, naga_proto,
-    naga_staging, naga_test, AuthConfig, AuthContext, AuthData, EncryptParams, EncryptResponse,
-    ExecuteJsResponse, LitAbility, LitClient, NetworkConfig, PkpSigner, ResourceAbilityRequest,
+    naga_staging, naga_test, AuthConfig, AuthContext, AuthData, DecryptParams, DecryptResponse,
+    EncryptParams, EncryptResponse, ExecuteJsResponse, LitAbility, LitClient, NetworkConfig,
+    PkpSigner, ResourceAbilityRequest,
 };
 
 use crate::auth::PersistedAuth;
@@ -116,10 +117,12 @@ impl LitWalletService {
         let rpc_url = resolve_lit_rpc_url().ok_or_else(|| {
             "Missing Lit RPC URL. Set HEAVEN_LIT_RPC_URL or LIT_RPC_URL (or LIT_TXSENDER_RPC_URL / LIT_YELLOWSTONE_PRIVATE_RPC_URL / LOCAL_RPC_URL).".to_string()
         })?;
+        let expected_pkp_address = pkp_address.clone();
 
         let config = config_for_network(&network_name)?.with_rpc_url(rpc_url);
 
         let auth_config = default_auth_config();
+        let prefer_auth_data = prefer_auth_data_context();
 
         let pkp_public_key_for_call = pkp_public_key.clone();
         let (client, auth_context, selected_auth_method_id) = self
@@ -127,6 +130,7 @@ impl LitWalletService {
             .block_on(async move {
                 let client = create_lit_client(config).await?;
                 let mut last_err = None;
+                let mut pre_generated_ok_context = None;
                 let sign_probe_payload: Vec<u8> =
                     keccak256(b"heaven-gpui-auth-probe").as_slice().to_vec();
 
@@ -149,11 +153,59 @@ impl LitWalletService {
                             .await
                             {
                                 Ok(()) => {
-                                    log::info!("[Auth] Using pre-generated Lit delegation auth material from disk");
-                                    return Ok::<
-                                        (LitClient, AuthContext, Option<String>),
-                                        lit_rust_sdk::LitSdkError,
-                                    >((client, auth_context, None));
+                                    if !auth_context_matches_expected_pkp(
+                                        &auth_context,
+                                        &expected_pkp_address,
+                                    ) {
+                                        let delegated =
+                                            auth_context.delegation_auth_sig.address.clone();
+                                        log::warn!(
+                                            "[Auth] Pre-generated delegation signer address mismatch: expected PKP={}, got={}",
+                                            expected_pkp_address,
+                                            delegated
+                                        );
+                                        last_err = Some(lit_rust_sdk::LitSdkError::Config(
+                                            format!(
+                                                "pre-generated delegation address mismatch: expected {}, got {}",
+                                                expected_pkp_address, delegated
+                                            ),
+                                        ));
+                                    } else {
+                                        if !delegation_has_required_abilities(
+                                            &auth_context.delegation_auth_sig,
+                                        ) {
+                                            if auth_data_candidates.is_empty() {
+                                                log::warn!(
+                                                    "[Auth] Pre-generated delegation missing LitActionExecution ability and no authData is available; re-auth required"
+                                                );
+                                                last_err = Some(lit_rust_sdk::LitSdkError::Config(
+                                                    "pre-generated delegation missing LitActionExecution ability and authData fallback is unavailable".into(),
+                                                ));
+                                            } else {
+                                                log::warn!(
+                                                    "[Auth] Pre-generated delegation missing LitActionExecution ability; rebuilding from authData"
+                                                );
+                                            }
+                                        } else {
+                                            if auth_data_candidates.is_empty() {
+                                                log::info!("[Auth] Using pre-generated Lit delegation auth material from disk");
+                                                return Ok::<
+                                                    (LitClient, AuthContext, Option<String>),
+                                                    lit_rust_sdk::LitSdkError,
+                                                >((client, auth_context, None));
+                                            }
+                                            if prefer_auth_data {
+                                                log::info!("[Auth] Pre-generated Lit delegation auth is valid; trying authData first for refreshed capabilities (HEAVEN_LIT_PREFER_AUTHDATA=true)");
+                                                pre_generated_ok_context = Some(auth_context);
+                                            } else {
+                                                log::info!("[Auth] Using valid pre-generated Lit delegation auth material (default preference)");
+                                                return Ok::<
+                                                    (LitClient, AuthContext, Option<String>),
+                                                    lit_rust_sdk::LitSdkError,
+                                                >((client, auth_context, None));
+                                            }
+                                        }
+                                    }
                                 }
                                 Err(err) => {
                                     log::warn!(
@@ -197,6 +249,26 @@ impl LitWalletService {
                             .await
                             {
                                 Ok(()) => {
+                                    if !auth_context_matches_expected_pkp(
+                                        &auth_context,
+                                        &expected_pkp_address,
+                                    ) {
+                                        let delegated =
+                                            auth_context.delegation_auth_sig.address.clone();
+                                        log::warn!(
+                                            "[Auth] Lit auth context delegation signer address mismatch for authMethodId={}: expected PKP={}, got={}; trying next candidate",
+                                            candidate_auth_method_id,
+                                            expected_pkp_address,
+                                            delegated
+                                        );
+                                        last_err = Some(lit_rust_sdk::LitSdkError::Config(
+                                            format!(
+                                                "authData delegation address mismatch: expected {}, got {}",
+                                                expected_pkp_address, delegated
+                                            ),
+                                        ));
+                                        continue;
+                                    }
                                     return Ok::<
                                         (LitClient, AuthContext, Option<String>),
                                         lit_rust_sdk::LitSdkError,
@@ -225,6 +297,14 @@ impl LitWalletService {
                             last_err = Some(err);
                         }
                     }
+                }
+
+                if let Some(auth_context) = pre_generated_ok_context {
+                    log::info!("[Auth] Falling back to pre-generated Lit delegation auth after authData attempts failed");
+                    return Ok::<
+                        (LitClient, AuthContext, Option<String>),
+                        lit_rust_sdk::LitSdkError,
+                    >((client, auth_context, None));
                 }
 
                 Err(last_err.unwrap_or_else(|| {
@@ -256,7 +336,22 @@ impl LitWalletService {
             }
         }
 
-        if persisted.lit_session_key_pair.is_none() || persisted.lit_delegation_auth_sig.is_none() {
+        log::info!(
+            "[Auth] Lit auth context selected: pkpAddress={} delegationSigner={} source={} authMethodId={}",
+            pkp_address,
+            auth_context.delegation_auth_sig.address,
+            if selected_auth_method_id.is_some() {
+                "authData"
+            } else {
+                "pre-generated"
+            },
+            selected_auth_method_id.as_deref().unwrap_or("n/a")
+        );
+
+        let should_cache_delegation = selected_auth_method_id.is_some()
+            || persisted.lit_session_key_pair.is_none()
+            || persisted.lit_delegation_auth_sig.is_none();
+        if should_cache_delegation {
             let mut updated = persisted.clone();
             updated.lit_session_key_pair = Some(auth_context.session_key_pair.clone());
             updated.lit_delegation_auth_sig = Some(auth_context.delegation_auth_sig.clone());
@@ -264,6 +359,10 @@ impl LitWalletService {
                 log::warn!(
                     "[Auth] Failed to cache pre-generated Lit delegation auth material: {}",
                     err
+                );
+            } else if selected_auth_method_id.is_some() {
+                log::info!(
+                    "[Auth] Refreshed and cached Lit delegation auth material from authData context"
                 );
             } else {
                 log::info!("[Auth] Cached Lit delegation auth material for future app launches");
@@ -602,6 +701,45 @@ impl LitWalletService {
             .map_err(|e| format!("encrypt failed: {e}"))
     }
 
+    pub fn decrypt_with_access_control(
+        &mut self,
+        ciphertext_base64: String,
+        data_to_encrypt_hash_hex: String,
+        unified_access_control_conditions: serde_json::Value,
+        chain: &str,
+    ) -> Result<DecryptResponse, String> {
+        let client = self
+            .client
+            .as_ref()
+            .ok_or("Lit client is not initialized")?
+            .clone();
+        let auth_context = self
+            .auth_context
+            .as_ref()
+            .ok_or("Lit auth context is not initialized")?
+            .clone();
+        let chain = chain.to_string();
+
+        self.runtime
+            .block_on(async move {
+                client
+                    .decrypt(
+                        DecryptParams {
+                            ciphertext_base64,
+                            data_to_encrypt_hash_hex,
+                            unified_access_control_conditions: Some(
+                                unified_access_control_conditions,
+                            ),
+                            hashed_access_control_conditions_hex: None,
+                        },
+                        &auth_context,
+                        &chain,
+                    )
+                    .await
+            })
+            .map_err(|e| format!("decrypt failed: {e}"))
+    }
+
     pub fn execute_js_with_auth_context(
         &mut self,
         code: Option<String>,
@@ -742,6 +880,33 @@ fn lit_network_name() -> String {
         .filter(|v| !v.trim().is_empty())
         .or_else(|| env::var("LIT_NETWORK").ok())
         .unwrap_or_else(|| "naga-dev".to_string())
+}
+
+fn prefer_auth_data_context() -> bool {
+    env::var("HEAVEN_LIT_PREFER_AUTHDATA")
+        .ok()
+        .map(|v| {
+            let v = v.trim().to_ascii_lowercase();
+            v == "1" || v == "true" || v == "yes"
+        })
+        .unwrap_or(false)
+}
+
+fn auth_context_matches_expected_pkp(
+    auth_context: &AuthContext,
+    expected_pkp_address: &str,
+) -> bool {
+    let expected = expected_pkp_address.trim().to_ascii_lowercase();
+    let delegated = auth_context
+        .delegation_auth_sig
+        .address
+        .trim()
+        .to_ascii_lowercase();
+    !expected.is_empty() && expected == delegated
+}
+
+fn delegation_has_required_abilities(auth_sig: &lit_rust_sdk::AuthSig) -> bool {
+    crate::auth::delegation_has_lit_action_execution(auth_sig)
 }
 
 fn resolve_lit_rpc_url() -> Option<String> {

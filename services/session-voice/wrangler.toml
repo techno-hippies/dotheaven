@@ -10,12 +10,17 @@ database_id = "ac26bc37-8329-4695-a733-fe54a6bd05e0"
 
 [durable_objects]
 bindings = [
-  { name = "ROOM_DO", class_name = "RoomDO" }
+  { name = "ROOM_DO", class_name = "RoomDO" },
+  { name = "DUET_ROOM_DO", class_name = "DuetRoomDO" }
 ]
 
 [[migrations]]
 tag = "v1"
 new_classes = ["RoomDO"]
+
+[[migrations]]
+tag = "v2"
+new_classes = ["DuetRoomDO"]
 
 [vars]
 ENVIRONMENT = "development"
@@ -26,12 +31,15 @@ VERIFICATION_MIRROR_ADDRESS = "0xb0864603A4d6b62eACB53fbFa32E7665BADCc7Fb"
 CHAIN_ID = "6343"
 LLM_BASE_URL = "https://openrouter.ai/api/v1"
 ELEVENLABS_VOICE_ID = "rf0RyZGEDtFGS4U6yghI"
+X402_FACILITATOR_MODE = "mock"
+X402_FACILITATOR_BASE_URL = "https://api.cdp.coinbase.com/platform/v2/x402"
 
 # Secrets (set via wrangler secret put):
 # AGORA_APP_ID
 # AGORA_APP_CERTIFICATE
 # AGORA_REST_AUTH (key:secret for Agora REST API — needed for CAI agent)
 # JWT_SECRET
+# X402_FACILITATOR_AUTH_TOKEN (for facilitator settle calls, e.g. CDP bearer token)
 # LLM_API_KEY (OpenRouter)
 # ELEVENLABS_API_KEY
 # ORACLE_PRIVATE_KEY

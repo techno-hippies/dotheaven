@@ -1,4 +1,0 @@
-.env
-reports/*.json
-tmp/
-node_modules/

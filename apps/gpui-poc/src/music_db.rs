@@ -147,6 +147,12 @@ impl MusicDb {
                 cover_path  TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_tracks_folder ON tracks(folder_path);
+            CREATE INDEX IF NOT EXISTS idx_tracks_folder_title
+                ON tracks(folder_path, title COLLATE NOCASE);
+            CREATE INDEX IF NOT EXISTS idx_tracks_folder_artist
+                ON tracks(folder_path, artist COLLATE NOCASE);
+            CREATE INDEX IF NOT EXISTS idx_tracks_folder_album
+                ON tracks(folder_path, album COLLATE NOCASE);
             CREATE TABLE IF NOT EXISTS settings (
                 key   TEXT PRIMARY KEY,
                 value TEXT NOT NULL
@@ -275,6 +281,10 @@ impl MusicDb {
         let mut seen_paths: HashSet<String> = HashSet::with_capacity(total);
         let mut cache_hits: usize = 0;
         let mut extracted: usize = 0;
+        let tx = self
+            .conn
+            .unchecked_transaction()
+            .map_err(|e| format!("scan transaction begin failed: {e}"))?;
 
         // 2. Process each file
         for (i, path) in audio_files.iter().enumerate() {
@@ -294,8 +304,7 @@ impl MusicDb {
                 .unwrap_or(0);
 
             // Check cache
-            let cached: Option<(i64, i64, Option<String>)> = self
-                .conn
+            let cached: Option<(i64, i64, Option<String>)> = tx
                 .query_row(
                     "SELECT file_size, file_mtime, cover_path FROM tracks WHERE file_path = ?1",
                     params![&path_str],
@@ -325,7 +334,7 @@ impl MusicDb {
             let (title, artist, album, duration, mbid, ip_id, cover_path) =
                 extract_metadata(path, &path_str, &self.covers_dir);
 
-            self.conn
+            tx
                 .execute(
                     "INSERT OR REPLACE INTO tracks (file_path, title, artist, album, duration_ms, duration, mbid, ip_id, file_size, file_mtime, folder_path, cover_path)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
@@ -359,21 +368,26 @@ impl MusicDb {
         );
 
         // 3. Prune deleted files
-        let mut stmt = self
-            .conn
-            .prepare("SELECT file_path FROM tracks WHERE folder_path = ?1")
-            .map_err(|e| format!("Prune prepare: {e}"))?;
-        let db_paths: Vec<String> = stmt
-            .query_map(params![folder], |row| row.get(0))
-            .map_err(|e| format!("Prune query: {e}"))?
-            .filter_map(|r| r.ok())
-            .collect();
+        let db_paths: Vec<String> = {
+            let mut stmt = tx
+                .prepare("SELECT file_path FROM tracks WHERE folder_path = ?1")
+                .map_err(|e| format!("Prune prepare: {e}"))?;
+            let rows = stmt
+                .query_map(params![folder], |row| row.get(0))
+                .map_err(|e| format!("Prune query: {e}"))?;
+            let mut out = Vec::new();
+            for row in rows {
+                if let Ok(path) = row {
+                    out.push(path);
+                }
+            }
+            out
+        };
 
         let mut pruned: usize = 0;
         for db_path in &db_paths {
             if !seen_paths.contains(db_path) {
-                self.conn
-                    .execute("DELETE FROM tracks WHERE file_path = ?1", params![db_path])
+                tx.execute("DELETE FROM tracks WHERE file_path = ?1", params![db_path])
                     .ok();
                 pruned += 1;
             }
@@ -381,6 +395,9 @@ impl MusicDb {
         if pruned > 0 {
             log::info!("music_db: pruned {} deleted files", pruned);
         }
+
+        tx.commit()
+            .map_err(|e| format!("scan transaction commit failed: {e}"))?;
 
         // Final progress
         progress_cb(ScanProgress { done: total, total });

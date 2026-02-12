@@ -32,6 +32,7 @@ export function generateToken(
   channel: string,
   uid: number,
   ttlSeconds: number,
+  role: RtcRole = RtcRole.PUBLISHER,
 ): { token: string; expiresInSeconds: number } {
   const now = Math.floor(Date.now() / 1000)
   const expirationTime = now + ttlSeconds
@@ -41,7 +42,7 @@ export function generateToken(
     appCertificate,
     channel,
     uid,
-    RtcRole.PUBLISHER,
+    role,
     expirationTime,
     expirationTime,
   )
@@ -67,4 +68,14 @@ export function generateBookedToken(
   uid: number,
 ): { token: string; expiresInSeconds: number } {
   return generateToken(appId, appCertificate, channel, uid, 3600)
+}
+
+/** Generate short-lived viewer token for audience/read-only clients. */
+export function generateViewerToken(
+  appId: string,
+  appCertificate: string,
+  channel: string,
+  uid: number,
+): { token: string; expiresInSeconds: number } {
+  return generateToken(appId, appCertificate, channel, uid, TOKEN_TTL_SECONDS, RtcRole.SUBSCRIBER)
 }

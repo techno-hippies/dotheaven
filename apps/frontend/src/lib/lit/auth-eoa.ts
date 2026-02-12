@@ -2,6 +2,7 @@ import { createWalletClient, custom, getAddress, keccak256, stringToBytes, type 
 import { mainnet } from 'viem/chains'
 import { WalletClientAuthenticator } from '@lit-protocol/auth'
 import { getLitClient } from './client'
+import { LIT_CONFIG } from './config'
 import type { PKPInfo, AuthData } from './types'
 
 // Relayer API for sponsored PKP minting (naga-test)
@@ -37,14 +38,75 @@ function tokenIdEquals(a: unknown, b: unknown): boolean {
   return asBigInt(a) === asBigInt(b)
 }
 
-function pickLatestPkp(pkps: any[]) {
-  if (pkps.length <= 1) return pkps[0]
-  return [...pkps].sort((a, b) => {
+function toTokenIdString(tokenId: unknown): string {
+  if (typeof tokenId === 'string') return tokenId
+  if (typeof tokenId === 'number' || typeof tokenId === 'bigint') return tokenId.toString()
+  if (tokenId && typeof (tokenId as any).toString === 'function') {
+    return (tokenId as any).toString()
+  }
+  return ''
+}
+
+function hasPersonalSignScope(scopes: unknown): boolean {
+  return Array.isArray(scopes) && scopes.includes('personal-sign')
+}
+
+async function getEoaAuthMethodScopesForPkp(
+  litClient: Awaited<ReturnType<typeof getLitClient>>,
+  tokenId: string,
+  authMethodId: string,
+): Promise<string[] | null> {
+  try {
+    const permissions = await litClient.viewPKPPermissions({ tokenId })
+    const authMethods = Array.isArray(permissions?.authMethods) ? permissions.authMethods : []
+    const target = authMethods.find((method: any) => {
+      const methodType = asBigInt(method?.authMethodType)
+      const methodId = String(method?.id ?? '').toLowerCase()
+      return methodType === BigInt(AUTH_METHOD_TYPE_ETH_WALLET) && methodId === authMethodId.toLowerCase()
+    })
+    if (!target) return []
+    const scopes = Array.isArray(target?.scopes) ? target.scopes : []
+    return scopes.filter((scope: unknown): scope is string => typeof scope === 'string')
+  } catch (error) {
+    console.warn('[Lit] Failed to inspect PKP permissions for tokenId', tokenId, error)
+    return null
+  }
+}
+
+async function pickPkpWithRequiredEoaScope(
+  litClient: Awaited<ReturnType<typeof getLitClient>>,
+  pkps: any[],
+  authMethodId: string,
+): Promise<{ pkp: any; scopeStatus: 'has-required' | 'missing-required' | 'unknown' }> {
+  const sorted = [...pkps].sort((a, b) => {
     const aTokenId = asBigInt(a?.tokenId)
     const bTokenId = asBigInt(b?.tokenId)
     if (aTokenId === bTokenId) return 0
     return aTokenId > bTokenId ? -1 : 1
-  })[0]
+  })
+  const fallback = sorted[0]
+  let checkedCount = 0
+
+  for (const pkp of sorted) {
+    const tokenId = toTokenIdString(pkp?.tokenId)
+    if (!tokenId) continue
+
+    const scopes = await getEoaAuthMethodScopesForPkp(litClient, tokenId, authMethodId)
+    if (scopes === null) {
+      continue
+    }
+    checkedCount += 1
+
+    if (hasPersonalSignScope(scopes)) {
+      return { pkp, scopeStatus: 'has-required' }
+    }
+  }
+
+  if (checkedCount > 0) {
+    return { pkp: fallback, scopeStatus: 'missing-required' }
+  }
+
+  return { pkp: fallback, scopeStatus: 'unknown' }
 }
 
 async function findPkpsByEoa(
@@ -151,7 +213,10 @@ export async function registerWithEOA(externalWalletClient?: WalletClient): Prom
   const response = await fetch(`${LIT_SPONSORSHIP_API_URL}/api/mint-user-pkp`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userAddress: address }),
+    body: JSON.stringify({
+      userAddress: address,
+      litNetwork: LIT_CONFIG.networkName,
+    }),
   })
 
   console.log('[Lit] Relayer response status:', response.status)
@@ -165,8 +230,15 @@ export async function registerWithEOA(externalWalletClient?: WalletClient): Prom
   const data = await response.json()
   console.log('[Lit] PKP minted via relayer:', {
     existing: data.existing,
+    network: data.network,
     pkpEthAddress: data.pkpEthAddress,
   })
+
+  if (typeof data.network === 'string' && data.network !== LIT_CONFIG.networkName) {
+    throw new Error(
+      `Relayer minted on ${data.network}, but app is configured for ${LIT_CONFIG.networkName}.`
+    )
+  }
 
   const pkpInfo: PKPInfo = {
     publicKey: data.pkpPublicKey,
@@ -222,6 +294,21 @@ export async function registerWithEOA(externalWalletClient?: WalletClient): Prom
         console.warn('[Lit] Detected legacy relayer authMethodId format for this new PKP; using raw-address authMethodId for this session')
         authData.authMethodId = legacyAuthMethodId
       }
+    }
+  }
+
+  const mintedTokenId = toTokenIdString(pkpInfo.tokenId)
+  if (mintedTokenId) {
+    const mintedScopes = await getEoaAuthMethodScopesForPkp(
+      litClient,
+      mintedTokenId,
+      String(authData.authMethodId),
+    )
+    if (mintedScopes && !hasPersonalSignScope(mintedScopes)) {
+      throw new Error('Relayer minted PKP without required personal-sign scope.')
+    }
+    if (mintedScopes === null) {
+      console.warn('[Lit] Unable to verify minted PKP scopes immediately after registration')
     }
   }
 
@@ -292,9 +379,21 @@ export async function authenticateWithEOA(externalWalletClient?: WalletClient): 
     throw new Error('No PKP found for this wallet. Please register first.')
   }
 
-  const pkp = pickLatestPkp(pkpsResult.pkps)
+  const selection = await pickPkpWithRequiredEoaScope(
+    litClient,
+    pkpsResult.pkps,
+    String(authData.authMethodId),
+  )
+  const pkp = selection.pkp
+  if (selection.scopeStatus === 'missing-required') {
+    throw new Error('Existing PKPs for this wallet are missing required personal-sign scope.')
+  }
+  if (selection.scopeStatus === 'unknown') {
+    console.warn('[Lit] Unable to verify PKP scopes during login; falling back to latest tokenId')
+  }
+
   if ((pkpsResult.pkps?.length ?? 0) > 1) {
-    console.warn('[Lit] Multiple PKPs found for auth method; selecting latest tokenId:', pkp?.tokenId?.toString?.() ?? pkp?.tokenId)
+    console.warn('[Lit] Multiple PKPs found for auth method; selected tokenId:', pkp?.tokenId?.toString?.() ?? pkp?.tokenId)
   }
   const pkpInfo: PKPInfo = {
     publicKey: pkp.pubkey,

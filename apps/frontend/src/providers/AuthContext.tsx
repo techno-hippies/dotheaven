@@ -295,7 +295,14 @@ export const AuthProvider: ParentComponent = (props) => {
         await persistEoaResult(result)
         setIsAuthenticating(false)
       } catch (authErr) {
-        if (authErr instanceof Error && authErr.message.includes('No PKP found')) {
+        const shouldRegister =
+          authErr instanceof Error &&
+          (
+            authErr.message.includes('No PKP found') ||
+            authErr.message.includes('missing required personal-sign scope')
+          )
+
+        if (shouldRegister) {
           const { registerWithEOA } = await import('../lib/lit')
           const result = await registerWithEOA(walletClientForEoa)
           await persistEoaResult(result)
@@ -404,6 +411,21 @@ export const AuthProvider: ParentComponent = (props) => {
     try {
       return await createPKPAuthContext(currentPkpInfo, currentAuthData)
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      const isScopeError =
+        message.includes('NodeAuthSigScopeTooLimited') ||
+        message.includes('required scope [2]') ||
+        message.includes('pkp is not authorized') ||
+        message.includes('auth_sig scope that is passed does not support the requested operation')
+
+      if (isScopeError) {
+        // This indicates a PKP permission mismatch (typically missing personal-sign scope),
+        // not a stale local session.
+        throw new Error(
+          'PKP is missing required signing permissions. Please reconnect after updating the relayer.'
+        )
+      }
+
       // Stale session — clear auth so user gets a clean login prompt
       console.error('[Auth] Auth context creation failed, clearing stale session:', err)
       setPkpInfo(null)

@@ -9,7 +9,9 @@
 //! Ported from apps/frontend/src-tauri/src/auth.rs (tokio → smol)
 
 use futures_lite::io::{AsyncReadExt, AsyncWriteExt};
-use lit_rust_sdk::{AuthSig as LitAuthSig, SessionKeyPair};
+use lit_rust_sdk::{
+    auth_config_from_delegation_auth_sig, AuthSig as LitAuthSig, LitAbility, SessionKeyPair,
+};
 use serde::{Deserialize, Serialize};
 use smol::net::TcpListener;
 use std::path::PathBuf;
@@ -296,7 +298,16 @@ pub fn load_from_disk() -> Option<PersistedAuth> {
         return None;
     }
     let contents = std::fs::read_to_string(&path).ok()?;
-    let parsed: PersistedAuth = serde_json::from_str(&contents).ok()?;
+    let mut parsed: PersistedAuth = serde_json::from_str(&contents).ok()?;
+    if let Some(auth_sig) = parsed.lit_delegation_auth_sig.as_ref() {
+        if !delegation_has_lit_action_execution(auth_sig) {
+            log::warn!(
+                "[Auth] Persisted delegation is missing LitActionExecution ability; clearing cached delegation and forcing refresh on next Lit init"
+            );
+            parsed.lit_session_key_pair = None;
+            parsed.lit_delegation_auth_sig = None;
+        }
+    }
     log::debug!(
         "[Auth] Loaded auth from disk: pkp_address={:?}, pkp_public_key={}, pkp_token_id={:?}, eoa_address={:?}, auth_method_type={:?}",
         parsed.pkp_address,
@@ -310,6 +321,23 @@ pub fn load_from_disk() -> Option<PersistedAuth> {
         parsed.auth_method_type
     );
     Some(parsed)
+}
+
+pub fn delegation_has_lit_action_execution(auth_sig: &LitAuthSig) -> bool {
+    let config = match auth_config_from_delegation_auth_sig(auth_sig) {
+        Ok(cfg) => cfg,
+        Err(err) => {
+            log::warn!(
+                "[Auth] Failed to parse delegation capabilities from signed SIWE: {}",
+                err
+            );
+            return false;
+        }
+    };
+    config
+        .resources
+        .iter()
+        .any(|req| req.ability == LitAbility::LitActionExecution)
 }
 
 pub fn delete_from_disk() {
