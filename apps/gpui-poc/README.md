@@ -5,8 +5,7 @@ This app is a **proof of concept** for a Rust-native desktop client using GPUI.
 ## Status
 
 - GPUI currently covers shell/navigation/auth persistence/local library UX.
-- Encrypted upload flow in GPUI sidecar now targets Load storage paths (backend proxy or direct agent mode).
-- Sidecar method names still keep `storage.*` compatibility for existing Rust callers.
+- Encrypted upload flow now uses native Rust direct upload to Load's Turbo-compatible offchain endpoint.
 
 ## Setup
 
@@ -18,23 +17,26 @@ Copy `.env.example` to `.env` and configure:
 # Required for scrobbling and Lit Actions
 export HEAVEN_LIT_RPC_URL="https://yellowstone-rpc.litprotocol.com"
 export HEAVEN_LIT_NETWORK="naga-dev"  # or naga-test
+export HEAVEN_XMTP_ENV="dev"          # dev | production (defaults to dev)
+# Optional: force XMTP inbox nonce when troubleshooting legacy inbox mismatches
+# export HEAVEN_XMTP_NONCE="0"         # auto if unset
 
 # Required for gasless scrobbling via AA gateway
 export HEAVEN_AA_GATEWAY_URL="http://127.0.0.1:3337"
 export HEAVEN_AA_RPC_URL="https://carrot.megaeth.com/rpc"
 export HEAVEN_AA_GATEWAY_KEY=""  # optional
 
-# Storage upload mode (auto | backend | agent)
-# auto: backend first, then fallback to direct agent if key is set
-export HEAVEN_LOAD_UPLOAD_MODE="auto"
+# Storage upload (direct offchain)
+export HEAVEN_LOAD_TURBO_UPLOAD_URL="https://loaded-turbo-api.load.network"
+export HEAVEN_LOAD_TURBO_TOKEN="ethereum"
+export HEAVEN_LOAD_GATEWAY_URL="https://gateway.s3-node-1.load.network"
 
-# Backend mode (recommended): heaven-api route /api/load/*
-export HEAVEN_API_URL="http://localhost:8787"
-
-# Direct agent mode fallback (optional):
-# export HEAVEN_LOAD_S3_AGENT_API_KEY="load_acc_..."
-# export HEAVEN_LOAD_S3_AGENT_URL="https://load-s3-agent.load.network"
-# export HEAVEN_LOAD_GATEWAY_URL="https://gateway.s3-node-1.load.network"
+# Optional: enable user-pays Turbo funding from PKP wallet (Base Sepolia)
+export HEAVEN_LOAD_USER_PAYS_ENABLED="true"
+export HEAVEN_TURBO_FUNDING_PROXY_URL="http://127.0.0.1:8788"
+export HEAVEN_TURBO_FUNDING_TOKEN="base-eth"
+export HEAVEN_BASE_SEPOLIA_RPC_URL="https://sepolia.base.org"
+export HEAVEN_LOAD_MIN_UPLOAD_CREDIT="0.00000001"
 ```
 
 **Important**: Without these environment variables set, scrobbling will fail with "Missing Lit RPC URL" error. The scrobble hook will fire correctly, but submission will fail due to missing configuration.
@@ -63,44 +65,14 @@ source .env  # or export them manually
 cargo run --release
 ```
 
-## Storage Sidecar Bridge
+## Native Load Storage
 
-GPUI uses a Bun sidecar for encrypted upload + registration orchestration:
+GPUI uses native Rust code for encrypted upload + registration orchestration.
 
-- `apps/gpui-poc/sidecar/synapse-sidecar.ts`
-
-Run it directly for health checks:
-
-- `printf '{"id":1,"method":"health","params":{}}\n' | bun apps/gpui-poc/sidecar/synapse-sidecar.ts`
-
-Modes:
-
-- `backend`: uploads via `HEAVEN_API_URL/api/load/upload` (server holds key).
-- `agent`: uploads directly to `load-s3-agent` (requires `HEAVEN_LOAD_S3_AGENT_API_KEY`).
-- `auto` (default): `backend` first, fallback to `agent` when key is configured.
-
-Protocol: NDJSON over stdin/stdout (one JSON-RPC-like message per line).
-
-Supported sidecar methods:
-
-- `health`
-- `storage.status`
-- `storage.depositAndApprove` (compat no-op in Load mode)
-- `storage.preflight`
-- `storage.upload`
-- `content.encryptUploadRegister`
-- `storage.reset`
-
-Expected auth payload shape (per request needing auth):
-
-- `pkp`: `{ publicKey, ethAddress, tokenId? }`
-- `authData`: `{ authMethodType, authMethodId, accessToken, ... }`
-
-This is intentionally limited to current product needs and does not attempt full SDK parity.
-
-### Long term (target)
-
-Replace Synapse TS dependency with native Rust storage/payment pipeline for the subset we actually use, then expand if required.
+- Upload target: `POST {HEAVEN_LOAD_TURBO_UPLOAD_URL}/v1/tx/{HEAVEN_LOAD_TURBO_TOKEN}`.
+- Data format: signed ANS-104 DataItem (signed by user PKP through Lit).
+- Retrieval: `GET {HEAVEN_LOAD_GATEWAY_URL}/resolve/{dataitem_id}`.
+- Optional user-pays mode: set `HEAVEN_LOAD_USER_PAYS_ENABLED=true` to require Turbo balance checks before upload and use "Add Funds" to send a PKP-signed Base Sepolia payment + `submitFundTransaction` via funding proxy.
 
 ## Voice Transport Note
 
@@ -112,7 +84,7 @@ Treat Agora as delivery path, JackTrip as strategic upgrade.
 
 ## Native Agora (GPUI)
 
-The GPUI app now includes a native Agora voice integration path for Scarlett AI calls (no WebView sidecar), behind a compile-time feature:
+The GPUI app now includes a native Agora voice integration path for Scarlett AI calls (no WebView bridge), behind a compile-time feature:
 
 ```bash
 export AGORA_SDK_ROOT=/path/to/agora/native/sdk

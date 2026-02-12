@@ -7,6 +7,7 @@
 
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use crate::voice::transport::VoiceSignalEnvelope;
 use futures::StreamExt;
@@ -18,6 +19,7 @@ use xmtp_api_d14n::MessageBackendBuilder;
 use xmtp_common::Retry;
 use xmtp_content_types::{text::TextCodec, ContentCodec};
 use xmtp_db::{
+    encrypted_store::consent_record::ConsentState,
     encrypted_store::group::ConversationType,
     encrypted_store::group_message::{GroupMessageKind, MsgQueryArgs, StoredGroupMessage},
     EncryptedMessageStore, NativeDb, StorageOption,
@@ -71,17 +73,68 @@ pub struct XmtpMessage {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const IS_DEV: bool = cfg!(debug_assertions);
 const XMTP_HOST: &str = "https://grpc.dev.xmtp.network:443";
 const XMTP_HOST_PROD: &str = "https://grpc.production.xmtp.network:443";
 const VOICE_SIGNAL_PREFIX: &str = "[heaven-voice-v1]";
 
-fn xmtp_host() -> &'static str {
-    if IS_DEV {
-        XMTP_HOST
-    } else {
-        XMTP_HOST_PROD
+#[derive(Copy, Clone, Debug)]
+enum XmtpEnv {
+    Dev,
+    Production,
+}
+
+fn xmtp_env() -> XmtpEnv {
+    let raw = std::env::var("HEAVEN_XMTP_ENV")
+        .or_else(|_| std::env::var("XMTP_ENV"))
+        .unwrap_or_else(|_| "dev".to_string());
+
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "prod" | "production" => XmtpEnv::Production,
+        _ => XmtpEnv::Dev,
     }
+}
+
+fn xmtp_env_name() -> &'static str {
+    match xmtp_env() {
+        XmtpEnv::Dev => "dev",
+        XmtpEnv::Production => "production",
+    }
+}
+
+fn xmtp_host() -> &'static str {
+    match xmtp_env() {
+        XmtpEnv::Dev => XMTP_HOST,
+        XmtpEnv::Production => XMTP_HOST_PROD,
+    }
+}
+
+fn xmtp_nonce_override() -> Option<u64> {
+    let raw = std::env::var("HEAVEN_XMTP_NONCE")
+        .or_else(|_| std::env::var("XMTP_NONCE"))
+        .ok()?;
+    match raw.trim().parse::<u64>() {
+        Ok(value) => Some(value),
+        Err(e) => {
+            log::warn!("[XMTP] Invalid XMTP nonce override '{raw}': {e}");
+            None
+        }
+    }
+}
+
+fn is_evm_address(value: &str) -> bool {
+    let trimmed = value.trim();
+    if trimmed.len() != 42 || !trimmed.starts_with("0x") {
+        return false;
+    }
+    trimmed
+        .as_bytes()
+        .iter()
+        .skip(2)
+        .all(|b| char::from(*b).is_ascii_hexdigit())
+}
+
+fn dm_consent_states() -> Vec<ConsentState> {
+    vec![ConsentState::Allowed, ConsentState::Unknown]
 }
 
 fn decode_text(msg: &StoredGroupMessage) -> Option<String> {
@@ -183,6 +236,7 @@ pub struct XmtpService {
     client: Option<Arc<XmtpClient>>,
     my_inbox_id: Option<String>,
     my_address: Option<String>,
+    last_dm_sync_at: std::sync::Mutex<Option<Instant>>,
 }
 
 #[cfg(test)]
@@ -224,6 +278,7 @@ impl XmtpService {
             client: None,
             my_inbox_id: None,
             my_address: None,
+            last_dm_sync_at: std::sync::Mutex::new(None),
         })
     }
 
@@ -256,22 +311,39 @@ impl XmtpService {
         }
 
         let address_lower = address.to_lowercase();
+        let identifier = Identifier::Ethereum(ident::Ethereum(address_lower.clone()));
+        let nonce_override = xmtp_nonce_override();
+        let inbox_id_nonce_0 = identifier.inbox_id(0).ok();
+        let inbox_id_nonce_1 = identifier.inbox_id(1).ok();
+        let nonce: u64 = nonce_override.unwrap_or(1);
+        let inbox_id = identifier
+            .inbox_id(nonce)
+            .map_err(|e| format!("inbox_id: {e}"))?;
+        log::info!(
+            "[XMTP] Inbox selection: addr={}, nonce={}, override={:?}, nonce0_inbox={:?}, nonce1_inbox={:?}",
+            address_lower,
+            nonce,
+            nonce_override,
+            inbox_id_nonce_0,
+            inbox_id_nonce_1
+        );
 
         // 1. Create store
         let data_dir = app_data_dir();
         std::fs::create_dir_all(&data_dir).map_err(|e| format!("mkdir: {e}"))?;
-        let db_path = data_dir
-            .join(format!("xmtp-{}.db", &address_lower))
-            .to_string_lossy()
-            .to_string();
+        let db_file = if nonce == 1 {
+            // Keep legacy filename for nonce=1 to preserve existing local data.
+            format!("xmtp-{}.db", &address_lower)
+        } else {
+            format!("xmtp-{}-n{}.db", &address_lower, nonce)
+        };
+        let db_path = data_dir.join(db_file).to_string_lossy().to_string();
 
-        log::info!("[XMTP] Connecting for {address_lower}, db={db_path}");
-
-        let identifier = Identifier::Ethereum(ident::Ethereum(address_lower.clone()));
-        let nonce: u64 = 1;
-        let inbox_id = identifier
-            .inbox_id(nonce)
-            .map_err(|e| format!("inbox_id: {e}"))?;
+        log::info!(
+            "[XMTP] Connecting for {address_lower}, env={}, host={}, db={db_path}",
+            xmtp_env_name(),
+            xmtp_host()
+        );
 
         let identity_strategy = IdentityStrategy::new(inbox_id.clone(), identifier, nonce, None);
 
@@ -518,23 +590,99 @@ to get below the {max} installation cap..."
         self.client = None;
         self.my_inbox_id = None;
         self.my_address = None;
+        if let Ok(mut last_sync_at) = self.last_dm_sync_at.lock() {
+            *last_sync_at = None;
+        }
         log::info!("[XMTP] Disconnected");
+    }
+
+    /// Clear local XMTP DB state for a wallet address (db + wal/shm/journal side files).
+    ///
+    /// This is a last-resort recovery path when local DM state gets stuck in an
+    /// unrecoverable inactive/validation loop.
+    pub fn reset_local_state_for_address(&mut self, address: &str) -> Result<String, String> {
+        let address_lower = address.to_lowercase();
+        self.disconnect();
+
+        let base = app_data_dir().join(format!("xmtp-{}.db", address_lower));
+        let sidecar = |suffix: &str| {
+            std::path::PathBuf::from(format!("{}{}", base.to_string_lossy(), suffix))
+        };
+        let candidates = vec![
+            base.clone(),
+            sidecar("-wal"),
+            sidecar("-shm"),
+            sidecar("-journal"),
+        ];
+
+        let mut removed = Vec::new();
+        for path in candidates {
+            if path.exists() {
+                std::fs::remove_file(&path)
+                    .map_err(|e| format!("remove {}: {e}", path.display()))?;
+                removed.push(path.display().to_string());
+            }
+        }
+
+        if removed.is_empty() {
+            Ok(format!(
+                "No local XMTP files found to reset for {}",
+                address_lower
+            ))
+        } else {
+            Ok(format!(
+                "Removed {} local XMTP file(s) for {}",
+                removed.len(),
+                address_lower
+            ))
+        }
     }
 
     /// List DM conversations.
     pub fn list_conversations(&self) -> Result<Vec<ConversationInfo>, String> {
         let client = get_client(&self.client)?;
         let my_inbox_id = self.my_inbox_id.as_deref().unwrap_or_default().to_string();
+        let consent_states = dm_consent_states();
+        let should_sync = {
+            let mut last_sync_at = self
+                .last_dm_sync_at
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let now = Instant::now();
+            let sync_needed = last_sync_at
+                .map(|last| now.saturating_duration_since(last) >= Duration::from_secs(20))
+                .unwrap_or(true);
+            if sync_needed {
+                *last_sync_at = Some(now);
+            }
+            sync_needed
+        };
 
         self.runtime.block_on(async {
-            // Sync welcomes first to discover new conversations
-            client
-                .sync_welcomes()
-                .await
-                .map_err(|e| format!("sync_welcomes: {e}"))?;
+            if should_sync {
+                // Keep this aligned with web transport: sync all first, then list DMs.
+                // If network sync fails, still return the local DB snapshot.
+                match client
+                    .sync_all_welcomes_and_groups(Some(consent_states.clone()))
+                    .await
+                {
+                    Ok(summary) => {
+                        log::debug!("[XMTP] list sync summary: {summary:?}");
+                    }
+                    Err(e) => {
+                        log::warn!(
+                            "[XMTP] sync_all_welcomes_and_groups during list failed; using local state: {e}"
+                        );
+                    }
+                }
+            } else {
+                log::debug!("[XMTP] Skipping full DM sync (throttled)");
+            }
 
             let args = xmtp_db::encrypted_store::group::GroupQueryArgs {
                 conversation_type: Some(ConversationType::Dm),
+                consent_states: Some(consent_states.clone()),
+                include_duplicate_dms: true,
                 ..Default::default()
             };
 
@@ -596,39 +744,91 @@ to get below the {max} installation cap..."
                         (None, None, None)
                     };
 
-                results.push(ConversationInfo {
+                let info = ConversationInfo {
                     id: group_id_hex,
                     peer_address,
                     last_message,
                     last_message_at,
                     last_message_sender,
-                });
+                };
+                results.push(info);
             }
 
+            results.sort_by(|a, b| {
+                b.last_message_at
+                    .unwrap_or(0)
+                    .cmp(&a.last_message_at.unwrap_or(0))
+                    .then_with(|| a.id.cmp(&b.id))
+            });
             Ok(results)
         })
     }
 
     /// Get or create a DM conversation with a peer.
     pub fn get_or_create_dm(&self, peer_address: &str) -> Result<String, String> {
+        self.get_or_create_dm_with_timeout(peer_address, Duration::from_secs(20))
+    }
+
+    /// Get or create a DM conversation with a timeout.
+    pub fn get_or_create_dm_with_timeout(
+        &self,
+        peer_address: &str,
+        timeout: Duration,
+    ) -> Result<String, String> {
+        self.refresh_dm_for_peer(peer_address, timeout)
+    }
+
+    /// Refresh DM state from the network and return the current DM conversation id for a peer.
+    ///
+    /// This intentionally resolves by peer identity rather than trusting a previously cached
+    /// conversation id, because DM group ids can change after stitching/sync.
+    pub fn refresh_dm_for_peer(
+        &self,
+        peer_address: &str,
+        timeout: Duration,
+    ) -> Result<String, String> {
         let client = get_client(&self.client)?;
-        let peer = peer_address.to_string();
+        let peer = peer_address.trim().to_string();
+        if !is_evm_address(&peer) {
+            return Err(format!(
+                "refresh_dm_for_peer expects an EVM address, got: {peer}"
+            ));
+        }
 
         self.runtime.block_on(async {
-            let dm = if peer.starts_with("0x") {
+            let dm_future = async {
+                match client
+                    .sync_all_welcomes_and_groups(Some(dm_consent_states()))
+                    .await
+                {
+                    Ok(summary) => {
+                        log::info!(
+                            "[XMTP] Refreshed welcomes/groups before DM lookup for {peer}: {summary:?}"
+                        );
+                    }
+                    Err(e) => {
+                        log::warn!("[XMTP] sync_all_welcomes_and_groups before DM lookup failed: {e}");
+                    }
+                }
+
                 let identifier = Identifier::Ethereum(ident::Ethereum(peer.to_lowercase()));
-                client
+                let dm = client
                     .find_or_create_dm_by_identity(identifier, None)
                     .await
-                    .map_err(|e| format!("create_dm_by_identity: {e}"))?
-            } else {
-                client
-                    .find_or_create_dm(&peer, None)
-                    .await
-                    .map_err(|e| format!("create_dm: {e}"))?
+                    .map_err(|e| format!("create_dm_by_identity: {e} | debug={e:?}"))?;
+
+                if !dm.is_active().map_err(|e| format!("dm_is_active: {e}"))? {
+                    return Err(format!(
+                        "resolved DM is inactive after sync (peer={peer}); cannot send on stale DM"
+                    ));
+                }
+
+                Ok::<String, String>(hex::encode(&dm.group_id))
             };
 
-            Ok(hex::encode(&dm.group_id))
+            tokio::time::timeout(timeout, dm_future)
+                .await
+                .map_err(|_| format!("refresh_dm timed out after {}s", timeout.as_secs()))?
         })
     }
 
@@ -639,7 +839,15 @@ to get below the {max} installation cap..."
         let content = content.to_string();
 
         self.runtime.block_on(async {
-            let group = client.group(&group_id).map_err(|e| format!("group: {e}"))?;
+            let group = match client.stitched_group(&group_id) {
+                Ok(group) => group,
+                Err(stitched_err) => {
+                    log::warn!(
+                        "[XMTP] stitched_group failed for {conversation_id}: {stitched_err}; falling back to group()"
+                    );
+                    client.group(&group_id).map_err(|e| format!("group: {e}"))?
+                }
+            };
 
             let encoded = TextCodec::encode(content).map_err(|e| format!("encode: {e}"))?;
             let bytes = encoded.encode_to_vec();
@@ -678,10 +886,27 @@ to get below the {max} installation cap..."
         let conv_id = conversation_id.to_string();
 
         self.runtime.block_on(async {
-            let group = client.group(&group_id).map_err(|e| format!("group: {e}"))?;
+            let group = match client.stitched_group(&group_id) {
+                Ok(group) => group,
+                Err(stitched_err) => {
+                    log::warn!(
+                        "[XMTP] stitched_group failed for {conversation_id}: {stitched_err}; falling back to group()"
+                    );
+                    client.group(&group_id).map_err(|e| format!("group: {e}"))?
+                }
+            };
 
             // Sync to get latest messages
-            group.sync().await.map_err(|e| format!("sync: {e}"))?;
+            if let Err(e) = group.sync().await {
+                let sync_err = e.to_string();
+                if sync_err.to_ascii_lowercase().contains("inactive") {
+                    log::warn!(
+                        "[XMTP] sync failed for inactive group {conv_id}; loading local messages only"
+                    );
+                } else {
+                    return Err(format!("sync: {e}"));
+                }
+            }
 
             let args = MsgQueryArgs {
                 kind: Some(GroupMessageKind::Application),
@@ -712,7 +937,15 @@ to get below the {max} installation cap..."
         let group_id = hex::decode(conversation_id).map_err(|e| format!("hex: {e}"))?;
         let conv_id = conversation_id.to_string();
 
-        let group = client.group(&group_id).map_err(|e| format!("group: {e}"))?;
+        let group = match client.stitched_group(&group_id) {
+            Ok(group) => group,
+            Err(stitched_err) => {
+                log::warn!(
+                    "[XMTP] stitched_group failed for {conversation_id}: {stitched_err}; falling back to group()"
+                );
+                client.group(&group_id).map_err(|e| format!("group: {e}"))?
+            }
+        };
 
         self.runtime.spawn(async move {
             match group.stream_owned().await {
@@ -747,7 +980,15 @@ to get below the {max} installation cap..."
     {
         let client = get_client(&self.client)?;
         let group_id = hex::decode(conversation_id).map_err(|e| format!("hex: {e}"))?;
-        let group = client.group(&group_id).map_err(|e| format!("group: {e}"))?;
+        let group = match client.stitched_group(&group_id) {
+            Ok(group) => group,
+            Err(stitched_err) => {
+                log::warn!(
+                    "[XMTP] stitched_group failed for {conversation_id}: {stitched_err}; falling back to group()"
+                );
+                client.group(&group_id).map_err(|e| format!("group: {e}"))?
+            }
+        };
 
         self.runtime.spawn(async move {
             match group.stream_owned().await {
@@ -784,6 +1025,7 @@ to get below the {max} installation cap..."
         F: Fn(XmtpMessage) + Send + 'static,
     {
         let client = get_client(&self.client)?;
+        log::info!("[XMTP] Starting stream_all_messages");
 
         self.runtime.spawn(async move {
             match client
@@ -809,6 +1051,42 @@ to get below the {max} installation cap..."
                 }
                 Err(e) => {
                     log::error!("[XMTP] Failed to start stream-all: {e}");
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    /// Stream DM conversation updates (including newly discovered welcomes/groups).
+    pub fn stream_dm_conversations<F>(&self, callback: F) -> Result<(), String>
+    where
+        F: Fn(String) + Send + 'static,
+    {
+        let client = get_client(&self.client)?;
+        log::info!("[XMTP] Starting stream_dm_conversations");
+
+        self.runtime.spawn(async move {
+            match client
+                .stream_conversations_owned(Some(ConversationType::Dm), true)
+                .await
+            {
+                Ok(mut stream) => {
+                    while let Some(result) = stream.next().await {
+                        match result {
+                            Ok(group) => {
+                                callback(hex::encode(&group.group_id));
+                            }
+                            Err(e) => {
+                                log::error!("[XMTP] Conversation stream error: {e}");
+                                break;
+                            }
+                        }
+                    }
+                    log::info!("[XMTP] stream_dm_conversations ended");
+                }
+                Err(e) => {
+                    log::error!("[XMTP] Failed to start DM conversation stream: {e}");
                 }
             }
         });

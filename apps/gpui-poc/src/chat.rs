@@ -3,7 +3,9 @@
 //! Auto-connects to XMTP when authenticated. Falls back to empty state
 //! when not connected. Messages stream in real-time.
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use alloy_primitives::keccak256;
@@ -12,10 +14,12 @@ use gpui::*;
 use gpui_component::input::{Input, InputEvent, InputState};
 use gpui_component::theme::Theme;
 use gpui_component::{ActiveTheme, StyledExt};
+use serde::{Deserialize, Serialize};
 
 use crate::lit_wallet::LitWalletService;
+use crate::voice::desktop_handoff::{jacktrip_web_url, launch_jacktrip_desktop};
 use crate::voice::{ChatHistoryItem, ScarlettVoiceController, VoiceSnapshot, VoiceState};
-use crate::xmtp_service::XmtpService;
+use crate::xmtp_service::{XmtpMessage, XmtpService};
 
 // =============================================================================
 // Data types (UI-side — mapped from xmtp_service types)
@@ -274,6 +278,162 @@ fn lock_xmtp<'a>(xmtp: &'a Arc<Mutex<XmtpService>>) -> std::sync::MutexGuard<'a,
     }
 }
 
+fn run_with_timeout<T, F>(op_name: &str, timeout: Duration, op: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    let started = Instant::now();
+    log::info!(
+        "[Chat] Starting op '{op_name}' with timeout={}s",
+        timeout.as_secs()
+    );
+    let (tx, rx) = std::sync::mpsc::sync_channel(1);
+    std::thread::spawn(move || {
+        let _ = tx.send(op());
+    });
+    match rx.recv_timeout(timeout) {
+        Ok(Ok(value)) => {
+            log::info!(
+                "[Chat] Op '{op_name}' completed in {}ms",
+                started.elapsed().as_millis()
+            );
+            Ok(value)
+        }
+        Ok(Err(err)) => {
+            log::warn!(
+                "[Chat] Op '{op_name}' failed in {}ms: {err}",
+                started.elapsed().as_millis()
+            );
+            Err(err)
+        }
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+            let msg = format!("{op_name} timed out after {}s", timeout.as_secs());
+            log::error!(
+                "[Chat] Op '{op_name}' timed out in {}ms",
+                started.elapsed().as_millis()
+            );
+            Err(msg)
+        }
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+            let msg = format!("{op_name} worker disconnected");
+            log::error!(
+                "[Chat] Op '{op_name}' worker disconnected in {}ms",
+                started.elapsed().as_millis()
+            );
+            Err(msg)
+        }
+    }
+}
+
+fn is_xmtp_identity_validation_error(err: &str) -> bool {
+    let lower = err.to_ascii_lowercase();
+    lower.contains("inboxvalidationfailed")
+        || lower.contains("intent [")
+        || lower.contains("create_dm_by_identity_retry")
+        || lower.contains("create_dm_retry")
+}
+
+fn is_xmtp_inactive_error(err: &str) -> bool {
+    err.to_ascii_lowercase().contains("inactive")
+}
+
+fn should_trigger_xmtp_hard_reset(err: &str) -> bool {
+    let lower = err.to_ascii_lowercase();
+    lower.contains("database disk image is malformed")
+        || lower.contains("file is not a database")
+        || (lower.contains("sqlite") && lower.contains("corrupt"))
+}
+
+fn send_with_dm_reactivate(
+    xmtp: &Arc<Mutex<XmtpService>>,
+    conversation_id: &str,
+    peer_address: Option<&str>,
+    content: &str,
+) -> Result<String, String> {
+    log::info!(
+        "[Chat] Sending message: conv_id={conversation_id}, peer_present={}, content_len={}",
+        peer_address.is_some(),
+        content.len()
+    );
+    let first_send = {
+        let svc = lock_xmtp(xmtp);
+        svc.send_message(conversation_id, content)
+    };
+    match first_send {
+        Ok(()) => Ok(conversation_id.to_string()),
+        Err(err) => {
+            let Some(peer) = peer_address.filter(|peer| is_evm_address(peer)) else {
+                return Err(err);
+            };
+            if !is_xmtp_inactive_error(&err) && !is_xmtp_identity_validation_error(&err) {
+                return Err(err);
+            }
+            log::warn!(
+                "[Chat] Send failed on {conversation_id}; resolving DM by peer before retry: peer={peer}, err={err}"
+            );
+            let resolved_conv_id =
+                lock_xmtp(xmtp).refresh_dm_for_peer(peer, Duration::from_secs(8))?;
+            let retry_send = {
+                let svc = lock_xmtp(xmtp);
+                svc.send_message(&resolved_conv_id, content)
+            };
+            if let Err(retry_err) = retry_send {
+                if is_xmtp_inactive_error(&retry_err) {
+                    return Err(format!(
+                        "{retry_err}; conversation remains inactive after DM refresh (peer={peer})"
+                    ));
+                }
+                return Err(format!("{err}; retry after DM refresh failed: {retry_err}"));
+            }
+            if resolved_conv_id != conversation_id {
+                log::info!(
+                    "[Chat] Send remapped to stitched DM: old_conv_id={conversation_id}, new_conv_id={resolved_conv_id}"
+                );
+            }
+            Ok(resolved_conv_id)
+        }
+    }
+}
+
+fn load_messages_with_dm_reactivate(
+    xmtp: &Arc<Mutex<XmtpService>>,
+    conversation_id: &str,
+    peer_address: Option<&str>,
+    limit: Option<i64>,
+) -> Result<(String, Vec<XmtpMessage>), String> {
+    log::info!(
+        "[Chat] Loading messages: conv_id={conversation_id}, peer_present={}",
+        peer_address.is_some()
+    );
+    let first_load = {
+        let svc = lock_xmtp(xmtp);
+        svc.load_messages(conversation_id, limit)
+    };
+    match first_load {
+        Ok(msgs) => Ok((conversation_id.to_string(), msgs)),
+        Err(err) => {
+            let Some(peer) = peer_address.filter(|peer| is_evm_address(peer)) else {
+                return Err(err);
+            };
+            if !is_xmtp_inactive_error(&err) && !is_xmtp_identity_validation_error(&err) {
+                return Err(err);
+            }
+            log::warn!(
+                "[Chat] Load failed on {conversation_id}; resolving DM by peer before retry: peer={peer}, err={err}"
+            );
+            let retry_conv_id =
+                lock_xmtp(xmtp).refresh_dm_for_peer(peer, Duration::from_secs(8))?;
+            let msgs = lock_xmtp(xmtp)
+                .load_messages(&retry_conv_id, limit)
+                .map_err(|retry_err| {
+                    format!("{err}; retry after DM refresh failed: {retry_err}")
+                })?;
+            Ok((retry_conv_id, msgs))
+        }
+    }
+}
+
 fn now_unix_ns() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -301,6 +461,81 @@ fn make_scarlett_message(content: String) -> ChatMessage {
         sent_at_ns,
         is_own: false,
     }
+}
+
+const JACKTRIP_INVITE_PREFIX: &str = "[heaven-jacktrip-room-v1]"; // legacy format
+const JACKTRIP_INVITE_HEADER: &str = "Heaven JackTrip Invite";
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct JackTripRoomInvite {
+    version: u8,
+    invite_id: String,
+    room_id: String,
+    host_wallet: String,
+    host_display: String,
+    created_at_ms: i64,
+    join_url: String,
+}
+
+fn encode_jacktrip_invite(invite: &JackTripRoomInvite) -> Result<String, String> {
+    if invite.join_url.trim().is_empty() {
+        return Err("invite join URL is empty".to_string());
+    }
+    Ok(format!(
+        "{JACKTRIP_INVITE_HEADER}\nInvite: {}\nRoom: {}\nHost: {}\nHost Wallet: {}\nJoin: {}",
+        invite.invite_id, invite.room_id, invite.host_display, invite.host_wallet, invite.join_url
+    ))
+}
+
+fn parse_jacktrip_invite(content: &str) -> Option<JackTripRoomInvite> {
+    let trimmed = content.trim();
+    if let Some(payload) = trimmed.strip_prefix(JACKTRIP_INVITE_PREFIX) {
+        // Backward compatibility for the initial machine-only payload.
+        return serde_json::from_str(payload).ok();
+    }
+
+    let mut lines = trimmed.lines();
+    if lines.next()?.trim() != JACKTRIP_INVITE_HEADER {
+        return None;
+    }
+
+    let mut invite_id: Option<String> = None;
+    let mut room_id: Option<String> = None;
+    let mut host_display: Option<String> = None;
+    let mut host_wallet: Option<String> = None;
+    let mut join_url: Option<String> = None;
+
+    for line in lines {
+        let line = line.trim();
+        if let Some(value) = line.strip_prefix("Invite:") {
+            invite_id = Some(value.trim().to_string());
+        } else if let Some(value) = line.strip_prefix("Room:") {
+            room_id = Some(value.trim().to_string());
+        } else if let Some(value) = line.strip_prefix("Host:") {
+            host_display = Some(value.trim().to_string());
+        } else if let Some(value) = line.strip_prefix("Host Wallet:") {
+            host_wallet = Some(value.trim().to_string());
+        } else if let Some(value) = line.strip_prefix("Join:") {
+            join_url = Some(value.trim().to_string());
+        }
+    }
+
+    Some(JackTripRoomInvite {
+        version: 1,
+        invite_id: invite_id?,
+        room_id: room_id?,
+        host_wallet: host_wallet?,
+        host_display: host_display?,
+        created_at_ms: 0,
+        join_url: join_url?,
+    })
+}
+
+fn preview_text_for_content(content: &str) -> String {
+    if let Some(invite) = parse_jacktrip_invite(content) {
+        return normalize_preview_text(&format!("JackTrip invite from {}", invite.host_display));
+    }
+    normalize_preview_text(content)
 }
 
 const DEFAULT_MEGAETH_RPC_URL: &str = "https://carrot.megaeth.com/rpc";
@@ -490,6 +725,17 @@ pub struct ChatView {
     ai_sending: bool,
     voice_controller: Arc<Mutex<ScarlettVoiceController>>,
     voice_error: Option<String>,
+    session_handoff: HashMap<String, SessionHandoffState>,
+    xmtp_hard_reset_attempted: bool,
+    global_stream_generation: u64,
+    last_stream_refresh_at: Option<Instant>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct SessionHandoffState {
+    opening: bool,
+    last_info: Option<String>,
+    last_error: Option<String>,
 }
 
 impl ChatView {
@@ -556,6 +802,10 @@ impl ChatView {
             ai_sending: false,
             voice_controller: voice_controller.clone(),
             voice_error: None,
+            session_handoff: HashMap::new(),
+            xmtp_hard_reset_attempted: false,
+            global_stream_generation: 0,
+            last_stream_refresh_at: None,
         };
         view.ensure_scarlett_conversation();
 
@@ -604,6 +854,7 @@ impl ChatView {
                 self.try_connect(cx);
             } else if self.own_address.is_none() {
                 // Logged out
+                self.global_stream_generation = self.global_stream_generation.wrapping_add(1);
                 lock_xmtp(&self.xmtp).disconnect();
                 self.connected = false;
                 self.conversations.clear();
@@ -646,9 +897,48 @@ impl ChatView {
     }
 
     fn rebuild_conversations(&mut self, mut xmpt: Vec<ConversationItem>) {
+        let previous_active_id = self.active_conversation_id.clone();
+        let previous_active_peer = previous_active_id.as_ref().and_then(|id| {
+            self.conversations
+                .iter()
+                .find(|c| &c.id == id)
+                .map(|c| c.peer_address.clone())
+        });
+
         xmpt.retain(|c| c.id != SCARLETT_CONVERSATION_ID);
         self.conversations = xmpt;
         self.ensure_scarlett_conversation();
+
+        let Some(active_id) = previous_active_id else {
+            return;
+        };
+        if active_id == SCARLETT_CONVERSATION_ID {
+            self.active_conversation_id = Some(SCARLETT_CONVERSATION_ID.to_string());
+            self.messages = self.scarlett_messages.clone();
+            return;
+        }
+        if self.conversations.iter().any(|c| c.id == active_id) {
+            return;
+        }
+        if let Some(peer) = previous_active_peer {
+            if let Some(remapped) = self
+                .conversations
+                .iter()
+                .find(|c| c.peer_address.eq_ignore_ascii_case(&peer))
+            {
+                log::info!(
+                    "[Chat] Active conversation remapped by peer: old_id={active_id}, new_id={}",
+                    remapped.id
+                );
+                self.active_conversation_id = Some(remapped.id.clone());
+                return;
+            }
+        }
+        log::warn!(
+            "[Chat] Active conversation {active_id} no longer exists after refresh; switching to Scarlett"
+        );
+        self.active_conversation_id = Some(SCARLETT_CONVERSATION_ID.to_string());
+        self.messages = self.scarlett_messages.clone();
     }
 
     fn is_scarlett_active(&self) -> bool {
@@ -724,7 +1014,11 @@ impl ChatView {
                         log::info!("[Chat] XMTP connected: {inbox_id}");
                         this.connected = true;
                         this.connect_error = None;
+                        this.xmtp_hard_reset_attempted = false;
                         this.refresh_conversations(cx);
+                        this.start_global_message_stream(cx);
+                        this.start_global_conversation_stream(cx);
+                        this.start_periodic_conversation_refresh(cx);
                     }
                     Err(e) => {
                         log::error!("[Chat] XMTP connect failed: {e}");
@@ -734,6 +1028,160 @@ impl ChatView {
                 cx.notify();
             });
         })
+        .detach();
+    }
+
+    fn start_global_message_stream(&mut self, cx: &mut Context<Self>) {
+        self.global_stream_generation = self.global_stream_generation.wrapping_add(1);
+        let stream_generation = self.global_stream_generation;
+        let xmtp = self.xmtp.clone();
+        let own_inbox = lock_xmtp(&xmtp)
+            .my_inbox_id()
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+
+        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            let (tx, rx) = smol::channel::unbounded::<XmtpMessage>();
+
+            std::thread::spawn(move || {
+                let service = lock_xmtp(&xmtp);
+                if let Err(e) = service.stream_all_messages(move |msg| {
+                    let _ = tx.send_blocking(msg);
+                }) {
+                    log::error!("[Chat] Failed to start global message stream: {e}");
+                }
+            });
+
+            while let Ok(msg) = rx.recv().await {
+                let keep_running = this
+                    .update(cx, |this, cx| {
+                        if this.global_stream_generation != stream_generation || !this.connected {
+                            return false;
+                        }
+
+                        let sent_at_ns = msg.sent_at_ns.parse::<i64>().unwrap_or(0);
+                        let is_known_conversation =
+                            this.conversations.iter().any(|c| c.id == msg.conversation_id);
+
+                        if is_known_conversation {
+                            this.touch_conversation_preview(
+                                &msg.conversation_id,
+                                &msg.content,
+                                sent_at_ns,
+                            );
+
+                            if this.active_conversation_id.as_deref() == Some(&msg.conversation_id) {
+                                let chat_msg = ChatMessage {
+                                    id: msg.id.clone(),
+                                    sender_address: msg.sender_address.clone(),
+                                    content: msg.content.clone(),
+                                    sent_at_ns,
+                                    is_own: msg.sender_address == own_inbox,
+                                };
+                                if !this.messages.iter().any(|m| m.id == chat_msg.id) {
+                                    this.messages.push(chat_msg);
+                                }
+                            }
+                            cx.notify();
+                            return true;
+                        }
+
+                        // New conversation ID observed from stream (often from a new peer message
+                        // or stitched/remapped DM). Refresh list with a small throttle.
+                        let should_refresh = this
+                            .last_stream_refresh_at
+                            .map(|last| last.elapsed() >= Duration::from_secs(2))
+                            .unwrap_or(true);
+                        if should_refresh {
+                            this.last_stream_refresh_at = Some(Instant::now());
+                            log::info!(
+                                "[Chat] Global stream discovered unseen conversation {}; refreshing list",
+                                msg.conversation_id
+                            );
+                            this.refresh_conversations(cx);
+                        }
+
+                        true
+                    })
+                    .unwrap_or(false);
+                if !keep_running {
+                    break;
+                }
+            }
+        })
+        .detach();
+    }
+
+    fn start_global_conversation_stream(&mut self, cx: &mut Context<Self>) {
+        let stream_generation = self.global_stream_generation;
+        let xmtp = self.xmtp.clone();
+
+        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            let (tx, rx) = smol::channel::unbounded::<String>();
+
+            std::thread::spawn(move || {
+                let service = lock_xmtp(&xmtp);
+                if let Err(e) = service.stream_dm_conversations(move |conversation_id| {
+                    let _ = tx.send_blocking(conversation_id);
+                }) {
+                    log::error!("[Chat] Failed to start DM conversation stream: {e}");
+                }
+            });
+
+            while let Ok(conversation_id) = rx.recv().await {
+                let keep_running = this
+                    .update(cx, |this, cx| {
+                        if this.global_stream_generation != stream_generation || !this.connected {
+                            return false;
+                        }
+
+                        if this.conversations.iter().any(|c| c.id == conversation_id) {
+                            return true;
+                        }
+
+                        let should_refresh = this
+                            .last_stream_refresh_at
+                            .map(|last| last.elapsed() >= Duration::from_secs(2))
+                            .unwrap_or(true);
+                        if should_refresh {
+                            this.last_stream_refresh_at = Some(Instant::now());
+                            log::info!(
+                                "[Chat] Conversation stream discovered unseen DM {}; refreshing list",
+                                conversation_id
+                            );
+                            this.refresh_conversations(cx);
+                        }
+                        true
+                    })
+                    .unwrap_or(false);
+                if !keep_running {
+                    break;
+                }
+            }
+        })
+        .detach();
+    }
+
+    fn start_periodic_conversation_refresh(&mut self, cx: &mut Context<Self>) {
+        let stream_generation = self.global_stream_generation;
+        cx.spawn(
+            async move |this: WeakEntity<Self>, cx: &mut AsyncApp| loop {
+                // Keep periodic list refresh lightweight; global stream handles most real-time updates.
+                smol::Timer::after(Duration::from_secs(15)).await;
+                let keep_running = this
+                    .update(cx, |this, cx| {
+                        if this.global_stream_generation != stream_generation || !this.connected {
+                            return false;
+                        }
+                        this.refresh_conversations(cx);
+                        true
+                    })
+                    .unwrap_or(false);
+                if !keep_running {
+                    break;
+                }
+            },
+        )
         .detach();
     }
 
@@ -816,7 +1264,7 @@ impl ChatView {
         };
 
         let mut conv = self.conversations.remove(idx);
-        conv.last_message = Some(normalize_preview_text(content));
+        conv.last_message = Some(preview_text_for_content(content));
         conv.last_message_at = Some(sent_at_ns / 1_000_000);
         self.conversations.insert(0, conv);
     }
@@ -843,14 +1291,14 @@ impl ChatView {
                                 peer_nationality: None, // TODO: resolve from profile
                                 last_message: c
                                     .last_message
-                                    .map(|msg| normalize_preview_text(&msg)),
+                                    .map(|msg| preview_text_for_content(&msg)),
                                 last_message_at: c.last_message_at,
                                 unread: false, // TODO: track unread state
                                 peer_address: c.peer_address,
                             })
                             .collect();
                         this.rebuild_conversations(mapped);
-                        log::info!("[Chat] Loaded {} conversations", this.conversations.len());
+                        log::debug!("[Chat] Loaded {} conversations", this.conversations.len());
                     }
                     Err(e) => {
                         log::error!("[Chat] Failed to list conversations: {e}");
@@ -879,36 +1327,63 @@ impl ChatView {
         // Load messages from XMTP
         let xmtp = self.xmtp.clone();
         let conv_id = id.clone();
+        let peer_address = self
+            .conversations
+            .iter()
+            .find(|c| c.id == conv_id)
+            .and_then(|c| {
+                if is_evm_address(&c.peer_address) {
+                    Some(c.peer_address.clone())
+                } else {
+                    log::warn!(
+                        "[Chat] Skipping DM peer-resolution for conv_id={conv_id}; peer is not an EVM address: {}",
+                        c.peer_address
+                    );
+                    None
+                }
+            });
         let own_inbox = lock_xmtp(&xmtp)
             .my_inbox_id()
             .map(|s| s.to_string())
             .unwrap_or_default();
 
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            let result = std::thread::spawn({
+            let result = smol::unblock({
                 let xmtp = xmtp.clone();
                 let conv_id = conv_id.clone();
-                move || lock_xmtp(&xmtp).load_messages(&conv_id, None)
+                let peer_address = peer_address.clone();
+                move || {
+                    run_with_timeout("load messages", Duration::from_secs(15), move || {
+                        load_messages_with_dm_reactivate(
+                            &xmtp,
+                            &conv_id,
+                            peer_address.as_deref(),
+                            None,
+                        )
+                    })
+                }
             })
-            .join()
-            .map_err(|_| "Thread panicked".to_string())
-            .and_then(|r| r);
+            .await;
 
             let _ = this.update(cx, |this, cx| {
                 // Only update if this conversation is still active
                 if this.active_conversation_id.as_ref() != Some(&conv_id) {
                     return;
                 }
-                match result {
-                    Ok(msgs) => {
+                match &result {
+                    Ok((resolved_conv_id, msgs)) => {
+                        if resolved_conv_id != &conv_id {
+                            this.active_conversation_id = Some(resolved_conv_id.clone());
+                            this.refresh_conversations(cx);
+                        }
                         this.messages = msgs
-                            .into_iter()
+                            .iter()
                             .map(|m| {
                                 let is_own = m.sender_address == own_inbox;
                                 ChatMessage {
-                                    id: m.id,
-                                    sender_address: m.sender_address,
-                                    content: m.content,
+                                    id: m.id.clone(),
+                                    sender_address: m.sender_address.clone(),
+                                    content: m.content.clone(),
                                     sent_at_ns: m.sent_at_ns.parse().unwrap_or(0),
                                     is_own,
                                 }
@@ -916,7 +1391,7 @@ impl ChatView {
                             .collect();
                         if let Some(last) = this.messages.last().cloned() {
                             this.touch_conversation_preview(
-                                &conv_id,
+                                resolved_conv_id,
                                 &last.content,
                                 last.sent_at_ns,
                             );
@@ -924,58 +1399,14 @@ impl ChatView {
                     }
                     Err(e) => {
                         log::error!("[Chat] Failed to load messages: {e}");
+                        if should_trigger_xmtp_hard_reset(e) && !this.xmtp_hard_reset_attempted {
+                            this.xmtp_hard_reset_attempted = true;
+                            this.recover_xmtp_session_hard(cx);
+                        }
                     }
                 }
                 cx.notify();
             });
-
-            // Start streaming new messages for this conversation via channel
-            let xmtp2 = xmtp.clone();
-            let conv_id2 = conv_id.clone();
-            let own_inbox2 = own_inbox.clone();
-
-            let (tx, rx) = smol::channel::unbounded::<ChatMessage>();
-
-            // Spawn the XMTP stream on a background thread (sends to channel)
-            std::thread::spawn(move || {
-                let service = lock_xmtp(&xmtp2);
-                let _ = service.stream_messages(&conv_id2, move |msg| {
-                    let is_own = msg.sender_address == own_inbox2;
-                    let chat_msg = ChatMessage {
-                        id: msg.id,
-                        sender_address: msg.sender_address,
-                        content: msg.content,
-                        sent_at_ns: msg.sent_at_ns.parse().unwrap_or(0),
-                        is_own,
-                    };
-                    let _ = tx.send_blocking(chat_msg);
-                });
-            });
-
-            // Poll the channel on the GPUI side (same async task)
-            let conv_id_for_poll = conv_id.clone();
-            while let Ok(chat_msg) = rx.recv().await {
-                let should_continue = this
-                    .update(cx, |this, cx: &mut Context<ChatView>| {
-                        if this.active_conversation_id.as_ref() == Some(&conv_id_for_poll) {
-                            if !this.messages.iter().any(|m| m.id == chat_msg.id) {
-                                this.messages.push(chat_msg);
-                                if let Some(last) = this.messages.last().cloned() {
-                                    this.touch_conversation_preview(
-                                        &conv_id_for_poll,
-                                        &last.content,
-                                        last.sent_at_ns,
-                                    );
-                                }
-                                cx.notify();
-                            }
-                        }
-                    })
-                    .is_ok();
-                if !should_continue {
-                    break;
-                }
-            }
         })
         .detach();
     }
@@ -991,6 +1422,21 @@ impl ChatView {
             Some(id) => id.clone(),
             None => return,
         };
+        let peer_address = self
+            .conversations
+            .iter()
+            .find(|c| c.id == conv_id)
+            .and_then(|c| {
+                if is_evm_address(&c.peer_address) {
+                    Some(c.peer_address.clone())
+                } else {
+                    log::warn!(
+                        "[Chat] Sending without DM peer-resolution for conv_id={conv_id}; peer is not an EVM address: {}",
+                        c.peer_address
+                    );
+                    None
+                                }
+            });
 
         // Clear input
         self.input_state.update(cx, |state, cx| {
@@ -1004,18 +1450,73 @@ impl ChatView {
 
         // Send via XMTP in background
         let xmtp = self.xmtp.clone();
-        cx.spawn(async move |_this: WeakEntity<Self>, _cx: &mut AsyncApp| {
-            let result = std::thread::spawn(move || lock_xmtp(&xmtp).send_message(&conv_id, &text))
-                .join()
-                .map_err(|_| "Thread panicked".to_string())
-                .and_then(|r| r);
+        let conv_id_for_send = conv_id.clone();
+        let conv_id_for_ui = conv_id.clone();
+        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            let result = smol::unblock(move || {
+                send_with_dm_reactivate(&xmtp, &conv_id_for_send, peer_address.as_deref(), &text)
+            })
+            .await;
 
-            if let Err(e) = result {
-                log::error!("[Chat] Failed to send message: {e}");
-                // TODO: mark message as failed in UI
-            }
+            let _ = this.update(cx, |this, cx| match result {
+                Ok(sent_conv_id) => {
+                    if sent_conv_id != conv_id_for_ui {
+                        this.select_conversation(sent_conv_id, cx);
+                        this.refresh_conversations(cx);
+                    }
+                }
+                Err(e) => {
+                    log::error!("[Chat] Failed to send message: {e}");
+                    if should_trigger_xmtp_hard_reset(&e) && !this.xmtp_hard_reset_attempted {
+                        this.xmtp_hard_reset_attempted = true;
+                        this.recover_xmtp_session_hard(cx);
+                    } else if is_xmtp_identity_validation_error(&e) {
+                        this.recover_xmtp_session(cx);
+                    }
+                    // TODO: mark message as failed in UI
+                }
+            });
         })
         .detach();
+    }
+
+    fn recover_xmtp_session(&mut self, cx: &mut Context<Self>) {
+        log::warn!("[Chat] Triggering XMTP self-heal: disconnect + reconnect");
+        self.global_stream_generation = self.global_stream_generation.wrapping_add(1);
+        {
+            let mut svc = lock_xmtp(&self.xmtp);
+            svc.disconnect();
+        }
+        self.connected = false;
+        self.connecting = false;
+        self.connect_error = None;
+        self.refresh_conversations(cx);
+        self.try_connect(cx);
+    }
+
+    fn recover_xmtp_session_hard(&mut self, cx: &mut Context<Self>) {
+        log::warn!("[Chat] Triggering XMTP hard self-heal: reset local DB + reconnect");
+        self.global_stream_generation = self.global_stream_generation.wrapping_add(1);
+        let own_address = self.own_address.clone();
+        {
+            let mut svc = lock_xmtp(&self.xmtp);
+            if let Some(addr) = own_address.as_deref() {
+                match svc.reset_local_state_for_address(addr) {
+                    Ok(msg) => log::warn!("[Chat] XMTP hard self-heal: {msg}"),
+                    Err(err) => log::error!("[Chat] XMTP hard self-heal failed: {err}"),
+                }
+            } else {
+                log::warn!(
+                    "[Chat] XMTP hard self-heal: own address unavailable, only disconnecting"
+                );
+                svc.disconnect();
+            }
+        }
+        self.connected = false;
+        self.connecting = false;
+        self.connect_error = None;
+        self.refresh_conversations(cx);
+        self.try_connect(cx);
     }
 
     fn handle_send_scarlett_message(&mut self, text: String, cx: &mut Context<Self>) {
@@ -1183,6 +1684,281 @@ impl ChatView {
             let _ = this.update(cx, |this, cx| {
                 if let Err(err) = result {
                     this.voice_error = Some(err);
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn session_handoff_state(&self, conversation_id: &str) -> SessionHandoffState {
+        self.session_handoff
+            .get(conversation_id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn open_jacktrip_desktop_handoff(&mut self, conversation_id: String, cx: &mut Context<Self>) {
+        let state = self
+            .session_handoff
+            .entry(conversation_id.clone())
+            .or_default();
+        if state.opening {
+            return;
+        }
+        state.opening = true;
+        state.last_error = None;
+        cx.notify();
+
+        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            let result = smol::unblock(|| {
+                run_with_timeout(
+                    "open JackTrip desktop",
+                    Duration::from_secs(8),
+                    launch_jacktrip_desktop,
+                )
+            })
+            .await;
+
+            let _ = this.update(cx, |this, cx| {
+                let state = this.session_handoff.entry(conversation_id).or_default();
+                state.opening = false;
+                match result {
+                    Ok(info) => {
+                        state.last_info = Some(info);
+                        state.last_error = None;
+                    }
+                    Err(err) => {
+                        state.last_info = None;
+                        state.last_error = Some(err);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn open_jacktrip_web_handoff(&mut self, conversation_id: String, cx: &mut Context<Self>) {
+        let state = self
+            .session_handoff
+            .entry(conversation_id.clone())
+            .or_default();
+        if state.opening {
+            return;
+        }
+        state.opening = true;
+        state.last_error = None;
+        cx.notify();
+
+        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            let result = smol::unblock(|| {
+                run_with_timeout("open JackTrip web", Duration::from_secs(8), || {
+                    let url = jacktrip_web_url();
+                    open::that(&url)
+                        .map_err(|e| format!("Failed to open JackTrip web URL: {e}"))?;
+                    Ok(format!("Opened JackTrip web: {url}"))
+                })
+            })
+            .await;
+
+            let _ = this.update(cx, |this, cx| {
+                let state = this.session_handoff.entry(conversation_id).or_default();
+                state.opening = false;
+                match result {
+                    Ok(info) => {
+                        state.last_info = Some(info);
+                        state.last_error = None;
+                    }
+                    Err(err) => {
+                        state.last_info = None;
+                        state.last_error = Some(err);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn send_jacktrip_invite(&mut self, conversation_id: String, cx: &mut Context<Self>) {
+        if conversation_id == SCARLETT_CONVERSATION_ID {
+            return;
+        }
+        {
+            let state = self
+                .session_handoff
+                .entry(conversation_id.clone())
+                .or_default();
+            if state.opening {
+                log::warn!(
+                    "[Chat] Invite ignored because handoff already opening: conv_id={conversation_id}"
+                );
+                return;
+            }
+            state.opening = true;
+            state.last_error = None;
+        }
+
+        let host_wallet = self
+            .own_address
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
+        let host_display = abbreviate_address(&host_wallet);
+        let created_at_ms = now_unix_ns() / 1_000_000;
+        let invite = JackTripRoomInvite {
+            version: 1,
+            invite_id: format!("inv-{created_at_ms}"),
+            room_id: format!("room-{created_at_ms}"),
+            host_wallet,
+            host_display,
+            created_at_ms,
+            join_url: jacktrip_web_url(),
+        };
+
+        let encoded = match encode_jacktrip_invite(&invite) {
+            Ok(content) => content,
+            Err(err) => {
+                let state = self.session_handoff.entry(conversation_id).or_default();
+                state.opening = false;
+                state.last_error = Some(err);
+                state.last_info = None;
+                cx.notify();
+                return;
+            }
+        };
+
+        let xmtp = self.xmtp.clone();
+        let peer_address = self
+            .conversations
+            .iter()
+            .find(|c| c.id == conversation_id)
+            .and_then(|c| {
+                if is_evm_address(&c.peer_address) {
+                    Some(c.peer_address.clone())
+                } else {
+                    log::warn!(
+                        "[Chat] Sending invite without DM peer-resolution for conv_id={conversation_id}; peer is not an EVM address: {}",
+                        c.peer_address
+                    );
+                    None
+                }
+            });
+        log::info!(
+            "[Chat] Invite requested: conv_id={}, peer_address={}",
+            conversation_id,
+            peer_address.as_deref().unwrap_or("<unknown>")
+        );
+        let conv_id = conversation_id.clone();
+        cx.notify();
+
+        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            let result = smol::unblock(move || {
+                run_with_timeout("send JackTrip invite", Duration::from_secs(20), move || {
+                    send_with_dm_reactivate(&xmtp, &conv_id, peer_address.as_deref(), &encoded)
+                })
+            })
+            .await;
+
+            let _ = this.update(cx, |this, cx| {
+                match result {
+                    Ok(sent_conv_id) => {
+                        let mut info = "Sent JackTrip room invite".to_string();
+                        if sent_conv_id != conversation_id {
+                            this.select_conversation(sent_conv_id, cx);
+                            this.refresh_conversations(cx);
+                            info = "Sent JackTrip room invite (conversation reopened)".to_string();
+                        }
+                        let state = this
+                            .session_handoff
+                            .entry(conversation_id.clone())
+                            .or_default();
+                        state.opening = false;
+                        state.last_info = Some(info);
+                        state.last_error = None;
+                    }
+                    Err(err) => {
+                        log::error!(
+                            "[Chat] JackTrip invite failed for conv_id={}: {err}",
+                            conversation_id
+                        );
+                        let state = this
+                            .session_handoff
+                            .entry(conversation_id.clone())
+                            .or_default();
+                        state.opening = false;
+                        state.last_info = None;
+                        if should_trigger_xmtp_hard_reset(&err) && !this.xmtp_hard_reset_attempted {
+                            this.xmtp_hard_reset_attempted = true;
+                            state.last_error = Some(
+                                "Failed to send invite: XMTP local state is stuck. Resetting local XMTP state and reconnecting now; retry in ~10s."
+                                    .to_string(),
+                            );
+                            this.recover_xmtp_session_hard(cx);
+                        } else if is_xmtp_identity_validation_error(&err) {
+                            state.last_error = Some(
+                                "Failed to send invite: XMTP session validation error. Reconnecting XMTP now; retry in a few seconds."
+                                    .to_string(),
+                            );
+                            this.recover_xmtp_session(cx);
+                        } else {
+                            state.last_error = Some(format!("Failed to send invite: {err}"));
+                        }
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn join_jacktrip_invite(
+        &mut self,
+        conversation_id: String,
+        invite: JackTripRoomInvite,
+        cx: &mut Context<Self>,
+    ) {
+        let state = self
+            .session_handoff
+            .entry(conversation_id.clone())
+            .or_default();
+        if state.opening {
+            return;
+        }
+        state.opening = true;
+        state.last_error = None;
+        cx.notify();
+
+        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            let join_url = invite.join_url.clone();
+            let fallback_msg = format!(
+                "Failed opening invite URL ({join_url}); launched JackTrip desktop instead."
+            );
+            let result = smol::unblock(move || {
+                run_with_timeout("join JackTrip invite", Duration::from_secs(12), move || {
+                    match open::that(&join_url) {
+                        Ok(()) => Ok::<String, String>(format!("Opened invite: {join_url}")),
+                        Err(_) => {
+                            launch_jacktrip_desktop()?;
+                            Ok::<String, String>(fallback_msg)
+                        }
+                    }
+                })
+            })
+            .await;
+
+            let _ = this.update(cx, |this, cx| {
+                let state = this.session_handoff.entry(conversation_id).or_default();
+                state.opening = false;
+                match result {
+                    Ok(info) => {
+                        state.last_info = Some(info);
+                        state.last_error = None;
+                    }
+                    Err(err) => {
+                        state.last_info = None;
+                        state.last_error = Some(format!("Failed to join invite: {err}"));
+                    }
                 }
                 cx.notify();
             });
@@ -1426,6 +2202,11 @@ impl ChatView {
         } else {
             None
         };
+        let handoff = if is_scarlett {
+            SessionHandoffState::default()
+        } else {
+            self.session_handoff_state(&conv_id)
+        };
         let conv = self.conversations.iter().find(|cv| cv.id == conv_id);
         let display_name = conv
             .map(|cv| cv.peer_display_name.clone())
@@ -1485,6 +2266,23 @@ impl ChatView {
                                             VoiceState::Error => "Call error".to_string(),
                                         };
                                         let status_color = if voice.state == VoiceState::Error {
+                                            hsla(0., 0.7, 0.6, 1.)
+                                        } else {
+                                            c.muted_fg
+                                        };
+                                        el.child(div().text_color(status_color).child(status))
+                                    })
+                                    .when(!is_scarlett, |el| {
+                                        let status = if handoff.opening {
+                                            "Opening JackTrip...".to_string()
+                                        } else if let Some(err) = &handoff.last_error {
+                                            format!("JackTrip handoff failed: {err}")
+                                        } else if let Some(info) = &handoff.last_info {
+                                            info.clone()
+                                        } else {
+                                            "Desktop voice uses JackTrip handoff".to_string()
+                                        };
+                                        let status_color = if handoff.last_error.is_some() {
                                             hsla(0., 0.7, 0.6, 1.)
                                         } else {
                                             c.muted_fg
@@ -1594,6 +2392,87 @@ impl ChatView {
                                     },
                                 ),
                         )
+                    })
+                    .when(!is_scarlett, |el| {
+                        let conv_id_for_desktop = conv_id.clone();
+                        let conv_id_for_web = conv_id.clone();
+                        let conv_id_for_invite = conv_id.clone();
+                        el.child(
+                            div()
+                                .h_flex()
+                                .items_center()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .id("jacktrip-send-invite-btn")
+                                        .px_3()
+                                        .h(px(32.))
+                                        .rounded_full()
+                                        .bg(c.elevated)
+                                        .cursor_pointer()
+                                        .hover(|s| s.bg(hsla(0., 0., 0.23, 1.)))
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .on_click(cx.listener(move |this, _, _window, cx| {
+                                            this.send_jacktrip_invite(
+                                                conv_id_for_invite.clone(),
+                                                cx,
+                                            );
+                                        }))
+                                        .child("Invite"),
+                                )
+                                .child(
+                                    div()
+                                        .id("jacktrip-open-desktop-btn")
+                                        .px_3()
+                                        .h(px(32.))
+                                        .rounded_full()
+                                        .bg(if handoff.opening {
+                                            c.elevated
+                                        } else {
+                                            c.primary
+                                        })
+                                        .cursor_pointer()
+                                        .when(!handoff.opening, |button| {
+                                            button.hover(|s| s.bg(c.primary_hover))
+                                        })
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .on_click(cx.listener(move |this, _, _window, cx| {
+                                            this.open_jacktrip_desktop_handoff(
+                                                conv_id_for_desktop.clone(),
+                                                cx,
+                                            );
+                                        }))
+                                        .child(if handoff.opening {
+                                            "Opening..."
+                                        } else {
+                                            "Open JackTrip"
+                                        }),
+                                )
+                                .child(
+                                    div()
+                                        .id("jacktrip-open-web-btn")
+                                        .px_3()
+                                        .h(px(32.))
+                                        .rounded_full()
+                                        .bg(c.elevated)
+                                        .cursor_pointer()
+                                        .hover(|s| s.bg(hsla(0., 0., 0.23, 1.)))
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .on_click(cx.listener(move |this, _, _window, cx| {
+                                            this.open_jacktrip_web_handoff(
+                                                conv_id_for_web.clone(),
+                                                cx,
+                                            );
+                                        }))
+                                        .child("Open Web"),
+                                ),
+                        )
                     }),
             )
             // Message list (scrollable)
@@ -1608,7 +2487,7 @@ impl ChatView {
                         div().v_flex().gap_1().children(
                             self.messages
                                 .iter()
-                                .map(|msg| render_message_bubble(msg, c)),
+                                .map(|msg| self.render_message_bubble(msg, &conv_id, c, cx)),
                         ),
                     ),
             )
@@ -1694,6 +2573,103 @@ impl ChatView {
                         )
                     }),
             )
+    }
+
+    fn render_message_bubble(
+        &self,
+        msg: &ChatMessage,
+        conversation_id: &str,
+        c: &Colors,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let Some(invite) = parse_jacktrip_invite(&msg.content) else {
+            return render_plain_message_bubble(msg, c).into_any_element();
+        };
+
+        let bubble_bg = if msg.is_own {
+            Hsla {
+                h: c.primary.h,
+                s: c.primary.s * 0.4,
+                l: 0.22,
+                a: 1.,
+            }
+        } else {
+            c.elevated
+        };
+        let time_str = format_ns_to_time(msg.sent_at_ns);
+        let conv_id = conversation_id.to_string();
+        let invite_for_join = invite.clone();
+
+        let card = div()
+            .max_w(DefiniteLength::Fraction(0.8))
+            .v_flex()
+            .gap_2()
+            .child(
+                div()
+                    .px_4()
+                    .py_3()
+                    .rounded(px(16.))
+                    .bg(bubble_bg)
+                    .v_flex()
+                    .gap_2()
+                    .child(
+                        div()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(c.foreground)
+                            .child("JackTrip Room Invite"),
+                    )
+                    .child(
+                        div()
+                            .text_color(c.muted_fg)
+                            .child(format!("Host: {}", invite.host_display)),
+                    )
+                    .child(
+                        div()
+                            .text_color(c.muted_fg)
+                            .child(format!("Room: {}", invite.room_id)),
+                    )
+                    .child(
+                        div().h_flex().items_center().gap_2().child(
+                            div()
+                                .id(ElementId::NamedInteger(
+                                    "jacktrip-join-invite-btn".into(),
+                                    (msg.sent_at_ns.max(0) as u64) ^ 0xA11CE,
+                                ))
+                                .px_3()
+                                .h(px(30.))
+                                .rounded_full()
+                                .bg(c.primary)
+                                .cursor_pointer()
+                                .hover(|s| s.bg(c.primary_hover))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .on_click(cx.listener(move |this, _, _window, cx| {
+                                    this.join_jacktrip_invite(
+                                        conv_id.clone(),
+                                        invite_for_join.clone(),
+                                        cx,
+                                    );
+                                }))
+                                .child("Join in JackTrip"),
+                        ),
+                    ),
+            )
+            .child(
+                div()
+                    .text_color(c.muted_fg)
+                    .text_size(px(12.))
+                    .child(time_str),
+            );
+
+        div()
+            .w_full()
+            .h_flex()
+            .py(px(2.))
+            .when(msg.is_own, |el| el.justify_end())
+            .when(!msg.is_own, |el| el.justify_start())
+            .child(card)
+            .into_any_element()
     }
 
     fn render_compose_modal(&self, c: &Colors, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1851,7 +2827,7 @@ impl Render for ChatView {
 // Message bubble
 // =============================================================================
 
-fn render_message_bubble(msg: &ChatMessage, c: &Colors) -> impl IntoElement {
+fn render_plain_message_bubble(msg: &ChatMessage, c: &Colors) -> impl IntoElement {
     let time_str = format_ns_to_time(msg.sent_at_ns);
     let own_bubble_bg = Hsla {
         h: c.primary.h,

@@ -112,7 +112,7 @@ pub fn log_auth_result(context: &str, result: &AuthResult) {
 }
 
 pub fn log_persisted_auth(context: &str, auth: &PersistedAuth) {
-    log::info!(
+    log::debug!(
         "[Auth] {}: pkp_address={:?}, pkp_public_key={}, pkp_token_id={:?}, eoa_address={:?}, auth_method_type={:?}",
         context,
         auth.pkp_address,
@@ -297,7 +297,18 @@ pub fn load_from_disk() -> Option<PersistedAuth> {
     }
     let contents = std::fs::read_to_string(&path).ok()?;
     let parsed: PersistedAuth = serde_json::from_str(&contents).ok()?;
-    log_persisted_auth("Loaded auth from disk", &parsed);
+    log::debug!(
+        "[Auth] Loaded auth from disk: pkp_address={:?}, pkp_public_key={}, pkp_token_id={:?}, eoa_address={:?}, auth_method_type={:?}",
+        parsed.pkp_address,
+        parsed
+            .pkp_public_key
+            .as_deref()
+            .map(short_hex)
+            .unwrap_or_else(|| "-".to_string()),
+        parsed.pkp_token_id,
+        parsed.eoa_address,
+        parsed.auth_method_type
+    );
     Some(parsed)
 }
 
