@@ -4,10 +4,9 @@
   "heavenSetProfile": "QmUJnDz9Q92bSLvNQMLyPDNSkw69MA3fpYsSCnAeMAJtuy",
   "heavenClaimName": "QmQB5GsQVaNbD8QS8zcXkjBMAZUjpADfbcWVaPgL3PygSA",
   "heavenSetRecords": "QmaXJcjGbPWQ1ypKnQB3vfnDwaQ1NLEGFmN3t7gQisw9g5",
-  "contentRegisterV1": "QmcyVkadHqJnFDhkrAPu4UjyPtYBbcLKqfMuYoHJnaQvde",
-  "contentRegisterV2": "",
-  "contentAccessV1": "QmeFDbYinv28a26uVELqSpYk2SBF27j3Ci7EfdnJ8xDVhA",
-  "linkEoaV1": "QmXFkjpHT95ZWQYtz2GVdhEqh8oZscXSkDBiEpK6VEy4k1",
+  "contentRegisterV1": "QmVbhvmjcwRPx47K7UuEg8RrxZuTCbYF5DrkYbJaehBbrd",
+  "contentRegisterV2": "Qmf1UMPL2MTjC7JLGPgdtZ7nFj6X13ZDHGP71P1aYLwh8U",
+  "contentAccessV1": "QmXhzbZqvfg7b29eY3CzyV9ep4kvL9QxibKDYqBYAiQoDT",
   "postRegisterV1": "QmduQNBGLfEB1bkCFMXLjRcpBJ3wfcV675KMWWYQe5k477",
   "trackCoverV4": "QmcwLxoNyuV5KrJALfaAEBa4zspoxedEfPJba2Y3uhWYx7",
   "postTranslateV1": "QmefcfyK57V6XQeHsH9oVCfukwMiLGC4KgZVniXFBAL6Sv",
@@ -19,5 +18,7 @@
   "flagV1": "QmbCPSxieogoSVLR3HAYDffyerNE1DZGZuLFAWiwnTzzPx",
   "storyRegisterSponsor": "QmZ38qG34PKnENxzV8eejbRwiqQf2aRFKuNKqJNTXvU43Q",
   "selfVerifyMirrorV1": "Qmdo2AXCt84x6ck2Vba5xtPESEY5AW3AdJ6NU94fdd2Zt8",
-  "contentRegisterMegaethV1": "QmRFuAAYCmri8kTCmJupF9AZWhYmvKnhNhVyqr5trRfZhS"
+  "contentRegisterMegaethV1": "QmRFuAAYCmri8kTCmJupF9AZWhYmvKnhNhVyqr5trRfZhS",
+  "albumArtLoadTestV1": "QmdUrr4ZSG7sqJrP2pCTSx3jJTd1LRF9mXXRVJYdYhuzzY",
+  "contentDecryptV1": "QmUmVkMxC57nAqUmJPZmoBKeBfiZS6ZR8qzYQJvWe4W12w"
 }

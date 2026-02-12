@@ -107,6 +107,14 @@ const ACTIONS: Record<string, ActionDef> = {
       { name: 'filebase_covers_key', envVar: 'FILEBASE_COVERS_KEY' },
     ],
   },
+  albumArtLoadTestV1: {
+    name: 'albumArtLoadTestV1',
+    path: 'features/music/album-art-load-test-v1.js',
+    displayName: 'Album Art Load Test v1',
+    keys: [
+      { name: 'load_acc_api_key', envVar: 'LOAD_S3_AGENT_API_KEY' },
+    ],
+  },
   heavenSetRecords: {
     name: 'heavenSetRecords',
     path: 'features/profile/heaven-set-records-v1.js',
@@ -191,6 +199,12 @@ const ACTIONS: Record<string, ActionDef> = {
     path: 'features/music/content-register-megaeth-v1.js',
     displayName: 'Content Register MegaETH v1',
     keys: [], // No encrypted keys — sponsor PKP pays gas directly
+  },
+  contentDecryptV1: {
+    name: 'contentDecryptV1',
+    path: 'features/music/content-decrypt-v1.js',
+    displayName: 'Content Decrypt v1',
+    keys: [], // No encrypted keys — uses decryptAndCombine with existing ACC
   },
 };
 

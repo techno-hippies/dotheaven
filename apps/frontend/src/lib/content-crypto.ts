@@ -4,14 +4,14 @@
  * Encryption (upload):
  *   1. Generate random AES-256-GCM key (32 bytes)
  *   2. Encrypt audio binary with AES key (Web Crypto, no base64)
- *   3. Encrypt the AES key with Lit (contract-gated access condition on Base)
+ *   3. Encrypt the AES key with Lit (Lit Action condition reading MegaETH ContentRegistry)
  *   4. Build header: [keyLen][litCiphertext][hashLen][dataToEncryptHash][algo][ivLen][iv][...encrypted audio...]
- *   5. Return combined blob for Synapse upload + metadata for content-register-v1
+ *   5. Return combined blob for Synapse upload + metadata for content-register
  *
  * Decryption (playback):
  *   1. Parse header from fetched blob
- *   2. Client-side litClient.decrypt() recovers AES key — Lit BLS nodes enforce
- *      canAccess() on Base ContentAccessMirror during threshold decryption
+ *   2. content-decrypt-v1 Lit Action checks canAccess() on MegaETH, then
+ *      calls decryptAndCombine server-side to recover AES key
  *   3. Decrypt audio with AES key via Web Crypto
  *   4. Return plaintext audio bytes
  *
@@ -28,19 +28,20 @@
  *   [optional trailing padding bytes]
  *
  * Access condition architecture:
- * The AES key is Lit-encrypted with a contract-gated access condition that calls
- * ContentAccessMirror.canAccess(user, contentId) on Base. This avoids IPFS CID
- * pinning dependencies — action CIDs can rotate freely without affecting decryption.
- * The mirror contract is immutable and sovereign: owners always have access.
+ * The AES key is Lit-encrypted with :currentActionIpfsId bound to content-decrypt-v1.
+ * Only the decrypt Lit Action can call decryptAndCombine. The action enforces
+ * canAccess(user, contentId) on MegaETH ContentRegistry before decrypting.
+ * Single chain — no Base mirror needed.
  */
 
 import { getLitClient } from './lit/client'
 import type { PKPAuthContext } from './lit'
+import { CONTENT_DECRYPT_V1_CID } from './lit/action-cids'
 import { keccak256, encodeAbiParameters, type Hex } from 'viem'
-import { CONTENT_REGISTRY, CONTENT_ACCESS_MIRROR } from '@heaven/core'
+import { CONTENT_REGISTRY } from '@heaven/core'
 
 // Re-export for backward compatibility
-export { CONTENT_REGISTRY, CONTENT_ACCESS_MIRROR }
+export { CONTENT_REGISTRY }
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -53,8 +54,32 @@ const IV_BYTES = 12
 /** AES key size in bytes */
 const KEY_BYTES = 32
 
-/** Lit chain identifier for Base Sepolia */
-const LIT_CHAIN = 'baseSepolia'
+/**
+ * Build access conditions for content encryption.
+ *
+ * Uses :currentActionIpfsId bound to the content-decrypt-v1 Lit Action CID.
+ * This means ONLY the decrypt Lit Action can call decryptAndCombine to recover
+ * the key. The decrypt action itself enforces canAccess() on MegaETH internally.
+ *
+ * This avoids the Lit SDK v8 limitation where client-side litClient.decrypt()
+ * fails with Lit Action ACC conditions (BLSNetworkSig not supported).
+ */
+function buildAccessConditions(_contentId: string) {
+  if (!CONTENT_DECRYPT_V1_CID) {
+    throw new Error('CONTENT_DECRYPT_V1_CID not set — deploy content-decrypt-v1 first')
+  }
+  return [
+    {
+      conditionType: 'evmBasic' as const,
+      contractAddress: '' as const,
+      standardContractType: '' as const,
+      chain: 'ethereum',
+      method: '' as const,
+      parameters: [':currentActionIpfsId'],
+      returnValueTest: { comparator: '=', value: CONTENT_DECRYPT_V1_CID },
+    },
+  ]
+}
 
 // ── Content ID ────────────────────────────────────────────────────────
 
@@ -112,9 +137,9 @@ export interface ContentHeader {
 /**
  * Encrypt audio bytes for Filecoin upload.
  *
- * The AES key is encrypted with Lit using a contract-gated access condition:
- * ContentAccessMirror.canAccess(:userAddress, contentId) on Base.
- * This means any user who passes canAccess() can decrypt — no IPFS CID dependency.
+ * The AES key is encrypted with Lit using a Lit Action access condition that
+ * reads canAccess(:userAddress, contentId) from MegaETH ContentRegistry.
+ * This means any user who passes canAccess() can decrypt — single chain, no mirror needed.
  *
  * @param audio - Raw audio bytes
  * @param contentId - bytes32 hex string (bound into the encrypted payload for key-content binding)
@@ -129,9 +154,6 @@ export async function encryptAudio(
   // Validate contentId format (must be bytes32 hex)
   if (!isBytes32Hex(contentId)) {
     throw new Error(`Invalid contentId format: expected 0x-prefixed bytes32 hex, got "${contentId}"`)
-  }
-  if (!CONTENT_ACCESS_MIRROR) {
-    throw new Error('CONTENT_ACCESS_MIRROR not set — deploy ContentAccessMirror first')
   }
 
   // 1. Generate random AES-256-GCM key
@@ -150,34 +172,11 @@ export async function encryptAudio(
     await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, audio as BufferSource),
   )
 
-  // 4. Encrypt the AES key with Lit (contract-gated condition on Base)
-  //    Payload is JSON with contentId binding + base64-encoded key (safe for string round-trip)
+  // 4. Encrypt the AES key with Lit (Lit Action condition reading MegaETH ContentRegistry)
   const keyBase64 = btoa(String.fromCharCode(...rawKey))
   const payload = JSON.stringify({ contentId: contentId.toLowerCase(), key: keyBase64 })
 
-  // Contract-gated: Lit nodes call canAccess(:userAddress, contentId) on Base
-  const accessControlConditions = [
-    {
-      conditionType: 'evmContract' as const,
-      contractAddress: CONTENT_ACCESS_MIRROR,
-      chain: LIT_CHAIN,
-      functionName: 'canAccess',
-      functionParams: [':userAddress', contentId.toLowerCase()],
-      functionAbi: {
-        type: 'function' as const,
-        name: 'canAccess',
-        stateMutability: 'view' as const,
-        inputs: [
-          { type: 'address', name: 'user', internalType: 'address' },
-          { type: 'bytes32', name: 'contentId', internalType: 'bytes32' },
-        ],
-        outputs: [
-          { type: 'bool', name: '', internalType: 'bool' },
-        ],
-      },
-      returnValueTest: { key: '', comparator: '=', value: 'true' },
-    },
-  ]
+  const accessControlConditions = buildAccessConditions(contentId)
 
   const litClient = await getLitClient()
   const { ciphertext, dataToEncryptHash } = await (litClient as any).encrypt({

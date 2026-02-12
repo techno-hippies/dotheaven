@@ -10,7 +10,7 @@
  */
 
 import { createQuery } from '@tanstack/solid-query'
-import { getPrimaryName, getEnsProfile, getLinkedEoa } from '../heaven'
+import { getPrimaryName, getEnsProfile } from '../heaven'
 
 export interface PeerNameResult {
   /** Display name (heaven name, ENS, or truncated address) */
@@ -56,15 +56,6 @@ async function resolvePeerName(peerAddress: string): Promise<{
   const ensResult = await getEnsProfile(peerAddress).catch(() => null)
   if (ensResult?.name) {
     return { heavenName: null, ensName: ensResult.name, avatarUrl: ensResult.avatar }
-  }
-
-  // 3. Check if this is a PKP with a linked EOA, then lookup ENS for the EOA
-  const linkedEoa = await getLinkedEoa(peerAddress).catch(() => null)
-  if (linkedEoa) {
-    const eoaEnsResult = await getEnsProfile(linkedEoa).catch(() => null)
-    if (eoaEnsResult?.name) {
-      return { heavenName: null, ensName: eoaEnsResult.name, avatarUrl: eoaEnsResult.avatar }
-    }
   }
 
   return { heavenName: null, ensName: null, avatarUrl: null }

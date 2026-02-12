@@ -65,10 +65,6 @@ export {
 } from './playlists'
 
 export {
-  getLinkedEoa,
-} from './linked-eoa'
-
-export {
   fetchArtistInfo,
   fetchArtistPageData,
   fetchRecordingArtists,

@@ -8,11 +8,11 @@
  *
  * Download flow:
  *   1. Fetch encrypted blob from Beam CDN
- *   2. Parse header, decrypt AES key via litClient.decrypt() (client-side)
+ *   2. Parse header, decrypt AES key via content-decrypt-v1 Lit Action (server-side)
  *   3. Decrypt audio with AES key
  *
- * The Lit BLS nodes enforce the canAccess() contract condition on Base during
- * threshold decryption. No Lit Action is needed for decrypt.
+ * The decrypt Lit Action checks canAccess() on MegaETH ContentRegistry,
+ * then uses decryptAndCombine to recover the AES key server-side.
  *
  * Share flow:
  *   1. Call content-access-v1 Lit Action (grant/revoke/batch)
@@ -24,7 +24,7 @@ import {
   CONTENT_REGISTER_V1_CID,
   CONTENT_REGISTER_V2_CID,
   CONTENT_ACCESS_V1_CID,
-  LINK_EOA_V1_CID,
+  CONTENT_DECRYPT_V1_CID,
 } from './lit/action-cids'
 
 type EncryptedKey = {
@@ -47,7 +47,6 @@ const FILEBASE_COVERS_ENCRYPTED_KEY: EncryptedKey = {
     returnValueTest: { comparator: '=', value: CONTENT_REGISTER_V1_CID },
   }],
 }
-import { CONTENT_ACCESS_MIRROR } from './content-crypto'
 import {
   encryptAudio,
   decryptAudio,
@@ -175,14 +174,19 @@ export async function encryptForUpload(
 /**
  * Fetch and decrypt content from Beam CDN.
  *
- * Decryption is client-side via litClient.decrypt(). The Lit BLS nodes enforce
- * the canAccess() contract condition on Base ContentAccessMirror during threshold
- * decryption — no Lit Action is needed.
+ * Decryption uses content-decrypt-v1 Lit Action (server-side via executeJs +
+ * decryptAndCombine). This bypasses the Lit SDK v8 limitation where client-side
+ * litClient.decrypt() fails with Lit Action ACC conditions (BLSNetworkSig not
+ * supported for wallet sig validation).
+ *
+ * The Lit Action checks canAccess() on MegaETH ContentRegistry directly,
+ * then calls decryptAndCombine to recover the AES key.
  *
  * @param datasetOwner - Address of the Synapse dataset owner
  * @param pieceCid - Filecoin piece CID
  * @param contentId - bytes32 content ID
- * @param authContext - Lit PKP auth context (must include access-control-condition-decryption resource)
+ * @param authContext - Lit PKP auth context (must include lit-action-execution + pkp-signing resources)
+ * @param pkpPublicKey - User's PKP public key
  * @param network - 'calibration' or 'mainnet'
  */
 export async function fetchAndDecrypt(
@@ -190,11 +194,15 @@ export async function fetchAndDecrypt(
   pieceCid: string,
   contentId: string,
   authContext: PKPAuthContext,
+  pkpPublicKey: string,
   network: 'calibration' | 'mainnet' = 'mainnet',
 ): Promise<DownloadResult> {
   // Validate contentId format
   if (!/^0x[0-9a-fA-F]{64}$/.test(contentId)) {
     throw new Error(`Invalid contentId: expected 0x-prefixed bytes32 hex, got "${contentId}"`)
+  }
+  if (!CONTENT_DECRYPT_V1_CID) {
+    throw new Error('CONTENT_DECRYPT_V1_CID not set — deploy content-decrypt-v1 first')
   }
 
   // 1. Fetch encrypted blob from Beam CDN
@@ -208,51 +216,34 @@ export async function fetchAndDecrypt(
   // 2. Parse header to get Lit ciphertext + hash
   const header = parseHeader(blob)
 
-  // 3. Decrypt AES key via litClient.decrypt() (client-side)
-  //    Lit BLS nodes enforce canAccess() on Base ContentAccessMirror during threshold decryption.
-  if (!CONTENT_ACCESS_MIRROR) {
-    throw new Error('CONTENT_ACCESS_MIRROR not set — deploy ContentAccessMirror first')
-  }
-
-  // Unified access control conditions matching what was used during encryption
-  const unifiedAccessControlConditions = [
-    {
-      conditionType: 'evmContract' as const,
-      contractAddress: CONTENT_ACCESS_MIRROR,
-      chain: 'baseSepolia',
-      functionName: 'canAccess',
-      functionParams: [':userAddress', contentId.toLowerCase()],
-      functionAbi: {
-        type: 'function' as const,
-        name: 'canAccess',
-        stateMutability: 'view' as const,
-        inputs: [
-          { type: 'address', name: 'user', internalType: 'address' },
-          { type: 'bytes32', name: 'contentId', internalType: 'bytes32' },
-        ],
-        outputs: [
-          { type: 'bool', name: '', internalType: 'bool' },
-        ],
-      },
-      returnValueTest: { key: '', comparator: '=', value: 'true' },
-    },
-  ]
-
+  // 3. Decrypt AES key via content-decrypt-v1 Lit Action (server-side)
   const litClient = await getLitClient()
+  const timestamp = Date.now()
+  const nonce = crypto.randomUUID()
 
-  const decryptResult = await litClient.decrypt({
-    unifiedAccessControlConditions: unifiedAccessControlConditions as any,
-    ciphertext: header.litCiphertext,
-    dataToEncryptHash: header.litDataToEncryptHash,
+  const result = await litClient.executeJs({
+    ipfsId: CONTENT_DECRYPT_V1_CID,
     authContext,
-    chain: 'baseSepolia',
+    jsParams: {
+      userPkpPublicKey: pkpPublicKey,
+      contentId: contentId.toLowerCase(),
+      ciphertext: header.litCiphertext,
+      dataToEncryptHash: header.litDataToEncryptHash,
+      decryptCid: CONTENT_DECRYPT_V1_CID,
+      timestamp,
+      nonce,
+    },
   })
 
+  const decryptResponse = JSON.parse(result.response as string)
+  if (!decryptResponse.success) {
+    throw new Error(`Content decrypt failed: ${decryptResponse.error}`)
+  }
+
   // Parse JSON payload and extract the AES key
-  const decryptedPayload = new TextDecoder().decode(decryptResult.decryptedData)
   let parsed: { key?: string; contentId?: string }
   try {
-    parsed = JSON.parse(decryptedPayload)
+    parsed = JSON.parse(decryptResponse.decryptedPayload)
   } catch {
     throw new Error('Decrypted payload is not valid JSON — possible key corruption or wrong access condition')
   }
@@ -288,111 +279,6 @@ export async function fetchPlaintext(
 }
 
 // ── Access Control ─────────────────────────────────────────────────────
-const linkedEoaSessionCache = new Set<string>()
-
-function linkedEoaCacheKey(pkpPublicKey: string, eoaAddress: string): string {
-  return `${pkpPublicKey.toLowerCase()}:${eoaAddress.toLowerCase()}`
-}
-
-/**
- * Grant or revoke access to content.
- */
-/**
- * Link a PKP to its originating EOA on ContentAccessMirror (Base).
- * This allows content grants made to the EOA to also apply when the user
- * authenticates via their PKP. Called lazily during content-access operations.
- *
- * No-ops if LINK_EOA_V1_CID is not deployed yet.
- */
-export async function linkEoa(
-  authContext: PKPAuthContext,
-  pkpPublicKey: string,
-  eoaAddress: string,
-): Promise<{ txHash?: string; alreadyLinked?: boolean } | null> {
-  if (!LINK_EOA_V1_CID) {
-    console.warn('[ContentService] LINK_EOA_V1_CID not set — skipping linkEoa')
-    return null
-  }
-  const litClient = await getLitClient()
-  const timestamp = Date.now().toString()
-  const nonce = crypto.randomUUID()
-
-  // Derive PKP address from public key for the signature message
-  const { computeAddress } = await import('ethers')
-  const pkpAddress = computeAddress(pkpPublicKey).toLowerCase()
-
-  // Pre-sign EIP-191 message proving PKP ownership (via user's PKP)
-  const { signMessageWithPKP } = await import('./lit/signer-pkp')
-  const message = `heaven:linkEoa:${pkpAddress}:${eoaAddress.toLowerCase()}:${timestamp}:${nonce}`
-  const signature = await signMessageWithPKP(
-    { publicKey: pkpPublicKey, ethAddress: pkpAddress as `0x${string}`, tokenId: '' },
-    authContext,
-    message,
-  )
-
-  const isRetryableNodeFault = (message: string): boolean => {
-    const msg = message.toLowerCase()
-    return (
-      msg.includes('nodesystemfault') ||
-      msg.includes('nodeunknownerror') ||
-      msg.includes('ecdsa signing failed') ||
-      msg.includes('could not delete file') ||
-      msg.includes('/presigns/') ||
-      msg.includes('.cbor')
-    )
-  }
-  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
-
-  const maxAttempts = 3
-  let response: any = null
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      if (import.meta.env.DEV) {
-        console.log('[ContentService] linkEoa executeJs', {
-          cid: LINK_EOA_V1_CID,
-          attempt,
-          maxAttempts,
-        })
-      }
-      const result = await litClient.executeJs({
-        ipfsId: LINK_EOA_V1_CID,
-        authContext,
-        jsParams: {
-          userPkpPublicKey: pkpPublicKey,
-          eoaAddress,
-          signature,
-          timestamp,
-          nonce,
-        },
-      })
-
-      response = JSON.parse(result.response as string)
-      if (!response.success) {
-        const errorMessage = String(response.error || 'Unknown linkEoa error')
-        if (attempt < maxAttempts && isRetryableNodeFault(errorMessage)) {
-          console.warn(`[ContentService] linkEoa transient Lit node error, retrying (${attempt}/${maxAttempts})`)
-          await sleep(400 * attempt)
-          continue
-        }
-        throw new Error(`linkEoa failed: ${errorMessage}`)
-      }
-      break
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      if (attempt < maxAttempts && isRetryableNodeFault(errorMessage)) {
-        console.warn(`[ContentService] linkEoa executeJs transient failure, retrying (${attempt}/${maxAttempts})`)
-        await sleep(400 * attempt)
-        continue
-      }
-      throw error
-    }
-  }
-
-  return {
-    txHash: response.txHash,
-    alreadyLinked: response.alreadyLinked,
-  }
-}
 
 /**
  * Grant or revoke access to content.
@@ -405,24 +291,10 @@ export async function manageAccess(
     contentId?: string
     contentIds?: string[]
     grantee?: string
-    eoaAddress?: string
   },
 ): Promise<{ txHash: string; blockNumber: number }> {
   if (!CONTENT_ACCESS_V1_CID) {
     throw new Error('CONTENT_ACCESS_V1_CID not set — deploy content-access-v1 first')
-  }
-  const eoaAddress = params.eoaAddress?.trim()
-  if (eoaAddress) {
-    const cacheKey = linkedEoaCacheKey(pkpPublicKey, eoaAddress)
-    if (!linkedEoaSessionCache.has(cacheKey)) {
-      try {
-        await linkEoa(authContext, pkpPublicKey, eoaAddress)
-        linkedEoaSessionCache.add(cacheKey)
-      } catch (e) {
-        // Non-fatal: allow access ops to continue for PKP-native use.
-        console.warn('[ContentService] linkEoa during manageAccess failed (non-fatal):', e)
-      }
-    }
   }
   const litClient = await getLitClient()
   const timestamp = Date.now().toString()

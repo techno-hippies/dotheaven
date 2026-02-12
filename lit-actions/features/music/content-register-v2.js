@@ -1,8 +1,7 @@
 /**
  * Content Register v2 (decoupled)
  *
- * Registers a Filecoin content entry on ContentRegistry (MegaETH)
- * and mirrors ownership to ContentAccessMirror (Base) for Lit access conditions.
+ * Registers a Filecoin content entry on ContentRegistry (MegaETH).
  *
  * This version intentionally does NOT register tracks in ScrobbleV3 and does
  * NOT upload/set cover art. Track registration and cover handling are separate flows.
@@ -10,8 +9,7 @@
  * Flow:
  * 1. Verify EIP-191 signature (trackId + pieceCid hash + datasetOwner + algo + timestamp + nonce)
  * 2. Sponsor PKP broadcasts registerContentFor() on MegaETH
- * 3. Sponsor PKP broadcasts registerContent() on Base mirror
- * 4. Return contentId + tx hashes
+ * 3. Return contentId + tx hash
  *
  * Required jsParams:
  * - userPkpPublicKey: User PKP public key
@@ -25,11 +23,10 @@
  * - datasetOwner: Beam dataset owner address (defaults to user)
  * - signature: Pre-signed EIP-191 signature
  * - contentRegistry: Override ContentRegistry address
- * - contentAccessMirror: Override ContentAccessMirror address
  * - dryRun: boolean (default false) — skip broadcast, return signed tx
  * - title, artist, album: accepted for backward compatibility, ignored in v2
  *
- * Returns: { success, contentId, txHash, blockNumber, mirrorTxHash }
+ * Returns: { success, contentId, txHash, blockNumber }
  */
 
 // ============================================================
@@ -41,11 +38,6 @@ const MEGAETH_CHAIN_ID = 6343;
 const MEGAETH_RPC_URL = "https://carrot.megaeth.com/rpc";
 const CONTENT_REGISTRY = "0x9ca08C2D2170A43ecfA12AB35e06F2E1cEEB4Ef2";
 
-// Base Sepolia
-const BASE_CHAIN_ID = 84532;
-const BASE_RPC_URL = "https://sepolia.base.org";
-const CONTENT_ACCESS_MIRROR = "0x4dD375b09160d09d4C33312406dFFAFb3f8A5035";
-
 // Sponsor PKP
 const SPONSOR_PKP_PUBLIC_KEY =
   "04fb425233a6b6c7628c42570d074d53fc7b4211464c9fc05f84a0f15f7d10cc2b149a2fca26f69539310b0ee129577b9d368015f207ce8719e5ef9040e340a0a5";
@@ -54,9 +46,6 @@ const SPONSOR_PKP_ADDRESS = "0xF2a9Ea42e5eD701AE5E7532d4217AE94D3F03455";
 // MegaETH gas config (legacy type 0 txs, ~0.001 gwei)
 const MEGAETH_GAS_PRICE = "1000000";
 const MEGAETH_GAS_LIMIT = "2000000";
-
-// Base gas config (EIP-1559)
-const BASE_GAS_LIMIT = "200000";
 
 const MAX_CID = 128;
 
@@ -165,9 +154,6 @@ const CONTENT_REGISTRY_ABI = [
   "function registerContentFor(address contentOwner, bytes32 trackId, address datasetOwner, bytes pieceCid, uint8 algo) external",
 ];
 
-const CONTENT_ACCESS_MIRROR_ABI = [
-  "function registerContent(address _owner, bytes32 contentId) external",
-];
 
 // ============================================================
 // MAIN
@@ -185,7 +171,6 @@ const main = async () => {
       nonce,
       signature: preSignedSig,
       contentRegistry: contentRegistryOverride,
-      contentAccessMirror: contentAccessMirrorOverride,
       dryRun = false,
     } = jsParams || {};
 
@@ -204,11 +189,6 @@ const main = async () => {
     const registryAddr = ethers.utils.getAddress(contentRegistryOverride || CONTENT_REGISTRY);
     if (registryAddr === "0x0000000000000000000000000000000000000000") {
       throw new Error("ContentRegistry address not set");
-    }
-
-    const mirrorAddr = ethers.utils.getAddress(contentAccessMirrorOverride || CONTENT_ACCESS_MIRROR);
-    if (mirrorAddr === "0x0000000000000000000000000000000000000000") {
-      throw new Error("ContentAccessMirror address not set");
     }
 
     // Validate timestamp freshness
@@ -321,23 +301,15 @@ const main = async () => {
     }
 
     const nonceJson = await Lit.Actions.runOnce(
-      { waitForResponse: true, name: "getTxNonces" },
+      { waitForResponse: true, name: "getTxNonce" },
       async () => {
         const megaProvider = new ethers.providers.JsonRpcProvider(MEGAETH_RPC_URL);
-        const baseProvider = new ethers.providers.JsonRpcProvider(BASE_RPC_URL);
-        const [megaNonce, baseNonce] = await Promise.all([
-          megaProvider.getTransactionCount(SPONSOR_PKP_ADDRESS, "pending"),
-          baseProvider.getTransactionCount(SPONSOR_PKP_ADDRESS, "pending"),
-        ]);
-        return JSON.stringify({
-          megaNonce: megaNonce.toString(),
-          baseNonce: baseNonce.toString(),
-        });
+        const megaNonce = await megaProvider.getTransactionCount(SPONSOR_PKP_ADDRESS, "pending");
+        return JSON.stringify({ megaNonce: megaNonce.toString() });
       }
     );
     const nonces = JSON.parse(nonceJson);
     const megaTxNonce = Number(nonces.megaNonce);
-    const baseTxNonce = Number(nonces.baseNonce);
 
     const unsignedMegaTx = {
       type: 0,
@@ -350,39 +322,7 @@ const main = async () => {
       value: 0,
     };
 
-    // ========================================
-    // STEP 3: Build + sign Base mirror tx
-    // ========================================
-    const mirrorIface = new ethers.utils.Interface(CONTENT_ACCESS_MIRROR_ABI);
-    const mirrorData = mirrorIface.encodeFunctionData("registerContent", [userAddress, computedContentId]);
-
-    const baseFeeJson = await Lit.Actions.runOnce(
-      { waitForResponse: true, name: "getBaseFee" },
-      async () => {
-        const provider = new ethers.providers.JsonRpcProvider(BASE_RPC_URL);
-        const feeData = await provider.getFeeData();
-        return JSON.stringify({
-          maxFeePerGas: feeData.maxFeePerGas?.toString() || "100000000",
-          maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString() || "1000000",
-        });
-      }
-    );
-    const baseFee = JSON.parse(baseFeeJson);
-
-    const unsignedBaseTx = {
-      type: 2,
-      chainId: BASE_CHAIN_ID,
-      nonce: toBigNumber(baseTxNonce, "baseNonce"),
-      to: mirrorAddr,
-      data: mirrorData,
-      gasLimit: toBigNumber(BASE_GAS_LIMIT, "gasLimit"),
-      maxFeePerGas: toBigNumber(baseFee.maxFeePerGas, "maxFeePerGas"),
-      maxPriorityFeePerGas: toBigNumber(baseFee.maxPriorityFeePerGas, "maxPriorityFeePerGas"),
-      value: 0,
-    };
-
     const megaSigned = await signTx(unsignedMegaTx, "registerContent_mega", SPONSOR_PKP_PUBLIC_KEY);
-    const baseSigned = await signTx(unsignedBaseTx, "registerContent_base", SPONSOR_PKP_PUBLIC_KEY);
 
     if (dryRun) {
       Lit.Actions.setResponse({
@@ -393,17 +333,15 @@ const main = async () => {
           user: userAddress.toLowerCase(),
           contentId: computedContentId,
           megaSignedTx: megaSigned.signedTx,
-          baseSignedTx: baseSigned.signedTx,
           sponsor: SPONSOR_PKP_ADDRESS,
           contract: registryAddr,
-          mirror: mirrorAddr,
         }),
       });
       return;
     }
 
     // ========================================
-    // STEP 4: Broadcast both txs
+    // STEP 3: Broadcast MegaETH tx
     // ========================================
     let megaBroadcast;
     try {
@@ -421,8 +359,6 @@ const main = async () => {
       return;
     }
 
-    const baseBroadcast = await broadcastSignedTx(baseSigned.signedTx, BASE_RPC_URL, "registerContent_base");
-
     Lit.Actions.setResponse({
       response: JSON.stringify({
         success: true,
@@ -431,7 +367,6 @@ const main = async () => {
         contentId: computedContentId,
         txHash: megaBroadcast.txHash,
         blockNumber: megaBroadcast.blockNumber,
-        mirrorTxHash: baseBroadcast.txHash,
       }),
     });
   } catch (err) {

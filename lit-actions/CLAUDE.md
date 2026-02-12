@@ -10,7 +10,8 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 - **Avatar upload**: IPFS upload with anime/stylized style enforcement (rejects realistic human photos). Encrypted keys: filebase, openrouter.
 - **Content register v1**: Register Filecoin content entry on ContentRegistry + upload cover art. Sponsor PKP pays gas.
 - **Content access v1**: Grant/revoke access on ContentRegistry. Sponsor PKP pays gas.
-- **Link EOA v1**: Link PKP to EOA on ContentAccessMirror for shared content access.
+- **Content decrypt v1**: Server-side AES key decryption. Checks canAccess() on MegaETH, then decryptAndCombine. ACC bound to own CID (:currentActionIpfsId).
+- **Content access check v1**: Lit Action ACC condition that reads canAccess() from MegaETH ContentRegistry (used during encrypt).
 - **Post register v1**: Unified post registration for text AND photo posts. Text posts: AI safety check (includes language detection) + metadata upload + MegaETH mirror (no Story). Photo posts: metadata upload + Story IP + MegaETH mirror. Supports attribution for shared content. Pre-signed signature support for test/frontend flexibility.
 - **Follow v1**: Follow/unfollow a user on-chain via FollowV1 on MegaETH. Sponsor PKP pays gas. EIP-191 sig verification with timestamp freshness check.
 - **Like v1**: Like/unlike a post on-chain via EngagementV2 on MegaETH. Sponsor PKP pays gas. EIP-191 sig verification. Idempotent (re-like is no-op).
@@ -30,7 +31,8 @@ Lit Actions that run on Lit Protocol's decentralized nodes. Used for:
 - **Post create v1**: Superseded by post-register-v1 (unified text + photo pipeline).
 - **Post text v1**: Deprecated, merged into post-register-v1.
 - **Photo reveal v1**: Feature removed. Reveal service deleted from frontend.
-- **Content decrypt v1**: Handled client-side via `litClient.decrypt()` — no Lit Action needed.
+- **Content access check v1**: Removed — was intended for Lit Action ACC conditions but those don't work with SDK v8 session auth.
+- **Link EOA v1**: Removed — was for Base Sepolia ContentAccessMirror (now deleted).
 
 ## Status
 

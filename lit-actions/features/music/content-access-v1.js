@@ -1,18 +1,14 @@
 /**
  * Content Access v1
  *
- * Grants/revokes access to content entries on ContentRegistry (MegaETH)
- * AND mirrors state to ContentAccessMirror (Base) for Lit access conditions.
- *
- * Dual-broadcast: MegaETH (source of truth) + Base (Lit condition target).
- * Base mirror failure is non-fatal — can be retried/synced later.
+ * Grants/revokes access to content entries on ContentRegistry (MegaETH).
  *
  * Operations:
- *   "grant"       → grantAccessFor (MegaETH) + grantAccess (Base)
- *   "revoke"      → revokeAccessFor (MegaETH) + revokeAccess (Base)
- *   "grantBatch"  → grantAccessBatchFor (MegaETH) + grantAccessBatch (Base)
- *   "revokeBatch" → revokeAccessBatchFor (MegaETH) + revokeAccessBatch (Base)
- *   "deactivate"  → deactivateFor (MegaETH) + deactivate (Base)
+ *   "grant"       → grantAccessFor
+ *   "revoke"      → revokeAccessFor
+ *   "grantBatch"  → grantAccessBatchFor
+ *   "revokeBatch" → revokeAccessBatchFor
+ *   "deactivate"  → deactivateFor
  *
  * Required jsParams:
  * - operation, timestamp, nonce
@@ -22,9 +18,9 @@
  * For grantBatch/revokeBatch: contentIds, grantee
  * For deactivate: contentId
  *
- * Optional: contentRegistry, contentAccessMirror, dryRun
+ * Optional: contentRegistry, dryRun
  *
- * Returns: { success, operation, txHash, blockNumber, mirrorTxHash }
+ * Returns: { success, operation, txHash, blockNumber }
  */
 
 // ============================================================
@@ -36,11 +32,6 @@ const MEGAETH_CHAIN_ID = 6343;
 const MEGAETH_RPC_URL = "https://carrot.megaeth.com/rpc";
 const CONTENT_REGISTRY = "0x9ca08C2D2170A43ecfA12AB35e06F2E1cEEB4Ef2";
 
-// Base Sepolia
-const BASE_CHAIN_ID = 84532;
-const BASE_RPC_URL = "https://sepolia.base.org";
-const CONTENT_ACCESS_MIRROR = "0x4dD375b09160d09d4C33312406dFFAFb3f8A5035";
-
 // Sponsor PKP
 const SPONSOR_PKP_PUBLIC_KEY =
   "04fb425233a6b6c7628c42570d074d53fc7b4211464c9fc05f84a0f15f7d10cc2b149a2fca26f69539310b0ee129577b9d368015f207ce8719e5ef9040e340a0a5";
@@ -50,8 +41,6 @@ const SPONSOR_PKP_ADDRESS = "0xF2a9Ea42e5eD701AE5E7532d4217AE94D3F03455";
 const MEGAETH_GAS_PRICE = "1000000";
 const MEGAETH_GAS_LIMIT_SINGLE = "2000000";
 const MEGAETH_GAS_LIMIT_BATCH = "8000000";
-const BASE_GAS_LIMIT_SINGLE = "200000";
-const BASE_GAS_LIMIT_BATCH = "500000";
 
 let ethersLib = globalThis.ethers;
 if (!ethersLib) ethersLib = require("ethers");
@@ -155,14 +144,6 @@ const CONTENT_REGISTRY_ABI = [
   "function deactivateFor(address contentOwner, bytes32 contentId) external",
 ];
 
-const MIRROR_ABI = [
-  "function grantAccess(bytes32 contentId, address user) external",
-  "function grantAccessBatch(bytes32[] contentIds, address user) external",
-  "function revokeAccess(bytes32 contentId, address user) external",
-  "function revokeAccessBatch(bytes32[] contentIds, address user) external",
-  "function deactivate(bytes32 contentId) external",
-];
-
 // ============================================================
 // MAIN
 // ============================================================
@@ -179,7 +160,6 @@ const main = async () => {
       nonce,
       signature: preSignedSig,
       contentRegistry: contentRegistryOverride,
-      contentAccessMirror: contentAccessMirrorOverride,
       dryRun = false,
     } = jsParams || {};
 
@@ -197,11 +177,6 @@ const main = async () => {
     if (registryAddr === "0x0000000000000000000000000000000000000000") {
       throw new Error("ContentRegistry address not set");
     }
-    const mirrorAddr = ethers.utils.getAddress(contentAccessMirrorOverride || CONTENT_ACCESS_MIRROR);
-    if (mirrorAddr === "0x0000000000000000000000000000000000000000") {
-      throw new Error("ContentAccessMirror address not set");
-    }
-
     const op = String(operation);
     const isGrant = op === "grant";
     const isRevoke = op === "revoke";
@@ -311,68 +286,40 @@ const main = async () => {
     }
 
     // ========================================
-    // STEP 3: Build MegaETH + Base txs
+    // STEP 3: Build MegaETH tx
     // ========================================
     const iface = new ethers.utils.Interface(CONTENT_REGISTRY_ABI);
-    const mirrorIface = new ethers.utils.Interface(MIRROR_ABI);
     let megaFn = "";
     let megaArgs = [];
     let megaGasLimit = MEGAETH_GAS_LIMIT_SINGLE;
-    let mirrorFn = "";
-    let mirrorArgs = [];
-    let baseGasLimit = BASE_GAS_LIMIT_SINGLE;
 
     if (isGrant) {
       megaFn = "grantAccessFor";
       megaArgs = [userAddress, normalizedContentId, granteeAddr];
-      mirrorFn = "grantAccess";
-      mirrorArgs = [normalizedContentId, granteeAddr];
     } else if (isRevoke) {
       megaFn = "revokeAccessFor";
       megaArgs = [userAddress, normalizedContentId, granteeAddr];
-      mirrorFn = "revokeAccess";
-      mirrorArgs = [normalizedContentId, granteeAddr];
     } else if (isGrantBatch) {
       megaFn = "grantAccessBatchFor";
       megaArgs = [userAddress, normalizedContentIds, granteeAddr];
       megaGasLimit = MEGAETH_GAS_LIMIT_BATCH;
-      mirrorFn = "grantAccessBatch";
-      mirrorArgs = [normalizedContentIds, granteeAddr];
-      baseGasLimit = BASE_GAS_LIMIT_BATCH;
     } else if (isRevokeBatch) {
       megaFn = "revokeAccessBatchFor";
       megaArgs = [userAddress, normalizedContentIds, granteeAddr];
       megaGasLimit = MEGAETH_GAS_LIMIT_BATCH;
-      mirrorFn = "revokeAccessBatch";
-      mirrorArgs = [normalizedContentIds, granteeAddr];
-      baseGasLimit = BASE_GAS_LIMIT_BATCH;
     } else if (isDeactivate) {
       megaFn = "deactivateFor";
       megaArgs = [userAddress, normalizedContentId];
-      mirrorFn = "deactivate";
-      mirrorArgs = [normalizedContentId];
     }
 
     const megaTxData = iface.encodeFunctionData(megaFn, megaArgs);
-    const mirrorTxData = mirrorIface.encodeFunctionData(mirrorFn, mirrorArgs);
 
-    // Get nonces for both chains
     const nonceJson = await Lit.Actions.runOnce(
-      { waitForResponse: true, name: "getTxNonces" },
+      { waitForResponse: true, name: "getTxNonce" },
       async () => {
         const megaProvider = new ethers.providers.JsonRpcProvider(MEGAETH_RPC_URL);
-        const baseProvider = new ethers.providers.JsonRpcProvider(BASE_RPC_URL);
-        const [megaNonce, baseNonce, feeData] = await Promise.all([
-          megaProvider.getTransactionCount(SPONSOR_PKP_ADDRESS, "pending"),
-          baseProvider.getTransactionCount(SPONSOR_PKP_ADDRESS, "pending"),
-          baseProvider.getFeeData(),
-        ]);
-        return JSON.stringify({
-          megaNonce: megaNonce.toString(),
-          baseNonce: baseNonce.toString(),
-          maxFeePerGas: feeData.maxFeePerGas?.toString() || "100000000",
-          maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString() || "1000000",
-        });
+        const megaNonce = await megaProvider.getTransactionCount(SPONSOR_PKP_ADDRESS, "pending");
+        return JSON.stringify({ megaNonce: megaNonce.toString() });
       }
     );
     const txNonces = JSON.parse(nonceJson);
@@ -388,20 +335,7 @@ const main = async () => {
       value: 0,
     };
 
-    const unsignedBaseTx = {
-      type: 2,
-      chainId: BASE_CHAIN_ID,
-      nonce: toBigNumber(txNonces.baseNonce, "baseNonce"),
-      to: mirrorAddr,
-      data: mirrorTxData,
-      gasLimit: toBigNumber(baseGasLimit, "gasLimit"),
-      maxFeePerGas: toBigNumber(txNonces.maxFeePerGas, "maxFeePerGas"),
-      maxPriorityFeePerGas: toBigNumber(txNonces.maxPriorityFeePerGas, "maxPriorityFeePerGas"),
-      value: 0,
-    };
-
     const megaSigned = await signTx(unsignedMegaTx, "contentAccess_mega");
-    const baseSigned = await signTx(unsignedBaseTx, "contentAccess_base");
 
     if (dryRun) {
       Lit.Actions.setResponse({
@@ -411,7 +345,6 @@ const main = async () => {
           version: "content-access-v1",
           operation: op,
           megaSignedTx: megaSigned.signedTx,
-          baseSignedTx: baseSigned.signedTx,
           user: userAddress.toLowerCase(),
         }),
       });
@@ -419,30 +352,9 @@ const main = async () => {
     }
 
     // ========================================
-    // STEP 4: Broadcast both
+    // STEP 4: Broadcast MegaETH tx
     // ========================================
-    // Base first — it's the Lit access-condition gate. If it fails we haven't
-    // committed to MegaETH yet, so the caller can safely retry.
-    const baseBroadcast = await broadcastSignedTx(baseSigned.signedTx, BASE_RPC_URL, "contentAccess_base");
-
-    let megaBroadcast;
-    try {
-      megaBroadcast = await broadcastSignedTx(megaSigned.signedTx, MEGAETH_RPC_URL, "contentAccess_mega");
-    } catch (megaErr) {
-      // Base succeeded but MegaETH failed — return error with both tx hashes
-      // so client can reconcile. Access grants are idempotent so retry is safe.
-      Lit.Actions.setResponse({
-        response: JSON.stringify({
-          success: false,
-          error: `MegaETH broadcast failed: ${megaErr.message}`,
-          version: "content-access-v1",
-          operation: op,
-          mirrorTxHash: baseBroadcast.txHash,
-          user: userAddress.toLowerCase(),
-        }),
-      });
-      return;
-    }
+    const megaBroadcast = await broadcastSignedTx(megaSigned.signedTx, MEGAETH_RPC_URL, "contentAccess_mega");
 
     Lit.Actions.setResponse({
       response: JSON.stringify({
@@ -452,7 +364,6 @@ const main = async () => {
         txHash: megaBroadcast.txHash,
         blockNumber: megaBroadcast.blockNumber,
         user: userAddress.toLowerCase(),
-        mirrorTxHash: baseBroadcast.txHash,
       }),
     });
   } catch (err) {

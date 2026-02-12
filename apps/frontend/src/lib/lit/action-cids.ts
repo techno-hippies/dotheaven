@@ -20,10 +20,9 @@ const CID_MAP = {
     heavenSetProfile:     'QmUJnDz9Q92bSLvNQMLyPDNSkw69MA3fpYsSCnAeMAJtuy',
     heavenSetRecords:     'QmaXJcjGbPWQ1ypKnQB3vfnDwaQ1NLEGFmN3t7gQisw9g5',
     avatarUpload:         'QmTWwoC5zX2pUuSExsra5RVzChE9nCYRAkVVgppjvc196A',
-    contentRegisterV1:    'QmcyVkadHqJnFDhkrAPu4UjyPtYBbcLKqfMuYoHJnaQvde',
+    contentRegisterV1:    'QmVbhvmjcwRPx47K7UuEg8RrxZuTCbYF5DrkYbJaehBbrd',
     contentRegisterV2:    '',
-    contentAccessV1:      'QmeFDbYinv28a26uVELqSpYk2SBF27j3Ci7EfdnJ8xDVhA',
-    linkEoaV1:            'QmXFkjpHT95ZWQYtz2GVdhEqh8oZscXSkDBiEpK6VEy4k1',
+    contentAccessV1:      'QmXhzbZqvfg7b29eY3CzyV9ep4kvL9QxibKDYqBYAiQoDT',
     postRegisterV1:       'QmduQNBGLfEB1bkCFMXLjRcpBJ3wfcV675KMWWYQe5k477',
     trackCoverV4:         'QmcwLxoNyuV5KrJALfaAEBa4zspoxedEfPJba2Y3uhWYx7',
     postTranslateV1:      'QmefcfyK57V6XQeHsH9oVCfukwMiLGC4KgZVniXFBAL6Sv',
@@ -35,6 +34,7 @@ const CID_MAP = {
     flagV1:               'QmbCPSxieogoSVLR3HAYDffyerNE1DZGZuLFAWiwnTzzPx',
     storyRegisterSponsor: 'QmZ38qG34PKnENxzV8eejbRwiqQf2aRFKuNKqJNTXvU43Q',
     contentRegisterMegaethV1: 'QmRFuAAYCmri8kTCmJupF9AZWhYmvKnhNhVyqr5trRfZhS',
+    contentDecryptV1:     'QmUmVkMxC57nAqUmJPZmoBKeBfiZS6ZR8qzYQJvWe4W12w',
   },
   'naga-test': {
     playlistV1:           'QmUf2jSaquVXJZBaoq5WCjKZKJpW7zVZVWHKuGi68GYZqq',
@@ -45,7 +45,6 @@ const CID_MAP = {
     contentRegisterV1:    'QmdPHymWEbh4H8zBEhup9vWpCPwR5hTLK2Kb3H8hcjDga1',
     contentRegisterV2:    '',
     contentAccessV1:      'QmcgN7ed4ePaCfpkzcwxiTG6WkvfgkPmNK26FZW67kbdau',
-    linkEoaV1:            'Qmac1ELMUarSwmpnjg29KoKo3zHc1SVWTTUFyXBZyMgchb',
     postRegisterV1:       'Qma4SVQpBy2hnN9Hcf3ZpGzo9U5PGxJusDjpXrDnBKRc9z',
     trackCoverV4:         'QmYhskK5XKmrREZBaGMpvzvTEYdaicUURjNLBhSV72U1Nm',
     postTranslateV1:      'QmSiC1nV5hu248sipLjukDuH3sDAV31F6S3RqRLfrQmZa6',
@@ -57,6 +56,7 @@ const CID_MAP = {
     flagV1:               '',
     storyRegisterSponsor: 'QmQi5mVzt4u6ViXZYkZYrmFu7oXFEJjx7Fzc6YUYyUcSEt',
     contentRegisterMegaethV1: '',
+    contentDecryptV1:     '',
   },
 } as const
 
@@ -92,9 +92,6 @@ export const CONTENT_REGISTER_V2_CID = cid('VITE_CONTENT_REGISTER_V2_CID', 'cont
 /** Content Access v1 — grant/revoke access on ContentRegistry */
 export const CONTENT_ACCESS_V1_CID = cid('VITE_CONTENT_ACCESS_V1_CID', 'contentAccessV1')
 
-/** Link EOA v1 — link PKP to EOA on ContentAccessMirror for shared content access */
-export const LINK_EOA_V1_CID = cid('VITE_LINK_EOA_V1_CID', 'linkEoaV1')
-
 /** Post Register v1 — unified text + photo registration (image uploaded by Media Worker or text inline) */
 export const POST_REGISTER_V1_CID = cid('VITE_POST_REGISTER_V1_CID', 'postRegisterV1')
 
@@ -128,5 +125,5 @@ export const FLAG_V1_CID = cid('VITE_FLAG_V1_CID', 'flagV1')
 /** Content Register MegaETH v1 — register content on ContentRegistry (MegaETH only, no Base mirror) */
 export const CONTENT_REGISTER_MEGAETH_V1_CID = cid('VITE_CONTENT_REGISTER_MEGAETH_V1_CID', 'contentRegisterMegaethV1')
 
-// Content decrypt is handled client-side via litClient.decrypt() — no Lit Action needed.
-// The Lit BLS nodes enforce canAccess() on Base ContentAccessMirror during threshold decryption.
+/** Content Decrypt v1 — server-side decryption via executeJs + decryptAndCombine (bypasses client-side ACC auth limitation) */
+export const CONTENT_DECRYPT_V1_CID = cid('VITE_CONTENT_DECRYPT_V1_CID', 'contentDecryptV1')

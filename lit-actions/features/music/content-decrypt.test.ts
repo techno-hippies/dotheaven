@@ -3,19 +3,14 @@
  * Test Content Decrypt — full encrypt → decrypt round-trip
  *
  * Verifies:
- *  1. Register content on both chains (content-register-v1)
- *  2. Encrypt a test AES key with Lit using contract-gated ACC on Base
- *  3. Decrypt via litClient.decrypt() (client-side, Lit BLS enforces condition)
+ *  1. Register content on MegaETH (content-register-v2 or v1)
+ *  2. Encrypt a test AES key with Lit using :currentActionIpfsId ACC
+ *     (bound to content-decrypt-v1 CID)
+ *  3. Decrypt via content-decrypt-v1 Lit Action (server-side decryptAndCombine)
  *  4. Verify decrypted key matches original
  *
- * Note: Decryption uses the SDK's client-side decrypt (not a Lit Action).
- * The Lit nodes still enforce the access condition (canAccess on Base) during
- * BLS threshold decryption. No Lit Action is needed for decrypt because
- * decryptAndCombine in Lit Actions only supports accessControlConditions
- * (evmBasic), not evmContractConditions.
- *
  * Usage:
- *   bun tests/content-decrypt.test.ts
+ *   bun features/music/content-decrypt.test.ts
  */
 
 import { createLitClient } from "@lit-protocol/lit-client";
@@ -26,31 +21,21 @@ import { randomBytes, hexlify, keccak256, AbiCoder } from "ethers";
 
 const abiCoder = AbiCoder.defaultAbiCoder();
 
-const CONTENT_ACCESS_MIRROR = "0x4dD375b09160d09d4C33312406dFFAFb3f8A5035";
-
-function buildAccessConditions(contentId: string) {
-  // Unified access control conditions with conditionType: "evmContract"
-  // This format is required for both encrypt and decrypt (SDK + Lit Action)
+/**
+ * Build ACC bound to content-decrypt-v1 CID.
+ * Only the decrypt Lit Action can call decryptAndCombine.
+ * The action itself enforces canAccess() on MegaETH.
+ */
+function buildAccessConditions(decryptCid: string) {
   return [
     {
-      conditionType: "evmContract" as const,
-      contractAddress: CONTENT_ACCESS_MIRROR,
-      chain: "baseSepolia",
-      functionName: "canAccess",
-      functionParams: [":userAddress", contentId],
-      functionAbi: {
-        type: "function" as const,
-        name: "canAccess",
-        stateMutability: "view" as const,
-        inputs: [
-          { type: "address", name: "user", internalType: "address" },
-          { type: "bytes32", name: "contentId", internalType: "bytes32" },
-        ],
-        outputs: [
-          { type: "bool", name: "", internalType: "bool" },
-        ],
-      },
-      returnValueTest: { key: "", comparator: "=", value: "true" },
+      conditionType: "evmBasic" as const,
+      contractAddress: "",
+      standardContractType: "",
+      chain: "ethereum",
+      method: "",
+      parameters: [":currentActionIpfsId"],
+      returnValueTest: { comparator: "=", value: decryptCid },
     },
   ];
 }
@@ -63,11 +48,18 @@ async function main() {
   const pkpCreds = Env.loadPkpCreds();
   console.log(`   PKP:         ${pkpCreds.ethAddress}`);
 
-  const registerCid = Env.cids["contentRegisterV1"];
-  console.log(`   Register CID: ${registerCid || "(not deployed)"}`);
+  const registerCid = Env.cids["contentRegisterV2"] || Env.cids["contentRegisterV1"];
+  const registerVersion = Env.cids["contentRegisterV2"] ? "v2" : "v1";
+  const decryptCid = Env.cids["contentDecryptV1"];
+  console.log(`   Register CID:  ${registerCid || "(not deployed)"} (${registerVersion})`);
+  console.log(`   Decrypt CID:   ${decryptCid || "(not deployed)"}`);
 
   if (!registerCid) {
-    console.error("\nMissing register action CID. Run setup.ts first.");
+    console.error("\nMissing register action CID.");
+    process.exit(1);
+  }
+  if (!decryptCid) {
+    console.error("\nMissing content-decrypt-v1 CID. Run setup.ts contentDecryptV1 first.");
     process.exit(1);
   }
 
@@ -78,7 +70,7 @@ async function main() {
   const authEoa = privateKeyToAccount(pk as `0x${string}`);
   const userPkpPublicKey = pkpCreds.publicKey;
   const userAddress = pkpCreds.ethAddress;
-  console.log(`   User (PKP):   ${userAddress}`);
+  console.log(`   User (PKP):    ${userAddress}`);
 
   console.log("\nConnecting to Lit Protocol...");
   const litClient = await createLitClient({ network: Env.litNetwork });
@@ -96,14 +88,13 @@ async function main() {
   const authData = await ViemAccountAuthenticator.authenticate(authEoa);
 
   console.log("Creating PKP auth context...");
-  const authContext = await authManager.createPkpAuthContext({
+  const pkpAuthContext = await authManager.createPkpAuthContext({
     authData,
     pkpPublicKey: pkpCreds.publicKey,
     authConfig: {
       resources: [
         ["pkp-signing", "*"],
         ["lit-action-execution", "*"],
-        ["access-control-condition-decryption", "*"],
       ],
       expiration: new Date(Date.now() + 1000 * 60 * 15).toISOString(),
       statement: "",
@@ -116,7 +107,7 @@ async function main() {
 
   try {
     // ══════════════════════════════════════════════════════════════
-    // STEP 1: Register content (creates canAccess on both chains)
+    // STEP 1: Register content (creates canAccess on MegaETH)
     // ══════════════════════════════════════════════════════════════
     console.log("\n── Step 1: Register content ──");
 
@@ -131,12 +122,13 @@ async function main() {
 
     const registerResult = await litClient.executeJs({
       ipfsId: registerCid,
-      authContext,
+      authContext: pkpAuthContext,
       jsParams: {
         userPkpPublicKey,
         trackId,
         pieceCid,
         algo: 1,
+        ...(registerVersion === "v1" ? { title: "Decrypt Test", artist: "Test Artist" } : {}),
         timestamp: Date.now(),
         nonce: Math.floor(Math.random() * 1e6).toString(),
       },
@@ -146,10 +138,10 @@ async function main() {
     if (!registerResp.success) {
       throw new Error(`Register failed: ${registerResp.error}`);
     }
-    console.log(`   ✓ Registered on both chains`);
+    console.log(`   ✓ Registered on MegaETH (tx: ${registerResp.txHash})`);
 
     // ══════════════════════════════════════════════════════════════
-    // STEP 2: Encrypt a test AES key with Lit (unified ACC)
+    // STEP 2: Encrypt a test AES key with :currentActionIpfsId ACC
     // ══════════════════════════════════════════════════════════════
     console.log("\n── Step 2: Encrypt AES key with Lit ──");
 
@@ -158,13 +150,10 @@ async function main() {
     console.log(`   Test key:    ${testKeyBase64.slice(0, 20)}...`);
 
     const payload = JSON.stringify({ contentId, key: testKeyBase64 });
-
-    // Use unifiedAccessControlConditions — required for both SDK decrypt
-    // and Lit Action decryptAndCombine with evmContract conditions
-    const unifiedAcc = buildAccessConditions(contentId);
+    const acc = buildAccessConditions(decryptCid);
 
     const encryptedData = await litClient.encrypt({
-      unifiedAccessControlConditions: unifiedAcc,
+      accessControlConditions: acc,
       dataToEncrypt: new TextEncoder().encode(payload),
     });
 
@@ -172,28 +161,39 @@ async function main() {
     console.log(`   dataToEncryptHash: ${encryptedData.dataToEncryptHash}`);
 
     // ══════════════════════════════════════════════════════════════
-    // STEP 3: Decrypt via litClient.decrypt() (client-side)
+    // STEP 3: Decrypt via content-decrypt-v1 Lit Action
     // ══════════════════════════════════════════════════════════════
-    console.log("\n── Step 3: Decrypt via SDK ──");
+    console.log("\n── Step 3: Decrypt via content-decrypt-v1 Lit Action ──");
 
-    // Client-side decrypt — Lit nodes verify canAccess() on Base during BLS
-    const decryptResult = await litClient.decrypt({
-      unifiedAccessControlConditions: unifiedAcc,
-      ciphertext: encryptedData.ciphertext,
-      dataToEncryptHash: encryptedData.dataToEncryptHash,
-      authContext,
-      chain: "baseSepolia",
+    const timestamp = Date.now();
+    const nonce = Math.floor(Math.random() * 1e6).toString();
+
+    const decryptResult = await litClient.executeJs({
+      ipfsId: decryptCid,
+      authContext: pkpAuthContext,
+      jsParams: {
+        userPkpPublicKey,
+        contentId,
+        ciphertext: encryptedData.ciphertext,
+        dataToEncryptHash: encryptedData.dataToEncryptHash,
+        decryptCid,
+        timestamp,
+        nonce,
+      },
     });
 
-    const decryptedPayload = new TextDecoder().decode(decryptResult.decryptedData);
-    console.log(`   ✓ Decrypted payload (${decryptedPayload.length} chars)`);
+    const decryptResp = JSON.parse(decryptResult.response as string);
+    if (!decryptResp.success) {
+      throw new Error(`Decrypt failed: ${decryptResp.error}`);
+    }
+    console.log(`   ✓ Decrypted payload (${decryptResp.decryptedPayload.length} chars)`);
 
     // ══════════════════════════════════════════════════════════════
     // STEP 4: Verify decrypted key matches original
     // ══════════════════════════════════════════════════════════════
     console.log("\n── Step 4: Verify ──");
 
-    const parsed = JSON.parse(decryptedPayload);
+    const parsed = JSON.parse(decryptResp.decryptedPayload);
     console.log(`   contentId:   ${parsed.contentId}`);
 
     if (parsed.contentId?.toLowerCase() !== contentId) {
