@@ -8,7 +8,7 @@
  * 4. Return result
  */
 
-import type { LitBridge } from '../services/LitBridge';
+import type { LitBridgeApi } from '../services/LitBridgeApi';
 import { getUserNonce } from './playlists';
 
 const PLAYLIST_V1_CID = 'QmUf2jSaquVXJZBaoq5WCjKZKJpW7zVZVWHKuGi68GYZqq';
@@ -58,7 +58,7 @@ export async function createPlaylist(
     tracks: TrackInput[];
   },
   signMessage: (message: string) => Promise<string>,
-  bridge: LitBridge,
+  bridge: LitBridgeApi,
   pkpPublicKey: string,
   pkpAddress: string,
 ): Promise<PlaylistResult> {
@@ -78,7 +78,7 @@ export async function setPlaylistTracks(
     existingTrackIds?: string[];
   },
   signMessage: (message: string) => Promise<string>,
-  bridge: LitBridge,
+  bridge: LitBridgeApi,
   pkpPublicKey: string,
   pkpAddress: string,
 ): Promise<PlaylistResult> {
@@ -98,7 +98,7 @@ export async function updatePlaylistMeta(
     visibility?: number;
   },
   signMessage: (message: string) => Promise<string>,
-  bridge: LitBridge,
+  bridge: LitBridgeApi,
   pkpPublicKey: string,
   pkpAddress: string,
 ): Promise<PlaylistResult> {
@@ -114,7 +114,7 @@ export async function updatePlaylistMeta(
 export async function deletePlaylist(
   params: { playlistId: string },
   signMessage: (message: string) => Promise<string>,
-  bridge: LitBridge,
+  bridge: LitBridgeApi,
   pkpPublicKey: string,
   pkpAddress: string,
 ): Promise<PlaylistResult> {
@@ -129,7 +129,7 @@ export async function deletePlaylist(
 async function executePlaylistAction(
   params: Record<string, unknown>,
   signMessage: (message: string) => Promise<string>,
-  bridge: LitBridge,
+  bridge: LitBridgeApi,
   pkpPublicKey: string,
   pkpAddress: string,
 ): Promise<PlaylistResult> {

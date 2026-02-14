@@ -7,7 +7,7 @@
 
 import { createPublicClient, http, parseAbi } from 'viem';
 import { MEGA_RPC, FOLLOW_V1 } from './heaven-constants';
-import type { LitBridge } from '../services/LitBridge';
+import type { LitBridgeApi } from '../services/LitBridgeApi';
 
 const FOLLOW_V1_CID = 'QmPccpeqwyJSHYzY1HGu6Nmp26anouhTT8daHS8Jox9VTx';
 
@@ -48,7 +48,7 @@ export async function toggleFollow(
   targetAddress: string,
   action: 'follow' | 'unfollow',
   signMessage: (message: string) => Promise<string>,
-  bridge: LitBridge,
+  bridge: LitBridgeApi,
   pkpPublicKey: string,
 ): Promise<FollowResult> {
   const timestamp = Date.now();

@@ -8,7 +8,7 @@
  */
 
 import { createPublicClient, http, parseAbi, keccak256, encodePacked, encodeAbiParameters, toBytes, defineChain } from 'viem';
-import type { LitBridge } from '../services/LitBridge';
+import type { LitBridgeApi } from '../services/LitBridgeApi';
 import {
   MEGA_RPC,
   REGISTRY_V1,
@@ -136,7 +136,7 @@ export interface RegisterResult {
 export async function registerHeavenName(
   label: string,
   recipientAddress: `0x${string}`,
-  bridge: LitBridge,
+  bridge: LitBridgeApi,
   pkpPublicKey: string,
   signMessage: (message: string) => Promise<string>,
 ): Promise<RegisterResult> {
@@ -226,7 +226,7 @@ export interface SetProfileData {
 export async function setProfile(
   data: SetProfileData,
   userAddress: `0x${string}`,
-  bridge: LitBridge,
+  bridge: LitBridgeApi,
   pkpPublicKey: string,
   signMessage: (message: string) => Promise<string>,
 ): Promise<SetProfileResult> {
@@ -387,7 +387,7 @@ export async function setTextRecord(
   node: string,
   key: string,
   value: string,
-  bridge: LitBridge,
+  bridge: LitBridgeApi,
   pkpPublicKey: string,
   signMessage: (message: string) => Promise<string>,
 ): Promise<SetTextRecordResult> {

@@ -1,0 +1,4 @@
+rust-core/target/
+android/src/main/jniLibs/
+ios/lib/
+

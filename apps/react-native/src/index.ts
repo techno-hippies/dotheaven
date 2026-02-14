@@ -5,6 +5,7 @@
  */
 
 export { LitBridge } from './services/LitBridge';
+export { LitRustBridge } from './services/LitRustBridge';
 export type {
   BridgeRequest,
   BridgeResponse,
@@ -12,6 +13,7 @@ export type {
   LitEncryptParams,
   LitDecryptParams
 } from './services/LitBridge';
+export type { LitBridgeApi } from './services/LitBridgeApi';
 
 export { LitWebView } from './components/LitWebView';
 export type { LitWebViewProps } from './components/LitWebView';

@@ -7,8 +7,11 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { LitBridge, type SecureStorage } from '../services/LitBridge';
+import { LitBridge as WebViewLitBridge, type SecureStorage } from '../services/LitBridge';
 import { LitWebView } from '../components/LitWebView';
+import type { LitBridgeApi } from '../services/LitBridgeApi';
+import { LitRustBridge } from '../services/LitRustBridge';
+import { AUTH_CONFIG } from '../lib/auth-config';
 
 // Async Storage adapter for secure storage
 const createSecureStorage = (): SecureStorage => ({
@@ -24,7 +27,7 @@ const createSecureStorage = (): SecureStorage => ({
 });
 
 export interface LitContextValue {
-  bridge: LitBridge | null;
+  bridge: LitBridgeApi | null;
   isReady: boolean;
   error: Error | null;
 }
@@ -41,7 +44,12 @@ export interface LitProviderProps {
 }
 
 export const LitProvider: React.FC<LitProviderProps> = ({ children, debug = false }) => {
-  const [bridge] = useState(() => new LitBridge(createSecureStorage()));
+  const [bridge] = useState<LitBridgeApi>(() => {
+    if (AUTH_CONFIG.litEngine === 'rust') {
+      return new LitRustBridge({ network: AUTH_CONFIG.litNetwork, rpcUrl: AUTH_CONFIG.litRpcUrl });
+    }
+    return new WebViewLitBridge(createSecureStorage());
+  });
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -61,14 +69,21 @@ export const LitProvider: React.FC<LitProviderProps> = ({ children, debug = fals
     };
   }, [bridge]);
 
+  useEffect(() => {
+    if (AUTH_CONFIG.litEngine !== 'rust') return;
+    bridge.waitForReady(15000).then(handleReady).catch(handleError);
+  }, [bridge, handleReady, handleError]);
+
   return (
     <LitContext.Provider value={{ bridge, isReady, error }}>
-      <LitWebView
-        bridge={bridge}
-        onReady={handleReady}
-        onError={handleError}
-        debug={debug}
-      />
+      {AUTH_CONFIG.litEngine !== 'rust' && bridge instanceof WebViewLitBridge ? (
+        <LitWebView
+          bridge={bridge}
+          onReady={handleReady}
+          onError={handleError}
+          debug={debug}
+        />
+      ) : null}
       {children}
     </LitContext.Provider>
   );

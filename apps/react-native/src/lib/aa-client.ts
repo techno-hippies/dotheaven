@@ -21,7 +21,7 @@ import {
   http,
 } from 'viem'
 import { MEGA_RPC } from './heaven-constants'
-import type { LitBridge } from '../services/LitBridge'
+import type { LitBridgeApi } from '../services/LitBridgeApi'
 
 // ── Config ────────────────────────────────────────────────────────────────
 
@@ -184,7 +184,7 @@ function deriveTrackKindAndPayload(
 async function signUserOpHash(
   userOpHash: Hex,
   pkpPublicKey: string,
-  bridge: LitBridge,
+  bridge: LitBridgeApi,
 ): Promise<Hex> {
   // Apply EIP-191 prefix
   const ethSignedHash = hashMessage({ raw: userOpHash })
@@ -300,7 +300,7 @@ export async function submitScrobbleViaAA(
   tracks: ScrobbleTrack[],
   userAddress: Address,
   pkpPublicKey: string,
-  bridge: LitBridge,
+  bridge: LitBridgeApi,
 ): Promise<AASubmitResult> {
   const gatewayHealth = await getGatewayHealth()
 

@@ -1,0 +1,10 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["HeavenLitRustModule"],
+    "podspecPath": "ios/HeavenLitRust.podspec"
+  },
+  "android": {
+    "modules": ["expo.modules.heavenlitrust.HeavenLitRustModule"]
+  }
+}

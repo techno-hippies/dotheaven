@@ -8,7 +8,7 @@
 import { ScrobbleEngine } from './scrobble-engine'
 import type { TrackMetadata, ReadyScrobble } from './scrobble-engine'
 import { submitScrobbleViaAA, type ScrobbleTrack } from '../lib/aa-client'
-import type { LitBridge } from './LitBridge'
+import type { LitBridgeApi } from './LitBridgeApi'
 import type { Address } from 'viem'
 
 const SESSION_KEY = 'local'
@@ -53,7 +53,7 @@ export function createScrobbleService(
   ensureAuth: EnsureAuth,
   getEthAddress: () => string | null,
   getPkpPublicKey: () => string | null,
-  getBridge: () => LitBridge | null,
+  getBridge: () => LitBridgeApi | null,
   getAuthContext?: CreateAuthContext,
 ): ScrobbleService {
   let tickTimer: ReturnType<typeof setInterval> | null = null
@@ -97,7 +97,7 @@ async function submitScrobble(
   ensureAuth: EnsureAuth,
   getEthAddress: () => string | null,
   getPkpPublicKey: () => string | null,
-  getBridge: () => LitBridge | null,
+  getBridge: () => LitBridgeApi | null,
   getAuthContext?: CreateAuthContext,
 ): Promise<void> {
   const track: ScrobbleTrack = {
