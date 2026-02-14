@@ -110,7 +110,8 @@ start_metro() {
   echo "[android-dev] Starting Metro (dev client mode)..."
   ensure_adb_reverse
   cd "$PROJECT_ROOT"
-  exec npx expo start --dev-client --clear --port 8081
+  # Prefer localhost + adb reverse so a USB-connected device works even without Wi-Fi.
+  exec npx expo start --dev-client --clear --port 8081 --localhost
 }
 
 main() {
