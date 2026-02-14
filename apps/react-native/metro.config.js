@@ -10,6 +10,16 @@ const config = getDefaultConfig(projectRoot);
 // to follow those links during module resolution.
 config.resolver.unstable_enableSymlinks = true;
 
+// Force singletons for native modules that cannot be loaded twice.
+// Without this, Bun's store-level node_modules can cause Metro to bundle a second
+// copy of react-native-svg (e.g. via react-native-svg-circle-country-flags),
+// which crashes at runtime with:
+//   "Tried to register two views with the same name RNSVGCircle"
+config.resolver.extraNodeModules = {
+  ...(config.resolver.extraNodeModules || {}),
+  'react-native-svg': path.resolve(projectRoot, 'node_modules/react-native-svg'),
+};
+
 // Ensure Metro can resolve hoisted/shared dependencies from the workspace root.
 config.watchFolders = [workspaceRoot];
 config.resolver.nodeModulesPaths = [
