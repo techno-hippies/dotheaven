@@ -1,0 +1,10 @@
+node_modules
+.expo
+/android
+/ios
+dist
+
+# Local module build outputs
+/modules/heaven-lit-rust/android/build
+/modules/heaven-lit-rust/android/src/main/jniLibs
+/modules/heaven-lit-rust/rust-core/target
