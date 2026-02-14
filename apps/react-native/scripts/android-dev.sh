@@ -99,10 +99,13 @@ clear_stale_expo_module_android_build() {
 install_android_app() {
   echo "[android-dev] Installing Android dev build..."
   cd "$PROJECT_ROOT"
-  if ! npx expo run:android --no-build-cache; then
+  # Don't let `expo run:android` start its own Metro instance (it defaults to LAN,
+  # which breaks USB devices that rely on `adb reverse`). We always start Metro
+  # ourselves with `--localhost` in `start_metro`.
+  if ! npx expo run:android --no-build-cache --no-bundler; then
     echo "[android-dev] First Android build failed. Retrying once after cache cleanup..."
     clear_stale_expo_module_android_build
-    npx expo run:android --no-build-cache
+    npx expo run:android --no-build-cache --no-bundler
   fi
 }
 
