@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 const DEFAULT_AUTH_SERVICE_BASE_URL = 'https://naga-dev-auth-service.getlit.dev';
 const DEFAULT_PASSKEY_RP_ID = 'dotheaven.org';
 const DEFAULT_LIT_WEBVIEW_PATH = '/lit-bundle/index.html';
@@ -5,7 +7,9 @@ const DEFAULT_AUTH_PAGE_URL = 'https://dotheaven.org/#/auth';
 const DEFAULT_AUTH_CALLBACK_URL = 'heaven://auth-callback';
 const DEFAULT_LIT_NETWORK = 'naga-dev';
 const DEFAULT_LIT_RPC_URL = 'https://yellowstone-rpc.litprotocol.com';
-const DEFAULT_LIT_ENGINE = 'webview';
+// Default to the Rust-native Lit engine on Android (no WebView).
+// Keep WebView as the default for iOS until native passkeys are implemented there.
+const DEFAULT_LIT_ENGINE = Platform.OS === 'android' ? 'rust' : 'webview';
 
 function cleanEnv(value: string | undefined): string | undefined {
   if (typeof value !== 'string') return undefined;

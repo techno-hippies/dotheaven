@@ -4,7 +4,7 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LIT_WEBVIEW_DIR="$PROJECT_ROOT/lit-webview"
 RUST_MODULE_DIR="$PROJECT_ROOT/modules/heaven-lit-rust"
-LIT_ENGINE="${EXPO_PUBLIC_LIT_ENGINE:-webview}"
+LIT_ENGINE="${EXPO_PUBLIC_LIT_ENGINE:-rust}"
 
 print_help() {
   cat <<'EOF'
