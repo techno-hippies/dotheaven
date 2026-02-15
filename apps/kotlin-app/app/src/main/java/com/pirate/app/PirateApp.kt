@@ -1,11 +1,23 @@
 package com.pirate.app
 
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.ChatBubble
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -13,18 +25,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CalendarMonth
-import androidx.compose.material.icons.rounded.Chat
-import androidx.compose.material.icons.rounded.LibraryMusic
-import androidx.compose.material.icons.rounded.Person
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -39,6 +40,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.pirate.app.about.AboutScreen
 import com.pirate.app.auth.PirateAuthUiState
 import com.pirate.app.chat.ChatScreen
 import com.pirate.app.chat.XmtpChatService
@@ -46,9 +48,9 @@ import com.pirate.app.lit.LitRust
 import com.pirate.app.lit.NativePasskeyAuth
 import com.pirate.app.lit.PirateAuthConfig
 import com.pirate.app.music.MusicScreen
+import com.pirate.app.player.PlayerController
 import com.pirate.app.profile.ProfileScreen
 import com.pirate.app.schedule.ScheduleScreen
-import com.pirate.app.player.PlayerController
 import com.pirate.app.scrobble.ScrobbleService
 import com.pirate.app.ui.PirateMiniPlayer
 import com.pirate.app.ui.PirateSideMenuDrawer
@@ -64,6 +66,7 @@ private sealed class PirateRoute(val route: String, val label: String) {
   data object Chat : PirateRoute("chat", "Chat")
   data object Schedule : PirateRoute("schedule", "Schedule")
   data object Auth : PirateRoute("auth", "Profile")
+  data object Profile : PirateRoute("profile", "Scrobbles")
   data object Player : PirateRoute("player", "Player")
 }
 
@@ -71,7 +74,7 @@ private sealed class PirateRoute(val route: String, val label: String) {
 fun PirateApp() {
   val appContext = LocalContext.current.applicationContext
   val navController = rememberNavController()
-  val routes = listOf(PirateRoute.Music, PirateRoute.Chat, PirateRoute.Schedule, PirateRoute.Auth)
+  val routes = listOf(PirateRoute.Music, PirateRoute.Chat, PirateRoute.Profile, PirateRoute.Schedule, PirateRoute.Auth)
   val scope = rememberCoroutineScope()
   val snackbarHostState = remember { SnackbarHostState() }
   val drawerState = androidx.compose.material3.rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -122,12 +125,13 @@ fun PirateApp() {
   val showBottomChrome = currentRoute != PirateRoute.Player.route
   val showTopChrome = currentRoute != PirateRoute.Player.route && currentRoute != PirateRoute.Music.route &&
     currentRoute != PirateRoute.Chat.route && currentRoute != PirateRoute.Schedule.route &&
-    currentRoute != PirateRoute.Auth.route
+    currentRoute != PirateRoute.Profile.route
   val currentTitle = when (currentRoute) {
     PirateRoute.Music.route -> "Music"
     PirateRoute.Chat.route -> "Chat"
     PirateRoute.Schedule.route -> "Schedule"
-    PirateRoute.Auth.route -> "Profile"
+    PirateRoute.Profile.route -> "Scrobbles"
+    PirateRoute.Auth.route -> "About"
     PirateRoute.Player.route -> "Now Playing"
     else -> "Pirate"
   }
@@ -173,7 +177,8 @@ fun PirateApp() {
         }
       val pkpEthAddress = pkp.optString("ethAddress", pkp.optString("eth_address", "")).ifBlank { null }
       val pkpTokenId = pkp.optString("tokenId", pkp.optString("token_id", "")).ifBlank { null }
-      val derivedEthAddress = pkpEthAddress ?: Eth.deriveAddressFromUncompressedPublicKeyHex(pkpPubkey)
+      // Prefer deriving from pubkey when possible (some APIs may return a different address field).
+      val derivedEthAddress = Eth.deriveAddressFromUncompressedPublicKeyHex(pkpPubkey) ?: pkpEthAddress
 
       authState =
         authState.copy(
@@ -263,7 +268,8 @@ fun PirateApp() {
         }
       val pkpEthAddress = pkp.optString("ethAddress", pkp.optString("eth_address", "")).ifBlank { null }
       val pkpTokenId = pkp.optString("tokenId", pkp.optString("token_id", "")).ifBlank { null }
-      val derivedEthAddress = pkpEthAddress ?: Eth.deriveAddressFromUncompressedPublicKeyHex(pkpPubkey)
+      // Prefer deriving from pubkey when possible (some APIs may return a different address field).
+      val derivedEthAddress = Eth.deriveAddressFromUncompressedPublicKeyHex(pkpPubkey) ?: pkpEthAddress
 
       authState =
         authState.copy(
@@ -428,8 +434,9 @@ fun PirateApp() {
                   label = { Text(screen.label) },
                   icon = {
                     when (screen) {
-                      PirateRoute.Music -> Icon(Icons.Rounded.LibraryMusic, contentDescription = null)
-                      PirateRoute.Chat -> Icon(Icons.Rounded.Chat, contentDescription = null)
+                      PirateRoute.Music -> Icon(Icons.Rounded.MusicNote, contentDescription = null)
+                      PirateRoute.Chat -> Icon(Icons.Rounded.ChatBubble, contentDescription = null)
+                      PirateRoute.Profile -> Icon(Icons.Rounded.GraphicEq, contentDescription = null)
                       PirateRoute.Schedule -> Icon(Icons.Rounded.CalendarMonth, contentDescription = null)
                       PirateRoute.Auth -> Icon(Icons.Rounded.Person, contentDescription = null)
                       else -> Icon(Icons.Rounded.Person, contentDescription = null)
@@ -527,7 +534,7 @@ private fun PirateNavHost(
         onOpenDrawer = onOpenDrawer,
       )
     }
-    composable(PirateRoute.Auth.route) {
+    composable(PirateRoute.Profile.route) {
       val isAuthenticated = authState.pkpPublicKey != null && authState.authMethodId != null && authState.accessToken != null
       ProfileScreen(
         ethAddress = authState.pkpEthAddress,
@@ -535,6 +542,18 @@ private fun PirateNavHost(
         busy = authState.busy,
         onRegister = onRegister,
         onLogin = onLogin,
+      )
+    }
+    composable(PirateRoute.Auth.route) {
+      val isAuthenticated = authState.pkpPublicKey != null && authState.authMethodId != null && authState.accessToken != null
+      AboutScreen(
+        isAuthenticated = isAuthenticated,
+        ethAddress = authState.pkpEthAddress,
+        busy = authState.busy,
+        onRegister = onRegister,
+        onLogin = onLogin,
+        onLogout = onLogout,
+        onOpenDrawer = onOpenDrawer,
       )
     }
     composable(

@@ -33,6 +33,7 @@ android {
   packaging {
     resources {
       excludes += "/META-INF/{AL2.0,LGPL2.1}"
+      excludes += "/META-INF/DISCLAIMER"
     }
   }
 }
@@ -61,6 +62,7 @@ dependencies {
   implementation("org.bouncycastle:bcprov-jdk18on:1.83")
   // Ethereum ABI encoding/decoding for AA (ERC-4337) scrobble submits.
   implementation("org.web3j:abi:4.12.2")
+  implementation("org.web3j:crypto:4.12.2")
 
   // XMTP messaging
   implementation("org.xmtp:android:4.9.0")

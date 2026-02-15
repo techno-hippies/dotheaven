@@ -22,14 +22,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,6 +60,7 @@ import java.util.Locale
 private enum class ChatView { Conversations, Thread }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun ChatScreen(
   chatService: XmtpChatService,
   isAuthenticated: Boolean,
@@ -75,9 +81,14 @@ fun ChatScreen(
   var connecting by remember { mutableStateOf(false) }
   var showNewDm by remember { mutableStateOf(false) }
   var newDmAddress by remember { mutableStateOf("") }
+  var newDmBusy by remember { mutableStateOf(false) }
+  var newDmError by remember { mutableStateOf<String?>(null) }
+  var showDisappearingSheet by remember { mutableStateOf(false) }
+  var disappearingRetentionSeconds by remember { mutableStateOf<Long?>(null) }
+  var disappearingBusy by remember { mutableStateOf(false) }
 
   // Auto-connect when authenticated
-  LaunchedEffect(isAuthenticated, connected) {
+  LaunchedEffect(isAuthenticated, pkpEthAddress, pkpPublicKey, litNetwork, litRpcUrl) {
     if (isAuthenticated && !connected && !connecting && pkpEthAddress != null && pkpPublicKey != null) {
       connecting = true
       try {
@@ -93,64 +104,132 @@ fun ChatScreen(
   // Sync view state with active conversation
   LaunchedEffect(activeConversationId) {
     currentView = if (activeConversationId != null) ChatView.Thread else ChatView.Conversations
+    showDisappearingSheet = false
+    disappearingRetentionSeconds = chatService.activeDisappearingSeconds()
   }
 
-  when {
-    !isAuthenticated -> NotAuthenticatedPlaceholder()
-    connecting -> ConnectingPlaceholder()
-    currentView == ChatView.Thread && activeConversationId != null -> {
-      val peerAddress = conversations.find { it.id == activeConversationId }?.peerAddress ?: ""
-      MessageThread(
-        messages = messages,
-        peerAddress = peerAddress,
-        onBack = {
-          chatService.closeConversation()
-          currentView = ChatView.Conversations
-        },
-        onSend = { text ->
-          scope.launch {
-            try {
-              chatService.sendMessage(text)
-            } catch (e: Exception) {
-              onShowMessage("Send failed: ${e.message}")
-            }
-          }
-        },
-      )
-    }
-    else -> {
-      ConversationList(
-        conversations = conversations,
-        showNewDm = showNewDm,
-        newDmAddress = newDmAddress,
-        onNewDmAddressChange = { newDmAddress = it },
-        onToggleNewDm = { showNewDm = !showNewDm },
-        onCreateDm = {
-          if (newDmAddress.isNotBlank()) {
+  Box(modifier = Modifier.fillMaxSize()) {
+    when {
+      !isAuthenticated -> NotAuthenticatedPlaceholder()
+      connecting -> ConnectingPlaceholder()
+      currentView == ChatView.Thread && activeConversationId != null -> {
+        val peerAddress = conversations.find { it.id == activeConversationId }?.peerAddress ?: ""
+        MessageThread(
+          messages = messages,
+          peerAddress = peerAddress,
+          onBack = {
+            chatService.closeConversation()
+            currentView = ChatView.Conversations
+          },
+          onSend = { text ->
             scope.launch {
               try {
-                val convId = chatService.newDm(newDmAddress.trim())
-                if (convId != null) {
-                  chatService.openConversation(convId)
-                  newDmAddress = ""
-                  showNewDm = false
-                }
+                chatService.sendMessage(text)
               } catch (e: Exception) {
-                onShowMessage("New DM failed: ${e.message}")
+                onShowMessage("Send failed: ${e.message}")
               }
             }
+          },
+          onOpenSettings = { showDisappearingSheet = true },
+        )
+      }
+
+      else -> {
+        ConversationList(
+          conversations = conversations,
+          showNewDm = showNewDm,
+          newDmAddress = newDmAddress,
+          newDmBusy = newDmBusy,
+          newDmError = newDmError,
+          onNewDmAddressChange = { newDmAddress = it },
+          onToggleNewDm = { showNewDm = !showNewDm },
+          onCreateDm = {
+            if (newDmAddress.isNotBlank()) {
+              scope.launch {
+                try {
+                  newDmBusy = true
+                  newDmError = null
+                  val convId = chatService.newDm(newDmAddress.trim())
+                  if (convId != null) {
+                    chatService.openConversation(convId)
+                    newDmAddress = ""
+                    showNewDm = false
+                  }
+                } catch (e: Exception) {
+                  val msg = e.message ?: "Unknown error"
+                  newDmError = msg
+                  onShowMessage("New DM failed: $msg")
+                } finally {
+                  newDmBusy = false
+                }
+              }
+            }
+          },
+          onOpenConversation = { convId ->
+            scope.launch {
+              chatService.openConversation(convId)
+            }
+          },
+          onOpenDrawer = onOpenDrawer,
+          onRefresh = {
+            scope.launch { chatService.refreshConversations() }
+          },
+        )
+      }
+    }
+
+    if (showDisappearingSheet) {
+      val options =
+        listOf(
+          "Off" to null,
+          "5 minutes" to 5L * 60L,
+          "1 hour" to 60L * 60L,
+          "1 day" to 24L * 60L * 60L,
+          "7 days" to 7L * 24L * 60L * 60L,
+        )
+
+      ModalBottomSheet(
+        onDismissRequest = { showDisappearingSheet = false },
+      ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+          Text(
+            text = "Disappearing messages",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+          )
+          options.forEach { (label, seconds) ->
+            val selected = disappearingRetentionSeconds == seconds
+            ListItem(
+              headlineContent = { Text(label) },
+              leadingContent = { Icon(Icons.Rounded.Timer, contentDescription = null) },
+              trailingContent = {
+                RadioButton(
+                  selected = selected,
+                  onClick = null,
+                  enabled = !disappearingBusy,
+                )
+              },
+              modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = !disappearingBusy) {
+                  scope.launch {
+                    disappearingBusy = true
+                    runCatching { chatService.setActiveDisappearingSeconds(seconds) }
+                      .onSuccess {
+                        disappearingRetentionSeconds = seconds
+                        showDisappearingSheet = false
+                      }
+                      .onFailure { e ->
+                        onShowMessage("Failed to update disappearing messages: ${e.message}")
+                      }
+                    disappearingBusy = false
+                  }
+                },
+            )
           }
-        },
-        onOpenConversation = { convId ->
-          scope.launch {
-            chatService.openConversation(convId)
-          }
-        },
-        onOpenDrawer = onOpenDrawer,
-        onRefresh = {
-          scope.launch { chatService.refreshConversations() }
-        },
-      )
+        }
+      }
     }
   }
 }
@@ -193,6 +272,8 @@ private fun ConversationList(
   conversations: List<ConversationItem>,
   showNewDm: Boolean,
   newDmAddress: String,
+  newDmBusy: Boolean,
+  newDmError: String?,
   onNewDmAddressChange: (String) -> Unit,
   onToggleNewDm: () -> Unit,
   onCreateDm: () -> Unit,
@@ -225,15 +306,22 @@ private fun ConversationList(
           singleLine = true,
         )
         Spacer(modifier = Modifier.width(8.dp))
-        Button(onClick = onCreateDm, enabled = newDmAddress.isNotBlank()) {
+        Button(onClick = onCreateDm, enabled = newDmAddress.isNotBlank() && !newDmBusy) {
           Text("Chat")
         }
+      }
+      if (!newDmError.isNullOrBlank()) {
+        Text(
+          text = newDmError,
+          color = MaterialTheme.colorScheme.error,
+          modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        )
       }
     }
 
     if (conversations.isEmpty()) {
       Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.weight(1f).fillMaxWidth(),
         contentAlignment = Alignment.Center,
       ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -245,7 +333,7 @@ private fun ConversationList(
         }
       }
     } else {
-      LazyColumn(modifier = Modifier.fillMaxSize()) {
+      LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
         items(conversations, key = { it.id }) { convo ->
           ConversationRow(
             conversation = convo,
@@ -320,6 +408,7 @@ private fun MessageThread(
   peerAddress: String,
   onBack: () -> Unit,
   onSend: (String) -> Unit,
+  onOpenSettings: () -> Unit,
 ) {
   var inputText by remember { mutableStateOf("") }
   val listState = rememberLazyListState()
@@ -336,6 +425,11 @@ private fun MessageThread(
       title = abbreviateAddress(peerAddress),
       onBackPress = onBack,
       isAuthenticated = true,
+      rightSlot = {
+        IconButton(onClick = onOpenSettings) {
+          Icon(Icons.Rounded.Timer, contentDescription = "Disappearing messages")
+        }
+      },
     )
 
     // Messages
