@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "NODE_OPTIONS='--max-old-space-size=8192' vite build && cp public/index.html ../android/app/src/main/assets/lit-bundle/",
+    "build:hosted": "NODE_OPTIONS='--max-old-space-size=8192' LIT_WEBVIEW_OUT_DIR=dist vite build && cp public/index.html dist/",
     "dev": "NODE_OPTIONS='--max-old-space-size=8192' vite build --watch"
   },
   "dependencies": {

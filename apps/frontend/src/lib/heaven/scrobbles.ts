@@ -1,6 +1,7 @@
 import type { Track } from '@heaven/ui'
 import { MEGAETH_RPC, SCROBBLE_V3, SCROBBLE_V4, SUBGRAPH_ACTIVITY } from '@heaven/core'
 import { payloadToMbid } from './artist'
+import { resolveCoverUrl } from './cover-ref'
 
 /**
  * Scrobble history — reads from Goldsky subgraph and resolves
@@ -23,7 +24,7 @@ export interface ScrobbleEntry {
   artist: string
   title: string
   album: string
-  coverCid: string          // IPFS CID for album art (empty if none)
+  coverCid: string          // cover ref (legacy IPFS CID or `ar://...`) (empty if none)
   durationSec: number       // track duration in seconds
   kind: number              // 1=MBID, 2=ipId, 3=meta
   payload: string           // raw derivation input (recording MBID hex for kind=1)
@@ -112,12 +113,6 @@ export async function fetchScrobbleEntries(
 /**
  * Convert ScrobbleEntry[] to Track[] for TrackList component.
  */
-const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
-
-/** Validate CID looks like an IPFS hash (Qm... or bafy...) */
-function isValidCid(cid: string | undefined | null): cid is string {
-  return !!cid && (cid.startsWith('Qm') || cid.startsWith('bafy'))
-}
 
 export function scrobblesToTracks(entries: ScrobbleEntry[]): Track[] {
   return entries.map((e) => ({
@@ -128,9 +123,7 @@ export function scrobblesToTracks(entries: ScrobbleEntry[]): Track[] {
     kind: e.kind,
     payload: e.payload,
     mbid: e.kind === 1 ? payloadToMbid(e.payload) ?? undefined : undefined,
-    albumCover: isValidCid(e.coverCid)
-      ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
-      : undefined,
+    albumCover: resolveCoverUrl(e.coverCid, { width: 96, height: 96, format: 'webp', quality: 80 }),
     dateAdded: formatTimeAgo(e.playedAt),
     duration: formatDuration(e.durationSec),
     scrobbleStatus: (e.kind === 3 ? 'unidentified' : 'verified') as Track['scrobbleStatus'],

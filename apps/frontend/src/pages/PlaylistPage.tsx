@@ -1,32 +1,33 @@
-import { type Component, createSignal, Show } from 'solid-js'
-import { useParams, useNavigate } from '@solidjs/router'
+import { type Component, Show, createSignal } from 'solid-js'
+import { useNavigate, useParams } from '@solidjs/router'
 import { createQuery } from '@tanstack/solid-query'
 import {
-  MediaHeader,
-  type MediaHeaderMenuItem,
-  TrackList,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogBody,
-  DialogFooter,
-  DialogTitle,
-  DialogDescription,
-  DialogCloseButton,
+  AlbumCover,
   Button,
-  IconButton,
-  PlayButton,
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   DropdownMenu,
-  DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  IconButton,
+  PlayButton,
+  TrackList,
 } from '@heaven/ui'
 import { publicProfile } from '@heaven/core'
 import { fetchPlaylistWithTracks } from '../lib/heaven/playlists'
 import { getPrimaryName } from '../lib/heaven'
+import { resolveCoverUrl } from '../lib/heaven/cover-ref'
 import { useTrackPlayback, usePlaylistDialog, buildMenuActions } from '../hooks/useTrackListActions'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
+import { MediaBackBar } from '../components/library/media-back-bar'
 
 export const PlaylistPage: Component = () => {
   const params = useParams<{ id: string }>()
@@ -56,7 +57,7 @@ export const PlaylistPage: Component = () => {
 
   const coverUrl = () => {
     const p = playlist()
-    return p?.coverCid ? `https://heaven.myfilebase.com/ipfs/${p.coverCid}?img-width=300&img-height=300&img-format=webp&img-quality=80` : undefined
+    return resolveCoverUrl(p?.coverCid, { width: 300, height: 300, format: 'webp', quality: 80 })
   }
 
   // Resolve playlist owner to heaven name (falls back to truncated address)
@@ -134,244 +135,272 @@ export const PlaylistPage: Component = () => {
   }
 
   return (
-    <Show when={!query.isLoading} fallback={
-      <div class="h-full flex items-center justify-center">
-        <p class="text-[var(--text-muted)]">Loading...</p>
-      </div>
-    }>
-      <Show when={playlist()} fallback={
-        <div class="h-full flex items-center justify-center">
-          <Show when={query.isFetching} fallback={
-            <p class="text-[var(--text-muted)]">Playlist not found</p>
-          }>
-            <div class="flex items-center gap-3 text-[var(--text-muted)]">
-              <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              <span>Indexing playlist...</span>
+    <div class="h-full overflow-y-auto">
+      <MediaBackBar title="Playlist" onBack={() => navigate(-1)} />
+
+      <div class="max-w-5xl mx-auto w-full">
+        <Show when={!query.isLoading} fallback={
+          <div class="min-h-[260px] py-20 flex items-center justify-center">
+            <p class="text-[var(--text-muted)]">Loading...</p>
+          </div>
+        }>
+          <Show when={playlist()} fallback={
+            <div class="min-h-[260px] py-20 flex items-center justify-center">
+              <Show when={query.isFetching} fallback={
+                <p class="text-[var(--text-muted)]">Playlist not found</p>
+              }>
+                <div class="flex items-center gap-3 text-[var(--text-muted)]">
+                  <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <span>Indexing playlist...</span>
+                </div>
+              </Show>
             </div>
-          </Show>
-        </div>
-      }>
-        {(p) => (
-          <div class="h-full overflow-y-auto max-w-5xl mx-auto w-full">
-            <MediaHeader
-                type="playlist"
-                title={p().name}
-                creator={creatorName()}
-                creatorHref={creatorHref()}
-                description=""
-                coverSrc={coverUrl()}
-                stats={{
-                  songCount: p().trackCount,
-                  duration: totalDuration(),
-                }}
-                onBack={() => navigate(-1)}
-                mobileMenuItems={[
-                  {
-                    label: 'Request Access',
-                    icon: (
-                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
-                      </svg>
-                    ),
-                    onSelect: () => console.log('Request Access'),
-                  } satisfies MediaHeaderMenuItem,
-                  {
-                    label: 'Mint NFT',
-                    icon: (
-                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
-                      </svg>
-                    ),
-                    onSelect: () => console.log('Mint NFT'),
-                  } satisfies MediaHeaderMenuItem,
-                ]}
-                onTitleClick={openEditDialog}
-                onCoverClick={openEditDialog}
-                actionsSlot={
-                  <div class="flex items-center gap-4">
-                    <PlayButton onClick={handlePlay} aria-label="Play playlist" />
+          }>
+            {(p) => (
+              <>
+                <div class="px-4 md:px-8 py-6">
+                  <div class="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/70 p-4 md:p-6">
+                    <div class="flex flex-col md:flex-row gap-5 md:gap-6">
+                      <button
+                        type="button"
+                        class="self-center md:self-auto cursor-pointer"
+                        onClick={openEditDialog}
+                        aria-label="Edit playlist cover"
+                      >
+                        <AlbumCover
+                          src={coverUrl()}
+                          icon="playlist"
+                          class="w-40 h-40 md:w-48 md:h-48"
+                        />
+                      </button>
 
-                    {/* Add Collaborator Button */}
-                    <IconButton
-                      variant="soft"
-                      size="lg"
-                      onClick={handleAddCollaborator}
-                      aria-label="Add collaborator"
-                    >
-                      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                      </svg>
-                    </IconButton>
+                      <div class="flex-1 min-w-0">
+                        <div class="text-xs uppercase tracking-[0.16em] text-[var(--text-muted)]">Playlist</div>
+                        <h1
+                          class="mt-2 text-2xl md:text-4xl font-bold leading-tight text-[var(--text-primary)] cursor-pointer hover:underline"
+                          onClick={openEditDialog}
+                        >
+                          {p().name}
+                        </h1>
 
-                    {/* More Options Dropdown */}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        as={(props: any) => (
+                        <div class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-base text-[var(--text-secondary)]">
+                          <Show when={creatorName()}>
+                            <Show
+                              when={creatorHref()}
+                              fallback={<span class="font-semibold text-[var(--text-primary)]">{creatorName()}</span>}
+                            >
+                              <a
+                                href={creatorHref()!}
+                                class="font-semibold text-[var(--text-primary)] hover:underline"
+                              >
+                                {creatorName()}
+                              </a>
+                            </Show>
+                            <span>&middot;</span>
+                          </Show>
+                          <span>{p().trackCount} tracks</span>
+                          <span>&middot;</span>
+                          <span>{totalDuration()}</span>
+                        </div>
+
+                        <div class="mt-5 flex flex-wrap items-center gap-3">
+                          <PlayButton onClick={handlePlay} aria-label="Play playlist" />
+
                           <IconButton
-                            {...props}
                             variant="soft"
                             size="lg"
-                            aria-label="More options"
+                            onClick={handleAddCollaborator}
+                            aria-label="Add collaborator"
                           >
-                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                             </svg>
                           </IconButton>
-                        )}
-                      />
-                      <DropdownMenuContent>
-                        <DropdownMenuItem onSelect={openEditDialog}>
-                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                          Edit Details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={handleCopyUrl}>
-                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                          </svg>
-                          Copy URL
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onSelect={() => setDeleteOpen(true)}
-                          class="text-[var(--accent-coral)]"
-                        >
-                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                          Delete Playlist
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                }
-              />
-              <Show when={tracks().length > 0} fallback={
-                <div class="px-8 py-12 text-center">
-                  <p class="text-[var(--text-muted)] text-lg">No songs yet</p>
-                  <p class="text-[var(--text-muted)] text-base mt-2">Add songs to this playlist to get started</p>
-                </div>
-              }>
-                <TrackList
-                  tracks={tracks()}
-                  activeTrackId={playback.activeTrackId()}
-                  selectedTrackId={playback.selectedTrackId()}
-                  onTrackClick={(track) => playback.select(track)}
-                  onTrackPlay={(track) => playback.play(track)}
-                  menuActions={menuActions}
-                />
-              </Show>
 
-              {/* Edit Playlist Dialog */}
-              <Dialog open={editOpen()} onOpenChange={setEditOpen}>
-                <DialogContent class="max-w-xl">
-                  <DialogHeader>
-                    <DialogTitle>Edit Playlist</DialogTitle>
-                    <DialogDescription>
-                      Update your playlist details.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <DialogBody>
-                    <div class="flex gap-6">
-                      <div class="flex-shrink-0">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          id="cover-upload"
-                          class="hidden"
-                          onChange={(e) => {
-                            const file = e.currentTarget.files?.[0]
-                            if (file) {
-                              const reader = new FileReader()
-                              reader.onload = (ev) => {
-                                setEditCoverUrl(ev.target?.result as string)
-                              }
-                              reader.readAsDataURL(file)
-                            }
-                          }}
-                        />
-                        <label
-                          for="cover-upload"
-                          class="block w-48 h-48 rounded-md bg-[var(--bg-highlight)] flex items-center justify-center cursor-pointer hover:bg-[var(--bg-highlight-hover)] transition-colors overflow-hidden"
-                        >
-                          <Show when={editCoverUrl()} fallback={
-                            <div class="text-center text-[var(--text-muted)]">
-                              <svg class="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-                                <path d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-                              </svg>
-                              <span class="text-base">Choose photo</span>
-                            </div>
-                          }>
-                            <img src={editCoverUrl()} alt="Cover" class="w-full h-full object-cover" />
-                          </Show>
-                        </label>
-                      </div>
-                      <div class="flex-1 flex flex-col gap-4">
-                        <input
-                          type="text"
-                          value={editTitle()}
-                          onInput={(e) => setEditTitle(e.currentTarget.value)}
-                          placeholder="Playlist name"
-                          class="w-full px-4 py-3 rounded-full bg-[var(--bg-highlight)] text-[var(--text-primary)] text-lg placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
-                          autofocus
-                        />
-                        <textarea
-                          value={editDescription()}
-                          onInput={(e) => setEditDescription(e.currentTarget.value)}
-                          placeholder="Add a description (optional)"
-                          rows={4}
-                          class="w-full px-4 py-3 rounded-2xl bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors resize-none flex-1"
-                        />
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              as={(props: any) => (
+                                <IconButton
+                                  {...props}
+                                  variant="soft"
+                                  size="lg"
+                                  aria-label="More options"
+                                >
+                                  <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+                                  </svg>
+                                </IconButton>
+                              )}
+                            />
+                            <DropdownMenuContent>
+                              <DropdownMenuItem onSelect={openEditDialog}>
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                  <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                Edit Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => console.log('Request Access')}>
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                  <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+                                </svg>
+                                Request Access
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => console.log('Mint NFT')}>
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                  <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+                                </svg>
+                                Mint NFT
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onSelect={handleCopyUrl}>
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                  <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                Copy URL
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onSelect={() => setDeleteOpen(true)}
+                                class="text-[var(--accent-coral)]"
+                              >
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                                Delete Playlist
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </div>
                     </div>
-                  </DialogBody>
-                  <DialogFooter>
-                    <DialogCloseButton
-                      as={(props: any) => (
-                        <Button {...props} variant="secondary">Cancel</Button>
-                      )}
-                    />
-                    <Button onClick={handleSave}>Save</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+                  </div>
+                </div>
 
-              {/* Delete Confirmation Dialog */}
-              <Dialog open={deleteOpen()} onOpenChange={setDeleteOpen}>
-                <DialogContent class="max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Delete Playlist</DialogTitle>
-                    <DialogDescription>
-                      Are you sure you want to delete "{p().name}"? This action cannot be undone.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <DialogFooter>
-                    <DialogCloseButton
-                      as={(props: any) => (
-                        <Button {...props} variant="secondary">Cancel</Button>
-                      )}
-                    />
-                    <Button
-                      onClick={handleDelete}
-                      class="bg-[var(--accent-coral)] hover:bg-[var(--accent-coral)]/90"
-                    >
-                      Delete
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-          </div>
-        )}
-      </Show>
+                <Show when={tracks().length > 0} fallback={
+                  <div class="px-4 md:px-8 py-12 text-center">
+                    <p class="text-[var(--text-muted)] text-lg">No songs yet</p>
+                    <p class="text-[var(--text-muted)] text-base mt-2">Add songs to this playlist to get started</p>
+                  </div>
+                }>
+                  <TrackList
+                    tracks={tracks()}
+                    activeTrackId={playback.activeTrackId()}
+                    selectedTrackId={playback.selectedTrackId()}
+                    onTrackClick={(track) => playback.select(track)}
+                    onTrackPlay={(track) => playback.play(track)}
+                    menuActions={menuActions}
+                  />
+                </Show>
+
+                <Dialog open={editOpen()} onOpenChange={setEditOpen}>
+                  <DialogContent class="max-w-xl">
+                    <DialogHeader>
+                      <DialogTitle>Edit Playlist</DialogTitle>
+                      <DialogDescription>
+                        Update your playlist details.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <DialogBody>
+                      <div class="flex gap-6">
+                        <div class="flex-shrink-0">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            id="cover-upload"
+                            class="hidden"
+                            onChange={(e) => {
+                              const file = e.currentTarget.files?.[0]
+                              if (file) {
+                                const reader = new FileReader()
+                                reader.onload = (ev) => {
+                                  setEditCoverUrl(ev.target?.result as string)
+                                }
+                                reader.readAsDataURL(file)
+                              }
+                            }}
+                          />
+                          <label
+                            for="cover-upload"
+                            class="block w-48 h-48 rounded-md bg-[var(--bg-highlight)] flex items-center justify-center cursor-pointer hover:bg-[var(--bg-highlight-hover)] transition-colors overflow-hidden"
+                          >
+                            <Show when={editCoverUrl()} fallback={
+                              <div class="text-center text-[var(--text-muted)]">
+                                <svg class="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                                  <path d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                                </svg>
+                                <span class="text-base">Choose photo</span>
+                              </div>
+                            }>
+                              <img src={editCoverUrl()} alt="Cover" class="w-full h-full object-cover" />
+                            </Show>
+                          </label>
+                        </div>
+                        <div class="flex-1 flex flex-col gap-4">
+                          <input
+                            type="text"
+                            value={editTitle()}
+                            onInput={(e) => setEditTitle(e.currentTarget.value)}
+                            placeholder="Playlist name"
+                            class="w-full px-4 py-3 rounded-full bg-[var(--bg-highlight)] text-[var(--text-primary)] text-lg placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors"
+                            autofocus
+                          />
+                          <textarea
+                            value={editDescription()}
+                            onInput={(e) => setEditDescription(e.currentTarget.value)}
+                            placeholder="Add a description (optional)"
+                            rows={4}
+                            class="w-full px-4 py-3 rounded-2xl bg-[var(--bg-highlight)] text-[var(--text-primary)] text-base placeholder:text-[var(--text-muted)] outline-none border border-transparent focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 transition-colors resize-none flex-1"
+                          />
+                        </div>
+                      </div>
+                    </DialogBody>
+                    <DialogFooter>
+                      <DialogCloseButton
+                        as={(props: any) => (
+                          <Button {...props} variant="secondary">Cancel</Button>
+                        )}
+                      />
+                      <Button onClick={handleSave}>Save</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
+                <Dialog open={deleteOpen()} onOpenChange={setDeleteOpen}>
+                  <DialogContent class="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Delete Playlist</DialogTitle>
+                      <DialogDescription>
+                        Are you sure you want to delete "{p().name}"? This action cannot be undone.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                      <DialogCloseButton
+                        as={(props: any) => (
+                          <Button {...props} variant="secondary">Cancel</Button>
+                        )}
+                      />
+                      <Button
+                        onClick={handleDelete}
+                        class="bg-[var(--accent-coral)] hover:bg-[var(--accent-coral)]/90"
+                      >
+                        Delete
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </>
+            )}
+          </Show>
+        </Show>
+      </div>
+
       <AddToPlaylistDialog
         open={plDialog.open()}
         onOpenChange={plDialog.setOpen}
         track={plDialog.track()}
       />
-    </Show>
+    </div>
   )
 }

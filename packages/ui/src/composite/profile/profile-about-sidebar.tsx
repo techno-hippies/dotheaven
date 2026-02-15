@@ -1,4 +1,4 @@
-import { Show, For, type Component } from 'solid-js'
+import { Show, type Component } from 'solid-js'
 import { ProfileSidebarCard, ProfileSidebarRow } from './profile-sidebar-card'
 import { getLanguageName, proficiencyLabel } from '../../data/languages'
 import { getTagLabel, stringToTagIds } from '../../data/tags'
@@ -8,7 +8,6 @@ import type { SelectOption } from '../../primitives'
 import type { ProfileInput } from './profile-info-section'
 import type { LanguageEntry } from '../../data/languages'
 import {
-  GENDER_OPTIONS,
   DEGREE_OPTIONS,
   FIELD_OPTIONS,
   PROFESSION_OPTIONS,

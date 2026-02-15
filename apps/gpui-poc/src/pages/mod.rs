@@ -2,6 +2,7 @@ use gpui::*;
 use gpui_component::StyledExt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum Page {
     Home,
     Community,
@@ -12,6 +13,7 @@ pub enum Page {
     MusicDiscover,
     MusicLibrary,
     Rooms,
+    Playlists,
     MusicShared,
     Download,
     Settings,
@@ -29,6 +31,7 @@ impl Page {
             Page::MusicDiscover => "Discover",
             Page::MusicLibrary => "Library",
             Page::Rooms => "Rooms",
+            Page::Playlists => "Playlists",
             Page::MusicShared => "Shared With Me",
             Page::Download => "Download",
             Page::Settings => "Settings",

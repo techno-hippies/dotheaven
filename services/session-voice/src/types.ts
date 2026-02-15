@@ -13,7 +13,8 @@ export interface Env {
   VERIFICATION_MIRROR_ADDRESS: string
   ORACLE_PRIVATE_KEY?: string
   ORACLE_SERVICE_TOKEN?: string
-  X402_FACILITATOR_MODE?: 'mock' | 'cdp'
+  SONG_REGISTRY_ADMIN_TOKEN?: string
+  X402_FACILITATOR_MODE?: 'mock' | 'cdp' | 'self'
   X402_FACILITATOR_BASE_URL?: string
   X402_FACILITATOR_AUTH_TOKEN?: string
   // CAI agent (AI in rooms)

@@ -13,6 +13,11 @@ export interface MusicTrack {
   filename: string;
   artworkUri?: string;
   artworkFallbackUri?: string;
+  // Optional cloud-content metadata for encrypted playback.
+  contentId?: string;
+  pieceCid?: string;
+  datasetOwner?: string;
+  algo?: number;
 }
 
 const PERMISSION_TIMEOUT_MS = 10000;

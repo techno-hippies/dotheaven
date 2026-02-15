@@ -6,20 +6,25 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use aes_gcm::aead::Aead;
 use aes_gcm::KeyInit;
+use aes_gcm::Nonce;
 use base64::Engine;
 use ethers::prelude::{Http, Provider, SignerMiddleware, U256};
 use ethers::providers::Middleware;
 use ethers::signers::{LocalWallet, Signer};
+use getrandom::getrandom;
+use sha2::{Digest, Sha384};
 
 use lit_rust_sdk::{
     create_eth_wallet_auth_data, create_lit_client, naga_dev, naga_mainnet, naga_proto,
     naga_staging, naga_test, view_pkps_by_auth_data, AuthConfig, AuthContext, AuthData,
-    LitAbility, LitClient, Pagination, PkpMintManager, ResourceAbilityRequest,
+    EncryptParams, LitAbility, LitClient, Pagination, PkpMintManager, ResourceAbilityRequest,
 };
 use lit_rust_sdk::client::ExecuteJsResponseStrategy;
 use serde::{Deserialize, Serialize};
 
 const BRIDGE_VERSION: &str = "0.1.0";
+const DEFAULT_LOAD_GATEWAY_URL: &str = "https://gateway.s3-node-1.load.network";
+const DEFAULT_CONTENT_DECRYPT_V1_CID: &str = "QmUmVkMxC57nAqUmJPZmoBKeBfiZS6ZR8qzYQJvWe4W12w";
 
 fn default_auth_expiration() -> String {
     use chrono::{SecondsFormat, Utc};
@@ -124,6 +129,15 @@ struct ExecuteJsResult {
 #[serde(rename_all = "camelCase")]
 struct SignMessageResult {
     signature: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LoadUploadResult {
+    id: String,
+    gateway_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    winc: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -787,19 +801,41 @@ fn strip_0x(value: &str) -> &str {
     value.strip_prefix("0x").or_else(|| value.strip_prefix("0X")).unwrap_or(value)
 }
 
-fn signature_from_combined_value(combined: &serde_json::Value) -> Result<String, String> {
-    let strip = |hex: &str| strip_0x(hex).to_string();
+fn normalize_hex_like_string(raw: &str) -> String {
+    // Some Lit runtimes return doubly-encoded JSON strings like "\"0xabc...\"".
+    let mut value = raw.trim().to_string();
+    for _ in 0..2 {
+        match serde_json::from_str::<String>(&value) {
+            Ok(decoded) => value = decoded,
+            Err(_) => break,
+        }
+    }
+    value.trim().trim_matches('"').to_string()
+}
 
+fn normalize_hex_digits(raw: &str) -> Result<String, String> {
+    let normalized = normalize_hex_like_string(raw);
+    let no_prefix = strip_0x(normalized.as_str()).trim();
+    if no_prefix.is_empty() || !no_prefix.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(format!(
+            "invalid hex string: {}",
+            sanitize_error(raw)
+        ));
+    }
+    Ok(no_prefix.to_string())
+}
+
+fn signature_from_combined_value(combined: &serde_json::Value) -> Result<String, String> {
     let mut r_hex: Option<String> = None;
     let mut s_hex: Option<String> = None;
     let mut recid: Option<i64> = None;
 
     if let Some(obj) = combined.as_object() {
         if let Some(r) = obj.get("r").and_then(|v| v.as_str()) {
-            r_hex = Some(strip(r));
+            r_hex = Some(normalize_hex_digits(r)?);
         }
         if let Some(s) = obj.get("s").and_then(|v| v.as_str()) {
-            s_hex = Some(strip(s));
+            s_hex = Some(normalize_hex_digits(s)?);
         }
         if let Some(v) = obj.get("recid").or_else(|| obj.get("recoveryId")).or_else(|| obj.get("v")) {
             recid = if let Some(n) = v.as_i64() {
@@ -812,7 +848,7 @@ fn signature_from_combined_value(combined: &serde_json::Value) -> Result<String,
         }
         if r_hex.is_none() || s_hex.is_none() {
             if let Some(sig) = obj.get("signature").and_then(|v| v.as_str()) {
-                let sig_hex = strip(sig);
+                let sig_hex = normalize_hex_digits(sig)?;
                 if sig_hex.len() >= 128 {
                     r_hex = Some(sig_hex[0..64].to_string());
                     s_hex = Some(sig_hex[64..128].to_string());
@@ -823,6 +859,12 @@ fn signature_from_combined_value(combined: &serde_json::Value) -> Result<String,
 
     let r = r_hex.ok_or_else(|| "missing signature r".to_string())?;
     let s = s_hex.ok_or_else(|| "missing signature s".to_string())?;
+    if r.len() > 64 {
+        return Err("invalid signature r length".to_string());
+    }
+    if s.len() > 64 {
+        return Err("invalid signature s length".to_string());
+    }
     let recid = recid.unwrap_or(0);
     let v = if recid >= 27 { recid } else { recid + 27 };
 
@@ -878,6 +920,722 @@ fn sign_message_impl(network: String, rpc_url: String, message: String, public_k
 
         let signature = signature_from_combined_value(&combined)?;
         Ok::<SignMessageResult, String>(SignMessageResult { signature })
+    });
+
+    match result {
+        Ok(value) => ok_json(value),
+        Err(err) => err_json(sanitize_error(err.as_str())),
+    }
+}
+
+const ANS104_SIGNATURE_TYPE_ETHEREUM: u16 = 3;
+
+const ANS104_MAX_TAGS: usize = 128;
+const ANS104_MAX_NAME_LEN: usize = 1024;
+const ANS104_MAX_VALUE_LEN: usize = 3072;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Ans104Tag {
+    name: String,
+    value: String,
+}
+
+impl Ans104Tag {
+    fn new(name: &str, value: &str) -> Self {
+        Self { name: name.to_string(), value: value.to_string() }
+    }
+}
+
+fn validate_ans104_tags(tags: &[Ans104Tag]) -> Result<(), String> {
+    if tags.len() > ANS104_MAX_TAGS {
+        return Err(format!("too many tags (>{})", ANS104_MAX_TAGS));
+    }
+
+    for tag in tags {
+        if tag.name.is_empty() {
+            return Err("empty tag name".to_string());
+        }
+        if tag.value.is_empty() {
+            return Err("empty tag value".to_string());
+        }
+        if tag.name.as_bytes().len() > ANS104_MAX_NAME_LEN {
+            return Err(format!("tag name >{} bytes", ANS104_MAX_NAME_LEN));
+        }
+        if tag.value.as_bytes().len() > ANS104_MAX_VALUE_LEN {
+            return Err(format!("tag value >{} bytes", ANS104_MAX_VALUE_LEN));
+        }
+    }
+
+    Ok(())
+}
+
+fn encode_avro_long(out: &mut Vec<u8>, value: usize) {
+    // Avro long uses zigzag varint encoding. For non-negative values, zigzag is value << 1.
+    let mut n = (value as u64) << 1;
+    loop {
+        let mut byte = (n & 0x7F) as u8;
+        n >>= 7;
+        if n != 0 {
+            byte |= 0x80;
+        }
+        out.push(byte);
+        if n == 0 {
+            break;
+        }
+    }
+}
+
+fn encode_ans104_tags(tags: &[Ans104Tag]) -> Result<Vec<u8>, String> {
+    if tags.is_empty() {
+        return Ok(Vec::new());
+    }
+    validate_ans104_tags(tags)?;
+
+    // Single positive-count block + terminating 0 block.
+    let mut out = Vec::with_capacity(tags.len() * 32);
+    encode_avro_long(&mut out, tags.len());
+
+    for tag in tags {
+        let name_bytes = tag.name.as_bytes();
+        let value_bytes = tag.value.as_bytes();
+
+        encode_avro_long(&mut out, name_bytes.len());
+        out.extend_from_slice(name_bytes);
+
+        encode_avro_long(&mut out, value_bytes.len());
+        out.extend_from_slice(value_bytes);
+    }
+
+    out.push(0); // end of array
+    Ok(out)
+}
+
+#[derive(Debug, Clone)]
+enum DeepHash<'a> {
+    Blob(&'a [u8]),
+    List(Vec<DeepHash<'a>>),
+}
+
+fn sha384_bytes(data: &[u8]) -> [u8; 48] {
+    Sha384::digest(data).into()
+}
+
+fn deep_hash_sync(item: &DeepHash<'_>) -> [u8; 48] {
+    match item {
+        DeepHash::Blob(bytes) => deep_hash_blob(bytes),
+        DeepHash::List(list) => deep_hash_list(list),
+    }
+}
+
+fn deep_hash_blob(data: &[u8]) -> [u8; 48] {
+    let tag = format!("blob{}", data.len());
+    let hash_tag = sha384_bytes(tag.as_bytes());
+    let hash_dat = sha384_bytes(data);
+
+    let mut concat = Vec::with_capacity(96);
+    concat.extend_from_slice(&hash_tag);
+    concat.extend_from_slice(&hash_dat);
+    sha384_bytes(&concat)
+}
+
+fn deep_hash_list(list: &[DeepHash<'_>]) -> [u8; 48] {
+    let tag = format!("list{}", list.len());
+    let mut acc = sha384_bytes(tag.as_bytes());
+
+    for child in list {
+        let child_hash = deep_hash_sync(child);
+
+        let mut pair = Vec::with_capacity(96);
+        pair.extend_from_slice(&acc);
+        pair.extend_from_slice(&child_hash);
+
+        acc = sha384_bytes(&pair);
+    }
+    acc
+}
+
+fn ans104_signing_message(owner: &[u8], tags: &[Ans104Tag], data: &[u8]) -> Result<[u8; 48], String> {
+    let tags_bytes = encode_ans104_tags(tags)?;
+    let signature_type = ANS104_SIGNATURE_TYPE_ETHEREUM.to_string();
+
+    let dh = DeepHash::List(vec![
+        DeepHash::Blob(b"dataitem"),
+        DeepHash::Blob(b"1"),
+        DeepHash::Blob(signature_type.as_bytes()),
+        DeepHash::Blob(owner),
+        DeepHash::Blob(&[]), // target bytes
+        DeepHash::Blob(&[]), // anchor bytes
+        DeepHash::Blob(tags_bytes.as_slice()),
+        DeepHash::Blob(data),
+    ]);
+
+    Ok(deep_hash_sync(&dh))
+}
+
+fn ans104_to_bytes(signature: &[u8], owner: &[u8], tags: &[Ans104Tag], data: &[u8]) -> Result<Vec<u8>, String> {
+    validate_ans104_tags(tags)?;
+
+    if signature.len() != 65 {
+        return Err(format!(
+            "invalid signature length: expected 65 bytes, got {}",
+            signature.len()
+        ));
+    }
+    if owner.len() != 65 {
+        return Err(format!(
+            "invalid owner length: expected 65 bytes, got {}",
+            owner.len()
+        ));
+    }
+
+    let tags_bin = encode_ans104_tags(tags)?;
+    let mut out = Vec::with_capacity(
+        2 + signature.len() + owner.len() + 2 + 16 + tags_bin.len() + data.len(),
+    );
+
+    out.extend_from_slice(&ANS104_SIGNATURE_TYPE_ETHEREUM.to_le_bytes());
+    out.extend_from_slice(signature);
+    out.extend_from_slice(owner);
+
+    out.push(0); // target absent
+    out.push(0); // anchor absent
+
+    out.extend_from_slice(&(tags.len() as u64).to_le_bytes());
+    out.extend_from_slice(&(tags_bin.len() as u64).to_le_bytes());
+    out.extend_from_slice(tags_bin.as_slice());
+
+    out.extend_from_slice(data);
+    Ok(out)
+}
+
+fn parse_tags_json(tags_json: &str) -> Result<Vec<Ans104Tag>, String> {
+    let raw = tags_json.trim();
+    if raw.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let parsed: serde_json::Value = serde_json::from_str(raw)
+        .map_err(|err| format!("invalid tags JSON: {err}"))?;
+    let arr = parsed
+        .as_array()
+        .ok_or_else(|| "tagsJson must be a JSON array".to_string())?;
+
+    let mut out = Vec::new();
+    for tag in arr {
+        let name = tag
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .unwrap_or("");
+        let value = tag
+            .get("value")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .unwrap_or("");
+        if name.is_empty() || value.is_empty() {
+            continue;
+        }
+        out.push(Ans104Tag::new(name, value));
+    }
+    Ok(out)
+}
+
+fn infer_content_type(file_path: &str) -> &'static str {
+    let lower = file_path.to_ascii_lowercase();
+    if lower.ends_with(".mp3") {
+        "audio/mpeg"
+    } else if lower.ends_with(".m4a") {
+        "audio/mp4"
+    } else if lower.ends_with(".aac") {
+        "audio/aac"
+    } else if lower.ends_with(".flac") {
+        "audio/flac"
+    } else if lower.ends_with(".wav") {
+        "audio/wav"
+    } else if lower.ends_with(".ogg") || lower.ends_with(".opus") {
+        "audio/ogg"
+    } else {
+        "application/octet-stream"
+    }
+}
+
+fn parse_pkp_public_key_bytes(pkp_public_key: &str) -> Result<Vec<u8>, String> {
+    let raw = strip_0x(pkp_public_key.trim());
+    let mut decoded =
+        hex::decode(raw).map_err(|err| format!("invalid PKP public key hex: {err}"))?;
+    if decoded.len() == 64 {
+        decoded.insert(0, 0x04);
+    }
+    if decoded.len() != 65 {
+        return Err(format!(
+            "invalid PKP public key length: expected 64 or 65 bytes, got {}",
+            decoded.len()
+        ));
+    }
+    if decoded[0] != 0x04 {
+        return Err("PKP public key must be uncompressed secp256k1 (0x04 prefix)".to_string());
+    }
+    Ok(decoded)
+}
+
+fn signature_hex_to_65_bytes(signature_hex: &str) -> Result<Vec<u8>, String> {
+    let normalized = normalize_hex_like_string(signature_hex);
+    let raw = strip_0x(normalized.trim());
+    let decoded = hex::decode(raw).map_err(|err| format!("invalid signature hex: {err}"))?;
+    if decoded.len() != 65 {
+        return Err(format!(
+            "invalid signature length: expected 65 bytes, got {}",
+            decoded.len()
+        ));
+    }
+    Ok(decoded)
+}
+
+fn parse_json_or_text(raw: &str) -> serde_json::Value {
+    serde_json::from_str(raw).unwrap_or_else(|_| serde_json::json!({ "raw": raw }))
+}
+
+fn extract_gateway_base(payload: &serde_json::Value) -> Option<String> {
+    let direct = payload
+        .get("dataCaches")
+        .or_else(|| payload.get("data_caches"))
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string);
+
+    if direct.is_some() {
+        return direct;
+    }
+
+    payload
+        .get("gateway")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
+}
+
+fn extract_upload_id(payload: &serde_json::Value) -> Option<String> {
+    let direct_keys = ["id", "dataitem_id", "dataitemId"];
+    for key in direct_keys {
+        if let Some(id) = payload.get(key).and_then(|v| v.as_str()) {
+            let trimmed = id.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+
+    if let Some(result) = payload.get("result") {
+        for key in direct_keys {
+            if let Some(id) = result.get(key).and_then(|v| v.as_str()) {
+                let trimmed = id.trim();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.to_string());
+                }
+            }
+        }
+    }
+
+    None
+}
+
+fn normalize_bytes32_hex(value: &str, field_name: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(format!("{field_name} cannot be empty"));
+    }
+
+    let lower = trimmed.to_lowercase();
+    if !lower.starts_with("0x") || lower.len() != 66 {
+        return Err(format!(
+            "invalid {field_name}: expected 0x-prefixed bytes32 hex, got \"{}\"",
+            sanitize_error(trimmed)
+        ));
+    }
+    if !lower[2..].chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(format!(
+            "invalid {field_name}: expected hex digits, got \"{}\"",
+            sanitize_error(trimmed)
+        ));
+    }
+    Ok(lower)
+}
+
+fn build_content_decrypt_action_conditions(decrypt_cid: &str) -> Result<serde_json::Value, String> {
+    let cid = decrypt_cid.trim();
+    if cid.is_empty() {
+        return Err("contentDecryptCid cannot be empty".to_string());
+    }
+
+    Ok(serde_json::json!([
+        {
+            "conditionType": "evmBasic",
+            "contractAddress": "",
+            "standardContractType": "",
+            "chain": "ethereum",
+            "method": "",
+            "parameters": [":currentActionIpfsId"],
+            "returnValueTest": { "comparator": "=", "value": cid },
+        }
+    ]))
+}
+
+fn build_encrypted_content_blob(
+    lit_ciphertext_b64: &str,
+    data_to_encrypt_hash_hex: &str,
+    iv: &[u8; 12],
+    encrypted_audio: &[u8],
+) -> Vec<u8> {
+    let lit_ciphertext_bytes = lit_ciphertext_b64.as_bytes();
+    let data_to_encrypt_hash_bytes = data_to_encrypt_hash_hex.as_bytes();
+
+    let header_size = 4
+        + lit_ciphertext_bytes.len()
+        + 4
+        + data_to_encrypt_hash_bytes.len()
+        + 1
+        + 1
+        + iv.len()
+        + 4;
+    let mut out = Vec::with_capacity(header_size + encrypted_audio.len());
+
+    out.extend_from_slice(&(lit_ciphertext_bytes.len() as u32).to_be_bytes());
+    out.extend_from_slice(lit_ciphertext_bytes);
+
+    out.extend_from_slice(&(data_to_encrypt_hash_bytes.len() as u32).to_be_bytes());
+    out.extend_from_slice(data_to_encrypt_hash_bytes);
+
+    out.push(ALGO_AES_GCM_256 as u8);
+    out.push(iv.len() as u8);
+    out.extend_from_slice(iv);
+
+    out.extend_from_slice(&(encrypted_audio.len() as u32).to_be_bytes());
+    out.extend_from_slice(encrypted_audio);
+    out
+}
+
+async fn encrypt_audio_for_upload(
+    lit_client: &LitClient,
+    plaintext_audio: &[u8],
+    content_id: &str,
+    content_decrypt_cid: &str,
+) -> Result<Vec<u8>, String> {
+    let normalized_content_id = normalize_bytes32_hex(content_id, "contentId")?;
+
+    let decrypt_cid = content_decrypt_cid.trim();
+    let decrypt_cid = if decrypt_cid.is_empty() {
+        DEFAULT_CONTENT_DECRYPT_V1_CID
+    } else {
+        decrypt_cid
+    };
+
+    let mut key = [0u8; 32];
+    getrandom(&mut key).map_err(|err| format!("AES key generation failed: {err}"))?;
+    let mut iv = [0u8; 12];
+    getrandom(&mut iv).map_err(|err| format!("IV generation failed: {err}"))?;
+
+    let cipher = aes_gcm::Aes256Gcm::new_from_slice(&key)
+        .map_err(|err| format!("failed to init AES-256-GCM: {err}"))?;
+    let encrypted_audio = cipher
+        .encrypt(Nonce::from_slice(&iv), plaintext_audio)
+        .map_err(|err| format!("AES-GCM encrypt failed: {err}"))?;
+
+    let key_base64 = base64::engine::general_purpose::STANDARD.encode(key);
+    key.fill(0);
+
+    let payload = serde_json::json!({
+        "contentId": normalized_content_id,
+        "key": key_base64,
+    });
+    let payload_bytes = serde_json::to_vec(&payload)
+        .map_err(|err| format!("failed to encode content key payload: {err}"))?;
+
+    let conditions = build_content_decrypt_action_conditions(decrypt_cid)?;
+    let encrypt_response = lit_client
+        .encrypt(EncryptParams {
+            data_to_encrypt: payload_bytes,
+            unified_access_control_conditions: Some(conditions),
+            hashed_access_control_conditions_hex: None,
+            metadata: None,
+        })
+        .await
+        .map_err(|err| format!("Lit encrypt failed: {err}"))?;
+
+    Ok(build_encrypted_content_blob(
+        encrypt_response.ciphertext_base64.as_str(),
+        encrypt_response.data_to_encrypt_hash_hex.as_str(),
+        &iv,
+        encrypted_audio.as_slice(),
+    ))
+}
+
+fn load_upload_impl(
+    network: String,
+    rpc_url: String,
+    upload_url: String,
+    upload_token: String,
+    gateway_url_fallback: String,
+    payload: Vec<u8>,
+    file_path: String,
+    content_type: String,
+    tags_json: String,
+) -> String {
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(err) => {
+            return err_json(format!(
+                "failed to create tokio runtime: {}",
+                sanitize_error(&err.to_string())
+            ));
+        }
+    };
+
+    let result = runtime.block_on(async {
+        let lit_client = get_or_create_lit_client(network.as_str(), rpc_url.as_str()).await?;
+        let cached = get_cached_auth_context(network.as_str(), rpc_url.as_str())?;
+
+        let mut tags = parse_tags_json(tags_json.as_str())?;
+
+        if !tags
+            .iter()
+            .any(|tag| tag.name.eq_ignore_ascii_case("Content-Type"))
+        {
+            let hint = content_type.trim();
+            let inferred = if !hint.is_empty() {
+                hint
+            } else {
+                infer_content_type(file_path.as_str())
+            };
+            tags.insert(0, Ans104Tag::new("Content-Type", inferred));
+        }
+
+        let owner = parse_pkp_public_key_bytes(cached.pkp_public_key.as_str())?;
+
+        let signing_message =
+            ans104_signing_message(owner.as_slice(), tags.as_slice(), payload.as_slice())?;
+        let digest = ethers::utils::hash_message(signing_message);
+        let combined = lit_client
+            .pkp_sign_ethereum_with_options(
+                cached.pkp_public_key.as_str(),
+                digest.as_bytes(),
+                &cached.auth_context,
+                None,
+                true, // bypass_auto_hashing — payload is already hashed
+            )
+            .await
+            .map_err(|err| format!("pkpSign failed: {err}"))?;
+
+        let signature_hex = signature_from_combined_value(&combined)?;
+        let signature_bytes = signature_hex_to_65_bytes(signature_hex.as_str())?;
+        let signed_dataitem = ans104_to_bytes(
+            signature_bytes.as_slice(),
+            owner.as_slice(),
+            tags.as_slice(),
+            payload.as_slice(),
+        )?;
+
+        let endpoint = format!(
+            "{}/v1/tx/{}",
+            upload_url.trim_end_matches('/'),
+            upload_token.trim()
+        );
+
+        let http = reqwest::Client::new();
+        let resp = http
+            .post(endpoint.as_str())
+            .header("Content-Type", "application/octet-stream")
+            .body(signed_dataitem)
+            .send()
+            .await
+            .map_err(|err| format!("Load upload request failed: {err}"))?;
+
+        let status = resp.status();
+        let body_raw = resp
+            .text()
+            .await
+            .map_err(|err| format!("Load upload response body failed: {err}"))?;
+        let body = parse_json_or_text(body_raw.as_str());
+
+        if !status.is_success() {
+            let message = body
+                .get("error")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("Load upload failed with status {status}"));
+            return Err(format!("{message}; endpoint={endpoint}"));
+        }
+
+        let id = extract_upload_id(&body)
+            .ok_or_else(|| "Upload succeeded but no dataitem id was returned".to_string())?;
+        let gateway_base = extract_gateway_base(&body).unwrap_or_else(|| {
+            let fallback = gateway_url_fallback.trim();
+            if fallback.is_empty() {
+                DEFAULT_LOAD_GATEWAY_URL.to_string()
+            } else {
+                fallback.to_string()
+            }
+        });
+        let gateway_url = format!("{}/resolve/{}", gateway_base.trim_end_matches('/'), id);
+
+        let winc = body
+            .get("winc")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+
+        Ok::<LoadUploadResult, String>(LoadUploadResult {
+            id,
+            gateway_url,
+            winc,
+        })
+    });
+
+    match result {
+        Ok(value) => ok_json(value),
+        Err(err) => err_json(sanitize_error(err.as_str())),
+    }
+}
+
+fn load_encrypt_upload_impl(
+    network: String,
+    rpc_url: String,
+    upload_url: String,
+    upload_token: String,
+    gateway_url_fallback: String,
+    payload: Vec<u8>,
+    content_id: String,
+    content_decrypt_cid: String,
+    file_path: String,
+    content_type: String,
+    tags_json: String,
+) -> String {
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(err) => {
+            return err_json(format!(
+                "failed to create tokio runtime: {}",
+                sanitize_error(&err.to_string())
+            ));
+        }
+    };
+
+    let result = runtime.block_on(async {
+        let lit_client = get_or_create_lit_client(network.as_str(), rpc_url.as_str()).await?;
+        let cached = get_cached_auth_context(network.as_str(), rpc_url.as_str())?;
+
+        let encrypted_blob = encrypt_audio_for_upload(
+            &lit_client,
+            payload.as_slice(),
+            content_id.as_str(),
+            content_decrypt_cid.as_str(),
+        )
+        .await?;
+
+        let mut tags = parse_tags_json(tags_json.as_str())?;
+
+        if !tags
+            .iter()
+            .any(|tag| tag.name.eq_ignore_ascii_case("Content-Type"))
+        {
+            let hint = content_type.trim();
+            let inferred = if !hint.is_empty() {
+                hint
+            } else {
+                infer_content_type(file_path.as_str())
+            };
+            tags.insert(0, Ans104Tag::new("Content-Type", inferred));
+        }
+
+        let owner = parse_pkp_public_key_bytes(cached.pkp_public_key.as_str())?;
+
+        let signing_message = ans104_signing_message(
+            owner.as_slice(),
+            tags.as_slice(),
+            encrypted_blob.as_slice(),
+        )?;
+        let digest = ethers::utils::hash_message(signing_message);
+        let combined = lit_client
+            .pkp_sign_ethereum_with_options(
+                cached.pkp_public_key.as_str(),
+                digest.as_bytes(),
+                &cached.auth_context,
+                None,
+                true, // bypass_auto_hashing — payload is already hashed
+            )
+            .await
+            .map_err(|err| format!("pkpSign failed: {err}"))?;
+
+        let signature_hex = signature_from_combined_value(&combined)?;
+        let signature_bytes = signature_hex_to_65_bytes(signature_hex.as_str())?;
+        let signed_dataitem = ans104_to_bytes(
+            signature_bytes.as_slice(),
+            owner.as_slice(),
+            tags.as_slice(),
+            encrypted_blob.as_slice(),
+        )?;
+
+        let endpoint = format!(
+            "{}/v1/tx/{}",
+            upload_url.trim_end_matches('/'),
+            upload_token.trim()
+        );
+
+        let http = reqwest::Client::new();
+        let resp = http
+            .post(endpoint.as_str())
+            .header("Content-Type", "application/octet-stream")
+            .body(signed_dataitem)
+            .send()
+            .await
+            .map_err(|err| format!("Load upload request failed: {err}"))?;
+
+        let status = resp.status();
+        let body_raw = resp
+            .text()
+            .await
+            .map_err(|err| format!("Load upload response body failed: {err}"))?;
+        let body = parse_json_or_text(body_raw.as_str());
+
+        if !status.is_success() {
+            let message = body
+                .get("error")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("Load upload failed with status {status}"));
+            return Err(format!("{message}; endpoint={endpoint}"));
+        }
+
+        let id = extract_upload_id(&body)
+            .ok_or_else(|| "Upload succeeded but no dataitem id was returned".to_string())?;
+        let gateway_base = extract_gateway_base(&body).unwrap_or_else(|| {
+            let fallback = gateway_url_fallback.trim();
+            if fallback.is_empty() {
+                DEFAULT_LOAD_GATEWAY_URL.to_string()
+            } else {
+                fallback.to_string()
+            }
+        });
+        let gateway_url = format!("{}/resolve/{}", gateway_base.trim_end_matches('/'), id);
+
+        let winc = body
+            .get("winc")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+
+        Ok::<LoadUploadResult, String>(LoadUploadResult {
+            id,
+            gateway_url,
+            winc,
+        })
     });
 
     match result {
@@ -1527,10 +2285,11 @@ mod android_jni {
     use super::{
         clear_auth_context_impl, create_auth_context_from_passkey_callback_impl,
         create_eth_wallet_auth_data_impl, execute_js_impl, fetch_and_decrypt_content_impl,
-        healthcheck_impl, mint_pkp_and_create_auth_context_impl, sign_message_impl,
-        test_connect_impl, view_pkps_by_auth_data_impl,
+        healthcheck_impl, load_encrypt_upload_impl, load_upload_impl,
+        mint_pkp_and_create_auth_context_impl, sign_message_impl, test_connect_impl,
+        view_pkps_by_auth_data_impl,
     };
-    use jni::objects::{JObject, JString};
+    use jni::objects::{JByteArray, JObject, JString};
     use jni::sys::jstring;
     use jni::JNIEnv;
 
@@ -1936,6 +2695,209 @@ mod android_jni {
         };
 
         to_jstring(&mut env, sign_message_impl(network, rpc_url, message, public_key))
+    }
+
+    #[no_mangle]
+    pub extern "system" fn Java_expo_modules_heavenlitrust_HeavenLitRustModule_nativeLoadUpload(
+        mut env: JNIEnv<'_>,
+        _this: JObject<'_>,
+        network: JString<'_>,
+        rpc_url: JString<'_>,
+        upload_url: JString<'_>,
+        upload_token: JString<'_>,
+        gateway_url_fallback: JString<'_>,
+        payload: JByteArray<'_>,
+        file_path: JString<'_>,
+        content_type: JString<'_>,
+        tags_json: JString<'_>,
+    ) -> jstring {
+        let network = match from_jstring(&mut env, network, "network") {
+            Ok(value) => value,
+            Err(err) => {
+                return to_jstring(&mut env, format!(r#"{{"ok":false,"error":"{}"}}"#, err))
+            }
+        };
+        let rpc_url = match from_jstring(&mut env, rpc_url, "rpcUrl") {
+            Ok(value) => value,
+            Err(err) => {
+                return to_jstring(&mut env, format!(r#"{{"ok":false,"error":"{}"}}"#, err))
+            }
+        };
+        let upload_url = match from_jstring(&mut env, upload_url, "uploadUrl") {
+            Ok(value) => value,
+            Err(err) => {
+                return to_jstring(&mut env, format!(r#"{{"ok":false,"error":"{}"}}"#, err))
+            }
+        };
+        let upload_token = match from_jstring(&mut env, upload_token, "uploadToken") {
+            Ok(value) => value,
+            Err(err) => {
+                return to_jstring(&mut env, format!(r#"{{"ok":false,"error":"{}"}}"#, err))
+            }
+        };
+        let gateway_url_fallback =
+            match from_jstring_allow_empty(&mut env, gateway_url_fallback, "gatewayUrlFallback")
+            {
+                Ok(value) => value,
+                Err(err) => {
+                    return to_jstring(&mut env, format!(r#"{{"ok":false,"error":"{}"}}"#, err))
+                }
+            };
+        let payload = match env.convert_byte_array(&payload) {
+            Ok(value) => value,
+            Err(err) => {
+                return to_jstring(
+                    &mut env,
+                    format!(
+                        r#"{{"ok":false,"error":"failed to read payload bytes: {}"}}"#,
+                        err
+                    ),
+                )
+            }
+        };
+        let file_path = match from_jstring_allow_empty(&mut env, file_path, "filePath") {
+            Ok(value) => value,
+            Err(err) => {
+                return to_jstring(&mut env, format!(r#"{{"ok":false,"error":"{}"}}"#, err))
+            }
+        };
+        let content_type = match from_jstring_allow_empty(&mut env, content_type, "contentType") {
+            Ok(value) => value,
+            Err(err) => {
+                return to_jstring(&mut env, format!(r#"{{"ok":false,"error":"{}"}}"#, err))
+            }
+        };
+        let tags_json = match from_jstring_allow_empty(&mut env, tags_json, "tagsJson") {
+            Ok(value) => value,
+            Err(err) => {
+                return to_jstring(&mut env, format!(r#"{{"ok":false,"error":"{}"}}"#, err))
+            }
+        };
+
+        to_jstring(
+            &mut env,
+            load_upload_impl(
+                network,
+                rpc_url,
+                upload_url,
+                upload_token,
+                gateway_url_fallback,
+                payload,
+                file_path,
+                content_type,
+                tags_json,
+            ),
+        )
+    }
+
+    #[no_mangle]
+    pub extern "system" fn Java_expo_modules_heavenlitrust_HeavenLitRustModule_nativeLoadEncryptUpload(
+        mut env: JNIEnv<'_>,
+        _this: JObject<'_>,
+        network: JString<'_>,
+        rpc_url: JString<'_>,
+        upload_url: JString<'_>,
+        upload_token: JString<'_>,
+        gateway_url_fallback: JString<'_>,
+        payload: JByteArray<'_>,
+        content_id: JString<'_>,
+        content_decrypt_cid: JString<'_>,
+        file_path: JString<'_>,
+        content_type: JString<'_>,
+        tags_json: JString<'_>,
+    ) -> jstring {
+        let network = match from_jstring(&mut env, network, "network") {
+            Ok(value) => value,
+            Err(err) => {
+                return to_jstring(&mut env, format!(r#"{{"ok":false,"error":"{}"}}"#, err))
+            }
+        };
+        let rpc_url = match from_jstring(&mut env, rpc_url, "rpcUrl") {
+            Ok(value) => value,
+            Err(err) => {
+                return to_jstring(&mut env, format!(r#"{{"ok":false,"error":"{}"}}"#, err))
+            }
+        };
+        let upload_url = match from_jstring(&mut env, upload_url, "uploadUrl") {
+            Ok(value) => value,
+            Err(err) => {
+                return to_jstring(&mut env, format!(r#"{{"ok":false,"error":"{}"}}"#, err))
+            }
+        };
+        let upload_token = match from_jstring(&mut env, upload_token, "uploadToken") {
+            Ok(value) => value,
+            Err(err) => {
+                return to_jstring(&mut env, format!(r#"{{"ok":false,"error":"{}"}}"#, err))
+            }
+        };
+        let gateway_url_fallback =
+            match from_jstring_allow_empty(&mut env, gateway_url_fallback, "gatewayUrlFallback")
+            {
+                Ok(value) => value,
+                Err(err) => {
+                    return to_jstring(&mut env, format!(r#"{{"ok":false,"error":"{}"}}"#, err))
+                }
+            };
+        let payload = match env.convert_byte_array(&payload) {
+            Ok(value) => value,
+            Err(err) => {
+                return to_jstring(
+                    &mut env,
+                    format!(
+                        r#"{{"ok":false,"error":"failed to read payload bytes: {}"}}"#,
+                        err
+                    ),
+                )
+            }
+        };
+        let content_id = match from_jstring_allow_empty(&mut env, content_id, "contentId") {
+            Ok(value) => value,
+            Err(err) => {
+                return to_jstring(&mut env, format!(r#"{{"ok":false,"error":"{}"}}"#, err))
+            }
+        };
+        let content_decrypt_cid =
+            match from_jstring_allow_empty(&mut env, content_decrypt_cid, "contentDecryptCid") {
+                Ok(value) => value,
+                Err(err) => {
+                    return to_jstring(&mut env, format!(r#"{{"ok":false,"error":"{}"}}"#, err))
+                }
+            };
+        let file_path = match from_jstring_allow_empty(&mut env, file_path, "filePath") {
+            Ok(value) => value,
+            Err(err) => {
+                return to_jstring(&mut env, format!(r#"{{"ok":false,"error":"{}"}}"#, err))
+            }
+        };
+        let content_type = match from_jstring_allow_empty(&mut env, content_type, "contentType") {
+            Ok(value) => value,
+            Err(err) => {
+                return to_jstring(&mut env, format!(r#"{{"ok":false,"error":"{}"}}"#, err))
+            }
+        };
+        let tags_json = match from_jstring_allow_empty(&mut env, tags_json, "tagsJson") {
+            Ok(value) => value,
+            Err(err) => {
+                return to_jstring(&mut env, format!(r#"{{"ok":false,"error":"{}"}}"#, err))
+            }
+        };
+
+        to_jstring(
+            &mut env,
+            load_encrypt_upload_impl(
+                network,
+                rpc_url,
+                upload_url,
+                upload_token,
+                gateway_url_fallback,
+                payload,
+                content_id,
+                content_decrypt_cid,
+                file_path,
+                content_type,
+                tags_json,
+            ),
+        )
     }
 
     #[no_mangle]

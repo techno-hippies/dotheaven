@@ -107,6 +107,12 @@ const ACTIONS: Record<string, ActionDef> = {
       { name: 'filebase_covers_key', envVar: 'FILEBASE_COVERS_KEY' },
     ],
   },
+  trackCoverV5: {
+    name: 'trackCoverV5',
+    path: 'features/music/track-cover-v5.js',
+    displayName: 'Track Cover v5',
+    keys: [], // No encrypted keys — expects client to provide a ready-to-store cover ref (e.g. ar://...)
+  },
   albumArtLoadTestV1: {
     name: 'albumArtLoadTestV1',
     path: 'features/music/album-art-load-test-v1.js',

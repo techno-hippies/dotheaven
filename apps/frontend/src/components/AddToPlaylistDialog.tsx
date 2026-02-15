@@ -18,6 +18,7 @@ import { addToast, updateToast } from '../lib/toast'
 import { setCoverCache, setCoverCacheById } from '../lib/cover-cache'
 import { readCoverBase64 } from '../lib/cover-image'
 import { computeTrackIdFromMeta } from '../lib/track-id'
+import { resolveCoverUrl } from '../lib/heaven/cover-ref'
 
 interface AddToPlaylistDialogProps {
   open: boolean
@@ -335,7 +336,7 @@ export const AddToPlaylistDialog: Component<AddToPlaylistDialogProps> = (props) 
                     >
                       <AlbumCover
                         size="sm"
-                        src={pl.coverCid ? `https://heaven.myfilebase.com/ipfs/${pl.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80` : undefined}
+                        src={resolveCoverUrl(pl.coverCid, { width: 96, height: 96, format: 'webp', quality: 80 })}
                         icon="playlist"
                       />
                       <div class="flex-1 min-w-0">

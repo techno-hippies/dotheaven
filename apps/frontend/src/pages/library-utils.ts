@@ -1,12 +1,7 @@
 import type { Track } from '@heaven/ui'
 import type { UploadedContentEntry, SharedContentEntry } from '../lib/heaven/scrobbles'
 import type { PlayerContextType, EncryptedContentInfo } from '../providers/PlayerProvider'
-
-export const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
-
-export function isValidCid(cid: string | undefined | null): cid is string {
-  return !!cid && (cid.startsWith('Qm') || cid.startsWith('bafy'))
-}
+import { resolveCoverUrl } from '../lib/heaven/cover-ref'
 
 export function mapUploadedToTracks(entries: UploadedContentEntry[]): Track[] {
   return entries.map((e) => ({
@@ -20,9 +15,7 @@ export function mapUploadedToTracks(entries: UploadedContentEntry[]): Track[] {
     payload: e.payload,
     mbid: e.mbid,
     coverCid: e.coverCid,
-    albumCover: isValidCid(e.coverCid)
-      ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
-      : undefined,
+    albumCover: resolveCoverUrl(e.coverCid, { width: 96, height: 96, format: 'webp', quality: 80 }),
     dateAdded: new Date(e.uploadedAt * 1000).toLocaleDateString(),
   }))
 }
@@ -40,9 +33,7 @@ export function mapSharedToTracks(entries: SharedContentEntry[]): Track[] {
     payload: e.payload,
     mbid: e.mbid,
     coverCid: e.coverCid,
-    albumCover: isValidCid(e.coverCid)
-      ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
-      : undefined,
+    albumCover: resolveCoverUrl(e.coverCid, { width: 96, height: 96, format: 'webp', quality: 80 }),
     dateAdded: new Date(e.uploadedAt * 1000).toLocaleDateString(),
   }))
 }
@@ -74,9 +65,7 @@ export function handleEncryptedTrackPlay(
   if (entry) {
     player.playEncryptedContent({
       ...entry,
-      coverUrl: isValidCid(entry.coverCid)
-        ? `${FILEBASE_GATEWAY}/${entry.coverCid}?img-width=256&img-height=256&img-format=webp&img-quality=80`
-        : undefined,
+      coverUrl: resolveCoverUrl(entry.coverCid, { width: 256, height: 256, format: 'webp', quality: 80 }),
     } as EncryptedContentInfo)
   }
 }

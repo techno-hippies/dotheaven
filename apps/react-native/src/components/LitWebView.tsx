@@ -10,6 +10,7 @@ import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View, Platform } from 'react-native';
 import WebView from 'react-native-webview';
 import type { LitBridge } from '../services/LitBridge';
+import { AUTH_CONFIG } from '../lib/auth-config';
 
 export interface LitWebViewProps {
   bridge: LitBridge;
@@ -51,11 +52,47 @@ export const LitWebView: React.FC<LitWebViewProps> = ({
 
   // Determine the source URL
   const sourceUri = Platform.select({
-    android: 'https://appassets.androidplatform.net/assets/lit-bundle/index.html',
-    ios: 'https://appassets.androidplatform.net/assets/lit-bundle/index.html', // Will need adjustment for iOS
+    android: AUTH_CONFIG.litWebViewUrl,
+    ios: AUTH_CONFIG.litWebViewUrl,
     default: 'about:blank'
   });
-  const allowedPrefix = 'https://appassets.androidplatform.net/assets/';
+
+  const sourceHost = (() => {
+    try {
+      if (!sourceUri || sourceUri === 'about:blank') return '';
+      return new URL(sourceUri).hostname.toLowerCase();
+    } catch {
+      return '';
+    }
+  })();
+
+  const allowedPrefix = (() => {
+    try {
+      if (!sourceUri || sourceUri === 'about:blank') return 'about:blank';
+      const parsed = new URL(sourceUri);
+      const normalizedPath = parsed.pathname.endsWith('/')
+        ? parsed.pathname
+        : parsed.pathname.replace(/[^/]+$/, '');
+      return `${parsed.origin}${normalizedPath}`;
+    } catch {
+      return `https://${AUTH_CONFIG.passkeyRpId}/lit-bundle/`;
+    }
+  })();
+
+  useEffect(() => {
+    console.log('[LitWebView] Source URI:', sourceUri);
+    console.log('[LitWebView] Allowed prefix:', allowedPrefix);
+    if (
+      AUTH_CONFIG.authFlow === 'browser' &&
+      !AUTH_CONFIG.allowNonCanonicalPasskeyRp &&
+      !AUTH_CONFIG.litWebViewMatchesPasskeyRp
+    ) {
+      console.error(
+        `[LitWebView] Non-canonical WebView host "${sourceHost || '(unknown)'}" for passkey RP "${AUTH_CONFIG.passkeyRpId}". ` +
+        `Set EXPO_PUBLIC_LIT_WEBVIEW_URL=${AUTH_CONFIG.canonicalLitWebViewUrl} or explicitly allow non-canonical RP for testing.`,
+      );
+    }
+  }, [sourceUri, allowedPrefix, sourceHost]);
 
   // Inject console forwarder so WebView logs appear in Metro
   const consoleForwarder = `
@@ -100,7 +137,7 @@ export const LitWebView: React.FC<LitWebViewProps> = ({
         onLoadEnd={() => console.log('[LitWebView] Load ended')}
         onShouldStartLoadWithRequest={(request) => {
           if (request.url === 'about:blank') return true;
-          // Only allow loading from our asset origin
+          // Only allow loading from the configured Lit engine origin/path.
           const allowed = request.url.startsWith(allowedPrefix);
           if (!allowed) {
             console.warn('[LitWebView] Blocked navigation to:', request.url);

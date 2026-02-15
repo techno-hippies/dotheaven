@@ -49,6 +49,8 @@ export interface Track {
   coverCid?: string
   /** Story Protocol IP Asset ID (for published songs) */
   ipId?: string
+  /** Optional storage lifecycle state */
+  storageStatus?: 'local' | 'uploaded' | 'permanent'
   /** Who shared this track (heaven name or address) */
   sharedBy?: string
 }
@@ -61,6 +63,7 @@ export interface TrackMenuActions {
   onRemoveFromPlaylist?: (track: Track) => void
   onIdentify?: (track: Track) => void
   onUploadToFilecoin?: (track: Track) => void
+  onSaveForever?: (track: Track) => void
   onDownload?: (track: Track) => void
 }
 
@@ -113,6 +116,10 @@ const isTrackDraggable = (track: Track): boolean =>
 /** Check if a track is cloud-only (no local file) */
 const isCloudTrack = (track: Track): boolean =>
   !track.filePath && !!(track.pieceCid || track.contentId)
+
+/** Check if a track has uploaded payload metadata and can be anchored. */
+const canSaveForever = (track: Track): boolean =>
+  track.storageStatus !== 'permanent' && !!(track.pieceCid || track.contentId)
 
 /** Create a custom drag preview element */
 const createDragPreview = (track: Track): HTMLElement => {
@@ -264,7 +271,12 @@ export const TrackList: Component<TrackListProps> = (props) => {
         </Show>
         <Show when={props.menuActions?.onUploadToFilecoin}>
           <DropdownMenuItem onSelect={() => props.menuActions?.onUploadToFilecoin?.(menuProps.track)}>
-            Encrypt & Upload
+            Upload
+          </DropdownMenuItem>
+        </Show>
+        <Show when={canSaveForever(menuProps.track)}>
+          <DropdownMenuItem onSelect={() => props.menuActions?.onSaveForever?.(menuProps.track)}>
+            Save Forever
           </DropdownMenuItem>
         </Show>
         <Show when={props.menuActions?.onDownload && isCloudTrack(menuProps.track)}>

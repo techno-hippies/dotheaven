@@ -791,6 +791,7 @@ export const PlayerProvider: ParentComponent = (props) => {
     setTracks,
     setSelectedTrackId,
     getAuthContext: () => auth.getAuthContext(),
+    getPkpPublicKey: () => auth.pkpInfo()?.publicKey,
   }
 
   const progress = () => (duration() > 0 ? (currentTime() / duration()) * 100 : 0)

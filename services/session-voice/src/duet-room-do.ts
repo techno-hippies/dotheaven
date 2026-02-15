@@ -14,16 +14,51 @@ import {
   settlePaymentWithFacilitator,
   type PaymentRequirement as X402PaymentRequirement,
 } from './x402-facilitator'
+import { tryParseJson, tryParseBase64Json } from './parse-utils'
 
 type NetworkId = 'eip155:8453' | 'eip155:84532'
 type RoomStatus = 'created' | 'live' | 'ended'
 type ReplayMode = 'load_gated' | 'worker_gated'
 type RecordingMode = 'host_local' | 'agora_cloud'
 type EntitlementType = 'live' | 'replay'
+type BroadcastState = 'idle' | 'live' | 'stopped'
+type SegmentRightsKind = 'original' | 'derivative'
 
 interface WalletEntitlement {
   live_expires_at?: number
   replay_expires_at?: number
+}
+
+interface SegmentRightsAttestation {
+  source_ip_id: string
+  payout: string
+  sig: string
+}
+
+interface SegmentRights {
+  kind: SegmentRightsKind
+  source_story_ip_ids?: string[]
+  upstream_bps?: number
+  upstream_payout?: string
+  attestations?: SegmentRightsAttestation[]
+}
+
+interface SegmentPricing {
+  live_amount: string
+  replay_amount?: string
+}
+
+interface DuetRoomSegment {
+  id: string
+  started_at: number
+  pay_to: string
+  pricing: SegmentPricing
+  rights?: SegmentRights
+}
+
+interface SegmentLock {
+  locked_at: number
+  first_settlement_tx_hash?: string
 }
 
 interface RecordingMetadata {
@@ -52,9 +87,16 @@ interface DuetRoomMeta {
   bridge_ticket_hash?: string
   bridge_ticket_valid_until?: number
   bridge_agora_uid?: number
+  broadcast_state?: BroadcastState
+  broadcast_mode?: string
+  broadcast_heartbeat_at?: number
+  broadcast_started_at?: number
   live_started_at?: number
   ended_at?: number
   recording?: RecordingMetadata
+  segments?: DuetRoomSegment[]
+  current_segment_id?: string
+  segment_locks?: Record<string, SegmentLock>
   created_at: number
 }
 
@@ -63,7 +105,10 @@ interface SettleMarker {
   wallet: string
   entitlement: EntitlementType
   expires_at: number
-  facilitator?: 'mock' | 'cdp'
+  segment_id?: string
+  pay_to?: string
+  amount?: string
+  facilitator?: 'mock' | 'cdp' | 'self'
   transaction_hash?: string
 }
 
@@ -80,6 +125,14 @@ const SETTLEMENT_LAST_PRUNE_KEY = 'meta:settle_last_prune'
 const BRIDGE_TOKEN_TTL_SECONDS = 2 * 60 * 60
 const BRIDGE_TICKET_GRACE_AFTER_END_SECONDS = 30 * 60
 const REPLAY_ACCESS_TOKEN_TTL_SECONDS = 60
+const BROADCAST_HEARTBEAT_TIMEOUT_SECONDS = 20
+const MAX_SEGMENTS_PER_ROOM = 500
+
+// Safety: we are not ready for mainnet funds. Lock duet rooms to Base Sepolia USDC for now.
+const ALLOWED_NETWORK: NetworkId = 'eip155:84532'
+const BASE_SEPOLIA_USDC = '0x036cbd53842c5426634e7929541ec2318f3dcf7e'
+const X402_MAX_TIMEOUT_SECONDS = 60 * 60
+const BASE_SEPOLIA_USDC_EIP712 = { name: 'USDC', version: '2' } as const
 
 export class DuetRoomDO implements DurableObject {
   private state: DurableObjectState
@@ -97,9 +150,13 @@ export class DuetRoomDO implements DurableObject {
       if (request.method === 'POST' && url.pathname === '/init') return this.handleInit(request)
       if (request.method === 'POST' && url.pathname === '/guest-accept') return this.handleGuestAccept(request)
       if (request.method === 'POST' && url.pathname === '/start') return this.handleStart(request)
+      if (request.method === 'POST' && url.pathname === '/segments/start') return this.handleSegmentsStart(request)
       if (request.method === 'POST' && url.pathname === '/bridge-token') return this.handleBridgeToken(request)
+      if (request.method === 'POST' && url.pathname === '/broadcast-heartbeat') return this.handleBroadcastHeartbeat(request)
       if (request.method === 'POST' && url.pathname === '/end') return this.handleEnd(request)
       if (request.method === 'POST' && url.pathname === '/enter') return this.handleEnter(request)
+      if (request.method === 'GET' && url.pathname === '/public-info') return this.handlePublicInfo()
+      if (request.method === 'POST' && url.pathname === '/public-enter') return this.handlePublicEnter(request)
       if (request.method === 'POST' && url.pathname === '/recording-complete') return this.handleRecordingComplete(request)
       if (request.method === 'POST' && url.pathname === '/replay-access') return this.handleReplayAccess(request)
       if (request.method === 'POST' && url.pathname === '/replay-source') return this.handleReplaySource(request)
@@ -142,6 +199,8 @@ export class DuetRoomDO implements DurableObject {
     if (!isAddress(body.splitAddress)) return json({ error: 'invalid_split_address' }, 400)
     if (!isAddress(body.assetUsdc)) return json({ error: 'invalid_asset_usdc' }, 400)
     if (!isNetworkId(body.network)) return json({ error: 'invalid_network' }, 400)
+    if (body.network !== ALLOWED_NETWORK) return json({ error: 'network_not_allowed' }, 400)
+    if (body.assetUsdc.toLowerCase() !== BASE_SEPOLIA_USDC) return json({ error: 'asset_not_allowed' }, 400)
     if (!isAmount(body.liveAmount) || !isAmount(body.replayAmount)) return json({ error: 'invalid_amount' }, 400)
     if (!Number.isFinite(body.accessWindowMinutes) || body.accessWindowMinutes <= 0) {
       return json({ error: 'invalid_access_window' }, 400)
@@ -166,6 +225,22 @@ export class DuetRoomDO implements DurableObject {
       agora_channel: body.agoraChannel,
       created_at: now,
     }
+
+    const initialSegmentId = 'seg-1'
+    meta.segments = [
+      {
+        id: initialSegmentId,
+        started_at: now,
+        pay_to: meta.split_address,
+        pricing: {
+          live_amount: meta.live_amount,
+          replay_amount: meta.replay_amount,
+        },
+        rights: { kind: 'original' },
+      },
+    ]
+    meta.current_segment_id = initialSegmentId
+    meta.segment_locks = {}
 
     await this.putMeta(meta)
 
@@ -246,6 +321,7 @@ export class DuetRoomDO implements DurableObject {
         already_live: true,
         status: meta.status,
         live_started_at: meta.live_started_at,
+        agora_app_id: this.env.AGORA_APP_ID,
         bridge_ticket: meta.bridge_ticket,
         agora_channel: meta.agora_channel,
         agora_broadcaster_uid: uid,
@@ -265,6 +341,10 @@ export class DuetRoomDO implements DurableObject {
     meta.bridge_ticket_hash = await sha256Hex(bridgeTicket)
     meta.bridge_ticket_valid_until = undefined
     meta.bridge_agora_uid = bridgeUid
+    meta.broadcast_state = 'idle'
+    meta.broadcast_mode = undefined
+    meta.broadcast_heartbeat_at = undefined
+    meta.broadcast_started_at = undefined
     await this.putMeta(meta)
 
     const broadcaster = generateToken(
@@ -278,6 +358,7 @@ export class DuetRoomDO implements DurableObject {
     return json({
       ok: true,
       status: meta.status,
+      agora_app_id: this.env.AGORA_APP_ID,
       bridge_ticket: bridgeTicket,
       agora_channel: meta.agora_channel,
       agora_broadcaster_uid: bridgeUid,
@@ -314,6 +395,7 @@ export class DuetRoomDO implements DurableObject {
 
     return json({
       ok: true,
+      agora_app_id: this.env.AGORA_APP_ID,
       agora_channel: meta.agora_channel,
       agora_broadcaster_uid: uid,
       agora_broadcaster_token: broadcaster.token,
@@ -336,6 +418,7 @@ export class DuetRoomDO implements DurableObject {
     const now = nowSeconds()
     meta.status = 'ended'
     meta.ended_at = now
+    meta.broadcast_state = 'stopped'
     if (meta.bridge_ticket_hash) {
       meta.bridge_ticket_valid_until = now + BRIDGE_TICKET_GRACE_AFTER_END_SECONDS
     }
@@ -346,6 +429,128 @@ export class DuetRoomDO implements DurableObject {
       status: meta.status,
       ended_at: meta.ended_at,
       bridge_ticket_valid_until: meta.bridge_ticket_valid_until,
+    })
+  }
+
+  private async handleBroadcastHeartbeat(request: Request): Promise<Response> {
+    const meta = await this.getMeta()
+    if (!meta) return json({ error: 'room_not_found' }, 404)
+
+    const body = await request.json<{
+      bridgeTicket?: string
+      status?: BroadcastState
+      mode?: string
+    }>()
+
+    if (!body.bridgeTicket) return json({ error: 'missing_bridge_ticket' }, 401)
+    const verify = await this.verifyBridgeTicket(meta, body.bridgeTicket, { allowAfterEnd: false })
+    if (!verify.ok) return json({ error: verify.error }, verify.status)
+    if (meta.status !== 'live') return json({ error: 'room_not_live', status: meta.status }, 400)
+
+    const now = nowSeconds()
+    const nextState: BroadcastState = body.status === 'stopped' ? 'stopped' : 'live'
+    meta.broadcast_state = nextState
+    meta.broadcast_mode = body.mode ? body.mode.slice(0, 24) : meta.broadcast_mode
+    meta.broadcast_heartbeat_at = now
+    if (nextState === 'live' && !meta.broadcast_started_at) {
+      meta.broadcast_started_at = now
+    }
+    await this.putMeta(meta)
+
+    return json({
+      ok: true,
+      room_id: meta.room_id,
+      broadcast_state: meta.broadcast_state,
+      broadcast_mode: meta.broadcast_mode ?? null,
+      broadcast_heartbeat_at: meta.broadcast_heartbeat_at,
+      broadcaster_online: isBroadcastOnline(meta, now),
+    })
+  }
+
+  private async handleSegmentsStart(request: Request): Promise<Response> {
+    const meta = await this.getMeta()
+    if (!meta) return json({ error: 'room_not_found' }, 404)
+    if (meta.status !== 'live') return json({ error: 'room_not_live', status: meta.status }, 400)
+
+    const body = await request.json<{
+      wallet?: string
+      payTo?: string
+      songId?: string
+      rights?: SegmentRights
+    }>().catch(() => ({} as {
+      wallet?: string
+      payTo?: string
+      songId?: string
+      rights?: SegmentRights
+    }))
+
+    if (!body.wallet || !isAddress(body.wallet)) return json({ error: 'invalid_wallet' }, 400)
+    if (body.wallet.toLowerCase() !== meta.host_wallet) return json({ error: 'forbidden' }, 403)
+
+    if (!body.payTo || !isAddress(body.payTo)) return json({ error: 'invalid_pay_to' }, 400)
+    const payTo = body.payTo.toLowerCase()
+
+    const existingSegments = meta.segments ?? []
+    if (existingSegments.length >= MAX_SEGMENTS_PER_ROOM) {
+      return json({ error: 'max_segments_reached', max: MAX_SEGMENTS_PER_ROOM }, 400)
+    }
+
+    const now = nowSeconds()
+    let rightsInput: unknown = body.rights
+    if (typeof body.songId === 'string' && body.songId.trim().length > 0) {
+      const song = await this.env.DB.prepare(`
+        SELECT
+          story_ip_id,
+          payout_chain_id,
+          payout_address,
+          default_upstream_bps,
+          payout_attestation_sig
+        FROM song_registry
+        WHERE song_id = ?1
+      `).bind(body.songId.trim()).first<{
+        story_ip_id: string
+        payout_chain_id: number
+        payout_address: string
+        default_upstream_bps: number
+        payout_attestation_sig: string
+      }>()
+
+      if (!song) return json({ error: 'song_not_found' }, 400)
+      if (song.payout_chain_id !== 84532) return json({ error: 'song_payout_chain_not_allowed' }, 400)
+
+      rightsInput = {
+        kind: 'derivative',
+        source_story_ip_ids: [song.story_ip_id],
+        upstream_bps: song.default_upstream_bps,
+        upstream_payout: song.payout_address,
+        attestations: [
+          {
+            source_ip_id: song.story_ip_id,
+            payout: song.payout_address,
+            sig: song.payout_attestation_sig,
+          },
+        ],
+      }
+    }
+    const segment: DuetRoomSegment = {
+      id: crypto.randomUUID(),
+      started_at: now,
+      pay_to: payTo,
+      pricing: {
+        live_amount: meta.live_amount,
+        replay_amount: meta.replay_amount,
+      },
+      rights: normalizeSegmentRights(rightsInput),
+    }
+
+    meta.segments = [...existingSegments, segment]
+    meta.current_segment_id = segment.id
+    await this.putMeta(meta)
+
+    return json({
+      ok: true,
+      current_segment_id: meta.current_segment_id,
+      segment,
     })
   }
 
@@ -362,15 +567,18 @@ export class DuetRoomDO implements DurableObject {
 
     if (!body.wallet || !isAddress(body.wallet)) return json({ error: 'wallet_required' }, 401)
     const wallet = body.wallet.toLowerCase()
-    const resource = body.resource || `/duet/${meta.room_id}/enter`
+    const baseResource = body.resource || `/duet/${meta.room_id}/enter`
     const now = nowSeconds()
+    const currentSegment = this.getCurrentSegment(meta)
+    const currentLiveAmount = currentSegment.pricing?.live_amount ?? meta.live_amount
+    const currentLivePayTo = currentSegment.pay_to
 
     const ent = await this.getEntitlement(wallet)
     if ((ent.live_expires_at ?? 0) > now) {
       return this.successEnterResponse(meta, wallet, ent.live_expires_at!)
     }
 
-    if (meta.live_amount === '0') {
+    if (currentLiveAmount === '0') {
       const nextExpiry = extendExpiry(ent.live_expires_at, now, meta.access_window_minutes)
       ent.live_expires_at = nextExpiry
       await this.setEntitlement(wallet, ent)
@@ -378,13 +586,17 @@ export class DuetRoomDO implements DurableObject {
     }
 
     if (body.paymentSignature) {
+      const { settleSegment, settleAmount, settlePayTo, settleResource, rejectResponse } =
+        await this.resolveSettleSegment(meta, body.paymentSignature, baseResource, currentSegment, currentLiveAmount, currentLivePayTo, now)
+      if (rejectResponse) return rejectResponse
+
       const requirement: X402PaymentRequirement = {
         scheme: 'exact',
         network: meta.network,
         asset: meta.asset_usdc,
-        amount: meta.live_amount,
-        payTo: meta.split_address,
-        resource,
+        amount: settleAmount,
+        payTo: settlePayTo,
+        resource: settleResource,
       }
 
       const paymentSigHash = await sha256Hex(body.paymentSignature)
@@ -419,23 +631,27 @@ export class DuetRoomDO implements DurableObject {
 
       const settle = await settlePaymentWithFacilitator(this.env, body.paymentSignature, requirement)
       if (!settle.ok) {
+        const checkout = await buildSegmentCheckoutExtension(this.env.JWT_SECRET, meta.room_id, currentSegment.id, now)
         return paymentInvalidResponse({
-          amount: meta.live_amount,
+          amount: currentLiveAmount,
           network: meta.network,
           asset: meta.asset_usdc,
-          payTo: meta.split_address,
-          resource,
+          payTo: currentLivePayTo,
+          resource: withSegmentId(baseResource, currentSegment.id),
+          extensions: checkout,
           reason: settle.reason,
         })
       }
 
       if (settle.payer && settle.payer !== wallet) {
+        const checkout = await buildSegmentCheckoutExtension(this.env.JWT_SECRET, meta.room_id, currentSegment.id, now)
         return paymentInvalidResponse({
-          amount: meta.live_amount,
+          amount: currentLiveAmount,
           network: meta.network,
           asset: meta.asset_usdc,
-          payTo: meta.split_address,
-          resource,
+          payTo: currentLivePayTo,
+          resource: withSegmentId(baseResource, currentSegment.id),
+          extensions: checkout,
           reason: 'payment_wallet_mismatch',
         })
       }
@@ -448,10 +664,14 @@ export class DuetRoomDO implements DurableObject {
         wallet,
         entitlement: 'live',
         expires_at: nextExpiry,
+        segment_id: settleSegment.id,
+        pay_to: settlePayTo,
+        amount: settleAmount,
         facilitator: settle.facilitator,
         transaction_hash: settle.transactionHash,
       }
 
+      await this.lockSegment(meta, settleSegment.id, now, settle.transactionHash)
       await this.state.storage.put(markerKey, newMarker)
       await this.setEntitlement(wallet, ent)
       await this.pruneSettlementMarkers(now)
@@ -468,12 +688,227 @@ export class DuetRoomDO implements DurableObject {
       return response
     }
 
+    const checkout = await buildSegmentCheckoutExtension(this.env.JWT_SECRET, meta.room_id, currentSegment.id, now)
     return paymentRequiredResponse({
-      amount: meta.live_amount,
+      amount: currentLiveAmount,
       network: meta.network,
       asset: meta.asset_usdc,
-      payTo: meta.split_address,
-      resource,
+      payTo: currentLivePayTo,
+      resource: withSegmentId(baseResource, currentSegment.id),
+      extensions: checkout,
+    })
+  }
+
+  private async handlePublicInfo(): Promise<Response> {
+    const meta = await this.getMeta()
+    if (!meta) return json({ error: 'room_not_found' }, 404)
+    const now = nowSeconds()
+
+    return json({
+      room_id: meta.room_id,
+      status: meta.status,
+      audience_mode: meta.live_amount === '0' ? 'free' : 'ticketed',
+      can_enter: meta.status === 'live',
+      broadcast_state: meta.broadcast_state ?? 'idle',
+      broadcast_mode: meta.broadcast_mode ?? null,
+      broadcast_heartbeat_at: meta.broadcast_heartbeat_at ?? null,
+      broadcaster_online: isBroadcastOnline(meta, now),
+    })
+  }
+
+  private async handlePublicEnter(request: Request): Promise<Response> {
+    const meta = await this.getMeta()
+    if (!meta) return json({ error: 'room_not_found' }, 404)
+    if (meta.status !== 'live') return json({ error: 'room_not_live', status: meta.status }, 400)
+
+    const body = await request.json<{
+      wallet?: string
+      paymentSignature?: string
+      resource?: string
+    }>().catch(() => ({} as {
+      wallet?: string
+      paymentSignature?: string
+      resource?: string
+    }))
+    const baseResource = body.resource || `/duet/${meta.room_id}/public-enter`
+    const now = nowSeconds()
+    const currentSegment = this.getCurrentSegment(meta)
+    const currentLiveAmount = currentSegment.pricing?.live_amount ?? meta.live_amount
+    const currentLivePayTo = currentSegment.pay_to
+
+    const walletFromBody = body.wallet ? body.wallet.toLowerCase() : undefined
+    if (walletFromBody && !isAddress(walletFromBody)) return json({ error: 'invalid_wallet' }, 400)
+
+    if (walletFromBody) {
+      const ent = await this.getEntitlement(walletFromBody)
+      if ((ent.live_expires_at ?? 0) > now) {
+        return this.successEnterResponse(meta, walletFromBody, ent.live_expires_at!)
+      }
+    }
+
+    if (currentLiveAmount !== '0') {
+      if (body.paymentSignature) {
+        const { settleSegment, settleAmount, settlePayTo, settleResource, rejectResponse } =
+          await this.resolveSettleSegment(meta, body.paymentSignature, baseResource, currentSegment, currentLiveAmount, currentLivePayTo, now)
+        if (rejectResponse) return rejectResponse
+
+        const requirement: X402PaymentRequirement = {
+          scheme: 'exact',
+          network: meta.network,
+          asset: meta.asset_usdc,
+          amount: settleAmount,
+          payTo: settlePayTo,
+          resource: settleResource,
+        }
+
+        const paymentSigHash = await sha256Hex(body.paymentSignature)
+        const markerKey = this.settleKey(paymentSigHash)
+        const marker = await this.state.storage.get<SettleMarker>(markerKey)
+
+        if (marker) {
+          if (marker.entitlement !== 'live') return json({ error: 'payment_signature_reused' }, 409)
+          if (walletFromBody && marker.wallet !== walletFromBody) {
+            return json({ error: 'payment_signature_reused' }, 409)
+          }
+          if (marker.expires_at <= now) return json({ error: 'payment_signature_already_consumed' }, 409)
+
+          const markerEnt = await this.getEntitlement(marker.wallet)
+          if ((markerEnt.live_expires_at ?? 0) < marker.expires_at) {
+            markerEnt.live_expires_at = marker.expires_at
+            await this.setEntitlement(marker.wallet, markerEnt)
+          }
+
+          const response = this.successEnterResponse(meta, marker.wallet, marker.expires_at)
+          response.headers.set('PAYMENT-RESPONSE', toBase64Json({
+            settled: true,
+            idempotent: true,
+            entitlement: 'live',
+            expires_at: marker.expires_at,
+            facilitator: marker.facilitator,
+            transaction_hash: marker.transaction_hash,
+          }))
+          return response
+        }
+
+        const settle = await settlePaymentWithFacilitator(this.env, body.paymentSignature, requirement)
+        if (!settle.ok) {
+          const checkout = await buildSegmentCheckoutExtension(this.env.JWT_SECRET, meta.room_id, currentSegment.id, now)
+          return paymentInvalidResponse({
+            amount: currentLiveAmount,
+            network: meta.network,
+            asset: meta.asset_usdc,
+            payTo: currentLivePayTo,
+            resource: withSegmentId(baseResource, currentSegment.id),
+            extensions: checkout,
+            reason: settle.reason,
+          })
+        }
+
+        const settleWallet = settle.payer?.toLowerCase()
+        if (walletFromBody && settleWallet && walletFromBody !== settleWallet) {
+          const checkout = await buildSegmentCheckoutExtension(this.env.JWT_SECRET, meta.room_id, currentSegment.id, now)
+          return paymentInvalidResponse({
+            amount: currentLiveAmount,
+            network: meta.network,
+            asset: meta.asset_usdc,
+            payTo: currentLivePayTo,
+            resource: withSegmentId(baseResource, currentSegment.id),
+            extensions: checkout,
+            reason: 'payment_wallet_mismatch',
+          })
+        }
+
+        const effectiveWallet = walletFromBody ?? settleWallet
+        if (!effectiveWallet || !isAddress(effectiveWallet)) {
+          const uid = randomAgoraUid()
+          const viewer = generateViewerToken(
+            this.env.AGORA_APP_ID,
+            this.env.AGORA_APP_CERTIFICATE,
+            meta.agora_channel,
+            uid,
+          )
+          const response = json({
+            ok: true,
+            room_id: meta.room_id,
+            agora_app_id: this.env.AGORA_APP_ID,
+            agora_channel: meta.agora_channel,
+            agora_uid: uid,
+            agora_viewer_token: viewer.token,
+            token_expires_in_seconds: viewer.expiresInSeconds,
+          })
+          response.headers.set('PAYMENT-RESPONSE', toBase64Json({
+            settled: true,
+            idempotent: false,
+            entitlement: 'live',
+            expires_at: null,
+            facilitator: settle.facilitator,
+            transaction_hash: settle.transactionHash,
+          }))
+          await this.lockSegment(meta, settleSegment.id, now, settle.transactionHash)
+          return response
+        }
+
+        const ent = await this.getEntitlement(effectiveWallet)
+        const nextExpiry = extendExpiry(ent.live_expires_at, now, meta.access_window_minutes)
+        ent.live_expires_at = nextExpiry
+
+        const newMarker: SettleMarker = {
+          processed_at: now,
+          wallet: effectiveWallet,
+          entitlement: 'live',
+          expires_at: nextExpiry,
+          segment_id: settleSegment.id,
+          pay_to: settlePayTo,
+          amount: settleAmount,
+          facilitator: settle.facilitator,
+          transaction_hash: settle.transactionHash,
+        }
+
+        await this.lockSegment(meta, settleSegment.id, now, settle.transactionHash)
+        await this.state.storage.put(markerKey, newMarker)
+        await this.setEntitlement(effectiveWallet, ent)
+        await this.pruneSettlementMarkers(now)
+
+        const response = this.successEnterResponse(meta, effectiveWallet, nextExpiry)
+        response.headers.set('PAYMENT-RESPONSE', toBase64Json({
+          settled: true,
+          idempotent: false,
+          entitlement: 'live',
+          expires_at: nextExpiry,
+          facilitator: settle.facilitator,
+          transaction_hash: settle.transactionHash,
+        }))
+        return response
+      }
+
+      const checkout = await buildSegmentCheckoutExtension(this.env.JWT_SECRET, meta.room_id, currentSegment.id, now)
+      return paymentRequiredResponse({
+        amount: currentLiveAmount,
+        network: meta.network,
+        asset: meta.asset_usdc,
+        payTo: currentLivePayTo,
+        resource: withSegmentId(baseResource, currentSegment.id),
+        extensions: checkout,
+      })
+    }
+
+    const uid = randomAgoraUid()
+    const viewer = generateViewerToken(
+      this.env.AGORA_APP_ID,
+      this.env.AGORA_APP_CERTIFICATE,
+      meta.agora_channel,
+      uid,
+    )
+
+    return json({
+      ok: true,
+      room_id: meta.room_id,
+      agora_app_id: this.env.AGORA_APP_ID,
+      agora_channel: meta.agora_channel,
+      agora_uid: uid,
+      agora_viewer_token: viewer.token,
+      token_expires_in_seconds: viewer.expiresInSeconds,
+      audience_mode: 'free',
     })
   }
 
@@ -714,6 +1149,87 @@ export class DuetRoomDO implements DurableObject {
     return json({ meta })
   }
 
+  // -- Segment checkout token resolution (shared by handleEnter and handlePublicEnter) --
+
+  private async resolveSettleSegment(
+    meta: DuetRoomMeta,
+    paymentSignature: string,
+    baseResource: string,
+    currentSegment: DuetRoomSegment,
+    currentLiveAmount: string,
+    currentLivePayTo: string,
+    now: number,
+  ): Promise<{
+    settleSegment: DuetRoomSegment
+    settleAmount: string
+    settlePayTo: string
+    settleResource: string
+    rejectResponse: Response | null
+  }> {
+    const paymentMeta = tryParseBase64Json(paymentSignature) ?? tryParseJson(paymentSignature)
+    const sigResource = paymentMeta && typeof paymentMeta === 'object' && typeof (paymentMeta as any).resource === 'string'
+      ? String((paymentMeta as any).resource)
+      : undefined
+    const sigSegmentId = sigResource ? extractSegmentIdFromResource(sigResource) : null
+    const sigToken = paymentMeta && typeof paymentMeta === 'object'
+      ? readSegmentCheckoutToken((paymentMeta as any).extensions)
+      : null
+    const verified = sigToken
+      ? await verifySegmentCheckoutToken(this.env.JWT_SECRET, sigToken, meta.room_id, now)
+      : { ok: false as const, reason: 'missing_segment_checkout' as const }
+
+    if (verified.ok) {
+      if (sigSegmentId && sigSegmentId !== verified.claims.segment_id) {
+        const checkout = await buildSegmentCheckoutExtension(this.env.JWT_SECRET, meta.room_id, currentSegment.id, now)
+        return {
+          settleSegment: currentSegment,
+          settleAmount: currentLiveAmount,
+          settlePayTo: currentLivePayTo,
+          settleResource: withSegmentId(baseResource, currentSegment.id),
+          rejectResponse: paymentInvalidResponse({
+            amount: currentLiveAmount,
+            network: meta.network,
+            asset: meta.asset_usdc,
+            payTo: currentLivePayTo,
+            resource: withSegmentId(baseResource, currentSegment.id),
+            extensions: checkout,
+            reason: 'segment_checkout_mismatch',
+          }),
+        }
+      }
+    } else {
+      // Prevent paying a stale segment without a valid checkout token.
+      if (sigSegmentId && sigSegmentId !== currentSegment.id) {
+        const checkout = await buildSegmentCheckoutExtension(this.env.JWT_SECRET, meta.room_id, currentSegment.id, now)
+        return {
+          settleSegment: currentSegment,
+          settleAmount: currentLiveAmount,
+          settlePayTo: currentLivePayTo,
+          settleResource: withSegmentId(baseResource, currentSegment.id),
+          rejectResponse: paymentInvalidResponse({
+            amount: currentLiveAmount,
+            network: meta.network,
+            asset: meta.asset_usdc,
+            payTo: currentLivePayTo,
+            resource: withSegmentId(baseResource, currentSegment.id),
+            extensions: checkout,
+            reason: 'segment_checkout_required',
+          }),
+        }
+      }
+    }
+
+    const settleSegmentId = verified.ok ? verified.claims.segment_id : currentSegment.id
+    const settleSegment = (meta.segments ?? []).find((s) => s.id === settleSegmentId) ?? currentSegment
+    const settleAmount = settleSegment.pricing?.live_amount ?? meta.live_amount
+    const settlePayTo = settleSegment.pay_to
+    const settleResource = sigResource || withSegmentId(baseResource, settleSegment.id)
+
+    return { settleSegment, settleAmount, settlePayTo, settleResource, rejectResponse: null }
+  }
+
+  // -- Internal helpers --
+
   private async verifyBridgeTicket(
     meta: DuetRoomMeta,
     bridgeTicket: string,
@@ -765,6 +1281,8 @@ export class DuetRoomDO implements DurableObject {
 
     return json({
       ok: true,
+      room_id: meta.room_id,
+      agora_app_id: this.env.AGORA_APP_ID,
       agora_channel: meta.agora_channel,
       agora_uid: uid,
       agora_viewer_token: viewer.token,
@@ -774,11 +1292,83 @@ export class DuetRoomDO implements DurableObject {
   }
 
   private async getMeta(): Promise<DuetRoomMeta | null> {
-    return (await this.state.storage.get<DuetRoomMeta>('meta')) ?? null
+    const meta = (await this.state.storage.get<DuetRoomMeta>('meta')) ?? null
+    if (!meta) return null
+
+    let changed = false
+
+    // Lazy migration for rooms created before segment support shipped.
+    if (!meta.segments || meta.segments.length === 0) {
+      const startedAt = meta.live_started_at ?? meta.created_at ?? nowSeconds()
+      meta.segments = [
+        {
+          id: 'seg-1',
+          started_at: startedAt,
+          pay_to: meta.split_address,
+          pricing: {
+            live_amount: meta.live_amount,
+            replay_amount: meta.replay_amount,
+          },
+          rights: { kind: 'original' },
+        },
+      ]
+      meta.current_segment_id = 'seg-1'
+      changed = true
+    }
+
+    if (!meta.current_segment_id) {
+      meta.current_segment_id = meta.segments[meta.segments.length - 1].id
+      changed = true
+    } else if (!meta.segments.find((s) => s.id === meta.current_segment_id)) {
+      meta.current_segment_id = meta.segments[meta.segments.length - 1].id
+      changed = true
+    }
+
+    if (!meta.segment_locks) {
+      meta.segment_locks = {}
+      changed = true
+    }
+
+    if (changed) {
+      await this.putMeta(meta)
+    }
+    return meta
   }
 
   private async putMeta(meta: DuetRoomMeta): Promise<void> {
     await this.state.storage.put('meta', meta)
+  }
+
+  private getCurrentSegment(meta: DuetRoomMeta): DuetRoomSegment {
+    const segments = meta.segments ?? []
+    const currentId = meta.current_segment_id
+    const found = currentId ? segments.find((s) => s.id === currentId) : undefined
+    if (found) return found
+    if (segments.length > 0) return segments[segments.length - 1]
+    return {
+      id: 'seg-legacy',
+      started_at: meta.live_started_at ?? meta.created_at ?? nowSeconds(),
+      pay_to: meta.split_address,
+      pricing: {
+        live_amount: meta.live_amount,
+        replay_amount: meta.replay_amount,
+      },
+      rights: { kind: 'original' },
+    }
+  }
+
+  private async lockSegment(
+    meta: DuetRoomMeta,
+    segmentId: string,
+    now: number,
+    transactionHash?: string,
+  ): Promise<void> {
+    if (!segmentId) return
+    const locks = meta.segment_locks ?? {}
+    if (locks[segmentId]) return
+    locks[segmentId] = { locked_at: now, first_settlement_tx_hash: transactionHash }
+    meta.segment_locks = locks
+    await this.putMeta(meta)
   }
 
   private entitlementKey(wallet: string): string {
@@ -822,12 +1412,15 @@ export class DuetRoomDO implements DurableObject {
   }
 }
 
+// -- Payment response helpers --
+
 interface PaymentRequirement {
   amount: string
   network: NetworkId
   asset: string
   payTo: string
   resource: string
+  extensions?: unknown
 }
 
 function paymentRequiredResponse(req: PaymentRequirement): Response {
@@ -858,10 +1451,141 @@ function buildPaymentRequiredPayload(req: PaymentRequirement): unknown {
         asset: req.asset,
         amount: req.amount,
         payTo: req.payTo,
+        // Required by @x402/evm Exact scheme to build a valid EIP-3009 authorization payload.
+        maxTimeoutSeconds: X402_MAX_TIMEOUT_SECONDS,
+        extra: {
+          assetTransferMethod: 'eip3009',
+          name: BASE_SEPOLIA_USDC_EIP712.name,
+          version: BASE_SEPOLIA_USDC_EIP712.version,
+        },
       },
     ],
     resource: req.resource,
+    ...(req.extensions ? { extensions: req.extensions } : {}),
   }
+}
+
+// -- Segment checkout token --
+
+const SEGMENT_CHECKOUT_TTL_SECONDS = 5 * 60
+
+interface SegmentCheckoutClaims {
+  room_id: string
+  segment_id: string
+  exp: number
+}
+
+function withSegmentId(resource: string, segmentId: string): string {
+  try {
+    const u = resource.includes('://') ? new URL(resource) : new URL(resource, 'https://heaven.invalid')
+    u.searchParams.set('segment_id', segmentId)
+    return `${u.pathname}${u.search}`
+  } catch {
+    const sep = resource.includes('?') ? '&' : '?'
+    return `${resource}${sep}segment_id=${encodeURIComponent(segmentId)}`
+  }
+}
+
+function extractSegmentIdFromResource(resource: string): string | null {
+  try {
+    const u = resource.includes('://') ? new URL(resource) : new URL(resource, 'https://heaven.invalid')
+    const seg = u.searchParams.get('segment_id')
+    return seg && seg.length > 0 ? seg : null
+  } catch {
+    const m = resource.match(/[?&]segment_id=([^&]+)/)
+    if (!m) return null
+    try {
+      return decodeURIComponent(m[1])
+    } catch {
+      return m[1]
+    }
+  }
+}
+
+function readSegmentCheckoutToken(extensions: unknown): string | null {
+  if (!extensions || typeof extensions !== 'object') return null
+  const segmentCheckout = (extensions as any).segment_checkout
+  if (!segmentCheckout || typeof segmentCheckout !== 'object') return null
+  const token = (segmentCheckout as any).token
+  if (typeof token !== 'string' || token.length < 10) return null
+  return token
+}
+
+async function buildSegmentCheckoutExtension(
+  secret: string,
+  roomId: string,
+  segmentId: string,
+  now: number,
+): Promise<unknown> {
+  const exp = now + SEGMENT_CHECKOUT_TTL_SECONDS
+  const claims: SegmentCheckoutClaims = { room_id: roomId, segment_id: segmentId, exp }
+  const token = await signSegmentCheckoutToken(secret, claims)
+  return {
+    segment_checkout: {
+      token,
+      segment_id: segmentId,
+      expires_at: exp,
+    },
+  }
+}
+
+async function verifySegmentCheckoutToken(
+  secret: string,
+  token: string,
+  roomId: string,
+  now: number,
+): Promise<
+  | { ok: true; claims: SegmentCheckoutClaims }
+  | { ok: false; reason: 'invalid_token_format' | 'invalid_token_sig' | 'token_room_mismatch' | 'token_expired' | 'invalid_token_claims' }
+> {
+  const parts = token.split('.')
+  if (parts.length !== 2) return { ok: false, reason: 'invalid_token_format' }
+  const [claimsB64, sigHex] = parts
+  if (!/^[a-fA-F0-9]{64}$/.test(sigHex)) return { ok: false, reason: 'invalid_token_format' }
+
+  const expected = await hmacSha256Hex(secret, claimsB64)
+  if (expected.toLowerCase() !== sigHex.toLowerCase()) return { ok: false, reason: 'invalid_token_sig' }
+
+  const claims = tryParseBase64Json(claimsB64)
+  if (!claims || typeof claims !== 'object') return { ok: false, reason: 'invalid_token_claims' }
+  const room_id = (claims as any).room_id
+  const segment_id = (claims as any).segment_id
+  const exp = (claims as any).exp
+  if (typeof room_id !== 'string' || typeof segment_id !== 'string' || typeof exp !== 'number') {
+    return { ok: false, reason: 'invalid_token_claims' }
+  }
+  if (room_id !== roomId) return { ok: false, reason: 'token_room_mismatch' }
+  if (!Number.isFinite(exp) || exp < now) return { ok: false, reason: 'token_expired' }
+
+  return { ok: true, claims: { room_id, segment_id, exp } }
+}
+
+async function signSegmentCheckoutToken(secret: string, claims: SegmentCheckoutClaims): Promise<string> {
+  const claimsB64 = toBase64Json(claims)
+  const sigHex = await hmacSha256Hex(secret, claimsB64)
+  return `${claimsB64}.${sigHex}`
+}
+
+async function hmacSha256Hex(secret: string, message: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message))
+  return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+// -- General utilities --
+
+function isBroadcastOnline(meta: DuetRoomMeta, now: number): boolean {
+  if (meta.status !== 'live') return false
+  if (meta.broadcast_state !== 'live') return false
+  const heartbeatAt = meta.broadcast_heartbeat_at ?? 0
+  if (heartbeatAt <= 0) return false
+  return now - heartbeatAt <= BROADCAST_HEARTBEAT_TIMEOUT_SECONDS
 }
 
 function extendExpiry(currentExpiry: number | undefined, now: number, windowMinutes: number): number {
@@ -915,6 +1639,49 @@ function isReplayMode(value: string): value is ReplayMode {
 
 function isRecordingMode(value: string): value is RecordingMode {
   return value === 'host_local' || value === 'agora_cloud'
+}
+
+function normalizeSegmentRights(input: unknown): SegmentRights | undefined {
+  if (!input || typeof input !== 'object') return undefined
+  const kind = (input as any).kind
+  if (kind !== 'original' && kind !== 'derivative') return undefined
+  const rights: SegmentRights = { kind }
+
+  const sourceIds = (input as any).source_story_ip_ids
+  if (Array.isArray(sourceIds) && sourceIds.every((v) => typeof v === 'string')) {
+    rights.source_story_ip_ids = sourceIds.map((s) => s.slice(0, 256))
+  }
+
+  const upstreamBps = (input as any).upstream_bps
+  if (Number.isFinite(upstreamBps)) {
+    rights.upstream_bps = Math.max(0, Math.min(10_000, Math.floor(upstreamBps)))
+  }
+
+  const upstreamPayout = (input as any).upstream_payout
+  if (typeof upstreamPayout === 'string' && isAddress(upstreamPayout)) {
+    rights.upstream_payout = upstreamPayout.toLowerCase()
+  }
+
+  const atts = (input as any).attestations
+  if (Array.isArray(atts)) {
+    const out: SegmentRightsAttestation[] = []
+    for (const a of atts) {
+      if (!a || typeof a !== 'object') continue
+      const source_ip_id = (a as any).source_ip_id
+      const payout = (a as any).payout
+      const sig = (a as any).sig
+      if (typeof source_ip_id !== 'string' || typeof payout !== 'string' || typeof sig !== 'string') continue
+      if (!isAddress(payout)) continue
+      out.push({
+        source_ip_id: source_ip_id.slice(0, 256),
+        payout: payout.toLowerCase(),
+        sig: sig.slice(0, 2048),
+      })
+    }
+    if (out.length > 0) rights.attestations = out
+  }
+
+  return rights
 }
 
 function json(data: unknown, status = 200, headers: Record<string, string> = {}): Response {

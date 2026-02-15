@@ -10,6 +10,11 @@ const config = getDefaultConfig(projectRoot);
 // to follow those links during module resolution.
 config.resolver.unstable_enableSymlinks = true;
 
+// With Bun's store, hierarchical lookups can cause Metro to resolve dependencies
+// from a nested `node_modules` inside the store, leading to duplicate copies of
+// native JS packages (e.g. `react-native-svg`) in the bundle.
+config.resolver.disableHierarchicalLookup = true;
+
 // Force singletons for native modules that cannot be loaded twice.
 // Without this, Bun's store-level node_modules can cause Metro to bundle a second
 // copy of react-native-svg (e.g. via react-native-svg-circle-country-flags),

@@ -776,22 +776,6 @@ export const SongPublishForm: Component<SongPublishFormProps> = (props) => {
   const config = createMemo(() => STEP_CONFIG[props.step])
   const isFormStep = createMemo(() => stepIndex() >= 0)
 
-  const nextDisabled = createMemo(() => {
-    switch (props.step) {
-      case 'song':
-        return !props.formData.title.trim()
-          || !props.formData.artist.trim()
-          || !props.formData.audioFile
-          || !props.formData.instrumentalFile
-      case 'details':
-        return !props.formData.primaryLanguage
-      case 'license':
-        return !props.formData.attestation
-      default:
-        return false
-    }
-  })
-
   return (
     <div class={cn('w-full [&_.text-base]:text-base', props.class)}>
       {/* Progress bar — thin segments */}

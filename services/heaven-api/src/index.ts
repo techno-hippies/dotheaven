@@ -24,6 +24,7 @@ import self from './routes/self'
 import wallet from './routes/wallet'
 import upload from './routes/upload'
 import load from './routes/load'
+import arweave from './routes/arweave'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -50,6 +51,7 @@ app.route('/api/self', self)
 app.route('/api/wallet', wallet)
 app.route('/api/upload', upload)
 app.route('/api/load', load)
+app.route('/api/arweave', arweave)
 
 // 404 fallback
 app.notFound((c) => c.json({ error: 'Not found' }, 404))

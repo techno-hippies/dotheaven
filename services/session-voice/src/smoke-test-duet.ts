@@ -7,6 +7,11 @@
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 
 const BASE_URL = process.env.SESSION_VOICE_URL || 'http://localhost:3338'
+const TEST_NETWORK = process.env.DUET_TEST_NETWORK || 'eip155:84532'
+if (TEST_NETWORK !== 'eip155:84532') {
+  throw new Error(`Duet tests are locked to Base Sepolia (eip155:84532). Got: ${TEST_NETWORK}`)
+}
+const TEST_ASSET_USDC = process.env.DUET_TEST_ASSET_USDC || '0x036cbd53842c5426634e7929541ec2318f3dcf7e'
 
 const envFile = await Bun.file('.env').text()
 const JWT_SECRET = envFile.match(/^JWT_SECRET=(.+)$/m)?.[1]?.trim()
@@ -72,6 +77,10 @@ function base64EncodeJson(value: unknown): string {
   return btoa(binary)
 }
 
+function decodeBase64Json(base64: string): unknown {
+  return JSON.parse(atob(base64))
+}
+
 function assert(cond: boolean, msg: string) {
   if (!cond) {
     console.error(`  ✗ FAIL: ${msg}`)
@@ -86,6 +95,7 @@ async function main() {
   const host = privateKeyToAccount(generatePrivateKey())
   const guest = privateKeyToAccount(generatePrivateKey())
   const viewer = privateKeyToAccount(generatePrivateKey())
+  const publicViewer = privateKeyToAccount(generatePrivateKey())
 
   const hostToken = await mintJWT(host.address)
   const guestToken = await mintJWT(guest.address)
@@ -97,11 +107,15 @@ async function main() {
   console.log(`Host:   ${host.address.toLowerCase()}`)
   console.log(`Guest:  ${guest.address.toLowerCase()}`)
   console.log(`Viewer: ${viewer.address.toLowerCase()}\n`)
+  console.log(`Network: ${TEST_NETWORK}`)
+  console.log(`USDC:    ${TEST_ASSET_USDC}\n`)
 
   console.log('── 1. Create Duet Room ──')
   const create = await api('POST', '/duet/create', hostToken, {
     split_address: host.address.toLowerCase(),
     guest_wallet: guest.address.toLowerCase(),
+    network: TEST_NETWORK,
+    asset_usdc: TEST_ASSET_USDC,
     live_amount: '100000',
     replay_amount: '100000',
     access_window_minutes: 1440,
@@ -142,21 +156,76 @@ async function main() {
   assert(bridgeRefresh.status === 200, `POST /duet/:id/bridge/token → ${bridgeRefresh.status}`)
   assert(typeof bridgeRefresh.data?.agora_broadcaster_token === 'string', 'refreshed bridge token present')
 
-  const livePaymentSig = base64EncodeJson({
-    network: 'eip155:8453',
-    asset: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
+  console.log('\n── 2.4 Broadcast Heartbeat + Public Info ──')
+  const heartbeat = await api(
+    'POST',
+    `/duet/${roomId}/broadcast/heartbeat`,
+    undefined,
+    { status: 'live', mode: 'mic' },
+    { Authorization: `Bearer ${bridgeTicket}` },
+  )
+  assert(heartbeat.status === 200, `POST /duet/:id/broadcast/heartbeat → ${heartbeat.status}`)
+  assert(heartbeat.data?.broadcaster_online === true, 'heartbeat marks broadcaster online')
+  const publicInfo = await api('GET', `/duet/${roomId}/public-info`)
+  assert(publicInfo.status === 200, `GET /duet/:id/public-info → ${publicInfo.status}`)
+  assert(publicInfo.data?.broadcaster_online === true, 'public-info reports broadcaster online')
+
+  console.log('\n── 4. Public Enter Requires Payment (402) ──')
+  const publicEnter402 = await api('POST', `/duet/${roomId}/public-enter`, undefined, {})
+  assert(publicEnter402.status === 402, `POST /duet/:id/public-enter without payment → ${publicEnter402.status}`)
+  assert(typeof publicEnter402.headers.get('PAYMENT-REQUIRED') === 'string', 'PAYMENT-REQUIRED header present')
+  const publicRequired = decodeBase64Json(publicEnter402.headers.get('PAYMENT-REQUIRED')!) as any
+  assert(typeof publicRequired?.resource === 'string' && publicRequired.resource.includes('segment_id='), 'public-enter resource includes segment_id')
+
+  const publicLivePaymentSig = base64EncodeJson({
+    network: TEST_NETWORK,
+    asset: TEST_ASSET_USDC,
     amount: '100000',
     payTo: host.address.toLowerCase(),
-    wallet: viewer.address.toLowerCase(),
-    resource: `/duet/${roomId}/enter`,
+    wallet: publicViewer.address.toLowerCase(),
+    resource: publicRequired.resource,
+    ...(publicRequired.extensions ? { extensions: publicRequired.extensions } : {}),
   })
 
-  console.log('\n── 4. Live Enter Requires Payment (402) ──')
+  console.log('\n── 4.1 Public Enter With Payment Signature ──')
+  const publicEnterPaid = await api(
+    'POST',
+    `/duet/${roomId}/public-enter`,
+    undefined,
+    { wallet: publicViewer.address.toLowerCase() },
+    { 'PAYMENT-SIGNATURE': publicLivePaymentSig },
+  )
+  assert(publicEnterPaid.status === 200, `POST /duet/:id/public-enter with payment signature → ${publicEnterPaid.status}`)
+  assert(typeof publicEnterPaid.data?.agora_viewer_token === 'string', 'public-enter agora_viewer_token present')
+  assert(typeof publicEnterPaid.headers.get('PAYMENT-RESPONSE') === 'string', 'PAYMENT-RESPONSE header present')
+
+  console.log('\n── 4.2 Public Re-Enter Without Repay ──')
+  const publicEnterAgain = await api(
+    'POST',
+    `/duet/${roomId}/public-enter`,
+    undefined,
+    { wallet: publicViewer.address.toLowerCase() },
+  )
+  assert(publicEnterAgain.status === 200, `POST /duet/:id/public-enter entitled wallet → ${publicEnterAgain.status}`)
+
+  console.log('\n── 5. Live Enter Requires Payment (402) ──')
   const enter402 = await api('POST', `/duet/${roomId}/enter`, viewerToken, {})
   assert(enter402.status === 402, `POST /duet/:id/enter without payment → ${enter402.status}`)
   assert(typeof enter402.headers.get('PAYMENT-REQUIRED') === 'string', 'PAYMENT-REQUIRED header present')
+  const liveRequired = decodeBase64Json(enter402.headers.get('PAYMENT-REQUIRED')!) as any
+  assert(typeof liveRequired?.resource === 'string' && liveRequired.resource.includes('segment_id='), 'live-enter resource includes segment_id')
 
-  console.log('\n── 5. Live Enter With Payment Signature ──')
+  const livePaymentSig = base64EncodeJson({
+    network: TEST_NETWORK,
+    asset: TEST_ASSET_USDC,
+    amount: '100000',
+    payTo: host.address.toLowerCase(),
+    wallet: viewer.address.toLowerCase(),
+    resource: liveRequired.resource,
+    ...(liveRequired.extensions ? { extensions: liveRequired.extensions } : {}),
+  })
+
+  console.log('\n── 6. Live Enter With Payment Signature ──')
   const enterPaid = await api(
     'POST',
     `/duet/${roomId}/enter`,
@@ -168,7 +237,7 @@ async function main() {
   assert(typeof enterPaid.data?.agora_viewer_token === 'string', 'agora_viewer_token present')
   assert(typeof enterPaid.headers.get('PAYMENT-RESPONSE') === 'string', 'PAYMENT-RESPONSE header present')
 
-  console.log('\n── 5.1 Payment Signature Replay Attack Blocked ──')
+  console.log('\n── 6.1 Payment Signature Replay Attack Blocked ──')
   const replayedByAttacker = await api(
     'POST',
     `/duet/${roomId}/enter`,
@@ -181,11 +250,11 @@ async function main() {
     `reused signature by other wallet blocked → ${replayedByAttacker.status}`,
   )
 
-  console.log('\n── 6. Live Re-Enter Without Repay ──')
+  console.log('\n── 7. Live Re-Enter Without Repay ──')
   const enterAgain = await api('POST', `/duet/${roomId}/enter`, viewerToken, {})
   assert(enterAgain.status === 200, `POST /duet/:id/enter entitled wallet → ${enterAgain.status}`)
 
-  console.log('\n── 7. Recording Complete (Bridge Auth) ──')
+  console.log('\n── 8. Recording Complete (Bridge Auth) ──')
   const recordingComplete = await api(
     'POST',
     `/duet/${roomId}/recording/complete`,
@@ -199,15 +268,15 @@ async function main() {
   )
   assert(recordingComplete.status === 200, `POST /duet/:id/recording/complete → ${recordingComplete.status}`)
 
-  console.log('\n── 8. Replay Requires Payment (402) ──')
+  console.log('\n── 9. Replay Requires Payment (402) ──')
   const replay402 = await api('GET', `/duet/${roomId}/replay`, viewerToken)
   assert(replay402.status === 402, `GET /duet/:id/replay without payment → ${replay402.status}`)
   assert(typeof replay402.headers.get('PAYMENT-REQUIRED') === 'string', 'PAYMENT-REQUIRED header present')
 
-  console.log('\n── 9. Replay With Payment Signature ──')
+  console.log('\n── 10. Replay With Payment Signature ──')
   const replayPaymentSig = base64EncodeJson({
-    network: 'eip155:8453',
-    asset: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
+    network: TEST_NETWORK,
+    asset: TEST_ASSET_USDC,
     amount: '100000',
     payTo: host.address.toLowerCase(),
     wallet: viewer.address.toLowerCase(),
@@ -223,17 +292,17 @@ async function main() {
   assert(replayPaid.status === 200, `GET /duet/:id/replay with payment signature → ${replayPaid.status}`)
   assert(typeof replayPaid.data?.replay_access_token === 'string', 'replay_access_token returned')
 
-  console.log('\n── 10. Replay Re-Access Without Repay ──')
+  console.log('\n── 11. Replay Re-Access Without Repay ──')
   const replayAgain = await api('GET', `/duet/${roomId}/replay`, viewerToken)
   assert(replayAgain.status === 200, `GET /duet/:id/replay entitled wallet → ${replayAgain.status}`)
   assert(typeof replayAgain.data?.replay_access_token === 'string', 'new replay_access_token returned')
 
-  console.log('\n── 11. End Room ──')
+  console.log('\n── 12. End Room ──')
   const end = await api('POST', `/duet/${roomId}/end`, hostToken, {})
   assert(end.status === 200, `POST /duet/:id/end → ${end.status}`)
   assert(end.data?.status === 'ended', `status: ${end.data?.status}`)
 
-  console.log('\n── 12. Enter After End Fails ──')
+  console.log('\n── 13. Enter After End Fails ──')
   const enterAfterEnd = await api('POST', `/duet/${roomId}/enter`, viewerToken, {})
   assert(enterAfterEnd.status === 400, `POST /duet/:id/enter after end → ${enterAfterEnd.status}`)
   assert(enterAfterEnd.data?.error === 'room_not_live', `error: ${enterAfterEnd.data?.error}`)

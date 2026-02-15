@@ -37,6 +37,11 @@ pub enum PhosphorIcon {
     PaperPlaneRight,
     ArrowLeft,
     PencilSimple,
+    Queue,
+    CoinVertical,
+    Cloud,
+    Infinity,
+    Database,
 }
 
 impl IconNamed for PhosphorIcon {
@@ -73,6 +78,11 @@ impl IconNamed for PhosphorIcon {
             Self::PaperPlaneRight => "icons/paper-plane-right.svg",
             Self::ArrowLeft => "icons/arrow-left.svg",
             Self::PencilSimple => "icons/pencil-simple.svg",
+            Self::Queue => "icons/queue.svg",
+            Self::CoinVertical => "icons/coin-vertical.svg",
+            Self::Cloud => "icons/cloud.svg",
+            Self::Infinity => "icons/infinity.svg",
+            Self::Database => "icons/database.svg",
         }
         .into()
     }
@@ -97,6 +107,7 @@ impl RenderOnce for PhosphorIcon {
 #[folder = "assets"]
 #[include = "icons/*.svg"]
 #[include = "icons/**/*.svg"]
+#[include = "app_icon/*.png"]
 pub struct HeavenAssets;
 
 /// Combined asset source: tries our icons first, falls back to gpui-component-assets.

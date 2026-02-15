@@ -17,6 +17,7 @@ import { creditRoutes } from './routes/credits'
 import { roomRoutes } from './routes/rooms'
 import { sessionRoutes } from './routes/sessions'
 import { duetRoutes } from './routes/duet'
+import { songRoutes } from './routes/songs'
 
 export { RoomDO } from './room-do'
 export { DuetRoomDO } from './duet-room-do'
@@ -35,5 +36,6 @@ app.route('/credits', creditRoutes)
 app.route('/rooms', roomRoutes)
 app.route('/session', sessionRoutes)
 app.route('/duet', duetRoutes)
+app.route('/songs', songRoutes)
 
 export default app

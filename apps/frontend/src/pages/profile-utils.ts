@@ -3,6 +3,7 @@ import { alpha3ToAlpha2 } from '@heaven/ui'
 import type { TranslationKey } from '@heaven/i18n'
 import { isAddress, zeroAddress } from 'viem'
 import { computeNode, getTextRecord, getAddr, resolveEnsName, getPrimaryName, resolveAvatarUri, resolveIpfsUri } from '../lib/heaven'
+import { resolveCoverUrl } from '../lib/heaven/cover-ref'
 import { SlotStatus, type SessionSlot } from '../lib/heaven/escrow'
 import type { ScrobbleEntry } from '../lib/heaven/scrobbles'
 import type { ProfileScrobble } from '../components/profile'
@@ -43,11 +44,6 @@ export function formatTimeAgo(ts: number, t?: (key: TranslationKey, ...args: any
   }
   return new Date(ts * 1000).toLocaleDateString()
 }
-
-export const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
-
-export const isValidCid = (cid: string | undefined | null): cid is string =>
-  !!cid && (cid.startsWith('Qm') || cid.startsWith('bafy'))
 
 export function parseProfileId(rawId: string | undefined): ParsedProfileId {
   const id = (rawId ?? '').trim()
@@ -121,9 +117,7 @@ export function mapScrobbles(
     album: e.album,
     trackId: e.trackId,
     timestamp: formatTimeAgo(e.playedAt, t),
-    coverUrl: isValidCid(e.coverCid)
-      ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
-      : undefined,
+    coverUrl: resolveCoverUrl(e.coverCid, { width: 96, height: 96, format: 'webp', quality: 80 }),
   }))
 }
 

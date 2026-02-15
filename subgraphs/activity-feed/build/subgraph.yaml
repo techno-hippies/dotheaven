@@ -58,6 +58,26 @@ dataSources:
           handler: handleTrackUpdatedV4
       file: ScrobbleV4/ScrobbleV4.wasm
   - kind: ethereum
+    name: VerificationMirror
+    network: megaeth-testnet-v2
+    source:
+      address: "0xb0864603A4d6b62eACB53fbFa32E7665BADCc7Fb"
+      abi: VerificationMirror
+      startBlock: 10342258
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - UserVerification
+      abis:
+        - name: VerificationMirror
+          file: VerificationMirror/VerificationMirror.json
+      eventHandlers:
+        - event: Mirrored(indexed address,uint64,string,uint256)
+          handler: handleMirrored
+      file: VerificationMirror/VerificationMirror.wasm
+  - kind: ethereum
     name: PostsV1
     network: megaeth-testnet-v2
     source:

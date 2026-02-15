@@ -45,6 +45,24 @@ export interface LitDecryptParams {
   authContext: any;
 }
 
+export interface FetchAndDecryptContentParams {
+  datasetOwner?: string;
+  pieceCid: string;
+  contentId: string;
+  userPkpPublicKey: string;
+  contentDecryptCid: string;
+  algo?: number;
+  network?: 'calibration' | 'mainnet';
+  gatewayUrl?: string;
+}
+
+export interface FetchAndDecryptContentResult {
+  audioBase64: string;
+  bytes: number;
+  mimeType?: string;
+  sourceUrl: string;
+}
+
 function toJsonSafeValue(value: unknown): unknown {
   if (typeof value === 'bigint') {
     const asNumber = Number(value);
@@ -283,6 +301,15 @@ export class LitBridge {
    */
   async setAuthContext(authContext: any): Promise<void> {
     await this.sendRequest('setAuthContext', authContext);
+  }
+
+  /**
+   * Fetch cloud content and decrypt inside the WebView runtime.
+   */
+  async fetchAndDecryptContent(
+    params: FetchAndDecryptContentParams,
+  ): Promise<FetchAndDecryptContentResult> {
+    return this.sendRequest('fetchAndDecryptContent', params, 180000);
   }
 
   /**

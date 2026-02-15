@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
-import { hashMessage, toBytes } from 'viem';
+import * as WebBrowser from 'expo-web-browser';
+import * as ExpoCrypto from 'expo-crypto';
+import { hashMessage, keccak256, toBytes } from 'viem';
 import { useLitBridge } from './LitProvider';
+import { AUTH_CONFIG } from '../lib/auth-config';
 
-const AUTH_SERVICE_BASE_URL = 'https://naga-dev-auth-service.getlit.dev';
 const STORAGE_KEY_PKP = 'heaven:pkpInfo';
 const STORAGE_KEY_AUTH = 'heaven:authData';
 
@@ -97,6 +99,14 @@ function isStaleAuthContextError(error: unknown): boolean {
   );
 }
 
+function isWebAuthnRpHashMismatchError(error: unknown): boolean {
+  const message = getErrorMessage(error).toLowerCase();
+  return (
+    message.includes('relying party id hash does not match') ||
+    message.includes('passkey assertion payload mismatch')
+  );
+}
+
 function isPersonalSignScopeError(error: unknown): boolean {
   const message = getErrorMessage(error).toLowerCase();
   return (
@@ -113,6 +123,10 @@ function isPersonalSignRuntimeError(error: unknown): boolean {
     message.includes('invalid ecdsa signature') ||
     message.includes('invalid signature produced by bridge')
   );
+}
+
+function isPasskeyRpMismatchError(error: unknown): boolean {
+  return getErrorMessage(error).includes('Passkey RP mismatch');
 }
 
 function parseLitSignature(sig: any): string {
@@ -151,6 +165,155 @@ function parseLitSignature(sig: any): string {
 type CreateAuthContextOptions = {
   forceRefresh?: boolean;
 };
+
+type BrowserAuthMode = 'signin' | 'register';
+
+interface BrowserAuthPayload {
+  pkpPublicKey?: string;
+  pkpAddress?: string;
+  pkpTokenId?: string;
+  authMethodType?: number | string;
+  authMethodId?: string;
+  accessToken?: string;
+  isNewUser?: boolean | string;
+  error?: string;
+}
+
+function parseBooleanLike(value: unknown): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return value.toLowerCase() === 'true';
+  return false;
+}
+
+function decodeBase64UrlUtf8(value: string): string {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+  if (typeof globalThis.atob === 'function') {
+    return decodeURIComponent(
+      Array.prototype.map
+        .call(globalThis.atob(padded), (char: string) =>
+          `%${char.charCodeAt(0).toString(16).padStart(2, '0')}`,
+        )
+        .join(''),
+    );
+  }
+  throw new Error('Missing base64 decoder in runtime');
+}
+
+function hostMatchesRpId(hostname: string, rpId: string): boolean {
+  const normalizedHost = String(hostname || '').toLowerCase();
+  const normalizedRp = String(rpId || '').toLowerCase();
+  if (!normalizedHost || !normalizedRp) return false;
+  return normalizedHost === normalizedRp || normalizedHost.endsWith(`.${normalizedRp}`);
+}
+
+function toRpIdHost(domainOrRpId: string): string {
+  const trimmed = String(domainOrRpId || '').trim();
+  if (!trimmed) {
+    throw new Error('Missing passkey RP domain');
+  }
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  const parsed = new URL(withScheme);
+  if (!parsed.hostname) {
+    throw new Error(`Invalid passkey RP domain: "${domainOrRpId}"`);
+  }
+  return parsed.hostname.toLowerCase();
+}
+
+function assertCanonicalLitWebViewForBrowserPasskeyFlow(): void {
+  if (AUTH_CONFIG.authFlow !== 'browser') return;
+  if (AUTH_CONFIG.allowNonCanonicalPasskeyRp) return;
+  if (AUTH_CONFIG.litWebViewMatchesPasskeyRp) return;
+
+  const host = AUTH_CONFIG.litWebViewHost || '(missing)';
+  throw new Error(
+    `Passkey RP mismatch: configured Lit WebView host "${host}" does not match passkey RP "${AUTH_CONFIG.passkeyRpId}". ` +
+    `Set EXPO_PUBLIC_LIT_WEBVIEW_URL=${AUTH_CONFIG.canonicalLitWebViewUrl}`,
+  );
+}
+
+function inspectWebAuthnAccessToken(accessToken: string): {
+  rawId?: string;
+  originHost?: string;
+  derivedAuthMethodId?: string;
+  authenticatorRpIdHashHex?: string;
+} {
+  try {
+    const parsed = JSON.parse(accessToken) as any;
+    const rawId = typeof parsed?.rawId === 'string' ? parsed.rawId : undefined;
+    const clientDataJsonB64 = parsed?.response?.clientDataJSON;
+    const authenticatorDataB64 = parsed?.response?.authenticatorData;
+    let originHost: string | undefined;
+    let authenticatorRpIdHashHex: string | undefined;
+
+    if (typeof clientDataJsonB64 === 'string' && clientDataJsonB64.length > 0) {
+      const clientDataJson = decodeBase64UrlUtf8(clientDataJsonB64);
+      const clientData = JSON.parse(clientDataJson) as { origin?: string };
+      if (typeof clientData?.origin === 'string') {
+        originHost = new URL(clientData.origin).hostname.toLowerCase();
+      }
+    }
+
+    if (typeof authenticatorDataB64 === 'string' && authenticatorDataB64.length > 0) {
+      const normalized = authenticatorDataB64.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+      if (typeof globalThis.atob === 'function') {
+        const decoded = globalThis.atob(padded);
+        if (decoded.length >= 32) {
+          let hashHex = '';
+          for (let i = 0; i < 32; i += 1) {
+            hashHex += decoded.charCodeAt(i).toString(16).padStart(2, '0');
+          }
+          authenticatorRpIdHashHex = hashHex;
+        }
+      }
+    }
+
+    const derivedAuthMethodId =
+      typeof rawId === 'string' && rawId.length > 0
+        ? keccak256(toBytes(`${rawId}:lit`))
+        : undefined;
+
+    return { rawId, originHost, derivedAuthMethodId, authenticatorRpIdHashHex };
+  } catch (error) {
+    console.warn('[Auth] Failed to inspect WebAuthn access token:', error);
+    return {};
+  }
+}
+
+function parseBrowserAuthPayloadFromUrl(url: string): BrowserAuthPayload {
+  const parsed = new URL(url);
+  const directPayload = parsed.searchParams.get('payload');
+  if (directPayload) {
+    try {
+      return JSON.parse(directPayload) as BrowserAuthPayload;
+    } catch (error) {
+      throw new Error(`Invalid auth callback payload JSON: ${String(error)}`);
+    }
+  }
+
+  return {
+    pkpPublicKey: parsed.searchParams.get('pkpPublicKey') || undefined,
+    pkpAddress: parsed.searchParams.get('pkpAddress') || undefined,
+    pkpTokenId: parsed.searchParams.get('pkpTokenId') || undefined,
+    authMethodType: parsed.searchParams.get('authMethodType') || undefined,
+    authMethodId: parsed.searchParams.get('authMethodId') || undefined,
+    accessToken: parsed.searchParams.get('accessToken') || undefined,
+    isNewUser: parsed.searchParams.get('isNewUser') || undefined,
+    error: parsed.searchParams.get('error') || undefined,
+  };
+}
+
+function buildBrowserAuthUrl(mode: BrowserAuthMode): string {
+  const params = new URLSearchParams({
+    callback: AUTH_CONFIG.authCallbackUrl,
+    mode,
+    transport: 'redirect',
+    source: 'react-native',
+  });
+  const separator = AUTH_CONFIG.authPageUrl.includes('?') ? '&' : '?';
+  return `${AUTH_CONFIG.authPageUrl}${separator}${params.toString()}`;
+}
 
 interface AuthContextValue {
   isAuthenticated: boolean;
@@ -244,55 +407,172 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const runBrowserPasskeyAuth = useCallback(async (mode: BrowserAuthMode) => {
+    const authUrl = buildBrowserAuthUrl(mode);
+    console.log('[Auth] Starting browser passkey flow:', mode, authUrl);
+    const result = await WebBrowser.openAuthSessionAsync(authUrl, AUTH_CONFIG.authCallbackUrl);
+
+    if (result.type !== 'success' || !('url' in result) || !result.url) {
+      throw new Error(
+        result.type === 'cancel' || result.type === 'dismiss'
+          ? 'Authentication cancelled'
+          : 'Authentication did not complete',
+      );
+    }
+
+    const payload = parseBrowserAuthPayloadFromUrl(result.url);
+    if (payload.error) {
+      throw new Error(payload.error);
+    }
+
+    const pkp = normalizePkpInfo({
+      pubkey: payload.pkpPublicKey,
+      ethAddress: payload.pkpAddress,
+      tokenId: payload.pkpTokenId,
+    });
+    const auth = normalizeAuthData({
+      authMethodType: payload.authMethodType,
+      authMethodId: payload.authMethodId,
+      accessToken: payload.accessToken,
+    });
+    const accessTokenInfo =
+      auth.authMethodType === 3 && auth.accessToken
+        ? inspectWebAuthnAccessToken(auth.accessToken)
+        : {};
+    const derivedAuthMethodId = accessTokenInfo.derivedAuthMethodId;
+    if (derivedAuthMethodId && derivedAuthMethodId.toLowerCase() !== auth.authMethodId.toLowerCase()) {
+      console.warn('[Auth] Browser callback authMethodId mismatch; using value derived from accessToken rawId.', {
+        received: auth.authMethodId.slice(0, 18),
+        derived: derivedAuthMethodId.slice(0, 18),
+      });
+      auth.authMethodId = derivedAuthMethodId;
+    }
+
+    if (accessTokenInfo.originHost && accessTokenInfo.authenticatorRpIdHashHex) {
+      ExpoCrypto.digestStringAsync(
+        ExpoCrypto.CryptoDigestAlgorithm.SHA256,
+        accessTokenInfo.originHost,
+        { encoding: ExpoCrypto.CryptoEncoding.HEX },
+      )
+        .then((expected) => {
+          console.log('[Auth] WebAuthn token RP hash check:', {
+            originHost: accessTokenInfo.originHost,
+            authenticatorRpIdHashHex: accessTokenInfo.authenticatorRpIdHashHex,
+            expectedRpIdHashHex: expected,
+            match:
+              accessTokenInfo.authenticatorRpIdHashHex?.toLowerCase() === expected.toLowerCase(),
+          });
+        })
+        .catch((error) => {
+          console.warn('[Auth] Failed to compute expected RP hash for callback token:', error);
+        });
+    }
+
+    console.log('[Auth] Browser callback payload summary:', {
+      mode,
+      tokenId: pkp.tokenId,
+      authMethodType: auth.authMethodType,
+      authMethodId: String(auth.authMethodId || '').slice(0, 18),
+      accessTokenOriginHost: accessTokenInfo.originHost,
+      accessTokenAuthenticatorRpIdHash: accessTokenInfo.authenticatorRpIdHashHex,
+      isNewUser: parseBooleanLike(payload.isNewUser) || mode === 'register',
+    });
+
+    return {
+      pkp,
+      auth,
+      isNewUser: parseBooleanLike(payload.isNewUser) || mode === 'register',
+    };
+  }, []);
+
   const register = useCallback(async () => {
-    if (!bridge || !isReady) {
+    if (AUTH_CONFIG.authFlow !== 'browser' && (!bridge || !isReady)) {
       Alert.alert('Not Ready', 'Lit engine is still loading. Please wait a moment and try again.');
       return;
     }
 
     try {
-      const result = await bridge.sendRequest('registerAndMintPKP', {
-        authServiceBaseUrl: AUTH_SERVICE_BASE_URL,
-        scopes: ['sign-anything', 'personal-sign'],
-      }, 120000);
+      let pkp: PKPInfo;
+      let auth: AuthData;
+      let shouldShowOnboarding = true;
 
-      const pkp = normalizePkpInfo(result.pkpInfo);
-      const auth = normalizeAuthData(result.authData);
+      if (AUTH_CONFIG.authFlow === 'browser') {
+        const result = await runBrowserPasskeyAuth('register');
+        pkp = result.pkp;
+        auth = result.auth;
+        shouldShowOnboarding = result.isNewUser;
+      } else {
+        const result = await bridge!.sendRequest('registerAndMintPKP', {
+          authServiceBaseUrl: AUTH_CONFIG.authServiceBaseUrl,
+          scopes: ['sign-anything', 'personal-sign'],
+          expectedRpId: AUTH_CONFIG.passkeyRpId,
+          allowNonCanonicalRp: AUTH_CONFIG.allowNonCanonicalPasskeyRp,
+        }, 120000);
+
+        pkp = normalizePkpInfo(result.pkpInfo);
+        auth = normalizeAuthData(result.authData);
+      }
 
       authContextCacheRef.current = null;
       setPkpInfo(pkp);
       setAuthData(auth);
       await persistAuth(pkp, auth);
-      setIsNewUser(true); // Trigger onboarding flow
+      setIsNewUser(shouldShowOnboarding);
     } catch (err: any) {
       console.error('[Auth] Registration failed:', err);
-      Alert.alert('Registration Failed', err?.message || 'Something went wrong');
+      if (isPasskeyRpMismatchError(err)) {
+        Alert.alert(
+          'Passkey Domain Mismatch',
+          `Passkey auth must run on ${AUTH_CONFIG.passkeyRpId}. Current WebView host is not allowed.`,
+        );
+      } else {
+        Alert.alert('Registration Failed', err?.message || 'Something went wrong');
+      }
     }
-  }, [bridge, isReady]);
+  }, [bridge, isReady, runBrowserPasskeyAuth]);
 
   const authenticate = useCallback(async () => {
-    if (!bridge || !isReady) {
+    if (AUTH_CONFIG.authFlow !== 'browser' && (!bridge || !isReady)) {
       Alert.alert('Not Ready', 'Lit engine is still loading. Please wait a moment and try again.');
       return;
     }
 
     try {
-      const result = await bridge.sendRequest('authenticate', {
-        authServiceBaseUrl: AUTH_SERVICE_BASE_URL,
-      }, 120000);
+      let pkp: PKPInfo | null = null;
+      let auth: AuthData;
 
-      const auth = normalizeAuthData(result);
+      if (AUTH_CONFIG.authFlow === 'browser') {
+        const result = await runBrowserPasskeyAuth('signin');
+        pkp = result.pkp;
+        auth = result.auth;
+      } else {
+        const result = await bridge!.sendRequest('authenticate', {
+          authServiceBaseUrl: AUTH_CONFIG.authServiceBaseUrl,
+          expectedRpId: AUTH_CONFIG.passkeyRpId,
+          allowNonCanonicalRp: AUTH_CONFIG.allowNonCanonicalPasskeyRp,
+        }, 120000);
+        auth = normalizeAuthData(result);
+      }
+
       authContextCacheRef.current = null;
       setAuthData(auth);
 
-      // Look up PKPs for this auth
-      const pkpsResult = await bridge.sendRequest('viewPKPsByAuthData', {
-        authData: { authMethodType: auth.authMethodType, authMethodId: auth.authMethodId },
-        pagination: { limit: 1, offset: 0 },
-      });
+      if (!pkp) {
+        if (!bridge) {
+          throw new Error('Missing PKP in auth callback and Lit bridge is unavailable');
+        }
+        // Look up PKPs for this auth
+        const pkpsResult = await bridge.sendRequest('viewPKPsByAuthData', {
+          authData: { authMethodType: auth.authMethodType, authMethodId: auth.authMethodId },
+          pagination: { limit: 1, offset: 0 },
+        });
 
-      if (pkpsResult.pkps?.length > 0) {
-        const pkp = normalizePkpInfo(pkpsResult.pkps[0]);
+        if (pkpsResult.pkps?.length > 0) {
+          pkp = normalizePkpInfo(pkpsResult.pkps[0]);
+        }
+      }
+
+      if (pkp) {
         setPkpInfo(pkp);
         await persistAuth(pkp, auth);
       } else {
@@ -302,19 +582,83 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       Alert.alert('Welcome back', 'You are now logged in.');
     } catch (err: any) {
       console.error('[Auth] Authentication failed:', err);
-      Alert.alert('Login Failed', err?.message || 'Something went wrong');
+      if (isPasskeyRpMismatchError(err)) {
+        Alert.alert(
+          'Passkey Domain Mismatch',
+          `Passkey auth must run on ${AUTH_CONFIG.passkeyRpId}. Current WebView host is not allowed.`,
+        );
+      } else {
+        Alert.alert('Login Failed', err?.message || 'Something went wrong');
+      }
     }
-  }, [bridge, isReady]);
+  }, [bridge, isReady, runBrowserPasskeyAuth]);
 
   const createAuthCtxInternal = useCallback(async (forceRefresh: boolean = false) => {
     if (!bridge || !isReady || !authData || !pkpInfo) {
       throw new Error('Not authenticated');
     }
 
+    assertCanonicalLitWebViewForBrowserPasskeyFlow();
+
     const createAuthContextWithData = async (auth: AuthData) => {
+      const domainHost = toRpIdHost(AUTH_CONFIG.passkeyRpId);
+      const webAuthnTokenInfo =
+        auth.authMethodType === 3 && auth.accessToken
+          ? inspectWebAuthnAccessToken(auth.accessToken)
+          : {};
+      const authDataForRequest: AuthData = { ...auth };
+
+      if (
+        webAuthnTokenInfo.derivedAuthMethodId &&
+        webAuthnTokenInfo.derivedAuthMethodId.toLowerCase() !== auth.authMethodId.toLowerCase()
+      ) {
+        console.warn('[Auth] Correcting cached authMethodId from WebAuthn accessToken rawId before createAuthContext.');
+        authDataForRequest.authMethodId = webAuthnTokenInfo.derivedAuthMethodId;
+      }
+
+      if (
+        webAuthnTokenInfo.originHost &&
+        !hostMatchesRpId(webAuthnTokenInfo.originHost, AUTH_CONFIG.passkeyRpId)
+      ) {
+        throw new Error(
+          `Passkey assertion origin mismatch (got ${webAuthnTokenInfo.originHost}, expected ${AUTH_CONFIG.passkeyRpId}). Please sign in again and choose the ${AUTH_CONFIG.passkeyRpId} passkey.`,
+        );
+      }
+
+      let expectedRpHashHex: string | undefined;
+      if (webAuthnTokenInfo.originHost) {
+        expectedRpHashHex = await ExpoCrypto.digestStringAsync(
+          ExpoCrypto.CryptoDigestAlgorithm.SHA256,
+          webAuthnTokenInfo.originHost,
+          { encoding: ExpoCrypto.CryptoEncoding.HEX },
+        );
+      }
+
+      if (
+        webAuthnTokenInfo.authenticatorRpIdHashHex &&
+        expectedRpHashHex &&
+        webAuthnTokenInfo.authenticatorRpIdHashHex.toLowerCase() !== expectedRpHashHex.toLowerCase()
+      ) {
+        throw new Error(
+          `Passkey assertion payload mismatch: clientData origin=${webAuthnTokenInfo.originHost} but authenticatorData rpIdHash differs. Please sign in again and choose the correct dotheaven.org passkey.`,
+        );
+      }
+
+      console.log('[Auth] createAuthContext request summary:', {
+        tokenId: pkpInfo.tokenId,
+        pkpPubkey: String(pkpInfo.pubkey || '').slice(0, 18),
+        authMethodType: authDataForRequest.authMethodType,
+        authMethodId: String(authDataForRequest.authMethodId || '').slice(0, 18),
+        authConfigDomain: domainHost,
+        accessTokenOriginHost: webAuthnTokenInfo.originHost,
+        accessTokenAuthenticatorRpIdHash: webAuthnTokenInfo.authenticatorRpIdHashHex,
+        expectedRpIdHash: expectedRpHashHex,
+      });
+
       const result = await bridge.sendRequest('createAuthContext', {
-        authData: auth,
+        authData: authDataForRequest,
         pkpPublicKey: pkpInfo.pubkey,
+        disableWebViewReauth: AUTH_CONFIG.authFlow === 'browser',
         authConfig: {
           resources: [
             ['lit-action-execution', '*'],
@@ -323,7 +667,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ],
           expiration: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
           statement: 'Execute Lit Actions and sign messages',
-          domain: 'appassets.androidplatform.net',
+          domain: domainHost,
         },
       }, 120000);
 
@@ -334,6 +678,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let effectiveAuth = auth;
       if (result?.refreshedAuthData) {
         effectiveAuth = normalizeAuthData(result.refreshedAuthData);
+        setAuthData(effectiveAuth);
+        await persistAuth(pkpInfo, effectiveAuth);
+      } else if (authDataForRequest.authMethodId !== auth.authMethodId) {
+        effectiveAuth = authDataForRequest;
         setAuthData(effectiveAuth);
         await persistAuth(pkpInfo, effectiveAuth);
       }
@@ -365,23 +713,57 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       return await createAuthContextWithData(authData);
     } catch (error) {
+      if (isWebAuthnRpHashMismatchError(error)) {
+        if (AUTH_CONFIG.authFlow === 'browser' && !forceRefresh) {
+          console.warn('[Auth] RP hash mismatch detected; requesting one explicit browser sign-in retry.');
+          const refreshedAuth = (await runBrowserPasskeyAuth('signin')).auth;
+          authContextCacheRef.current = null;
+          setAuthData(refreshedAuth);
+          await persistAuth(pkpInfo, refreshedAuth);
+          try {
+            return await createAuthContextWithData(refreshedAuth);
+          } catch (retryError) {
+            if (!isWebAuthnRpHashMismatchError(retryError)) {
+              throw retryError;
+            }
+          }
+        }
+        throw new Error(
+          `Passkey verification failed (RP hash mismatch). Please sign in again and select the passkey stored for ${AUTH_CONFIG.passkeyRpId}.`,
+        );
+      }
+      if (isPersonalSignScopeError(error)) {
+        console.warn('[Auth] Missing personal-sign scope for cached auth; clearing local auth state.');
+        authContextCacheRef.current = null;
+        setPkpInfo(null);
+        setAuthData(null);
+        setIsNewUser(false);
+        await persistAuth(null, null);
+        throw new Error(
+          'This passkey account is missing required signing scope. Please register again to migrate your PKP.',
+        );
+      }
       if (!isStaleAuthContextError(error)) {
         throw error;
       }
 
       console.warn('[Auth] Auth context stale, re-authenticating to refresh access token...');
-      const refreshedRaw = await bridge.sendRequest('authenticate', {
-        authServiceBaseUrl: AUTH_SERVICE_BASE_URL,
-      }, 120000);
-
-      const refreshedAuth = normalizeAuthData(refreshedRaw);
+      const refreshedAuth = AUTH_CONFIG.authFlow === 'browser'
+        ? (await runBrowserPasskeyAuth('signin')).auth
+        : normalizeAuthData(
+            await bridge.sendRequest('authenticate', {
+              authServiceBaseUrl: AUTH_CONFIG.authServiceBaseUrl,
+              expectedRpId: AUTH_CONFIG.passkeyRpId,
+              allowNonCanonicalRp: AUTH_CONFIG.allowNonCanonicalPasskeyRp,
+            }, 120000),
+          );
       authContextCacheRef.current = null;
       setAuthData(refreshedAuth);
       await persistAuth(pkpInfo, refreshedAuth);
 
       return createAuthContextWithData(refreshedAuth);
     }
-  }, [bridge, isReady, authData, pkpInfo]);
+  }, [bridge, isReady, authData, pkpInfo, runBrowserPasskeyAuth]);
 
   const createAuthCtx = useCallback(async (options?: CreateAuthContextOptions) => {
     return createAuthCtxInternal(options?.forceRefresh === true);

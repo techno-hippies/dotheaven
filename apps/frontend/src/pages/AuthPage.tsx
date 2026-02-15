@@ -18,25 +18,46 @@ export const AuthPage: Component = () => {
   const [authMode, setAuthMode] = createSignal<'signin' | 'register'>('signin')
   const [authMethod, setAuthMethod] = createSignal<'passkey' | 'eoa'>('passkey')
 
-  // Parse callback URL from query params (supports both hash and regular routing)
-  const getCallbackUrl = () => {
+  // Parse auth query params (supports both hash and regular routing)
+  const getAuthParams = () => {
     const hash = window.location.hash
     const hashQuery = hash.includes('?') ? hash.slice(hash.indexOf('?')) : ''
-    const params = new URLSearchParams(hashQuery || window.location.search)
-    return params.get('callback') || undefined
+    return new URLSearchParams(hashQuery || window.location.search)
   }
+  const authParams = getAuthParams()
+  const getCallbackUrl = () => authParams.get('callback') || undefined
 
   const callbackUrl = getCallbackUrl()
   const isTauriCallback = !!callbackUrl
+  const callbackTransport = (authParams.get('transport') || '').toLowerCase()
+  const initialMode = authParams.get('mode')
 
-  console.log('[AuthPage] callbackUrl:', callbackUrl, 'isTauriCallback:', isTauriCallback)
+  console.log('[AuthPage] callbackUrl:', callbackUrl, 'isTauriCallback:', isTauriCallback, 'transport:', callbackTransport)
 
-  // Send result to Tauri via POST
+  // Send auth result to callback transport:
+  // - POST (desktop callback server)
+  // - redirect with payload query param (mobile deep links)
   const sendCallback = async (data: Record<string, unknown>) => {
     if (!callbackUrl) {
       console.log('[AuthPage] No callbackUrl, skipping POST')
       return false
     }
+    const useRedirect = callbackTransport === 'redirect' || !/^https?:\/\//i.test(callbackUrl)
+
+    if (useRedirect) {
+      try {
+        const callback = new URL(callbackUrl)
+        callback.searchParams.set('payload', JSON.stringify(data))
+        const callbackHref = callback.toString()
+        console.log('[AuthPage] Redirecting to callback URL:', callbackHref)
+        window.location.href = callbackHref
+        return true
+      } catch (e) {
+        console.error('[AuthPage] Callback redirect failed:', e)
+        return false
+      }
+    }
+
     console.log('[AuthPage] POSTing to callback:', callbackUrl, 'data keys:', Object.keys(data))
     try {
       const res = await fetch(callbackUrl, {
@@ -72,23 +93,27 @@ export const AuthPage: Component = () => {
       eoaAddress,
     }
 
-    try {
-      // Pre-generate delegation auth materials while accessToken challenge is fresh.
-      // Native GPUI can later restore from these without needing a fresh WebAuthn challenge.
-      const { createPKPAuthContext } = await import('../lib/lit')
-      const authContext = await createPKPAuthContext(pkpInfo, authData)
-      if (authContext?.sessionKeyPair) {
-        callbackPayload.litSessionKeyPair = authContext.sessionKeyPair
-      }
-      if (typeof authContext?.authNeededCallback === 'function') {
-        const delegationAuthSig = await authContext.authNeededCallback()
-        if (delegationAuthSig) {
-          callbackPayload.litDelegationAuthSig = delegationAuthSig
+    const includePreGeneratedDelegation = callbackTransport !== 'redirect'
+
+    if (includePreGeneratedDelegation) {
+      try {
+        // Pre-generate delegation auth materials while accessToken challenge is fresh.
+        // Native GPUI can later restore from these without needing a fresh WebAuthn challenge.
+        const { createPKPAuthContext } = await import('../lib/lit')
+        const authContext = await createPKPAuthContext(pkpInfo, authData)
+        if (authContext?.sessionKeyPair) {
+          callbackPayload.litSessionKeyPair = authContext.sessionKeyPair
         }
+        if (typeof authContext?.authNeededCallback === 'function') {
+          const delegationAuthSig = await authContext.authNeededCallback()
+          if (delegationAuthSig) {
+            callbackPayload.litDelegationAuthSig = delegationAuthSig
+          }
+        }
+        console.log('[AuthPage] Prepared pre-generated Lit delegation auth material for callback')
+      } catch (e) {
+        console.warn('[AuthPage] Failed to pre-generate Lit delegation auth material; falling back to raw authData only:', e)
       }
-      console.log('[AuthPage] Prepared pre-generated Lit delegation auth material for callback')
-    } catch (e) {
-      console.warn('[AuthPage] Failed to pre-generate Lit delegation auth material; falling back to raw authData only:', e)
     }
 
     const sent = await sendCallback(callbackPayload)
@@ -144,10 +169,9 @@ export const AuthPage: Component = () => {
     setError(null)
 
     try {
-      await (await import('../lib/lit')).registerWithWebAuthn()
-      const { authenticateWithWebAuthn } = await import('../lib/lit')
-      const authResult = await authenticateWithWebAuthn()
-      await handleAuthSuccess(authResult.pkpInfo, authResult.authData, true)
+      const { registerWithWebAuthn } = await import('../lib/lit')
+      const result = await registerWithWebAuthn()
+      await handleAuthSuccess(result.pkpInfo, result.authData, true)
     } catch (e: unknown) {
       console.error('[Auth] Registration failed:', e)
       await handleAuthError(e as Error)
@@ -171,9 +195,17 @@ export const AuthPage: Component = () => {
       await handleAuthSuccess(result.pkpInfo, result.authData, false, result.eoaAddress)
     } catch (e: unknown) {
       const err = e as Error
-      // If no PKP found, auto-register
-      if (err.message?.includes('No PKP found')) {
-        console.log('[Auth] No PKP for wallet, auto-registering...')
+      const message = err?.message || String(e)
+      const shouldAutoRegister =
+        message.includes('No PKP found') ||
+        message.includes('missing required personal-sign scope') ||
+        message.includes('NodeAuthSigScopeTooLimited') ||
+        message.includes('required scope [2]') ||
+        message.includes('pkp is not authorized')
+
+      // Auto-register when wallet has no PKP yet or only legacy / under-scoped PKPs.
+      if (shouldAutoRegister) {
+        console.log('[Auth] Wallet needs PKP migration/registration, auto-registering...')
         setAuthMode('register')
         try {
           const { registerWithEOA } = await import('../lib/lit')
@@ -206,6 +238,18 @@ export const AuthPage: Component = () => {
     if (!isTauriCallback) {
       console.log('[AuthPage] No callback, redirecting to /')
       window.location.href = '/'
+      return
+    }
+
+    if (initialMode === 'register') {
+      console.log('[AuthPage] Auto-starting register flow')
+      queueMicrotask(() => performRegister())
+    } else if (initialMode === 'signin') {
+      console.log('[AuthPage] Auto-starting sign-in flow')
+      queueMicrotask(() => performSignIn())
+    } else if (initialMode === 'connect-wallet') {
+      console.log('[AuthPage] Auto-starting wallet connect flow')
+      queueMicrotask(() => performConnectWallet())
     }
   })
 

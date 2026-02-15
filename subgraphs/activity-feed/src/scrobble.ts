@@ -5,14 +5,19 @@ import {
   TrackCoverSet as TrackCoverSetEvent,
   Scrobbled as ScrobbledEvent,
 } from "../generated/ScrobbleV3/ScrobbleV3";
-import { Track, Scrobble } from "../generated/schema";
+import { Scrobble, Track, UserVerification } from "../generated/schema";
 
 export function handleTrackRegistered(event: TrackRegisteredEvent): void {
   let id = event.params.trackId.toHexString();
 
   let track = Track.load(id);
+  let isNew = track == null;
   if (!track) {
     track = new Track(id);
+  }
+  if (isNew) {
+    track.scrobbleCountTotal = BigInt.fromI32(0);
+    track.scrobbleCountVerified = BigInt.fromI32(0);
   }
   track.kind = event.params.kind;
   track.payload = event.params.payload;
@@ -60,4 +65,19 @@ export function handleScrobbled(event: ScrobbledEvent): void {
   scrobble.blockTimestamp = event.block.timestamp;
   scrobble.transactionHash = event.transaction.hash;
   scrobble.save();
+
+  let track = Track.load(event.params.trackId.toHexString());
+  if (track) {
+    track.scrobbleCountTotal = track.scrobbleCountTotal.plus(BigInt.fromI32(1));
+
+    let userId = event.params.user.toHexString();
+    let verification = UserVerification.load(userId);
+    if (verification) {
+      track.scrobbleCountVerified = track.scrobbleCountVerified.plus(
+        BigInt.fromI32(1),
+      );
+    }
+
+    track.save();
+  }
 }

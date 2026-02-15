@@ -2,6 +2,7 @@ import { type Component, Show, createSignal } from 'solid-js'
 import type { Track } from '@heaven/ui'
 import { AlbumCover } from '@heaven/ui'
 import type { OnChainPlaylist } from '../../lib/heaven/playlists'
+import { resolveCoverUrl } from '../../lib/heaven/cover-ref'
 
 /** Parse track data from drag event */
 export const parseTrackFromDrag = (e: DragEvent): Track | null => {
@@ -81,9 +82,7 @@ export const PlaylistDropTarget: Component<PlaylistDropTargetProps> = (props) =>
     }
   }
 
-  const coverSrc = () => props.playlist.coverCid
-    ? `https://heaven.myfilebase.com/ipfs/${props.playlist.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
-    : undefined
+  const coverSrc = () => resolveCoverUrl(props.playlist.coverCid, { width: 96, height: 96, format: 'webp', quality: 80 })
 
   return (
     <button

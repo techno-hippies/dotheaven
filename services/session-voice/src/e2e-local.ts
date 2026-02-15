@@ -6,6 +6,10 @@
  * Usage:
  *   bun src/e2e-local.ts
  *   bun src/e2e-local.ts --full
+ *   bun src/e2e-local.ts --duet-cdp
+ *   bun src/e2e-local.ts --duet-onchain
+ *   bun src/e2e-local.ts --duet-openx402
+ *   bun src/e2e-local.ts --duet-onchain --serve
  */
 
 import { readFileSync } from "node:fs";
@@ -14,6 +18,11 @@ import { fileURLToPath } from "node:url";
 
 const BASE_URL = process.env.SESSION_VOICE_URL || "http://localhost:3338";
 const FULL = process.argv.includes("--full");
+const DUET_CDP_ONLY = process.argv.includes("--duet-cdp");
+const DUET_ONCHAIN = process.argv.includes("--duet-onchain");
+const DUET_OPENX402 = process.argv.includes("--duet-openx402");
+const DUET_REAL_ONLY = DUET_CDP_ONLY || DUET_ONCHAIN || DUET_OPENX402;
+const SERVE = process.argv.includes("--serve");
 const SCRIPT_DIR = fileURLToPath(new URL(".", import.meta.url));
 const SERVICE_DIR = resolve(SCRIPT_DIR, "..");
 
@@ -30,7 +39,13 @@ const FULL_TESTS = [
   "src/smoke-test-concurrent.ts",
 ];
 
-const TESTS = FULL ? FULL_TESTS : CORE_TESTS;
+const DUET_CDP_TESTS = [
+  "src/smoke-test-duet-cdp.ts",
+];
+
+const TESTS = DUET_REAL_ONLY
+  ? DUET_CDP_TESTS
+  : (FULL ? FULL_TESTS : CORE_TESTS);
 
 function loadDotEnv(filePath: string): Record<string, string> {
   const env: Record<string, string> = {};
@@ -59,17 +74,95 @@ const LOCAL_ENV = loadDotEnv(resolve(SERVICE_DIR, ".env"));
 const CHILD_ENV = {
   ...process.env,
   ...LOCAL_ENV,
+  // Prevent wrangler from trying to write under ~/.config in constrained environments.
+  XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME || "/tmp/session-voice-xdg",
   SESSION_VOICE_URL: BASE_URL,
 };
+
+const facilitatorMode = DUET_REAL_ONLY
+  ? "cdp"
+  : (LOCAL_ENV.X402_FACILITATOR_MODE || process.env.X402_FACILITATOR_MODE || "mock");
 
 const WRANGLER_LOCAL_VARS: Record<string, string> = {
   JWT_SECRET: LOCAL_ENV.JWT_SECRET || "dev-secret-for-testing-only",
   AGORA_APP_ID: LOCAL_ENV.AGORA_APP_ID || "00000000000000000000000000000000",
   AGORA_APP_CERTIFICATE: LOCAL_ENV.AGORA_APP_CERTIFICATE || "00000000000000000000000000000000",
-  X402_FACILITATOR_MODE: LOCAL_ENV.X402_FACILITATOR_MODE || "mock",
-  X402_FACILITATOR_BASE_URL:
-    LOCAL_ENV.X402_FACILITATOR_BASE_URL || "https://api.cdp.coinbase.com/platform/v2/x402",
+  SONG_REGISTRY_ADMIN_TOKEN: LOCAL_ENV.SONG_REGISTRY_ADMIN_TOKEN
+    || process.env.SONG_REGISTRY_ADMIN_TOKEN
+    || "local-song-admin",
+  X402_FACILITATOR_MODE: facilitatorMode,
+  X402_FACILITATOR_BASE_URL: "",
 };
+
+const localFacilitatorPort = Number((process.env.LOCAL_FACILITATOR_PORT || "3340").trim());
+const localFacilitatorBaseUrl = `http://127.0.0.1:${localFacilitatorPort}`;
+
+const requestedFacilitatorBaseUrl =
+  LOCAL_ENV.X402_FACILITATOR_BASE_URL
+  || process.env.X402_FACILITATOR_BASE_URL
+  || (DUET_ONCHAIN
+    ? localFacilitatorBaseUrl
+    : (DUET_OPENX402 ? "https://facilitator.openx402.ai" : "https://api.cdp.coinbase.com/platform/v2/x402"));
+
+WRANGLER_LOCAL_VARS.X402_FACILITATOR_BASE_URL = requestedFacilitatorBaseUrl;
+
+const facilitatorAuthToken =
+  LOCAL_ENV.X402_FACILITATOR_AUTH_TOKEN
+  || process.env.X402_FACILITATOR_AUTH_TOKEN
+  || (DUET_ONCHAIN ? (process.env.LOCAL_FACILITATOR_AUTH_TOKEN || "local") : undefined);
+
+if (facilitatorAuthToken) WRANGLER_LOCAL_VARS.X402_FACILITATOR_AUTH_TOKEN = facilitatorAuthToken;
+if (DUET_ONCHAIN && facilitatorAuthToken) {
+  // The local facilitator process reads LOCAL_FACILITATOR_AUTH_TOKEN (or X402_FACILITATOR_AUTH_TOKEN).
+  CHILD_ENV.LOCAL_FACILITATOR_AUTH_TOKEN = facilitatorAuthToken;
+}
+
+function facilitatorRequiresAuthToken(baseUrl: string): boolean {
+  try {
+    const u = new URL(baseUrl);
+    return u.hostname.endsWith("coinbase.com") && u.pathname.includes("/platform/v2/x402");
+  } catch {
+    return false;
+  }
+}
+
+async function preflightOpenX402Gas(): Promise<void> {
+  let supported: any = null;
+  try {
+    supported = await fetch("https://facilitator.openx402.ai/supported").then((r) => r.json());
+  } catch {
+    // If the facilitator is unreachable, the smoke test will fail anyway; don't throw here.
+    return;
+  }
+
+  const signer = supported?.signers?.["eip155:*"]?.[0];
+  if (!signer || typeof signer !== "string" || !/^0x[a-fA-F0-9]{40}$/.test(signer)) return;
+
+  try {
+    const rpcRes = await fetch("https://sepolia.base.org", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_getBalance",
+        params: [signer, "latest"],
+      }),
+    }).then((r) => r.json());
+
+    const hex = rpcRes?.result;
+    if (typeof hex !== "string" || !hex.startsWith("0x")) return;
+    const wei = BigInt(hex);
+    if (wei === 0n) {
+      throw new Error(
+        `OpenX402 facilitator signer has 0 ETH on Base Sepolia (${signer}). Settlement will fail until they fund gas.`,
+      );
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("0 ETH on Base Sepolia")) throw e;
+    // Ignore RPC issues; smoke test will fail and surface details.
+  }
+}
 
 function buildWranglerVarArgs(vars: Record<string, string>): string[] {
   return Object.entries(vars).flatMap(([key, value]) => ["--var", `${key}:${value}`]);
@@ -112,6 +205,26 @@ async function waitForHealth(worker: Bun.Subprocess, timeoutMs: number): Promise
   throw new Error(`Timed out waiting for health at ${BASE_URL}/health`);
 }
 
+async function waitForUrl(proc: Bun.Subprocess, url: string, timeoutMs: number): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (proc.exitCode !== null) {
+      throw new Error(`process exited early with code ${proc.exitCode}`);
+    }
+
+    try {
+      const res = await fetch(url);
+      if (res.ok) return;
+    } catch {
+      // keep polling
+    }
+
+    await Bun.sleep(250);
+  }
+
+  throw new Error(`Timed out waiting for ${url}`);
+}
+
 async function stopWorker(worker: Bun.Subprocess): Promise<void> {
   if (worker.exitCode !== null) return;
 
@@ -127,12 +240,59 @@ async function stopWorker(worker: Bun.Subprocess): Promise<void> {
 async function main() {
   console.log("[e2e] Starting local e2e run");
   console.log(`[e2e] Base URL: ${BASE_URL}`);
-  console.log(`[e2e] Mode: ${FULL ? "full" : "core"}`);
+  console.log(`[e2e] Mode: ${DUET_ONCHAIN ? "duet-onchain" : (DUET_OPENX402 ? "duet-openx402" : (DUET_CDP_ONLY ? "duet-cdp" : (FULL ? "full" : "core")))}`);
+  if (SERVE) console.log("[e2e] Serve: enabled (no tests will run; press Ctrl+C to stop)");
+
+  if (DUET_REAL_ONLY) {
+    if (facilitatorRequiresAuthToken(requestedFacilitatorBaseUrl) && !facilitatorAuthToken) {
+      throw new Error("X402_FACILITATOR_AUTH_TOKEN is required for duet payment tests with Coinbase CDP");
+    }
+
+    if (!SERVE) {
+      const payerPrivateKey =
+        CHILD_ENV.DUET_TEST_PAYER_PRIVATE_KEY
+        || CHILD_ENV.X402_EVM_PRIVATE_KEY
+        || CHILD_ENV.EVM_PRIVATE_KEY
+        || CHILD_ENV.PRIVATE_KEY;
+      if (!payerPrivateKey) {
+        throw new Error("DUET_TEST_PAYER_PRIVATE_KEY (or X402_EVM_PRIVATE_KEY / EVM_PRIVATE_KEY / PRIVATE_KEY) is required for duet payment smoke tests");
+      }
+    }
+  }
+
+  if (DUET_OPENX402 && !CHILD_ENV.DUET_TEST_SPLIT_ADDRESS && !SERVE) {
+    // OpenX402 enforces payTo whitelisting. Default to the facilitator signer so tests work out-of-the-box.
+    // Override with DUET_TEST_SPLIT_ADDRESS to test your own registered receiver address.
+    CHILD_ENV.DUET_TEST_SPLIT_ADDRESS = "0x97316fa4730bc7d3b295234f8e4d04a0a4c093e8";
+  }
+  if (DUET_OPENX402 && !SERVE) {
+    await preflightOpenX402Gas();
+  }
 
   runChecked(
     ["npx", "wrangler", "d1", "execute", "session-voice", "--local", "--file=migrations/0001_credits_rooms.sql"],
-    "Applying local migration",
+    "Applying local migration (0001)",
   );
+  runChecked(
+    ["npx", "wrangler", "d1", "execute", "session-voice", "--local", "--file=migrations/0002_song_registry.sql"],
+    "Applying local migration (0002)",
+  );
+
+  let localFacilitator: Bun.Subprocess | null = null;
+  if (DUET_ONCHAIN) {
+    console.log("\n[e2e] Starting local facilitator...");
+    localFacilitator = Bun.spawn(
+      ["bun", "src/local-facilitator.ts"],
+      {
+        cwd: SERVICE_DIR,
+        env: CHILD_ENV,
+        stdout: "inherit",
+        stderr: "inherit",
+      },
+    );
+    await waitForUrl(localFacilitator, `${localFacilitatorBaseUrl}/health`, 30_000);
+    console.log("[e2e] Local facilitator is healthy");
+  }
 
   console.log("\n[e2e] Starting wrangler dev...");
   const worker = Bun.spawn(
@@ -153,8 +313,32 @@ async function main() {
     },
   );
 
+  let shutdownInFlight = false;
+  async function shutdown(signal: string) {
+    if (shutdownInFlight) return;
+    shutdownInFlight = true;
+    console.log(`\n[e2e] ${signal} received, shutting down...`);
+    try {
+      await stopWorker(worker);
+    } finally {
+      if (localFacilitator) {
+        await stopWorker(localFacilitator);
+      }
+      process.exit(0);
+    }
+  }
+
+  process.on("SIGINT", () => { shutdown("SIGINT"); });
+  process.on("SIGTERM", () => { shutdown("SIGTERM"); });
+
   try {
     await waitForHealth(worker, 60_000);
+
+    if (SERVE) {
+      // Keep serving until the user stops the process.
+      await worker.exited;
+      return;
+    }
 
     for (const testFile of TESTS) {
       runChecked(["bun", testFile], `Running ${testFile}`);
@@ -164,6 +348,11 @@ async function main() {
   } finally {
     console.log("\n[e2e] Stopping wrangler dev...");
     await stopWorker(worker);
+
+    if (localFacilitator) {
+      console.log("\n[e2e] Stopping local facilitator...");
+      await stopWorker(localFacilitator);
+    }
   }
 }
 

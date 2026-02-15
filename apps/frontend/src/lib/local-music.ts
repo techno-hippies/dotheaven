@@ -1,4 +1,5 @@
 import type { Track } from '@heaven/ui'
+import { resolveCoverUrl } from './heaven/cover-ref'
 
 const tauriCore = () => import('@tauri-apps/api/core')
 const tauriDialog = () => import('@tauri-apps/plugin-dialog')
@@ -33,10 +34,14 @@ export async function getTracksNative(folder: string, limit: number, offset: num
   const { invoke, convertFileSrc } = await tauriCore()
   const tracks = await invoke<LocalTrack[]>('music_get_tracks', { folder, limit, offset })
   // Convert local cover paths to asset URLs serveable by Tauri
+  // If local embedded art is missing, fallback to on-chain cover CID.
   // Set scrobbleStatus based on whether the track has a recording MBID
   for (const t of tracks) {
     if (t.albumCover) {
       t.albumCover = convertFileSrc(t.albumCover)
+    } else {
+      const coverUrl = resolveCoverUrl(t.coverCid, { width: 96, height: 96, format: 'webp', quality: 80 })
+      if (coverUrl) t.albumCover = coverUrl
     }
     t.scrobbleStatus = t.mbid ? 'verified' : 'unidentified'
   }

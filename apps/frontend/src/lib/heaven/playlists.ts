@@ -2,6 +2,7 @@ import type { Track } from '@heaven/ui'
 import { MEGAETH_RPC, PLAYLIST_V1, SUBGRAPH_ACTIVITY, SUBGRAPH_PLAYLISTS } from '@heaven/core'
 import { getCoverCache, getCoverCacheById } from '../cover-cache'
 import { payloadToMbid } from './artist'
+import { resolveCoverUrl } from './cover-ref'
 
 /**
  * PlaylistV1 — reads playlist data from Goldsky subgraph + on-chain track metadata.
@@ -201,18 +202,13 @@ export async function resolvePlaylistTracks(
   return playlistTracks.map((pt) => {
     const meta = metaMap.get(pt.trackId)
     const content = contentMap.get(pt.trackId)
-    const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
-    const isValidCid = (cid: string | undefined | null): cid is string =>
-      !!cid && (cid.startsWith('Qm') || cid.startsWith('bafy'))
     const title = meta?.title ?? `Track ${pt.trackId.slice(0, 10)}...`
     const artist = meta?.artist ?? 'Unknown'
     const album = meta?.album ?? ''
     const kind = meta?.kind
     const payload = meta?.payload
     const mbid = kind === 1 && payload ? payloadToMbid(payload) ?? undefined : undefined
-    const onChainCover = isValidCid(meta?.coverCid)
-      ? `${FILEBASE_GATEWAY}/${meta.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
-      : undefined
+    const onChainCover = resolveCoverUrl(meta?.coverCid, { width: 96, height: 96, format: 'webp', quality: 80 })
     const localCover = getCoverCacheById(pt.trackId) ?? (meta ? getCoverCache(artist, title, album) : undefined)
     return {
       id: pt.trackId,

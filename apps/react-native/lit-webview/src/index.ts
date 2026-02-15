@@ -134,6 +134,7 @@ let litClient: LitClient | null = null;
 let authManager: ReturnType<typeof createAuthManager> | null = null;
 let lastAuthContext: any = null;
 let lastAuthParams: { authData: any; pkpPublicKey: string; authConfig: any } | null = null;
+let lastPasskeyContext: { expectedRpId?: string; allowNonCanonicalRp?: boolean } | null = null;
 let isInitialized = false;
 let initPromise: Promise<void> | null = null;
 const LIT_CONNECT_TIMEOUT_MS = 60_000;
@@ -181,6 +182,81 @@ function normalizeExecuteJsParams(jsParams: unknown): Record<string, unknown> {
 
 function isHex(value: unknown): value is string {
   return typeof value === 'string' && /^0x[0-9a-fA-F]*$/.test(value);
+}
+
+function hostMatchesRpId(hostname: string, rpId: string): boolean {
+  if (!hostname || !rpId) return false;
+  const normalizedHost = hostname.toLowerCase();
+  const normalizedRpId = rpId.toLowerCase();
+  return (
+    normalizedHost === normalizedRpId ||
+    normalizedHost.endsWith(`.${normalizedRpId}`)
+  );
+}
+
+function assertPasskeyRpContext(op: string, payload: any): {
+  currentHost: string;
+  expectedRpId: string;
+  allowNonCanonicalRp: boolean;
+} {
+  const currentHost = String(window.location.hostname || '').toLowerCase();
+  const expectedRpIdRaw = String(payload?.expectedRpId || '').trim();
+  const expectedRpId = expectedRpIdRaw.toLowerCase();
+  const allowNonCanonicalRp = payload?.allowNonCanonicalRp === true;
+
+  if (!expectedRpId) {
+    return { currentHost, expectedRpId: '', allowNonCanonicalRp };
+  }
+
+  const isMatch = hostMatchesRpId(currentHost, expectedRpId);
+  console.log(
+    `[Lit] ${op}: passkey context host=${currentHost}, expectedRpId=${expectedRpId}, match=${isMatch}`,
+  );
+
+  if (!isMatch && !allowNonCanonicalRp) {
+    throw new Error(
+      `Passkey RP mismatch: current WebView host "${currentHost}" does not match expected RP ID "${expectedRpId}". ` +
+      'Load the Lit auth WebView from your canonical HTTPS domain or set EXPO_PUBLIC_ALLOW_NON_CANONICAL_PASSKEY_RP=1 for temporary testing.',
+    );
+  }
+
+  return { currentHost, expectedRpId, allowNonCanonicalRp };
+}
+
+function normalizeAuthConfigDomain(rawAuthConfig: unknown): {
+  authConfig: any;
+  domainRaw: string;
+  domainResolved?: string;
+  domainHostname?: string;
+  domainParseError?: string;
+} {
+  const authConfig: any =
+    rawAuthConfig && typeof rawAuthConfig === 'object'
+      ? { ...(rawAuthConfig as Record<string, unknown>) }
+      : {};
+  const domainRaw = typeof authConfig.domain === 'string' ? authConfig.domain.trim() : '';
+
+  if (!domainRaw) {
+    return { authConfig, domainRaw: '' };
+  }
+
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(domainRaw)
+    ? domainRaw
+    : `https://${domainRaw}`;
+
+  try {
+    const parsed = new URL(withScheme);
+    const domainResolved = parsed.origin;
+    const domainHostname = parsed.hostname.toLowerCase();
+    authConfig.domain = domainHostname;
+    return { authConfig, domainRaw, domainResolved, domainHostname };
+  } catch (error) {
+    return {
+      authConfig,
+      domainRaw,
+      domainParseError: getErrorMessage(error),
+    };
+  }
 }
 
 function toEcdsa65ByteSignature(sig: any): string {
@@ -234,11 +310,24 @@ function isRecoverableAuthContextError(error: unknown): boolean {
   );
 }
 
-async function refreshWebAuthnAuthData(): Promise<{
+function isMissingPersonalSignScopeError(error: unknown): boolean {
+  const message = getErrorMessage(error).toLowerCase();
+  return (
+    message.includes('nodeauthsigscopetoolimited') ||
+    (message.includes('required scope [2]') && message.includes('pkp is not authorized')) ||
+    message.includes('missing required personal-sign scope')
+  );
+}
+
+async function refreshWebAuthnAuthData(passkeyContext?: {
+  expectedRpId?: string;
+  allowNonCanonicalRp?: boolean;
+}): Promise<{
   authMethodType: number;
   authMethodId: string;
   accessToken?: string;
 }> {
+  assertPasskeyRpContext('refreshWebAuthnAuthData', passkeyContext || {});
   const refreshed = await WebAuthnAuthenticator.authenticate();
   return {
     authMethodType: Number((refreshed as any).authMethodType),
@@ -316,6 +405,157 @@ async function initLit(): Promise<void> {
 }
 
 // ============================================================================
+// Cloud content fetch/decrypt helpers
+// ============================================================================
+
+const ALGO_AES_GCM_256 = 1;
+
+interface ParsedContentHeader {
+  litCiphertext: string;
+  litDataToEncryptHash: string;
+  algo: number;
+  iv: Uint8Array;
+  audioLen: number;
+  audioOffset: number;
+}
+
+function buildContentUrl(
+  datasetOwner: string,
+  pieceCid: string,
+  network: 'calibration' | 'mainnet' = 'mainnet',
+  gatewayUrl?: string,
+): string {
+  const isFilecoinPieceCid =
+    pieceCid.startsWith('baga') ||
+    pieceCid.startsWith('bafy') ||
+    pieceCid.startsWith('Qm');
+
+  if (isFilecoinPieceCid) {
+    const host = network === 'mainnet' ? 'filbeam.io' : 'calibration.filbeam.io';
+    return `https://${datasetOwner}.${host}/${pieceCid}`;
+  }
+
+  const normalizedGateway = String(gatewayUrl || 'https://gateway.s3-node-1.load.network').replace(/\/+$/, '');
+  return `${normalizedGateway}/resolve/${pieceCid}`;
+}
+
+function parseContentHeader(blob: Uint8Array): ParsedContentHeader {
+  if (blob.length < 10) {
+    throw new Error(`Blob too small to contain a valid header (${blob.length} bytes)`);
+  }
+
+  const view = new DataView(blob.buffer, blob.byteOffset, blob.byteLength);
+  let offset = 0;
+
+  const ctLen = view.getUint32(offset);
+  offset += 4;
+  if (ctLen === 0 || offset + ctLen > blob.length) {
+    throw new Error(`Invalid litCiphertext length: ${ctLen}`);
+  }
+  const litCiphertext = new TextDecoder().decode(blob.subarray(offset, offset + ctLen));
+  offset += ctLen;
+
+  if (offset + 4 > blob.length) throw new Error('Blob truncated before dataToEncryptHash length');
+  const hashLen = view.getUint32(offset);
+  offset += 4;
+  if (hashLen === 0 || offset + hashLen > blob.length) {
+    throw new Error(`Invalid dataToEncryptHash length: ${hashLen}`);
+  }
+  const litDataToEncryptHash = new TextDecoder().decode(blob.subarray(offset, offset + hashLen));
+  offset += hashLen;
+
+  if (offset + 2 > blob.length) throw new Error('Blob truncated before algo/ivLen');
+  const algo = blob[offset];
+  offset += 1;
+
+  const ivLen = blob[offset];
+  offset += 1;
+  if (ivLen === 0 || offset + ivLen > blob.length) {
+    throw new Error(`Invalid IV length: ${ivLen}`);
+  }
+  const iv = blob.subarray(offset, offset + ivLen);
+  offset += ivLen;
+
+  if (offset + 4 > blob.length) throw new Error('Blob truncated before audioLen');
+  const audioLen = view.getUint32(offset);
+  offset += 4;
+  if (audioLen === 0 || offset + audioLen > blob.length) {
+    throw new Error(`Invalid audioLen: ${audioLen} (available: ${blob.length - offset})`);
+  }
+
+  return { litCiphertext, litDataToEncryptHash, algo, iv, audioLen, audioOffset: offset };
+}
+
+async function decryptAesGcmContent(blob: Uint8Array, keyBase64: string): Promise<Uint8Array> {
+  const header = parseContentHeader(blob);
+  if (header.algo !== ALGO_AES_GCM_256) {
+    throw new Error(`Unsupported encryption algorithm: ${header.algo}`);
+  }
+
+  const rawKey = new Uint8Array(Buffer.from(keyBase64, 'base64'));
+  if (rawKey.length !== 32) {
+    throw new Error(`Invalid AES key length: ${rawKey.length}`);
+  }
+
+  const key = await crypto.subtle.importKey('raw', rawKey, { name: 'AES-GCM' }, false, ['decrypt']);
+  rawKey.fill(0);
+
+  const encryptedAudio = blob.subarray(header.audioOffset, header.audioOffset + header.audioLen);
+  const ivBuffer = header.iv.buffer.slice(
+    header.iv.byteOffset,
+    header.iv.byteOffset + header.iv.byteLength,
+  ) as ArrayBuffer;
+  const encryptedAudioBuffer = encryptedAudio.buffer.slice(
+    encryptedAudio.byteOffset,
+    encryptedAudio.byteOffset + encryptedAudio.byteLength,
+  ) as ArrayBuffer;
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: ivBuffer },
+    key,
+    encryptedAudioBuffer,
+  );
+  return new Uint8Array(decrypted);
+}
+
+function sniffAudioMime(bytes: Uint8Array): string | undefined {
+  if (bytes.length >= 3 && bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) {
+    return 'audio/mpeg'; // MP3 (ID3)
+  }
+  if (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0) {
+    return 'audio/mpeg'; // MP3 frame sync
+  }
+  if (bytes.length >= 4 && bytes[0] === 0x66 && bytes[1] === 0x4c && bytes[2] === 0x61 && bytes[3] === 0x43) {
+    return 'audio/flac';
+  }
+  if (bytes.length >= 4 && bytes[0] === 0x4f && bytes[1] === 0x67 && bytes[2] === 0x67 && bytes[3] === 0x53) {
+    return 'audio/ogg';
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x41 &&
+    bytes[10] === 0x56 &&
+    bytes[11] === 0x45
+  ) {
+    return 'audio/wav';
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes[4] === 0x66 &&
+    bytes[5] === 0x74 &&
+    bytes[6] === 0x79 &&
+    bytes[7] === 0x70
+  ) {
+    return 'audio/mp4'; // m4a/mp4 container
+  }
+  return undefined;
+}
+
+// ============================================================================
 // Bridge protocol handler
 // ============================================================================
 
@@ -363,7 +603,8 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
       op === 'viewPKPsByAuthData' ||
       op === 'createAuthContext' ||
       op === 'signMessage' ||
-      op === 'executeLitAction';
+      op === 'executeLitAction' ||
+      op === 'fetchAndDecryptContent';
     if (requiresLitInit) {
       await initLit();
     }
@@ -393,6 +634,12 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
       case 'registerAndMintPKP': {
         console.log('[Lit] Registering WebAuthn credential and minting PKP...');
 
+        const { currentHost, expectedRpId, allowNonCanonicalRp } = assertPasskeyRpContext(
+          'registerAndMintPKP',
+          payload || {},
+        );
+        lastPasskeyContext = { expectedRpId, allowNonCanonicalRp };
+
         const authServiceBaseUrl = payload.authServiceBaseUrl;
         const username = payload.username || 'Heaven';
         const rpName = payload.rpName || 'Heaven';
@@ -403,6 +650,21 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
           username,
           authServiceBaseUrl,
         });
+        const requestedRpId = String(opts?.rp?.id || '').toLowerCase();
+        console.log(
+          '[Lit] registerAndMintPKP: registration rp.id=' +
+          (requestedRpId || '(missing)') +
+          ', host=' +
+          currentHost,
+        );
+        if (expectedRpId && requestedRpId && requestedRpId !== expectedRpId) {
+          console.warn(
+            '[Lit] registerAndMintPKP: auth service returned rp.id=' +
+            requestedRpId +
+            ' but expectedRpId=' +
+            expectedRpId,
+          );
+        }
 
         // Step 2: Override rp.name so the passkey dialog shows our app name
         if (opts.rp) {
@@ -480,6 +742,11 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
 
       case 'authenticate': {
         console.log('[Lit] Authenticating with existing WebAuthn credential...');
+        const { expectedRpId, allowNonCanonicalRp } = assertPasskeyRpContext(
+          'authenticate',
+          payload || {},
+        );
+        lastPasskeyContext = { expectedRpId, allowNonCanonicalRp };
         const authData = await WebAuthnAuthenticator.authenticate();
         console.log('[Lit] Authentication successful');
         return reply({ id, ok: true, result: authData });
@@ -500,12 +767,23 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
         if (!authManager || !litClient) throw new Error('Lit/Auth manager not initialized');
         console.log('[Lit] Creating auth context...');
         const normalizedPkpPublicKey = ensurePkpPublicKeyPrefix(payload.pkpPublicKey);
+        const disableWebViewReauth = payload?.disableWebViewReauth === true;
+        const normalizedAuthConfig = normalizeAuthConfigDomain(payload?.authConfig);
+        const authConfigForRequest = normalizedAuthConfig.authConfig;
+        console.log('[Lit] createAuthContext webview origin=', window.location.origin);
+        console.log('[Lit] createAuthContext domain=', normalizedAuthConfig.domainRaw || '(missing)');
+        if (normalizedAuthConfig.domainResolved) {
+          console.log('[Lit] createAuthContext domain origin=', normalizedAuthConfig.domainResolved);
+          console.log('[Lit] createAuthContext domain hostname=', normalizedAuthConfig.domainHostname);
+        } else if (normalizedAuthConfig.domainParseError) {
+          console.warn('[Lit] createAuthContext domain parse failed:', normalizedAuthConfig.domainParseError);
+        }
 
         // Store the original parameters for future re-authentication
         lastAuthParams = {
           authData: payload.authData,
           pkpPublicKey: normalizedPkpPublicKey,
-          authConfig: payload.authConfig,
+          authConfig: authConfigForRequest,
         };
         let effectiveAuthData = payload.authData;
         let refreshedAuthData: any | undefined;
@@ -514,7 +792,7 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
           return authManager!.createPkpAuthContext({
             authData,
             pkpPublicKey: normalizedPkpPublicKey,
-            authConfig: payload.authConfig,
+            authConfig: authConfigForRequest,
             litClient: litClient!,
           });
         };
@@ -523,12 +801,21 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
         try {
           authContext = await createWithAuthData(effectiveAuthData);
         } catch (error) {
+          if (isMissingPersonalSignScopeError(error)) {
+            throw error;
+          }
           if (!isRecoverableAuthContextError(error)) {
+            throw error;
+          }
+          if (disableWebViewReauth) {
+            console.warn(
+              '[Lit] createAuthContext recoverable failure; skipping WebView re-authentication because browser auth flow is enabled.',
+            );
             throw error;
           }
 
           console.warn('[Lit] createAuthContext failed with stale auth data; re-authenticating WebAuthn and retrying...');
-          refreshedAuthData = await refreshWebAuthnAuthData();
+          refreshedAuthData = await refreshWebAuthnAuthData(lastPasskeyContext || undefined);
           effectiveAuthData = refreshedAuthData;
           if (lastAuthParams) {
             lastAuthParams.authData = effectiveAuthData;
@@ -674,6 +961,146 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
         }
       }
 
+      case 'fetchAndDecryptContent': {
+        if (!litClient || !authManager) throw new Error('Lit client not initialized');
+
+        const datasetOwner = String(payload?.datasetOwner || '');
+        const pieceCid = String(payload?.pieceCid || '');
+        const contentId = String(payload?.contentId || '').toLowerCase();
+        const requestedAlgo = Number(payload?.algo ?? ALGO_AES_GCM_256);
+        const network = payload?.network === 'calibration' ? 'calibration' : 'mainnet';
+        const contentDecryptCid = String(payload?.contentDecryptCid || '');
+        const userPkpPublicKey = stripPkpPublicKeyPrefix(payload?.userPkpPublicKey || '');
+        const isFilecoinPieceCid =
+          pieceCid.startsWith('baga') ||
+          pieceCid.startsWith('bafy') ||
+          pieceCid.startsWith('Qm');
+
+        if (!pieceCid) throw new Error('Missing pieceCid');
+        if (isFilecoinPieceCid && !datasetOwner) throw new Error('Missing datasetOwner for Filecoin piece CID');
+        if (!userPkpPublicKey) throw new Error('Missing userPkpPublicKey');
+        if (!contentId || !/^0x[0-9a-fA-F]{64}$/.test(contentId)) {
+          throw new Error(`Invalid contentId: "${contentId}"`);
+        }
+
+        const sourceUrl = buildContentUrl(datasetOwner, pieceCid, network, payload?.gatewayUrl);
+        console.log('[Lit] fetchAndDecryptContent: fetching', sourceUrl);
+        const response = await fetch(sourceUrl);
+        if (!response.ok) {
+          throw new Error(`Cloud fetch failed: ${response.status} ${response.statusText}`);
+        }
+        const blob = new Uint8Array(await response.arrayBuffer());
+        console.log('[Lit] fetchAndDecryptContent: fetched bytes=' + blob.length + ', algo=' + requestedAlgo);
+
+        // Plaintext mode (algo=0) skips Lit key decryption.
+        if (requestedAlgo === 0) {
+          const mimeType = sniffAudioMime(blob);
+          const audioBase64 = Buffer.from(blob).toString('base64');
+          return reply({
+            id,
+            ok: true,
+            result: {
+              audioBase64,
+              bytes: blob.length,
+              mimeType,
+              sourceUrl,
+            },
+          });
+        }
+
+        if (!contentDecryptCid) {
+          throw new Error('Missing contentDecryptCid');
+        }
+
+        let authContext = lastAuthContext;
+        if (!authContext) {
+          throw new Error('No auth context available. Call createAuthContext first.');
+        }
+
+        // Re-create stale auth context if callback is missing.
+        if (!authContext.authNeededCallback) {
+          if (lastAuthParams) {
+            authContext = await authManager.createPkpAuthContext({
+              authData: lastAuthParams.authData,
+              pkpPublicKey: lastAuthParams.pkpPublicKey,
+              authConfig: lastAuthParams.authConfig,
+              litClient,
+            });
+            lastAuthContext = authContext;
+          } else {
+            throw new Error('Auth context missing callback and no stored auth params to recover');
+          }
+        }
+
+        const header = parseContentHeader(blob);
+        if (header.algo !== ALGO_AES_GCM_256) {
+          throw new Error(`Unsupported encrypted content algorithm: ${header.algo}`);
+        }
+
+        const timestamp = Date.now();
+        const nonce = crypto.randomUUID();
+        const decryptResult = await litClient.executeJs({
+          ipfsId: contentDecryptCid,
+          authContext,
+          jsParams: {
+            userPkpPublicKey,
+            contentId,
+            ciphertext: header.litCiphertext,
+            dataToEncryptHash: header.litDataToEncryptHash,
+            decryptCid: contentDecryptCid,
+            timestamp,
+            nonce,
+          },
+        });
+
+        const decryptResponse = typeof decryptResult.response === 'string'
+          ? JSON.parse(decryptResult.response)
+          : decryptResult.response;
+        if (!decryptResponse?.success) {
+          throw new Error(`Content decrypt failed: ${decryptResponse?.error || 'unknown error'}`);
+        }
+
+        let decryptedPayload: { key?: string; contentId?: string };
+        try {
+          decryptedPayload = JSON.parse(String(decryptResponse.decryptedPayload || '{}'));
+        } catch {
+          throw new Error('Decrypted payload is not valid JSON');
+        }
+
+        if (!decryptedPayload.key) {
+          throw new Error('Decrypted payload missing AES key');
+        }
+        if (
+          decryptedPayload.contentId &&
+          String(decryptedPayload.contentId).toLowerCase() !== contentId
+        ) {
+          throw new Error(
+            `Content ID mismatch: payload=${decryptedPayload.contentId}, requested=${contentId}`,
+          );
+        }
+
+        const audioBytes = await decryptAesGcmContent(blob, decryptedPayload.key);
+        const mimeType = sniffAudioMime(audioBytes);
+        const audioBase64 = Buffer.from(audioBytes).toString('base64');
+        console.log(
+          '[Lit] fetchAndDecryptContent: decrypted bytes=' +
+          audioBytes.length +
+          ', mime=' +
+          (mimeType || 'unknown'),
+        );
+
+        return reply({
+          id,
+          ok: true,
+          result: {
+            audioBase64,
+            bytes: audioBytes.length,
+            mimeType,
+            sourceUrl,
+          },
+        });
+      }
+
       default:
         return reply({ id, ok: false, error: `Unknown operation: ${op}` });
     }
@@ -694,6 +1121,8 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
 function checkEnvironment(): void {
   console.log('[Lit] Environment check:');
   console.log('  isSecureContext:', window.isSecureContext);
+  console.log('  origin:', window.location.origin);
+  console.log('  hostname:', window.location.hostname);
   console.log('  crypto:', !!globalThis.crypto);
   console.log('  crypto.subtle:', !!globalThis.crypto?.subtle);
   console.log('  userAgent:', navigator.userAgent);

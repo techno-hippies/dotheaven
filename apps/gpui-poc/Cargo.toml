@@ -42,6 +42,7 @@ aes-gcm = "0.10"
 rand = "0.8"
 sha2 = "0.10"
 bundles_rs = { git = "https://github.com/loadnetwork/bundles-rs.git", branch = "main" }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "bmp"] }
 
 # Audio playback (ported from Tauri audio.rs)
 symphonia = { version = "0.5", features = ["mp3", "aac", "isomp4", "flac", "ogg", "vorbis", "pcm", "wav"] }
@@ -51,6 +52,7 @@ rubato = "0.14"
 
 # XMTP (libxmtp) — pinned to local clone
 xmtp_mls = { path = "/media/t42/th42/Code/libxmtp/crates/xmtp_mls" }
+xmtp_mls_common = { path = "/media/t42/th42/Code/libxmtp/crates/xmtp_mls_common" }
 xmtp_db = { path = "/media/t42/th42/Code/libxmtp/crates/xmtp_db" }
 xmtp_id = { path = "/media/t42/th42/Code/libxmtp/crates/xmtp_id" }
 xmtp_api = { path = "/media/t42/th42/Code/libxmtp/crates/xmtp_api" }
@@ -80,6 +82,9 @@ hpke-rs = { path = "/media/t42/th42/Code/hpke-rs-pinned" }
 hpke-rs-crypto = { path = "/media/t42/th42/Code/hpke-rs-pinned/traits" }
 hpke-rs-libcrux = { path = "/media/t42/th42/Code/hpke-rs-pinned/libcrux_provider" }
 hpke-rs-rust-crypto = { path = "/media/t42/th42/Code/hpke-rs-pinned/rust_crypto_provider" }
+
+[profile.dev]
+debug = 1  # line-tables-only — much faster codegen than full debug=2
 
 [build-dependencies]
 cc = "1"

@@ -837,6 +837,106 @@ export class UserFollowStats extends Entity {
   }
 }
 
+export class UserVerification extends Entity {
+  constructor(id: string) {
+    super();
+    this.set("id", Value.fromString(id));
+  }
+
+  save(): void {
+    let id = this.get("id");
+    assert(id != null, "Cannot save UserVerification entity without an ID");
+    if (id) {
+      assert(
+        id.kind == ValueKind.STRING,
+        `Entities of type UserVerification must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
+      );
+      store.set("UserVerification", id.toString(), this);
+    }
+  }
+
+  static loadInBlock(id: string): UserVerification | null {
+    return changetype<UserVerification | null>(
+      store.get_in_block("UserVerification", id),
+    );
+  }
+
+  static load(id: string): UserVerification | null {
+    return changetype<UserVerification | null>(
+      store.get("UserVerification", id),
+    );
+  }
+
+  get id(): string {
+    let value = this.get("id");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set id(value: string) {
+    this.set("id", Value.fromString(value));
+  }
+
+  get verifiedAt(): BigInt {
+    let value = this.get("verifiedAt");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set verifiedAt(value: BigInt) {
+    this.set("verifiedAt", Value.fromBigInt(value));
+  }
+
+  get nationality(): string | null {
+    let value = this.get("nationality");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toString();
+    }
+  }
+
+  set nationality(value: string | null) {
+    if (!value) {
+      this.unset("nationality");
+    } else {
+      this.set("nationality", Value.fromString(<string>value));
+    }
+  }
+
+  get mirroredAt(): BigInt {
+    let value = this.get("mirroredAt");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set mirroredAt(value: BigInt) {
+    this.set("mirroredAt", Value.fromBigInt(value));
+  }
+
+  get transactionHash(): Bytes {
+    let value = this.get("transactionHash");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set transactionHash(value: Bytes) {
+    this.set("transactionHash", Value.fromBytes(value));
+  }
+}
+
 export class Track extends Entity {
   constructor(id: string) {
     super();
@@ -982,6 +1082,32 @@ export class Track extends Entity {
 
   set durationSec(value: i32) {
     this.set("durationSec", Value.fromI32(value));
+  }
+
+  get scrobbleCountTotal(): BigInt {
+    let value = this.get("scrobbleCountTotal");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set scrobbleCountTotal(value: BigInt) {
+    this.set("scrobbleCountTotal", Value.fromBigInt(value));
+  }
+
+  get scrobbleCountVerified(): BigInt {
+    let value = this.get("scrobbleCountVerified");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set scrobbleCountVerified(value: BigInt) {
+    this.set("scrobbleCountVerified", Value.fromBigInt(value));
   }
 
   get registeredAt(): BigInt {

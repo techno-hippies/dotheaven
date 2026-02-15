@@ -14,6 +14,7 @@ import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewClientCompat;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
+import com.facebook.react.bridge.ReactContext;
 `;
 
 const WEBVIEW_ASSET_LOADER_CODE = `
@@ -37,12 +38,17 @@ const WEBVIEW_ASSET_LOADER_CODE = `
 
   private void setupWebViewAssetLoader() {
     WebViewAssetLoader assetLoader = new WebViewAssetLoader.Builder()
-      .addPathHandler("/lit-bundle/", new WebViewAssetLoader.AssetsPathHandler(this))
+      .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
       .build();
     // Store the asset loader for use by react-native-webview
-    getReactInstanceManager().getCurrentReactContext()
-      .getNativeModule(com.reactnativecommunity.webview.RNCWebViewModule.class)
-      .setAssetLoader(assetLoader);
+    ReactContext reactContext = getReactInstanceManager().getCurrentReactContext();
+    if (reactContext != null) {
+      com.reactnativecommunity.webview.RNCWebViewModule module =
+        reactContext.getNativeModule(com.reactnativecommunity.webview.RNCWebViewModule.class);
+      if (module != null) {
+        module.setAssetLoader(assetLoader);
+      }
+    }
   }
 `;
 

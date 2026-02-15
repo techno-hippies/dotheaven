@@ -9,7 +9,7 @@
 
 const IS_DEV = import.meta.env.DEV
 
-import { Component, createSignal, createMemo, For, createEffect, Show, onCleanup } from 'solid-js'
+import { Component, createSignal, createMemo, For, createEffect, Show } from 'solid-js'
 import { useParams, useSearchParams, useNavigate } from '@solidjs/router'
 import {
   IconButton,
@@ -47,6 +47,40 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
+}
+
+const THINK_OPEN_TAG = '<think>'
+const THINK_CLOSE_TAG = '</think>'
+
+const stripThinkSections = (input: string): string => {
+  const lower = input.toLowerCase()
+  let output = ''
+  let cursor = 0
+
+  while (true) {
+    const start = lower.indexOf(THINK_OPEN_TAG, cursor)
+    if (start === -1) {
+      output += input.slice(cursor)
+      break
+    }
+
+    output += input.slice(cursor, start)
+    const bodyStart = start + THINK_OPEN_TAG.length
+    const end = lower.indexOf(THINK_CLOSE_TAG, bodyStart)
+    if (end === -1) {
+      break
+    }
+    cursor = end + THINK_CLOSE_TAG.length
+  }
+
+  return output
+}
+
+const sanitizeAssistantMessage = (raw: unknown): string => {
+  const base = typeof raw === 'string' ? raw : ''
+  const stripped = stripThinkSections(base)
+  const cleaned = stripped.replace(/<\/?think>/gi, '').trim()
+  return cleaned || "Sorry, I couldn't generate a response."
 }
 
 
@@ -250,7 +284,7 @@ export const AIChatPage: Component = () => {
       const assistantMessage: Message = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
-        content: data.message || "Sorry, I couldn't generate a response.",
+        content: sanitizeAssistantMessage(data.message),
         timestamp: new Date(),
       }
       setMessages((prev) => [...prev, assistantMessage])

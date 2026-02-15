@@ -6,17 +6,12 @@
 import type { Track } from '@heaven/ui'
 import { SUBGRAPH_ACTIVITY } from '@heaven/core'
 import { normalizeArtistName, normalizeArtistVariants, splitArtistNames, artistMatchesTarget, payloadToMbid } from './artist'
+import { resolveCoverUrl } from './cover-ref'
 
 // ── Config ──────────────────────────────────────────────────────────
 
 const RESOLVER_URL =
   import.meta.env.VITE_RESOLVER_URL || 'https://heaven-resolver-production.deletion-backup782.workers.dev'
-
-const FILEBASE_GATEWAY = 'https://heaven.myfilebase.com/ipfs'
-
-function isValidCid(cid: string | undefined | null): cid is string {
-  return !!cid && (cid.startsWith('Qm') || cid.startsWith('bafy'))
-}
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -331,9 +326,7 @@ export function albumTracksToTracks(albumTracks: AlbumTrack[]): Track[] {
     kind: t.kind,
     payload: t.payload,
     mbid: t.kind === 1 ? payloadToMbid(t.payload) ?? undefined : undefined,
-    albumCover: isValidCid(t.coverCid)
-      ? `${FILEBASE_GATEWAY}/${t.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
-      : undefined,
+    albumCover: resolveCoverUrl(t.coverCid, { width: 96, height: 96, format: 'webp', quality: 80 }),
     scrobbleCount: t.scrobbleCount,
     dateAdded: t.scrobbleCount > 0 ? `${t.scrobbleCount} plays` : '',
     duration: formatDuration(t.durationSec),

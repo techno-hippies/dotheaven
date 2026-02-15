@@ -6,6 +6,7 @@ import { TRACK_COVER_V4_CID } from './lit/action-cids'
 import { readCoverBase64 } from './cover-image'
 import { setCoverCidNative } from './local-music'
 import { computeTrackIdForScrobble, type ScrobbleTrack } from './aa-client'
+import { isOnchainCoverRef } from './heaven/cover-ref'
 
 type EncryptedKey = {
   ciphertext: string
@@ -52,10 +53,6 @@ const scrobbleAbi = [{
 
 const rpcClient = createPublicClient({ transport: http(MEGAETH_RPC) })
 
-function isValidCid(cid: string | null | undefined): cid is string {
-  return !!cid && (cid.startsWith('Qm') || cid.startsWith('bafy'))
-}
-
 async function getOnchainCoverCid(trackId: Hex): Promise<string | null> {
   try {
     const result = await rpcClient.readContract({
@@ -65,7 +62,7 @@ async function getOnchainCoverCid(trackId: Hex): Promise<string | null> {
       args: [trackId],
     }) as readonly [string, string, string, number, Hex, bigint, string, number]
     const coverCid = result[6]
-    return isValidCid(coverCid) ? coverCid : null
+    return isOnchainCoverRef(coverCid) ? coverCid : null
   } catch {
     return null
   }
@@ -78,7 +75,7 @@ export async function submitTrackCoverViaLit(
 ): Promise<void> {
   if (!TRACK_COVER_V4_CID) return
 
-  const coverCid = isValidCid(scrobble.coverCid) ? scrobble.coverCid : null
+  const coverCid = isOnchainCoverRef(scrobble.coverCid) ? scrobble.coverCid : null
   const track: ScrobbleTrack = {
     artist: scrobble.artist,
     title: scrobble.title,
@@ -155,7 +152,7 @@ export async function submitTrackCoverViaLit(
     response?.coverCid ||
     (trackIdKey && response?.coverCids ? response.coverCids[trackIdKey] : undefined)
 
-  if (returnedCoverCid && scrobble.filePath) {
+  if (returnedCoverCid && isOnchainCoverRef(returnedCoverCid) && scrobble.filePath) {
     try {
       await setCoverCidNative(scrobble.filePath, returnedCoverCid)
     } catch {

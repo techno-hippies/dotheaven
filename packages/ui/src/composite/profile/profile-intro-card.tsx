@@ -1,5 +1,5 @@
-import { Show, For, type Component } from 'solid-js'
-import { MapPin, Briefcase, Translate, Tag, GraduationCap, Heart } from '../../icons'
+import { Show, type Component } from 'solid-js'
+import { MapPin, Briefcase, Translate, Tag, Heart } from '../../icons'
 import { getLanguageName, proficiencyLabel, type LanguageEntry } from '../../data/languages'
 import { getTagLabel, stringToTagIds } from '../../data/tags'
 import { abbreviateLocation } from '../../primitives'

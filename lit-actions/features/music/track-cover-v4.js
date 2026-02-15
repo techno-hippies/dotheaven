@@ -190,6 +190,17 @@ function normalizeTrackId(trackId) {
   return ethers.utils.hexZeroPad(hex, 32).toLowerCase();
 }
 
+function isValidCid(value) {
+  if (value === undefined || value === null) return false;
+  const cid = String(value).trim();
+  return cid.startsWith("Qm") || cid.startsWith("bafy");
+}
+
+function normalizeCid(value) {
+  const cid = String(value || "").trim();
+  return isValidCid(cid) ? cid : "";
+}
+
 // ============================================================
 // ABI (ScrobbleV4)
 // ============================================================
@@ -330,7 +341,7 @@ const main = async () => {
     const resolvedCoverCids = {};
     const trackInfos = tracks.map((t) => ({
       trackId: normalizeTrackId(t.trackId),
-      coverCid: (t.coverCid || "").slice(0, 128),
+      coverCid: normalizeCid(String(t.coverCid || "").slice(0, 128)),
       coverImage: t.coverImage || null,
     }));
 
@@ -350,7 +361,10 @@ const main = async () => {
             return JSON.stringify({ coverCid: track.coverCid || "" });
           }
         );
-        const existingCover = JSON.parse(checkCoverJson).coverCid || "";
+        if (typeof checkCoverJson !== "string" || checkCoverJson.startsWith("[ERROR]")) {
+          continue;
+        }
+        const existingCover = normalizeCid(JSON.parse(checkCoverJson).coverCid);
         if (existingCover) {
           t.coverCid = existingCover;
           resolvedCoverCids[t.trackId] = existingCover;
@@ -399,12 +413,19 @@ const main = async () => {
 
       const ext = contentType.split("/")[1] || "jpg";
       const objectKey = `covers/${hash}.${ext}`;
-      const cid = await Lit.Actions.runOnce(
+      const cidResult = await Lit.Actions.runOnce(
         { waitForResponse: true, name: `uploadCover_${hash.slice(0, 8)}` },
         async () => {
           return await uploadToFilebase(filebaseKey, bytes, contentType, objectKey);
         }
       );
+      if (typeof cidResult !== "string" || cidResult.startsWith("[ERROR]")) {
+        continue;
+      }
+      const cid = normalizeCid(cidResult);
+      if (!cid) {
+        continue;
+      }
       coverCache.set(hash, cid);
       t.coverCid = cid;
       uploadedCoverCids[t.trackId] = cid;
@@ -419,7 +440,7 @@ const main = async () => {
     const coverCids = [];
 
     for (const t of trackInfos) {
-      if (!t.coverCid || coverSeen.has(t.trackId)) continue;
+      if (!isValidCid(t.coverCid) || coverSeen.has(t.trackId)) continue;
       coverSeen.add(t.trackId);
       coverTrackIds.push(t.trackId);
       coverCids.push(t.coverCid);

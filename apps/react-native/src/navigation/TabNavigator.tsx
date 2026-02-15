@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FeedScreen } from '../screens/FeedScreen';
 import { CommunityScreen } from '../screens/CommunityScreen';
 import { MusicScreen } from '../screens/MusicScreen';
@@ -26,6 +27,7 @@ import { useAuth } from '../providers/AuthProvider';
 import { DrawerContext } from './DrawerContext';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { colors } from '../lib/theme';
 
 export type RootStackParamList = {
   Tabs: undefined;
@@ -62,6 +64,7 @@ const TabsNavigator: React.FC = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { isAuthenticated, isNewUser, logout, register, authenticate, completeOnboarding } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const insets = useSafeAreaInsets();
 
   const openDrawer = useCallback(() => setDrawerOpen(true), []);
 
@@ -78,7 +81,16 @@ const TabsNavigator: React.FC = () => {
             const focusedRoute = state.routes[state.index];
             const focusedOptions = descriptors[focusedRoute.key]?.options;
             const tabBarStyle = (focusedOptions as any)?.tabBarStyle;
-            if (tabBarStyle?.display === 'none') return null;
+            if (tabBarStyle?.display === 'none') {
+              // Hide the bottom tab bar, but keep the mini player visible in chat detail.
+              return (
+                <View style={{ backgroundColor: colors.bgSurface, paddingBottom: insets.bottom }}>
+                  <TouchableOpacity activeOpacity={0.9} onPress={handleMiniPlayerPress}>
+                    <MiniPlayer />
+                  </TouchableOpacity>
+                </View>
+              );
+            }
 
             return (
               <>

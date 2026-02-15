@@ -9,7 +9,7 @@
  */
 
 import type { ParentComponent } from 'solid-js'
-import { Show, createSignal, createMemo, createEffect } from 'solid-js'
+import { Show, createMemo, createEffect } from 'solid-js'
 import { useLocation, useNavigate } from '@solidjs/router'
 import {
   HOME, WALLET, SCHEDULE, CHAT, SEARCH, MUSIC, ONBOARDING, SETTINGS,

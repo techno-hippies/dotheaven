@@ -79,6 +79,14 @@ type UserFollowStats @entity(immutable: false) {
 
 # ── ScrobbleV3 — Track Registry + Scrobble Events ─────────────────
 
+type UserVerification @entity(immutable: false) {
+  id: ID!                      # user address hex (lowercase)
+  verifiedAt: BigInt!          # unix seconds (mirrored from Celo SelfProfileVerifier.verifiedAt)
+  nationality: String          # ISO-3 country code (e.g. "USA")
+  mirroredAt: BigInt!          # MegaETH block timestamp of the latest mirror tx
+  transactionHash: Bytes!
+}
+
 type Track @entity(immutable: false) {
   id: ID!                      # trackId (bytes32 hex)
   title: String!               # display title (from contract state)
@@ -89,6 +97,8 @@ type Track @entity(immutable: false) {
   metaHash: Bytes!             # keccak256(abi.encode(title, artist, album))
   coverCid: String             # IPFS CID for album art (set once via setTrackCover)
   durationSec: Int             # track duration in seconds (0 = unknown)
+  scrobbleCountTotal: BigInt!  # pre-aggregated total scrobbles (all users)
+  scrobbleCountVerified: BigInt! # pre-aggregated scrobbles from verified users at scrobble time
   registeredAt: BigInt!        # block timestamp
   blockNumber: BigInt!
   transactionHash: Bytes!

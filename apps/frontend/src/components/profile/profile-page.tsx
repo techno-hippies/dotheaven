@@ -425,9 +425,6 @@ export const ProfilePage: Component<ProfilePageProps> = (props) => {
           onEditClick={handleEditClick}
           onSaveClick={handleSaveClick}
           onVerifyClick={props.onVerifyClick}
-          age={props.profileData?.age}
-          gender={props.profileData?.gender}
-          location={props.profileData?.locationCityId}
         />
 
         <div class="max-w-4xl mx-auto px-4 md:px-8">
@@ -566,4 +563,3 @@ export const ProfilePage: Component<ProfilePageProps> = (props) => {
     </div>
   )
 }
-

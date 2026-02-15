@@ -1,8 +1,12 @@
 import { defineConfig } from 'vite';
 
+const outDir = process.env.LIT_WEBVIEW_OUT_DIR || '../android/app/src/main/assets/lit-bundle';
+
 export default defineConfig({
+  // Keep script URLs relative so the bundle can be hosted under /lit-bundle/.
+  base: './',
   build: {
-    outDir: '../android/app/src/main/assets/lit-bundle',
+    outDir,
     emptyOutDir: true,
     rollupOptions: {
       input: './src/index.ts',

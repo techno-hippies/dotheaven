@@ -27,6 +27,7 @@ export interface EncryptedPlaybackDeps {
 
   // Auth
   getAuthContext: () => Promise<any>
+  getPkpPublicKey: () => string | undefined
 }
 
 // In-memory cache for decrypted audio blob URLs (keyed by contentId)
@@ -111,11 +112,16 @@ export async function playEncryptedContent(
     } else {
       console.log('[Player] Fetching encrypted + decrypting via Lit...')
       const authContext = await deps.getAuthContext()
+      const pkpPublicKey = deps.getPkpPublicKey()
+      if (!pkpPublicKey) {
+        throw new Error('Missing PKP public key')
+      }
       result = await fetchAndDecrypt(
         content.datasetOwner,
         content.pieceCid,
         content.contentId,
         authContext,
+        pkpPublicKey,
       )
     }
     console.log('[Player] Got audio bytes:', result.audio.length)

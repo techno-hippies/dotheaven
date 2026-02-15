@@ -226,7 +226,13 @@ async function proxyUpload(
 ): Promise<Map<string, string>> {
   const form = new FormData()
   for (const f of files) {
-    form.append(f.slot, new Blob([f.data], { type: f.contentType }), `${f.slot}.${f.contentType.split('/')[1] || 'bin'}`)
+    const blobBytes = new Uint8Array(f.data.byteLength)
+    blobBytes.set(f.data)
+    form.append(
+      f.slot,
+      new Blob([blobBytes], { type: f.contentType }),
+      `${f.slot}.${f.contentType.split('/')[1] || 'bin'}`,
+    )
   }
 
   const resp = await fetch(`${HEAVEN_API_URL}/api/upload`, {

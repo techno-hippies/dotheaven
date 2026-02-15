@@ -1,0 +1,6 @@
+# Rust files temporarily allowed to exceed the line threshold.
+# Keep this list short and remove entries as files are decomposed.
+src/chat/conversations.rs
+src/discover.rs
+src/lyrics.rs
+src/scrobble/cover.rs

@@ -72,6 +72,13 @@ interface XMTPContextValue {
   getMessages: (conversationId: string) => XMTPMessage[];
   sendMessage: (conversationId: string, content: string) => Promise<void>;
   loadMessages: (conversationId: string) => Promise<XMTPMessage[]>;
+  getDisappearingTimer: (
+    conversationId: string,
+  ) => Promise<{ disappearStartingAtMs: number; retentionSeconds: number } | null>;
+  setDisappearingTimer: (
+    conversationId: string,
+    seconds: number,
+  ) => Promise<{ disappearStartingAtMs: number; retentionSeconds: number } | null>;
   markRead: (conversationId: string) => void;
 }
 
@@ -536,6 +543,66 @@ export const XMTPProvider: React.FC<{ children: React.ReactNode }> = ({
     );
   }, []);
 
+  // ── Disappearing messages (native / libxmtp) ─────────────────────────
+
+  const getDisappearingTimer = useCallback(
+    async (
+      conversationId: string,
+    ): Promise<{ disappearStartingAtMs: number; retentionSeconds: number } | null> => {
+      const client = clientRef.current;
+      if (!client) throw new Error('Not connected');
+
+      const conv = await client.conversations.findConversation(conversationId);
+      if (!conv) throw new Error('Conversation not found');
+
+      const settings = await conv.disappearingMessageSettings();
+      if (!settings) return null;
+
+      const disappearStartingAtMs = Math.floor(settings.disappearStartingAtNs / 1_000_000);
+      const retentionSeconds = Math.max(
+        0,
+        Math.round(settings.retentionDurationInNs / 1_000_000_000),
+      );
+
+      if (!Number.isFinite(disappearStartingAtMs) || !Number.isFinite(retentionSeconds)) {
+        return null;
+      }
+
+      return { disappearStartingAtMs, retentionSeconds };
+    },
+    [],
+  );
+
+  const setDisappearingTimer = useCallback(
+    async (
+      conversationId: string,
+      seconds: number,
+    ): Promise<{ disappearStartingAtMs: number; retentionSeconds: number } | null> => {
+      const client = clientRef.current;
+      if (!client || !XMTPSdk) throw new Error('Not connected');
+
+      const conv = await client.conversations.findConversation(conversationId);
+      if (!conv) throw new Error('Conversation not found');
+
+      const safeSeconds = Number.isFinite(seconds) ? Math.max(0, Math.round(seconds)) : 0;
+
+      if (safeSeconds <= 0) {
+        await conv.clearDisappearingMessageSettings();
+        return null;
+      }
+
+      const disappearStartingAtMs = Date.now();
+      const startAtNs = disappearStartingAtMs * 1_000_000;
+      const durationInNs = safeSeconds * 1_000_000_000;
+
+      const settings = new XMTPSdk.DisappearingMessageSettings(startAtNs, durationInNs);
+      await conv.updateDisappearingMessageSettings(settings);
+
+      return { disappearStartingAtMs, retentionSeconds: safeSeconds };
+    },
+    [],
+  );
+
   // ── Context value ────────────────────────────────────────────────────
 
   const value: XMTPContextValue = {
@@ -551,6 +618,8 @@ export const XMTPProvider: React.FC<{ children: React.ReactNode }> = ({
     getMessages,
     sendMessage,
     loadMessages,
+    getDisappearingTimer,
+    setDisappearingTimer,
     markRead: markReadFn,
   };
 

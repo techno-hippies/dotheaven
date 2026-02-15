@@ -2,11 +2,13 @@ import React, { useState, useCallback, useRef, useContext, useEffect } from 'rea
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Share,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  Alert,
   View,
 } from 'react-native';
 import {
@@ -14,13 +16,14 @@ import {
   DotsThreeVertical,
   PaperPlaneTilt,
   PencilSimple,
-  Phone,
 } from 'phosphor-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MobileHeader } from '../components/MobileHeader';
 import { Avatar } from '../ui/Avatar';
 import { IconButton } from '../ui/IconButton';
+import { BottomSheet } from '../ui/BottomSheet';
+import { OptionPicker } from '../ui/OptionPicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../providers/AuthProvider';
 import { useXMTP, type XMTPMessage, type ChatListItem } from '../providers/XMTPProvider';
@@ -30,6 +33,16 @@ import { colors, fontSize, radii } from '../lib/theme';
 
 const CHAT_WORKER_URL = 'https://neodate-voice.deletion-backup782.workers.dev';
 const CHAT_STORAGE_KEY = 'heaven:ai-chat-scarlett';
+const CHAT_DISAPPEARING_KEY_PREFIX = 'heaven:chat-disappearing-seconds:';
+
+const CHAT_DISAPPEARING_OPTIONS = [
+  { value: 0, label: 'Off' },
+  { value: 15, label: '15 seconds' },
+  { value: 60, label: '1 minute' },
+  { value: 300, label: '5 minutes' },
+  { value: 900, label: '15 minutes' },
+  { value: 3600, label: '1 hour' },
+];
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -53,7 +66,191 @@ interface Message {
   senderName?: string;
   content: string;
   time: string;
+  createdAt?: number;
 }
+
+const THINK_OPEN_TAG = '<think>';
+const THINK_CLOSE_TAG = '</think>';
+
+function stripThinkSections(input: string): string {
+  const lower = input.toLowerCase();
+  let output = '';
+  let cursor = 0;
+
+  while (true) {
+    const start = lower.indexOf(THINK_OPEN_TAG, cursor);
+    if (start === -1) {
+      output += input.slice(cursor);
+      break;
+    }
+
+    output += input.slice(cursor, start);
+    const bodyStart = start + THINK_OPEN_TAG.length;
+    const end = lower.indexOf(THINK_CLOSE_TAG, bodyStart);
+    if (end === -1) {
+      break;
+    }
+    cursor = end + THINK_CLOSE_TAG.length;
+  }
+
+  return output;
+}
+
+function sanitizeAssistantMessage(raw: unknown): string {
+  const base = typeof raw === 'string' ? raw : '';
+  const stripped = stripThinkSections(base);
+  const cleaned = stripped.replace(/<\/?think>/gi, '').trim();
+  return cleaned || "Sorry, I couldn't generate a response.";
+}
+
+function formatDisappearingLabel(seconds: number): string {
+  if (seconds <= 0) return 'Off';
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.round((seconds % 3600) / 60);
+  if (mins === 0) return `${hrs}h`;
+  return `${hrs}h ${mins}m`;
+}
+
+function formatDisappearingMenuValue(seconds: number): string {
+  const match = CHAT_DISAPPEARING_OPTIONS.find((opt) => opt.value === seconds);
+  return match ? match.label : formatDisappearingLabel(seconds);
+}
+
+function parseSavedMessages(raw: string): Message[] {
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .map((row: unknown, index: number) => {
+        if (!row || typeof row !== 'object') return null;
+        const item = row as Partial<Message> & {
+          id?: unknown;
+          sender?: unknown;
+          content?: unknown;
+          time?: unknown;
+        };
+
+        return {
+          id: String(item.id ?? `saved-${index}`),
+          sender: item.sender === 'me' ? 'me' : 'them',
+          senderName:
+            typeof item.senderName === 'string' && item.senderName.length > 0
+              ? item.senderName
+              : undefined,
+          content: typeof item.content === 'string' ? item.content : String(item.content ?? ''),
+          time:
+            typeof item.time === 'string'
+              ? item.time
+              : formatMessageTime(new Date()),
+          createdAt: typeof item.createdAt === 'number' ? item.createdAt : undefined,
+        };
+      })
+      .filter((msg): msg is Message => Boolean(msg));
+  } catch {
+    return [];
+  }
+}
+
+function pruneByDisappearingWindow(
+  messages: Message[],
+  seconds: number,
+  disappearStartingAtMs?: number | null,
+): Message[] {
+  if (seconds <= 0) return messages;
+  const cutoffMs = Date.now() - seconds * 1000;
+  const startAtMs =
+    typeof disappearStartingAtMs === 'number' && disappearStartingAtMs > 0
+      ? disappearStartingAtMs
+      : 0;
+
+  let pruned = false;
+  const next = messages.filter((msg) => {
+    if (typeof msg.createdAt !== 'number') return true;
+    // XMTP semantics: only messages sent after the policy start can expire.
+    if (startAtMs > 0 && msg.createdAt < startAtMs) return true;
+
+    const keep = msg.createdAt >= cutoffMs;
+    if (!keep) pruned = true;
+    return keep;
+  });
+  return pruned ? next : messages;
+}
+
+function formatWalletSummary(address?: string): string {
+  if (!address) return 'Unavailable';
+  if (address.length <= 14) return address;
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+async function shareWalletAddress(address: string): Promise<boolean> {
+  try {
+    await Share.share({
+      message: address,
+      title: 'Wallet Address',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+interface ChatMenuProps {
+  open: boolean;
+  onClose: () => void;
+  onOpenDisappearingPicker: () => void;
+  onCopyWallet: () => void;
+  walletAddress?: string;
+  disappearingSeconds: number;
+}
+
+const ChatMenu: React.FC<ChatMenuProps> = ({
+  open,
+  onClose,
+  onOpenDisappearingPicker,
+  onCopyWallet,
+  walletAddress,
+  disappearingSeconds,
+}) => {
+  const canCopy = Boolean(walletAddress);
+  const copyLabel = formatWalletSummary(walletAddress);
+
+  return (
+    <BottomSheet open={open} onClose={onClose}>
+      <Text style={styles.chatMenuTitle}>Chat options</Text>
+
+      <TouchableOpacity
+        style={styles.chatMenuItem}
+        activeOpacity={0.7}
+        onPress={() => {
+          onClose();
+          onCopyWallet();
+        }}
+        disabled={!canCopy}
+      >
+        <Text style={styles.chatMenuItemLabel}>Copy wallet address</Text>
+        <Text style={styles.chatMenuItemValue}>{copyLabel}</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.chatMenuItem}
+        activeOpacity={0.7}
+        onPress={() => {
+          onClose();
+          onOpenDisappearingPicker();
+        }}
+      >
+        <Text style={styles.chatMenuItemLabel}>Disappearing message timer</Text>
+        <Text style={styles.chatMenuItemValue}>
+          {formatDisappearingMenuValue(disappearingSeconds)}
+        </Text>
+      </TouchableOpacity>
+    </BottomSheet>
+  );
+};
 
 // ── Mock data (Scarlett AI only) ─────────────────────────────────────
 
@@ -118,6 +315,7 @@ function xmtpToMessage(msg: XMTPMessage): Message {
     sender: msg.sender === 'user' ? 'me' : 'them',
     content: msg.content,
     time: formatMessageTime(msg.timestamp),
+    createdAt: msg.timestamp.getTime(),
   };
 }
 
@@ -350,25 +548,47 @@ const AIChatDetail: React.FC<{
   const { pkpInfo, signMessage } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isSending, setIsSending] = useState(false);
+  const [disappearingSeconds, setDisappearingSeconds] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [disappearingPickerOpen, setDisappearingPickerOpen] = useState(false);
 
-  // Load persisted messages on mount
+  // Load persisted settings/messages
   useEffect(() => {
     (async () => {
+      const storageKey = `${CHAT_DISAPPEARING_KEY_PREFIX}${SCARLETT_CONVERSATION.id}`;
+      const storedSetting = await AsyncStorage.getItem(storageKey);
+      const nextSeconds = storedSetting ? Number(storedSetting) : 0;
+      const safeSeconds = Number.isFinite(nextSeconds) && nextSeconds >= 0 ? nextSeconds : 0;
+
+      setDisappearingSeconds(safeSeconds);
+
       const stored = await AsyncStorage.getItem(CHAT_STORAGE_KEY);
-      if (stored) {
-        try {
-          setMessages(JSON.parse(stored));
-        } catch {}
-      }
+      const saved = stored ? parseSavedMessages(stored) : [];
+      setMessages(pruneByDisappearingWindow(saved, safeSeconds));
     })();
   }, []);
 
   // Persist messages when they change
   useEffect(() => {
-    if (messages.length > 0) {
-      AsyncStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages)).catch(() => {});
-    }
+    AsyncStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages)).catch(() => {});
   }, [messages]);
+
+  useEffect(() => {
+    const storageKey = `${CHAT_DISAPPEARING_KEY_PREFIX}${SCARLETT_CONVERSATION.id}`;
+    AsyncStorage.setItem(storageKey, String(disappearingSeconds)).catch(() => {});
+  }, [disappearingSeconds]);
+
+  useEffect(() => {
+    setMessages((prev) => pruneByDisappearingWindow(prev, disappearingSeconds));
+  }, [disappearingSeconds]);
+
+  useEffect(() => {
+    if (disappearingSeconds <= 0) return;
+    const id = setInterval(() => {
+      setMessages((prev) => pruneByDisappearingWindow(prev, disappearingSeconds));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [disappearingSeconds]);
 
   // All display messages: intro + persisted
   const allMessages: Message[] = [
@@ -376,20 +596,36 @@ const AIChatDetail: React.FC<{
     ...messages,
   ];
 
+  const handleCopyWallet = useCallback(async () => {
+    if (!pkpInfo?.ethAddress) {
+      Alert.alert('Wallet address', 'Sign in to connect a wallet first.');
+      return;
+    }
+
+    const copied = await shareWalletAddress(pkpInfo.ethAddress);
+    if (!copied) {
+      Alert.alert('Wallet address', pkpInfo.ethAddress);
+    } else {
+      Alert.alert('Copied', 'Wallet address is ready to share or copy.');
+    }
+  }, [pkpInfo?.ethAddress]);
+
   const getIsFirstInGroup = (index: number): boolean => {
     if (index === 0) return true;
     return allMessages[index].sender !== allMessages[index - 1].sender;
   };
 
   const handleSend = useCallback(async (text: string) => {
-    const now = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const now = Date.now();
+    const nowLabel = new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     const userMsg: Message = {
-      id: `user-${Date.now()}`,
+      id: `user-${now}`,
       sender: 'me',
       content: text,
-      time: now,
+      createdAt: now,
+      time: nowLabel,
     };
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => pruneByDisappearingWindow([...prev, userMsg], disappearingSeconds));
 
     if (!pkpInfo?.ethAddress) {
       const errorMsg: Message = {
@@ -397,9 +633,10 @@ const AIChatDetail: React.FC<{
         sender: 'them',
         senderName: 'Scarlett',
         content: 'Please sign in to chat with me!',
-        time: now,
+        createdAt: now,
+        time: nowLabel,
       };
-      setMessages((prev) => [...prev, errorMsg]);
+      setMessages((prev) => pruneByDisappearingWindow([...prev, errorMsg], disappearingSeconds));
       return;
     }
 
@@ -439,10 +676,11 @@ const AIChatDetail: React.FC<{
         id: `assistant-${Date.now()}`,
         sender: 'them',
         senderName: 'Scarlett',
-        content: data.message || "Sorry, I couldn't generate a response.",
+        content: sanitizeAssistantMessage(data.message),
+        createdAt: Date.now(),
         time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
       };
-      setMessages((prev) => [...prev, assistantMsg]);
+      setMessages((prev) => pruneByDisappearingWindow([...prev, assistantMsg], disappearingSeconds));
     } catch (error) {
       console.error('[ChatScreen] AI send failed:', error);
       const errorMsg: Message = {
@@ -450,13 +688,14 @@ const AIChatDetail: React.FC<{
         sender: 'them',
         senderName: 'Scarlett',
         content: 'Sorry, something went wrong. Please try again.',
+        createdAt: Date.now(),
         time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
       };
-      setMessages((prev) => [...prev, errorMsg]);
+      setMessages((prev) => pruneByDisappearingWindow([...prev, errorMsg], disappearingSeconds));
     } finally {
       setIsSending(false);
     }
-  }, [pkpInfo, signMessage, messages]);
+  }, [disappearingSeconds, pkpInfo, signMessage]);
 
   return (
     <KeyboardAvoidingView
@@ -472,24 +711,45 @@ const AIChatDetail: React.FC<{
           <Text style={styles.chatHeaderName} numberOfLines={1}>Scarlett</Text>
         </View>
         <View style={styles.chatHeaderRight}>
-          <IconButton
-            variant="ghost"
-            size="md"
-            accessibilityLabel="Start voice call"
-            onPress={() => console.log('[ChatScreen] Start call')}
-          >
-            <Phone size={20} color={colors.textSecondary} />
-          </IconButton>
+          {disappearingSeconds > 0 && (
+            <View style={styles.disappearingChip}>
+              <Text style={styles.disappearingChipText}>
+                {formatDisappearingLabel(disappearingSeconds)}
+              </Text>
+            </View>
+          )}
           <IconButton
             variant="ghost"
             size="md"
             accessibilityLabel="More options"
-            onPress={() => console.log('[ChatScreen] Options')}
+            onPress={() => setMenuOpen(true)}
           >
             <DotsThreeVertical size={20} color={colors.textSecondary} weight="bold" />
           </IconButton>
         </View>
       </View>
+
+      <ChatMenu
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        onOpenDisappearingPicker={() => {
+          setMenuOpen(false);
+          setDisappearingPickerOpen(true);
+        }}
+        onCopyWallet={handleCopyWallet}
+        walletAddress={pkpInfo?.ethAddress}
+        disappearingSeconds={disappearingSeconds}
+      />
+
+      <OptionPicker
+        open={disappearingPickerOpen}
+        onClose={() => setDisappearingPickerOpen(false)}
+        title="Disappearing messages"
+        options={CHAT_DISAPPEARING_OPTIONS}
+        selected={disappearingSeconds}
+        onSelect={(seconds) => setDisappearingSeconds(seconds)}
+        allowClear={false}
+      />
 
       <ScrollView
         ref={scrollRef}
@@ -530,6 +790,10 @@ const XMTPChatDetail: React.FC<{
   const xmtp = useXMTP();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
+  const [disappearingSeconds, setDisappearingSeconds] = useState(0);
+  const [disappearingStartAtMs, setDisappearingStartAtMs] = useState<number | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [disappearingPickerOpen, setDisappearingPickerOpen] = useState(false);
 
   // Load messages on mount
   useEffect(() => {
@@ -538,8 +802,22 @@ const XMTPChatDetail: React.FC<{
     (async () => {
       try {
         const xmtpMsgs = await xmtp.loadMessages(conversation.id);
+        const timer = await xmtp.getDisappearingTimer(conversation.id).catch((error) => {
+          console.error('[ChatScreen] Failed to load XMTP disappearing timer:', error);
+          return null;
+        });
+        const nextSeconds = timer?.retentionSeconds ?? 0;
+        const nextStartAtMs = timer?.disappearStartingAtMs ?? null;
         if (mounted) {
-          setMessages(xmtpMsgs.map(xmtpToMessage));
+          setDisappearingSeconds(nextSeconds);
+          setDisappearingStartAtMs(nextStartAtMs);
+          setMessages(
+            pruneByDisappearingWindow(
+              xmtpMsgs.map(xmtpToMessage),
+              nextSeconds,
+              nextStartAtMs,
+            ),
+          );
           xmtp.markRead(conversation.id);
         }
       } catch (error) {
@@ -554,13 +832,54 @@ const XMTPChatDetail: React.FC<{
     };
   }, [conversation.id]);
 
+  useEffect(() => {
+    setMessages((prev) =>
+      pruneByDisappearingWindow(prev, disappearingSeconds, disappearingStartAtMs),
+    );
+  }, [disappearingSeconds, disappearingStartAtMs, conversation.id]);
+
+  useEffect(() => {
+    if (disappearingSeconds <= 0) return;
+    const id = setInterval(() => {
+      setMessages((prev) =>
+        pruneByDisappearingWindow(prev, disappearingSeconds, disappearingStartAtMs),
+      );
+    }, 1000);
+    return () => clearInterval(id);
+  }, [disappearingSeconds, disappearingStartAtMs]);
+
   // Sync messages from provider state
   useEffect(() => {
     const providerMsgs = xmtp.getMessages(conversation.id);
     if (providerMsgs.length > 0) {
-      setMessages(providerMsgs.map(xmtpToMessage));
+      setMessages(
+        pruneByDisappearingWindow(
+          providerMsgs.map(xmtpToMessage),
+          disappearingSeconds,
+          disappearingStartAtMs,
+        ),
+      );
     }
-  }, [xmtp.getMessages(conversation.id).length]);
+  }, [
+    xmtp.getMessages(conversation.id).length,
+    conversation.id,
+    disappearingSeconds,
+    disappearingStartAtMs,
+  ]);
+
+  const handleCopyWallet = useCallback(async () => {
+    if (!conversation.peerAddress) {
+      Alert.alert('Wallet address', 'No wallet address is available for this conversation.');
+      return;
+    }
+
+    const copied = await shareWalletAddress(conversation.peerAddress);
+    if (!copied) {
+      Alert.alert('Wallet address', conversation.peerAddress);
+    } else {
+      Alert.alert('Copied', 'Wallet address is ready to share or copy.');
+    }
+  }, [conversation.peerAddress]);
 
   const getIsFirstInGroup = (index: number): boolean => {
     if (index === 0) return true;
@@ -573,9 +892,44 @@ const XMTPChatDetail: React.FC<{
         await xmtp.sendMessage(conversation.id, text);
         // Reload messages after send
         const updated = await xmtp.loadMessages(conversation.id);
-        setMessages(updated.map(xmtpToMessage));
+        setMessages(
+          pruneByDisappearingWindow(
+            updated.map(xmtpToMessage),
+            disappearingSeconds,
+            disappearingStartAtMs,
+          ),
+        );
       } catch (error) {
         console.error('[ChatScreen] Send failed:', error);
+      }
+    },
+    [conversation.id, disappearingSeconds, disappearingStartAtMs, xmtp],
+  );
+
+  const handleSelectDisappearingTimer = useCallback(
+    async (seconds: number) => {
+      try {
+        const timer = await xmtp.setDisappearingTimer(conversation.id, seconds);
+        const nextSeconds = timer?.retentionSeconds ?? 0;
+        const nextStartAtMs = timer?.disappearStartingAtMs ?? null;
+
+        setDisappearingSeconds(nextSeconds);
+        setDisappearingStartAtMs(nextStartAtMs);
+
+        const updated = await xmtp.loadMessages(conversation.id);
+        setMessages(
+          pruneByDisappearingWindow(
+            updated.map(xmtpToMessage),
+            nextSeconds,
+            nextStartAtMs,
+          ),
+        );
+      } catch (error) {
+        console.error('[ChatScreen] Failed to update disappearing timer:', error);
+        Alert.alert(
+          'Disappearing messages',
+          'Failed to update disappearing message timer. Please try again.',
+        );
       }
     },
     [conversation.id, xmtp],
@@ -597,16 +951,45 @@ const XMTPChatDetail: React.FC<{
           </Text>
         </View>
         <View style={styles.chatHeaderRight}>
+          {disappearingSeconds > 0 && (
+            <View style={styles.disappearingChip}>
+              <Text style={styles.disappearingChipText}>
+                {formatDisappearingLabel(disappearingSeconds)}
+              </Text>
+            </View>
+          )}
           <IconButton
             variant="ghost"
             size="md"
             accessibilityLabel="More options"
-            onPress={() => console.log('[ChatScreen] Options')}
+            onPress={() => setMenuOpen(true)}
           >
             <DotsThreeVertical size={20} color={colors.textSecondary} weight="bold" />
           </IconButton>
         </View>
       </View>
+
+      <ChatMenu
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        onOpenDisappearingPicker={() => {
+          setMenuOpen(false);
+          setDisappearingPickerOpen(true);
+        }}
+        onCopyWallet={handleCopyWallet}
+        walletAddress={conversation.peerAddress}
+        disappearingSeconds={disappearingSeconds}
+      />
+
+      <OptionPicker
+        open={disappearingPickerOpen}
+        onClose={() => setDisappearingPickerOpen(false)}
+        title="Disappearing messages"
+        options={CHAT_DISAPPEARING_OPTIONS}
+        selected={disappearingSeconds}
+        onSelect={handleSelectDisappearingTimer}
+        allowClear={false}
+      />
 
       <ScrollView
         ref={scrollRef}
@@ -873,6 +1256,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  disappearingChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radii.full,
+    backgroundColor: colors.bgElevated,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+  },
+  disappearingChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textMuted,
+  },
+  chatMenuTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: 16,
+  },
+  chatMenuItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+  },
+  chatMenuItemLabel: {
+    fontSize: fontSize.base,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  chatMenuItemValue: {
+    fontSize: fontSize.sm,
+    color: colors.textMuted,
   },
 
   // ── Messages ──────────────────────────────────────────────────────

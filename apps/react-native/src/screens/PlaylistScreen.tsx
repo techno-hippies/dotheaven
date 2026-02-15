@@ -93,6 +93,10 @@ function playlistToMusicTracks(tracks: PlaylistTrack[]): MusicTrack[] {
     uri: '',
     filename: '',
     artworkUri: t.albumCover,
+    contentId: t.contentId,
+    pieceCid: t.pieceCid,
+    datasetOwner: t.datasetOwner,
+    algo: t.algo,
   }));
 }
 
@@ -199,7 +203,20 @@ export const PlaylistScreen: React.FC<Props> = ({ navigation, route }) => {
         return match ? { ...t, uri: match.uri, artworkUri: t.artworkUri || match.artworkUri, artworkFallbackUri: match.artworkFallbackUri } : t;
       });
       const resolvedTrack = resolvedQueue.find((t) => t.id === track.id) ?? { ...track, uri: localMatch.uri };
-      void playTrack(resolvedTrack, resolvedQueue.filter((t) => !!t.uri));
+      const playableQueue = resolvedQueue.filter((t) =>
+        !!t.uri || (!!t.contentId && !!t.pieceCid),
+      );
+      void playTrack(resolvedTrack, playableQueue);
+      navigation.navigate('Player');
+      return;
+    }
+
+    // Cloud fallback (Load/Filecoin content metadata available)
+    if (track.contentId && track.pieceCid) {
+      const playableQueue = tracks.filter((t) =>
+        !!t.uri || (!!t.contentId && !!t.pieceCid),
+      );
+      void playTrack(track, playableQueue);
       navigation.navigate('Player');
       return;
     }
@@ -207,7 +224,7 @@ export const PlaylistScreen: React.FC<Props> = ({ navigation, route }) => {
     // No playable source found
     Alert.alert(
       'Track Not Available',
-      `"${track.title}" by ${track.artist} is not in your local library. Scan your device library first to play this track.`,
+      `"${track.title}" by ${track.artist} has no local file and no cloud content metadata. Scan your device library or re-upload the track.`,
     );
   }, [currentTrack, togglePlayPause, playTrack, tracks, navigation]);
 

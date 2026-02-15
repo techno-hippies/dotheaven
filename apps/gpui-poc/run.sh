@@ -78,5 +78,36 @@ echo "  LOAD_UPLOAD_URL: ${LOAD_UPLOAD_URL}"
 echo "  LOAD_UPLOAD_TOKEN: ${LOAD_UPLOAD_TOKEN}"
 echo ""
 
-# Run the app
-cargo run --release
+# Run the app.
+# If AGORA_SDK_ROOT is configured, enable native Agora automatically so
+# duet native bridge works without passing extra cargo flags manually.
+if [ -n "${AGORA_SDK_ROOT:-}" ]; then
+    DUET_NATIVE_BRIDGE_OPT_IN="${HEAVEN_ENABLE_DUET_NATIVE_BRIDGE:-${HEAVEN_ENABLE_SCARLETT_DESKTOP_AGORA:-0}}"
+    if [ "$(uname -s)" = "Linux" ] && [ "${DUET_NATIVE_BRIDGE_OPT_IN}" != "1" ]; then
+        echo "AGORA_SDK_ROOT is set, but native Agora is disabled by default on Linux."
+        echo "Set HEAVEN_ENABLE_DUET_NATIVE_BRIDGE=1 to opt in to the deprecated Linux native bridge."
+        echo ""
+        cargo run --release
+        exit 0
+    fi
+
+    if [ ! -d "${AGORA_SDK_ROOT}/include" ] || [ ! -d "${AGORA_SDK_ROOT}/lib" ]; then
+        echo "ERROR: AGORA_SDK_ROOT is set but missing include/ or lib/: ${AGORA_SDK_ROOT}"
+        echo "Set AGORA_SDK_ROOT to the Agora native SDK root."
+        exit 1
+    fi
+
+    export AGORA_SDK_ROOT
+    export AGORA_SDK_LIB_NAME="${AGORA_SDK_LIB_NAME:-agora_rtc_sdk}"
+    export LD_LIBRARY_PATH="${AGORA_SDK_ROOT}/lib:${LD_LIBRARY_PATH:-}"
+    echo "Native Agora enabled via AGORA_SDK_ROOT."
+    echo "  AGORA_SDK_ROOT: ${AGORA_SDK_ROOT}"
+    echo "  AGORA_SDK_LIB_NAME: ${AGORA_SDK_LIB_NAME}"
+    echo "  LD_LIBRARY_PATH prepended with: ${AGORA_SDK_ROOT}/lib"
+    echo ""
+    cargo run --release --features agora-native
+else
+    echo "AGORA_SDK_ROOT not set; running without native Agora."
+    echo ""
+    cargo run --release
+fi

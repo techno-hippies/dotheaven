@@ -44,6 +44,10 @@ export interface PlaylistTrack {
   kind?: number;
   payload?: string;
   mbid?: string;
+  contentId?: string;
+  pieceCid?: string;
+  datasetOwner?: string;
+  algo?: number;
 }
 
 interface TrackMeta {
@@ -54,6 +58,13 @@ interface TrackMeta {
   kind: number;
   payload: string;
   durationSec: number;
+}
+
+interface ContentMeta {
+  contentId: string;
+  pieceCid: string;
+  datasetOwner: string;
+  algo: number;
 }
 
 // ── Subgraph Queries ───────────────────────────────────────────────
@@ -183,10 +194,14 @@ async function resolvePlaylistTracks(
   if (playlistTracks.length === 0) return [];
 
   const uniqueIds = [...new Set(playlistTracks.map((t) => t.trackId))];
-  const metaMap = await batchGetTracks(uniqueIds);
+  const [metaMap, contentMap] = await Promise.all([
+    batchGetTracks(uniqueIds),
+    batchGetContentMeta(uniqueIds),
+  ]);
 
   return playlistTracks.map((pt) => {
     const meta = metaMap.get(pt.trackId);
+    const content = contentMap.get(pt.trackId);
     const isValidCid = (cid: string | undefined | null): cid is string =>
       !!cid && (cid.startsWith('Qm') || cid.startsWith('bafy'));
 
@@ -206,6 +221,12 @@ async function resolvePlaylistTracks(
       duration: formatDuration(meta?.durationSec ?? 0),
       kind: meta?.kind,
       payload: meta?.payload,
+      ...(content ? {
+        contentId: content.contentId,
+        pieceCid: content.pieceCid,
+        datasetOwner: content.datasetOwner,
+        algo: content.algo,
+      } : {}),
     };
   });
 }
@@ -294,6 +315,71 @@ async function batchGetTracks(trackIds: string[]): Promise<Map<string, TrackMeta
     }
   } catch {
     // Subgraph unavailable — degrade gracefully
+  }
+
+  return results;
+}
+
+async function batchGetContentMeta(trackIds: string[]): Promise<Map<string, ContentMeta>> {
+  const results = new Map<string, ContentMeta>();
+  if (trackIds.length === 0) return results;
+
+  const ids = trackIds.map((id) => `"${id.toLowerCase()}"`).join(',');
+  const query = `{
+    contentEntries(
+      where: { trackId_in: [${ids}], active: true }
+      first: 1000
+    ) {
+      id
+      trackId
+      pieceCid
+      datasetOwner
+      algo
+    }
+  }`;
+
+  try {
+    const res = await fetch(SUBGRAPH_ACTIVITY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+    if (!res.ok) return results;
+    const json = await res.json();
+    const entries: Array<{
+      id: string;
+      trackId: string;
+      pieceCid: string;
+      datasetOwner: string;
+      algo: number;
+    }> = json.data?.contentEntries ?? [];
+
+    for (const entry of entries) {
+      // Keep the first active content entry per trackId.
+      if (results.has(entry.trackId)) continue;
+
+      let pieceCid = entry.pieceCid;
+      if (pieceCid.startsWith('0x')) {
+        try {
+          const hex = pieceCid.slice(2);
+          if (hex.length > 0 && hex.length % 2 === 0 && /^[0-9a-fA-F]+$/.test(hex)) {
+            const bytes = new Uint8Array(hex.match(/.{2}/g)!.map((b) => parseInt(b, 16)));
+            pieceCid = new TextDecoder().decode(bytes);
+          }
+        } catch {
+          // Keep raw pieceCid if decode fails.
+        }
+      }
+
+      results.set(entry.trackId, {
+        contentId: entry.id,
+        pieceCid,
+        datasetOwner: entry.datasetOwner,
+        algo: entry.algo ?? 1,
+      });
+    }
+  } catch {
+    // Content metadata unavailable — degrade gracefully.
   }
 
   return results;

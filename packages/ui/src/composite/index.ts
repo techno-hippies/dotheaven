@@ -60,7 +60,7 @@ export {
   HOBBY_TAGS, SKILL_TAGS, HOBBY_BY_ID, SKILL_BY_ID,
   getTagLabel, packTagIds, unpackTagIds,
   tagIdsToString, stringToTagIds, tagIdsToValues, valuesToTagIds, tagsToOptions,
-  type Tag,
+  type Tag as ProfileTag,
 } from '../data/tags'
 export {
   type LanguageEntry, type ProficiencyLevel,

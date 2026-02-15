@@ -20,7 +20,8 @@ import { type ProfileInput, type VerificationState, type VerifyStep, type Verifi
 import { publicProfile, peerChat } from '@heaven/core'
 import { parseTagCsv } from '../lib/heaven/profile'
 import { parseEther, type Address } from 'viem'
-import { formatTimeAgo, FILEBASE_GATEWAY, isValidCid, parseProfileId, resolveProfileId, applyHeavenRecords } from './profile-utils'
+import { formatTimeAgo, parseProfileId, resolveProfileId, applyHeavenRecords } from './profile-utils'
+import { resolveCoverUrl } from '../lib/heaven/cover-ref'
 import { ProfileWalletTab } from './ProfileWalletTab'
 import { ProfileSkeleton } from './ProfileSkeleton'
 
@@ -282,9 +283,7 @@ export const MyProfilePage: Component = () => {
       trackId: e.trackId,
       timestamp: formatTimeAgo(e.playedAt, t),
       durationSec: e.durationSec,
-      coverUrl: isValidCid(e.coverCid)
-        ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
-        : undefined,
+      coverUrl: resolveCoverUrl(e.coverCid, { width: 96, height: 96, format: 'webp', quality: 80 }),
     }))
   }
 
@@ -779,9 +778,7 @@ export const PublicProfilePage: Component = () => {
       trackId: e.trackId,
       timestamp: formatTimeAgo(e.playedAt, t),
       durationSec: e.durationSec,
-      coverUrl: isValidCid(e.coverCid)
-        ? `${FILEBASE_GATEWAY}/${e.coverCid}?img-width=96&img-height=96&img-format=webp&img-quality=80`
-        : undefined,
+      coverUrl: resolveCoverUrl(e.coverCid, { width: 96, height: 96, format: 'webp', quality: 80 }),
     }))
   }
 

@@ -30,6 +30,12 @@ storybook-static/
 .claude/
 **/.claude/
 
+# Local toolchains
+.local/
+
+# Bundled Lit engine (regenerated from lit-webview)
+apps/frontend/public/lit-bundle/
+
 # OS
 .DS_Store
 Thumbs.db

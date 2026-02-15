@@ -1,7 +1,7 @@
 import { type Component, Show, For, createMemo, createSignal, createEffect, createResource } from 'solid-js'
-import { useParams } from '@solidjs/router'
+import { useParams, useNavigate } from '@solidjs/router'
 import { createQuery } from '@tanstack/solid-query'
-import { TrackList, IconButton, PageHero } from '@heaven/ui'
+import { TrackList, IconButton } from '@heaven/ui'
 import {
   Globe,
   Database,
@@ -16,9 +16,11 @@ import { useTrackPlayback, usePlaylistDialog, buildMenuActions } from '../hooks/
 import { usePlayer } from '../providers'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 import { resolveImageUrl } from '../lib/image-cache'
+import { MediaBackBar } from '../components/library/media-back-bar'
 
 export const ArtistPage: Component = () => {
   const params = useParams<{ mbid: string }>()
+  const navigate = useNavigate()
 
   const player = usePlayer()
   const playback = useTrackPlayback()
@@ -47,10 +49,12 @@ export const ArtistPage: Component = () => {
 
   const info = () => query.data?.info ?? null
   const [heroImageIndex, setHeroImageIndex] = createSignal(0)
+
   const localCoverMap = createMemo(() => {
     const map = new Map<string, string>()
     let total = 0
     let withCover = 0
+
     for (const t of player.tracks()) {
       total += 1
       if (debugArtistCovers() && t.filePath && debugLocalPaths.some((p) => t.filePath.endsWith(p))) {
@@ -66,13 +70,20 @@ export const ArtistPage: Component = () => {
       }
       if (!t.albumCover) continue
       withCover += 1
+
       const titleKey = normalizeTitleKey(t.title)
       if (!titleKey) continue
+      const albumKey = normalizeTitleKey(t.album || '')
       const variants = normalizeArtistVariants(t.artist)
+
       for (const variant of variants) {
         map.set(`${variant}::${titleKey}`, t.albumCover)
+        if (albumKey) {
+          map.set(`${variant}::${albumKey}::${titleKey}`, t.albumCover)
+        }
       }
     }
+
     if (debugArtistCovers()) {
       const sample = Array.from(map.keys()).slice(0, 5)
       console.log('[Artist] local cover map', { total, withCover, keys: map.size, sample })
@@ -84,13 +95,24 @@ export const ArtistPage: Component = () => {
     const base = query.data ? artistTracksToTracks(query.data.tracks) : []
     const map = localCoverMap()
     let logged = 0
+
     return base.map((t) => {
-      if (t.albumCover) return t
       const titleKey = normalizeTitleKey(t.title)
+      const albumKey = normalizeTitleKey(t.album || '')
       const variants = normalizeArtistVariants(t.artist)
+
       let localCover: string | undefined
       let matchKey: string | undefined
+
       for (const variant of variants) {
+        const albumMatchKey = albumKey ? `${variant}::${albumKey}::${titleKey}` : undefined
+        const albumHit = albumMatchKey ? map.get(albumMatchKey) : undefined
+        if (albumHit) {
+          localCover = albumHit
+          matchKey = albumMatchKey
+          break
+        }
+
         const key = `${variant}::${titleKey}`
         const hit = map.get(key)
         if (hit) {
@@ -99,21 +121,30 @@ export const ArtistPage: Component = () => {
           break
         }
       }
+
       if (debugArtistCovers() && logged < 10) {
         console.log('[Artist] cover lookup', {
           title: t.title,
           artist: t.artist,
+          album: t.album,
           titleKey,
+          albumKey,
           variants: Array.from(variants),
           matchKey,
           hasLocalCover: !!localCover,
+          hasOnchainCover: !!t.albumCover,
         })
         logged += 1
       }
-      return localCover ? { ...t, albumCover: localCover } : t
+
+      if (localCover) return { ...t, albumCover: localCover }
+      return t
     })
   }
+
   const uniqueListeners = () => query.data?.uniqueListeners ?? 0
+  const totalScrobbles = () => query.data?.totalScrobbles ?? 0
+  const ranking = () => query.data?.ranking ?? 0
 
   const imageUrl = () => {
     const i = info()
@@ -126,10 +157,20 @@ export const ArtistPage: Component = () => {
   // Rehost external images to IPFS automatically
   const [rehostedImageUrl] = createResource(imageUrl, resolveImageUrl)
 
+  const localArtistImage = createMemo(() => {
+    const firstWithCover = tracks().find((t) => !!t.albumCover)
+    return firstWithCover?.albumCover
+  })
+
   const heroImageCandidates = createMemo(() => {
     // Use rehosted IPFS URL if available, otherwise fallback to original
     const resolved = rehostedImageUrl()
-    return resolved ? buildWikimediaImageCandidates(resolved) : buildWikimediaImageCandidates(imageUrl())
+    const remoteCandidates = resolved ? buildWikimediaImageCandidates(resolved) : buildWikimediaImageCandidates(imageUrl())
+    if (remoteCandidates.length > 0) return remoteCandidates
+
+    // Tauri fallback: if artist image is missing, use local/on-chain album cover from the track list.
+    const local = localArtistImage()
+    return local ? [local] : []
   })
 
   const heroImageSrc = () => heroImageCandidates()[heroImageIndex()]
@@ -140,133 +181,156 @@ export const ArtistPage: Component = () => {
   })
 
   return (
-    <Show when={!query.isLoading} fallback={
-      <div class="h-full overflow-y-auto max-w-5xl mx-auto w-full">
-        {/* Skeleton loader */}
-        <div class="pb-4">
-          {/* Hero skeleton */}
-          <div class="relative overflow-hidden h-[280px] md:h-[420px] bg-[var(--bg-elevated)] animate-pulse" />
-        </div>
-        {/* Track list skeleton */}
-        <div class="px-4 md:px-8 pb-2">
-          <div class="h-7 w-24 bg-[var(--bg-elevated)] rounded-md animate-pulse mb-2" />
-        </div>
-        <div class="px-4 md:px-8 space-y-2">
-          {Array.from({ length: 8 }).map(() => (
-            <div class="h-12 bg-[var(--bg-elevated)] rounded-md animate-pulse" />
-          ))}
-        </div>
-      </div>
-    }>
-      <Show when={info()} fallback={
-        <div class="h-full flex items-center justify-center">
-          <Show when={query.isFetching} fallback={
-            <p class="text-[var(--text-muted)]">Artist not found</p>
-          }>
-            <div class="flex items-center gap-3 text-[var(--text-muted)]">
-              <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              <span>Loading artist...</span>
-            </div>
-          </Show>
-        </div>
-      }>
-        {(artist) => {
-          const artistInfo = () => artist()
-          // External links slot for MediaHeader
-          // Filter to only entries that have a known icon (excludes 'image' key etc.)
-          const linkEntries = () => Object.entries(artistInfo().links).filter(([key]) => getLinkIcon(key))
-          return (
-            <div class="h-full overflow-y-auto max-w-5xl mx-auto w-full">
-              <div class="pb-4">
-                <PageHero
-                  title={artist().name}
-                  background={
-                    <Show when={!rehostedImageUrl.loading && heroImageSrc()} fallback={
-                      <div class="absolute inset-0 bg-[var(--bg-elevated)] animate-pulse" />
-                    }>
-                      {(src) => (
-                        <img
-                          src={src()}
-                          alt={artist().name}
-                          class="absolute inset-0 w-full h-full object-cover"
-                          referrerpolicy="no-referrer"
-                          crossorigin="anonymous"
-                          onError={() => {
-                            const next = heroImageIndex() + 1
-                            if (next < heroImageCandidates().length) setHeroImageIndex(next)
-                          }}
-                        />
-                      )}
-                    </Show>
-                  }
-                  subtitle={<>{uniqueListeners().toLocaleString()} listeners</>}
-                  actions={
-                    <Show when={linkEntries().length > 0}>
-                      <div class="flex flex-wrap gap-1">
-                        <For each={linkEntries()}>
-                          {([key, url]) => {
-                            const Icon = getLinkIcon(key)!
-                            return (
-                              <a
-                                href={url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title={linkLabel(key)}
-                              >
-                                <IconButton variant="soft" size="md" aria-label={linkLabel(key)}>
-                                  <Icon class="w-5 h-5" />
-                                </IconButton>
-                              </a>
-                            )
-                          }}
-                        </For>
-                      </div>
-                    </Show>
-                  }
-                />
-              </div>
+    <div class="h-full overflow-y-auto">
+      <MediaBackBar title="Artist" onBack={() => navigate(-1)} />
 
-              {/* Track list */}
-            <Show when={tracks().length > 0} fallback={
-              <div class="px-8 py-12 text-center">
-                <p class="text-[var(--text-muted)] text-lg">No scrobbles found</p>
-                <p class="text-[var(--text-muted)] text-base mt-2">
-                  Scrobble tracks by this artist to see them here
-                </p>
+      <div class="max-w-5xl mx-auto w-full">
+        <Show when={!query.isLoading} fallback={
+          <div class="px-4 md:px-8 py-6">
+            <div class="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/70 overflow-hidden">
+              <div class="h-[220px] md:h-[320px] bg-[var(--bg-elevated)] animate-pulse" />
+              <div class="p-4 md:p-6 space-y-3">
+                <div class="h-3 w-20 bg-[var(--bg-elevated)] rounded animate-pulse" />
+                <div class="h-10 w-2/3 bg-[var(--bg-elevated)] rounded animate-pulse" />
+                <div class="h-5 w-56 bg-[var(--bg-elevated)] rounded animate-pulse" />
               </div>
-            }>
-              <div class="px-4 md:px-8 pb-2">
-                <h2 class="text-lg font-semibold text-[var(--text-primary)] mb-0">
-                  Popular
-                </h2>
-              </div>
-              <TrackList
-                tracks={tracks()}
-                activeTrackId={playback.activeTrackId()}
-                selectedTrackId={playback.selectedTrackId()}
-                onTrackClick={(track) => playback.select(track)}
-                onTrackPlay={(track) => playback.play(track)}
-                showScrobbleCount={true}
-                showScrobbleStatus={false}
-                showArtist={false}
-                showDateAdded={false}
-                showDuration={true}
-                menuActions={menuActions}
-              />
+            </div>
+            <div class="mt-6 space-y-2">
+              {Array.from({ length: 8 }).map(() => (
+                <div class="h-12 bg-[var(--bg-elevated)] rounded-md animate-pulse" />
+              ))}
+            </div>
+          </div>
+        }>
+          <Show when={info()} fallback={
+            <div class="min-h-[260px] py-20 flex items-center justify-center">
+              <Show when={query.isFetching} fallback={
+                <p class="text-[var(--text-muted)]">Artist not found</p>
+              }>
+                <div class="flex items-center gap-3 text-[var(--text-muted)]">
+                  <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <span>Loading artist...</span>
+                </div>
               </Show>
             </div>
-          )
-        }}
-      </Show>
-      <AddToPlaylistDialog
-        open={plDialog.open()}
-        onOpenChange={plDialog.setOpen}
-        track={plDialog.track()}
-      />
-    </Show>
+          }>
+            {(artist) => {
+              const artistInfo = () => artist()
+              // Filter to only entries that have a known icon (excludes 'image' key etc.)
+              const linkEntries = () => Object.entries(artistInfo().links).filter(([key]) => getLinkIcon(key))
+
+              return (
+                <>
+                  <div class="px-4 md:px-8 py-6">
+                    <div class="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/70 overflow-hidden">
+                      <div class="relative h-[220px] md:h-[320px]">
+                        <Show when={!rehostedImageUrl.loading && heroImageSrc()} fallback={
+                          <div class="absolute inset-0 bg-[var(--bg-elevated)] animate-pulse" />
+                        }>
+                          {(src) => (
+                            <img
+                              src={src()}
+                              alt={artist().name}
+                              class="absolute inset-0 w-full h-full object-cover"
+                              referrerpolicy="no-referrer"
+                              crossorigin="anonymous"
+                              onError={() => {
+                                const next = heroImageIndex() + 1
+                                if (next < heroImageCandidates().length) setHeroImageIndex(next)
+                              }}
+                            />
+                          )}
+                        </Show>
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-black/15" />
+                      </div>
+
+                      <div class="px-4 py-4 md:px-6 md:py-5">
+                        <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+                          <div class="min-w-0">
+                            <div class="text-xs uppercase tracking-[0.16em] text-[var(--text-muted)]">Artist</div>
+                            <h1 class="mt-2 text-2xl md:text-4xl font-bold leading-tight text-[var(--text-primary)]">
+                              {artist().name}
+                            </h1>
+                            <div class="mt-2 flex flex-wrap items-center gap-2 text-base text-[var(--text-secondary)]">
+                              <span>{uniqueListeners().toLocaleString()} listeners</span>
+                              <span>&middot;</span>
+                              <span>{totalScrobbles().toLocaleString()} scrobbles</span>
+                              <Show when={ranking() > 0}>
+                                <span>&middot;</span>
+                                <span>#{ranking().toLocaleString()} ranking</span>
+                              </Show>
+                            </div>
+                          </div>
+
+                          <Show when={linkEntries().length > 0}>
+                            <div class="flex flex-wrap gap-1">
+                              <For each={linkEntries()}>
+                                {([key, url]) => {
+                                  const Icon = getLinkIcon(key)!
+                                  return (
+                                    <a
+                                      href={url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title={linkLabel(key)}
+                                    >
+                                      <IconButton variant="soft" size="md" aria-label={linkLabel(key)}>
+                                        <Icon class="w-5 h-5" />
+                                      </IconButton>
+                                    </a>
+                                  )
+                                }}
+                              </For>
+                            </div>
+                          </Show>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Show when={tracks().length > 0} fallback={
+                    <div class="px-4 md:px-8 py-12 text-center">
+                      <p class="text-[var(--text-muted)] text-lg">No scrobbles found</p>
+                      <p class="text-[var(--text-muted)] text-base mt-2">
+                        Scrobble tracks by this artist to see them here
+                      </p>
+                    </div>
+                  }>
+                    <div class="px-4 md:px-8 pb-2">
+                      <h2 class="text-lg font-semibold text-[var(--text-primary)] mb-0">
+                        Popular
+                      </h2>
+                    </div>
+                    <TrackList
+                      tracks={tracks()}
+                      activeTrackId={playback.activeTrackId()}
+                      selectedTrackId={playback.selectedTrackId()}
+                      onTrackClick={(track) => playback.select(track)}
+                      onTrackPlay={(track) => playback.play(track)}
+                      showScrobbleCount={true}
+                      showScrobbleStatus={false}
+                      showArtist={false}
+                      showDateAdded={false}
+                      showDuration={true}
+                      menuActions={menuActions}
+                    />
+                  </Show>
+                </>
+              )
+            }}
+          </Show>
+
+          <AddToPlaylistDialog
+            open={plDialog.open()}
+            onOpenChange={plDialog.setOpen}
+            track={plDialog.track()}
+          />
+        </Show>
+      </div>
+    </div>
   )
 }
 

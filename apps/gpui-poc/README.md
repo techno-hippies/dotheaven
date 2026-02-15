@@ -65,6 +65,17 @@ source .env  # or export them manually
 cargo run --release
 ```
 
+## Organization Guardrail
+
+To keep Rust modules manageable, run the file-size check:
+
+```bash
+./scripts/check_rs_size.sh 450
+```
+
+- Threshold defaults to `450` lines.
+- Temporary exceptions are tracked in `.rs-size-allowlist`.
+
 ## Native Load Storage
 
 GPUI uses native Rust code for encrypted upload + registration orchestration.
@@ -81,6 +92,30 @@ Agora WebRTC is the current practical route for shipping quickly.
 JackTrip remains the long-term peer audio direction, but requires substantial additional engineering (session control, NAT/network strategy, reliability/ops, and UX fallback logic).
 
 Treat Agora as delivery path, JackTrip as strategic upgrade.
+
+### Linux Duet Browser Bridge Helper
+
+For Linux duet rooms, use the host-room action **Use JackTrip Audio Source** to provision a
+virtual capture source for browser publish.
+
+- Script used: `scripts/setup-duet-audio-source-linux.sh`
+- It creates/reuses `jacktrip_duet` null sink.
+- It creates/reuses a browser-friendly virtual mic source:
+  - `jacktrip_duet_input` (remap of `jacktrip_duet.monitor`)
+- By default it does **not** change your global default input source.
+- Optional opt-in: set `HEAVEN_DUET_SET_DEFAULT_SOURCE=1` if you want it to switch browser `Default` to `jacktrip_duet_input`.
+- In the broadcast tab, prefer selecting **Remapped jacktrip_duet.monitor source** (or similar JackTrip duet mic label).
+- Recovery (if `Default` points at JackTrip virtual mic): run `pactl set-default-source <hardware_source_name>` and verify with `pactl get-default-source`.
+- GPUI host room now exposes **Restore System Mic** (when needed) and **Copy Diagnostics** for easier recovery/debug without terminal commands.
+
+### Duet Platform Status
+
+- Linux:
+  - Default supported path is browser bridge + Pulse/PipeWire virtual mic.
+  - Native Agora bridge remains experimental/off by default.
+- macOS/Windows:
+  - Browser bridge flow works similarly.
+  - Native bridge capability depends on build flags/SDK packaging and is not the default V1 host path.
 
 ## Native Agora (GPUI)
 
@@ -100,4 +135,5 @@ cargo run --features agora-native
 
 Notes:
 - `AGORA_SDK_ROOT` must contain `include/` and `lib/`.
+- Linux desktop native Agora is opt-in. Set `HEAVEN_ENABLE_DUET_NATIVE_BRIDGE=1` (or legacy `HEAVEN_ENABLE_SCARLETT_DESKTOP_AGORA=1`) before running if you intentionally want native bridge on Linux.
 - Without `agora-native`, Scarlett text chat works, but voice call start returns a clear "agora-native not enabled" error.
