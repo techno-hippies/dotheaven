@@ -5,9 +5,10 @@ Sovereign social + music network with onchain identity, scrobbling, publishing, 
 ## Current Product Architecture (February 2026)
 
 We removed the old Tauri desktop path and moved desktop to a native Rust + GPUI client.
+React Native has been removed from this repository.
 
-We are also moving mobile from React Native to native apps:
-- Android is now Kotlin + Jetpack Compose (`apps/android`).
+Mobile is native-first:
+- Android is Kotlin + Jetpack Compose (`apps/android`).
 - iOS will be a native Swift app (planned).
 
 ## Apps
@@ -17,8 +18,7 @@ We are also moving mobile from React Native to native apps:
 | Web | SolidJS + Vite + Tailwind | `apps/web` | Active |
 | Desktop (Linux/macOS/Windows) | Rust + GPUI | `apps/desktop` | Active |
 | Android | Kotlin + Jetpack Compose | `apps/android` | Active |
-| iOS | Swift (planned) | TBD | Planned |
-| Legacy mobile path | React Native + Expo | `apps/react-native` | Legacy / migration source only |
+| iOS | Swift (planned) | Not in repo yet | Planned |
 
 ## Repository Layout
 
@@ -26,9 +26,8 @@ We are also moving mobile from React Native to native apps:
 dotheaven/
 ├── apps/
 │   ├── web/              # SolidJS web app
-│   ├── desktop/         # Native desktop app (Rust + GPUI)
-│   ├── android/       # Native Android app (Kotlin + Compose)
-│   └── react-native/     # Legacy mobile code while migration finishes
+│   ├── desktop/          # Native desktop app (Rust + GPUI)
+│   └── android/          # Native Android app (Kotlin + Compose)
 ├── packages/             # Shared TS libs (core/i18n/platform/ui)
 ├── contracts/            # Smart contracts (MegaETH/Celo/Base)
 ├── services/             # Workers/APIs/voice/gateway/relayers
@@ -81,7 +80,7 @@ Suggested packaging:
 From `apps/android`:
 
 ```bash
-./gradlew assembleDebug
+JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew assembleDebug
 ```
 
 APK output:
@@ -89,7 +88,7 @@ APK output:
 
 Optional unsigned release build:
 ```bash
-./gradlew assembleRelease
+JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew assembleRelease
 ```
 
 Output:
@@ -145,11 +144,11 @@ Android (Kotlin):
 
 ```bash
 cd apps/android
-./gradlew installDebug
+JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew installDebug
 ```
 
 ## Notes
 
 - Root web scripts are in `package.json` and target `apps/web`.
 - GPUI desktop environment/config notes are in `apps/desktop/README.md`.
-- Android build notes are in `apps/android/CLAUDE.md`.
+- Android build notes are in `apps/android/README.md`.

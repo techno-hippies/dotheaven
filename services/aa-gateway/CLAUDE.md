@@ -1,45 +1,49 @@
-# AA Gateway (ERC-4337 Account Abstraction)
-- **Service**: `services/aa-gateway/` — Bun HTTP server that validates UserOps and sponsors gas via a VerifyingPaymaster
-- **Alto bundler**: `services/alto/` — Pimlico's ERC-4337 bundler (git submodule), submits UserOps to EntryPoint
-- **Deployed on EigenCloud TEE**: App ID `0xF2E275a9A27C1bc684f7d546100687601111Dec4`, IP `34.168.65.48`
-- **Current URL**: prefer HTTPS via domain configured in `DOMAIN` env (Cloudflare/custom DNS recommended)
-- **Raw HTTP URL**: `http://34.168.65.48:3337` (debug fallback only)
-- **Docker image**: `t3333333k/heaven-aa:latest` on Docker Hub
-- **Endpoints**:
-  - `GET /health` → `{"ok":true,"chainId":6343}`
-  - `POST /quotePaymaster` — validates unsigned UserOp, returns `paymasterAndData`
-  - `POST /sendUserOp` — re-validates signed UserOp, unpacks v0.7 packed fields, forwards to Alto bundler
-- **Two-step handshake**: Frontend builds UserOp → `/quotePaymaster` returns paymaster signature → PKP signs `userOpHash` → `/sendUserOp` forwards to bundler
-- **Target allowlist**: Only ScrobbleV4 (`scrobbleBatch`, `registerAndScrobbleBatch`) — enforced in `validation.ts`
-- **Gas caps**: `callGasLimit=5M`, `verificationGasLimit=3M`, `preVerificationGas=500K` (generous for MegaEVM)
-- **Local dev**: `bash services/aa-gateway/start.sh` (auto-loads `.env`, starts Alto + gateway)
-- **Docker build** (from repo root):
-  ```bash
-  docker build -f services/aa-gateway/Dockerfile \
-    --build-context alto=services/alto \
-    --build-context gateway=services/aa-gateway \
-    -t heaven-aa .
-  ```
-- **Deploy to EigenCloud**: `docker tag heaven-aa t3333333k/heaven-aa:latest && docker push t3333333k/heaven-aa:latest`, then `ecloud compute app upgrade <app-id>` (interactive — requires TTY)
-- **EigenCloud quirks**:
-  - `ecloud` CLI has interactive prompts (inquirer.js) that can't be bypassed with flags — user must run deploy/upgrade manually
-  - Port exposure requires TLS via Caddy — EigenCloud firewalls all ports unless TLS is configured
-  - `ecloud compute app configure tls` generates Caddyfile + TLS env vars (local scaffolding only — doesn't affect deployed app)
-  - `app start` restarts with existing image; `app upgrade` pulls new image from registry
-  - nip.io wildcard DNS used for Let's Encrypt certs on raw IPs (e.g. `34-168-65-48.nip.io`)
-  - `DOMAIN` in `.env` MUST match the assigned IP — if EigenCloud assigns a new IP on redeploy, update `DOMAIN` before upgrading
-  - For production certs: set `ACME_STAGING=false`; use `ACME_FORCE_ISSUE=true` once, then turn it back off
-  - Container startup must be fast — Caddy health checks failing at startup can cause the TEE launcher to terminate the container. Gateway starts immediately alongside Alto (not sequentially) so `/health` responds right away.
-  - Caddyfile should avoid aggressive upstream health-check loops during startup — they can cause race conditions
-  - Staging certs (`ACME_STAGING=true`) work for TLS but aren't trusted by browsers; switch to `false` for production
-  - **Env file on upgrade**: Always select "Enter path to existing env file" when upgrading to ensure DOMAIN/APP_PORT/TLS vars are injected into KMS. Without this, TLS won't be provisioned even if the Caddyfile is in the image.
-- **Key files**:
-  - `services/aa-gateway/src/index.ts` — HTTP server (Bun.serve)
-  - `services/aa-gateway/src/config.ts` — env var config + target allowlist
-  - `services/aa-gateway/src/validation.ts` — UserOp policy checks (factory, calldata, gas caps, implementation slot)
-  - `services/aa-gateway/src/paymaster.ts` — VerifyingPaymaster hash + signature
-  - `services/aa-gateway/start.sh` — startup script (auto-detects Docker vs local dev)
-  - `services/aa-gateway/Dockerfile` — multi-stage build (Foundry → Alto TS → Runtime)
-  - `services/aa-gateway/Caddyfile` — Caddy reverse proxy config for EigenCloud TLS
-  - `services/aa-gateway/.env` — config (keys, contracts, TLS vars)
-  - `apps/web/src/lib/aa-client.ts` — frontend AA client (builds UserOps, calls gateway)
+# AA Gateway
+
+Operational notes for `services/aa-gateway`.
+
+## Purpose
+- Accept ERC-4337 UserOperations for Heaven flows.
+- Quote paymaster data (`/quotePaymaster`).
+- Forward signed UserOperations to Alto (`/sendUserOp`).
+
+## Scope
+- This service is policy enforcement + paymaster signing.
+- Alto (`services/alto`) is the bundler execution layer.
+
+## Key Endpoints
+- `GET /health`
+- `POST /quotePaymaster`
+- `POST /sendUserOp`
+
+## Local Development
+From `services/aa-gateway`:
+
+```bash
+bun install
+bun test
+bun run dev
+```
+
+Or use the helper launcher from repo root:
+
+```bash
+bash services/aa-gateway/start.sh
+```
+
+## Runtime Inputs
+- Read env config from `services/aa-gateway/src/config.ts`.
+- Keep target allowlist and gas-policy limits aligned with deployed contracts.
+- Do not widen allowlists without explicit review.
+
+## Deployment Notes
+- Docker image is built from `services/aa-gateway/Dockerfile`.
+- TLS/reverse proxy behavior is defined in `services/aa-gateway/Caddyfile`.
+- After infra redeploys, verify `DOMAIN` and endpoint reachability before enabling clients.
+
+## Files You Will Touch Most
+- `services/aa-gateway/src/index.ts`
+- `services/aa-gateway/src/config.ts`
+- `services/aa-gateway/src/validation.ts`
+- `services/aa-gateway/src/paymaster.ts`
+- `services/aa-gateway/start.sh`
