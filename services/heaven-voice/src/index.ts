@@ -244,6 +244,8 @@ app.post("/agent/start", async (c) => {
   const wallet = walletOrRes;
 
   const body = await c.req.json().catch(() => ({}));
+  const activityWallet = (typeof body.activityWallet === "string" && /^0x[0-9a-fA-F]{40}$/.test(body.activityWallet))
+    ? body.activityWallet : wallet;
 
   const sessionId = crypto.randomUUID();
   const channel = `neo_${sessionId.replace(/-/g, "").slice(0, 20)}`;
@@ -269,7 +271,7 @@ app.post("/agent/start", async (c) => {
 
     const [memory, activity] = await Promise.all([
       getUserMemory(c.env, wallet).catch((e) => { console.warn("[agent/start] Honcho memory failed:", e); return null; }),
-      getActivityContext(c.env, wallet).catch((e) => { console.warn("[agent/start] Activity fetch failed:", e); return null; }),
+      getActivityContext(c.env, activityWallet).catch((e) => { console.warn("[agent/start] Activity fetch failed:", e); return null; }),
     ]);
 
     if (memory) {
@@ -346,6 +348,7 @@ Your role:
 - Keep responses concise (2-4 sentences) unless they ask for more detail
 - If the user's Recent Activity is provided, reference it naturally when relevant (e.g. noticing sleep patterns, commenting on their music taste, acknowledging their runs or meals)
 - Use activity data as conversation starters or to give personalized advice, but don't dump raw stats unless asked
+- When music context is present, prioritize one concrete recent listen and (if useful) the user's top artist; keep it natural, not stat-heavy
 
 Remember: Dating is about being authentic. Help users present their best genuine self.`;
 

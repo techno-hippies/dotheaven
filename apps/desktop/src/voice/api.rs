@@ -8,12 +8,11 @@ use super::auth::WorkerAuthContext;
 
 pub use agent_chat::{send_chat_message, start_agent, stop_agent};
 pub use duet_rooms::{
-    create_duet_room_from_disk, end_duet_room_from_disk, get_duet_public_info,
+    create_duet_room_from_disk, discover_duet_rooms, end_duet_room_from_disk, get_duet_public_info,
     start_duet_room_from_disk, start_duet_segment_from_disk,
 };
 pub use models::{
-    ChatHistoryItem, CreateDuetRoomRequest, DuetRoomSegment, SongSearchItem, SongSearchResponse,
-    StartDuetSegmentResponse, VoiceEndpoints,
+    ChatHistoryItem, CreateDuetRoomRequest, DiscoverDuetRoomItem, SongSearchItem, VoiceEndpoints,
 };
 pub use songs::search_songs;
 

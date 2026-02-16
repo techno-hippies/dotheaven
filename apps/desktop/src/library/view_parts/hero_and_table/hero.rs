@@ -54,11 +54,7 @@ pub(in crate::library) fn render_hero(
                                 .child("Library"),
                         )
                         .when_some(subtitle, |el, sub| {
-                            el.child(
-                                div()
-                                    .text_color(TEXT_MUTED())
-                                    .child(sub),
-                            )
+                            el.child(div().text_color(TEXT_MUTED()).child(sub))
                         }),
                 )
                 .child(render_hero_overflow_menu(entity)),

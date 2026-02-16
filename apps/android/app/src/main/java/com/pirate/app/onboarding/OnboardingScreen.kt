@@ -44,6 +44,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import kotlin.math.roundToInt
 
 private const val TAG = "OnboardingScreen"
 
@@ -117,6 +118,7 @@ fun OnboardingScreen(
   var claimedName by remember { mutableStateOf("") }
   var age by remember { mutableIntStateOf(0) }
   var gender by remember { mutableStateOf("") }
+  var selectedLocation by remember { mutableStateOf<com.pirate.app.onboarding.steps.LocationResult?>(null) }
   var location by remember { mutableStateOf("") }
   var languageEntries by remember { mutableStateOf<List<com.pirate.app.onboarding.steps.LanguageEntry>>(emptyList()) }
 
@@ -183,6 +185,7 @@ fun OnboardingScreen(
               try {
                 val result = withContext(Dispatchers.IO) {
                   OnboardingLitActions.registerHeavenName(
+                    appContext = context,
                     label = label,
                     recipientAddress = pkpEthAddress,
                     pkpPublicKey = pkpPublicKey,
@@ -223,8 +226,9 @@ fun OnboardingScreen(
 
         OnboardingStep.LOCATION -> LocationStep(
           submitting = submitting,
-          onContinue = { loc ->
-            location = loc
+          onContinue = { result ->
+            selectedLocation = result
+            location = result.label
             step = OnboardingStep.LANGUAGES
           },
         )
@@ -255,13 +259,17 @@ fun OnboardingScreen(
                 profileInput.put("languagesPacked", languagesPacked)
 
                 // Location city ID = keccak256(location string)
-                if (location.isNotBlank()) {
-                  val cityHash = OnboardingRpcHelpers.keccak256(location.toByteArray(Charsets.UTF_8))
+                val locationResult = selectedLocation
+                if (locationResult != null) {
+                  val cityHash = OnboardingRpcHelpers.keccak256(locationResult.label.toByteArray(Charsets.UTF_8))
                   profileInput.put("locationCityId", "0x" + OnboardingRpcHelpers.bytesToHex(cityHash))
+                  profileInput.put("locationLatE6", (locationResult.lat * 1_000_000.0).roundToInt())
+                  profileInput.put("locationLngE6", (locationResult.lng * 1_000_000.0).roundToInt())
                 }
 
                 val result = withContext(Dispatchers.IO) {
                   OnboardingLitActions.setProfile(
+                    appContext = context,
                     userAddress = pkpEthAddress,
                     profileInput = profileInput,
                     pkpPublicKey = pkpPublicKey,
@@ -280,6 +288,7 @@ fun OnboardingScreen(
                     val node = OnboardingRpcHelpers.computeNode(claimedName)
                     withContext(Dispatchers.IO) {
                       OnboardingLitActions.setTextRecord(
+                        appContext = context,
                         node = node,
                         key = "heaven.location",
                         value = location,
@@ -321,6 +330,7 @@ fun OnboardingScreen(
 
                   withContext(Dispatchers.IO) {
                     OnboardingLitActions.setTextRecords(
+                      appContext = context,
                       node = node,
                       keys = listOf("heaven.music.v1", "heaven.music.count"),
                       values = listOf(musicPayload.toString(), mbids.size.toString()),
@@ -353,6 +363,7 @@ fun OnboardingScreen(
                 // Upload avatar
                 val uploadResult = withContext(Dispatchers.IO) {
                   OnboardingLitActions.uploadAvatar(
+                    appContext = context,
                     imageBase64 = base64,
                     contentType = contentType,
                     pkpPublicKey = pkpPublicKey,
@@ -371,6 +382,7 @@ fun OnboardingScreen(
                   val avatarURI = "ipfs://${uploadResult.avatarCID}"
                   withContext(Dispatchers.IO) {
                     OnboardingLitActions.setTextRecord(
+                      appContext = context,
                       node = node,
                       key = "avatar",
                       value = avatarURI,

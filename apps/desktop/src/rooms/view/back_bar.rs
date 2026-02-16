@@ -54,11 +54,13 @@ pub(super) fn render_rooms_back_bar(
                 .text_color(theme.foreground)
                 .child(title.to_string()),
         )
-        .child(
-            div()
-                .text_color(theme.muted_foreground)
-                .child(subtitle.to_string()),
-        );
+        .when(!subtitle.trim().is_empty(), |el| {
+            el.child(
+                div()
+                    .text_color(theme.muted_foreground)
+                    .child(subtitle.to_string()),
+            )
+        });
     left_cluster = left_cluster.child(title_cluster);
 
     let mut top_row = div()

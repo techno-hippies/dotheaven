@@ -1,5 +1,7 @@
 package com.pirate.app.music
 
+import android.content.Context
+import com.pirate.app.lit.LitAuthContextManager
 import com.pirate.app.lit.LitRust
 import org.json.JSONArray
 import org.json.JSONObject
@@ -23,7 +25,8 @@ object ContentAccessLitAction {
     return if (litNetwork.trim().lowercase() == "naga-test") CONTENT_ACCESS_V1_CID_NAGA_TEST else CONTENT_ACCESS_V1_CID_NAGA_DEV
   }
 
-  fun grantAccess(
+  suspend fun grantAccess(
+    appContext: Context,
     litNetwork: String,
     litRpcUrl: String,
     userPkpPublicKey: String,
@@ -31,6 +34,7 @@ object ContentAccessLitAction {
     grantee: String,
   ): ContentAccessResult {
     return manageAccess(
+      appContext = appContext,
       litNetwork = litNetwork,
       litRpcUrl = litRpcUrl,
       userPkpPublicKey = userPkpPublicKey,
@@ -41,7 +45,8 @@ object ContentAccessLitAction {
     )
   }
 
-  fun manageAccess(
+  suspend fun manageAccess(
+    appContext: Context,
     litNetwork: String,
     litRpcUrl: String,
     userPkpPublicKey: String,
@@ -62,14 +67,16 @@ object ContentAccessLitAction {
     if (!contentIds.isNullOrEmpty()) jsParams.put("contentIds", JSONArray(contentIds.map { it.trim().lowercase() }))
 
     val raw =
-      LitRust.executeJsRaw(
-        network = litNetwork,
-        rpcUrl = litRpcUrl,
-        code = "",
-        ipfsId = contentAccessCidForNetwork(litNetwork),
-        jsParamsJson = jsParams.toString(),
-        useSingleNode = false,
-      )
+      LitAuthContextManager.runWithSavedStateRecovery(appContext) {
+        LitRust.executeJsRaw(
+          network = litNetwork,
+          rpcUrl = litRpcUrl,
+          code = "",
+          ipfsId = contentAccessCidForNetwork(litNetwork),
+          jsParamsJson = jsParams.toString(),
+          useSingleNode = false,
+        )
+      }
     val exec = LitRust.unwrapEnvelope(raw)
 
     val responseAny = exec.opt("response")
@@ -93,4 +100,3 @@ object ContentAccessLitAction {
     )
   }
 }
-

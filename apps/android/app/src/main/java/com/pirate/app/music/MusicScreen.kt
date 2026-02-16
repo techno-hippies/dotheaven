@@ -1,6 +1,7 @@
 package com.pirate.app.music
 
 import android.Manifest
+import android.content.Context
 import android.database.ContentObserver
 import android.net.Uri
 import android.os.Build
@@ -94,7 +95,8 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 
-private enum class MusicView { Home, Library, Shared, SharedPlaylistDetail, Playlists, Search }
+private enum class MusicView { Home, Library, Shared, SharedPlaylistDetail, Playlists, PlaylistDetail, Search }
+
 
 private data class AlbumCardModel(
   val title: String,
@@ -124,6 +126,8 @@ private val TOP_ARTISTS = listOf(
 private const val IPFS_GATEWAY = "https://heaven.myfilebase.com/ipfs/"
 private const val TAG_SHARED = "MusicShared"
 private const val SHARED_REFRESH_TTL_MS = 120_000L
+private const val SHARED_SEEN_PREFS = "pirate_music_shared_seen"
+private const val SHARED_SEEN_KEY_PREFIX = "seen_v1_"
 
 private data class CachedSharedAudio(
   val file: File,
@@ -131,6 +135,56 @@ private data class CachedSharedAudio(
   val filename: String,
   val mimeType: String?,
 )
+
+private fun sharedItemIdForPlaylist(share: PlaylistShareEntry): String {
+  return "pl:${share.id.trim().lowercase()}"
+}
+
+private fun sharedItemIdForTrack(track: SharedCloudTrack): String {
+  val stable = track.contentId.ifBlank { track.trackId }.trim().lowercase()
+  return "tr:$stable"
+}
+
+private fun computeSharedItemIds(
+  playlists: List<PlaylistShareEntry>,
+  tracks: List<SharedCloudTrack>,
+): Set<String> {
+  val out = LinkedHashSet<String>(playlists.size + tracks.size)
+  for (p in playlists) out.add(sharedItemIdForPlaylist(p))
+  for (t in tracks) out.add(sharedItemIdForTrack(t))
+  return out
+}
+
+private fun sharedSeenStorageKey(ownerEthAddress: String?): String? {
+  val owner = ownerEthAddress?.trim()?.lowercase().orEmpty()
+  if (owner.isBlank()) return null
+  return SHARED_SEEN_KEY_PREFIX + owner
+}
+
+private fun loadSeenSharedItemIds(context: Context, ownerEthAddress: String?): Set<String> {
+  val key = sharedSeenStorageKey(ownerEthAddress) ?: return emptySet()
+  val prefs = context.getSharedPreferences(SHARED_SEEN_PREFS, Context.MODE_PRIVATE)
+  val raw = prefs.getString(key, "").orEmpty()
+  if (raw.isBlank()) return emptySet()
+  return raw
+    .split('|')
+    .map { it.trim() }
+    .filter { it.isNotBlank() }
+    .toSet()
+}
+
+private fun saveSeenSharedItemIds(
+  context: Context,
+  ownerEthAddress: String?,
+  ids: Set<String>,
+) {
+  val key = sharedSeenStorageKey(ownerEthAddress) ?: return
+  val payload = ids.joinToString("|")
+  context.getSharedPreferences(SHARED_SEEN_PREFS, Context.MODE_PRIVATE)
+    .edit()
+    .putString(key, payload)
+    .apply()
+}
 
 @Composable
 fun MusicScreen(
@@ -172,6 +226,11 @@ fun MusicScreen(
   var playlistsLoading by remember { mutableStateOf(false) }
   var localPlaylists by remember { mutableStateOf<List<LocalPlaylist>>(emptyList()) }
   var onChainPlaylists by remember { mutableStateOf<List<OnChainPlaylist>>(emptyList()) }
+  var selectedPlaylist by remember { mutableStateOf<PlaylistDisplayItem?>(null) }
+  var selectedPlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
+  var playlistDetailLoading by remember { mutableStateOf(false) }
+  var playlistDetailError by remember { mutableStateOf<String?>(null) }
+  var playlistDetailTracks by remember { mutableStateOf<List<MusicTrack>>(emptyList()) }
 
   var sharedLoading by remember { mutableStateOf(false) }
   var sharedError by remember { mutableStateOf<String?>(null) }
@@ -201,7 +260,10 @@ fun MusicScreen(
 
   var sharedLastFetchAtMs by remember { mutableStateOf(SharedWithYouCache.lastFetchAtMs) }
   val sharedOwnerLabels = remember { mutableStateMapOf<String, String>() }
+  var sharedSeenItemIds by remember { mutableStateOf<Set<String>>(emptySet()) }
   var downloadedTracksByContentId by remember { mutableStateOf<Map<String, DownloadedTrackEntry>>(emptyMap()) }
+  val sharedItemIds = remember(sharedPlaylists, sharedTracks) { computeSharedItemIds(sharedPlaylists, sharedTracks) }
+  val sharedUnreadCount = remember(sharedItemIds, sharedSeenItemIds) { sharedItemIds.count { !sharedSeenItemIds.contains(it) } }
 
   fun shortAddr(addr: String): String {
     val a = addr.trim()
@@ -441,6 +503,76 @@ fun MusicScreen(
     playlistsLoading = false
   }
 
+  suspend fun loadPlaylistDetail(playlist: PlaylistDisplayItem) {
+    playlistDetailLoading = true
+    playlistDetailError = null
+    try {
+      if (playlist.isLocal) {
+        val local = localPlaylists.firstOrNull { it.id == playlist.id }
+        if (local == null) {
+          playlistDetailTracks = emptyList()
+          playlistDetailError = "Playlist not found"
+          return
+        }
+        val fallbackArt = playlist.coverUri
+        playlistDetailTracks =
+          local.tracks.mapIndexed { idx, t ->
+            val stable = t.uri ?: "${t.artist}-${t.title}-${idx}"
+            MusicTrack(
+              id = "localpl:${local.id}:$stable",
+              title = t.title.ifBlank { "Track ${idx + 1}" },
+              artist = t.artist.ifBlank { "Unknown Artist" },
+              album = t.album.orEmpty(),
+              durationSec = t.durationSec ?: 0,
+              uri = t.uri.orEmpty(),
+              filename = t.title.ifBlank { "track-${idx + 1}" },
+              artworkUri = t.artworkUri ?: fallbackArt,
+              artworkFallbackUri = t.artworkFallbackUri,
+            )
+          }
+      } else {
+        val trackIds = OnChainPlaylistsApi.fetchPlaylistTrackIds(playlist.id)
+        val byContentId =
+          tracks
+            .mapNotNull { t ->
+              val key = t.contentId?.trim()?.lowercase().orEmpty()
+              if (key.isBlank()) null else key to t
+            }
+            .toMap()
+        val byTrackId = tracks.associateBy { it.id.trim().lowercase() }
+        val fallbackArt = playlist.coverUri
+        playlistDetailTracks =
+          trackIds.mapIndexed { idx, tid ->
+            val key = tid.trim().lowercase()
+            val match = byContentId[key] ?: byTrackId[key]
+            if (match != null) {
+              match.copy(
+                id = "onchain:${playlist.id}:$idx:${match.id}",
+                artworkUri = match.artworkUri ?: fallbackArt,
+              )
+            } else {
+              MusicTrack(
+                id = "onchain:${playlist.id}:$idx",
+                title = "Track ${idx + 1}",
+                artist = key.take(10).ifBlank { "Unknown Artist" },
+                album = playlist.name,
+                durationSec = 0,
+                uri = "",
+                filename = key.ifBlank { "track-${idx + 1}" },
+                artworkUri = fallbackArt,
+                contentId = key.ifBlank { null },
+              )
+            }
+          }
+      }
+    } catch (err: Throwable) {
+      playlistDetailTracks = emptyList()
+      playlistDetailError = err.message ?: "Failed to load playlist"
+    } finally {
+      playlistDetailLoading = false
+    }
+  }
+
   suspend fun loadShared(force: Boolean) {
     sharedError = null
     if (!isAuthenticated || ownerEthAddress.isNullOrBlank()) {
@@ -636,7 +768,14 @@ fun MusicScreen(
   }
 
   LaunchedEffect(ownerEthAddress, isAuthenticated) {
+    sharedSeenItemIds =
+      if (isAuthenticated && !ownerEthAddress.isNullOrBlank()) {
+        withContext(Dispatchers.IO) { loadSeenSharedItemIds(context, ownerEthAddress) }
+      } else {
+        emptySet()
+      }
     loadPlaylists()
+    loadShared(force = false)
   }
 
   LaunchedEffect(view, ownerEthAddress, isAuthenticated) {
@@ -649,6 +788,15 @@ fun MusicScreen(
     val share = sharedSelectedPlaylist ?: return@LaunchedEffect
 
     loadSharedPlaylistTracks(share, force = false)
+  }
+
+  LaunchedEffect(view, sharedItemIds, ownerEthAddress, isAuthenticated) {
+    if (view != MusicView.Shared || !isAuthenticated || ownerEthAddress.isNullOrBlank()) return@LaunchedEffect
+    if (sharedItemIds.isEmpty()) return@LaunchedEffect
+    val merged = sharedSeenItemIds + sharedItemIds
+    if (merged.size == sharedSeenItemIds.size) return@LaunchedEffect
+    sharedSeenItemIds = merged
+    withContext(Dispatchers.IO) { saveSeenSharedItemIds(context, ownerEthAddress, merged) }
   }
 
   LaunchedEffect(sharedPlaylists) {
@@ -715,13 +863,20 @@ fun MusicScreen(
           },
         )
         MusicHomeView(
-          sharedCount = sharedPlaylists.size + sharedTracks.size,
+          sharedPlaylistCount = sharedPlaylists.size,
+          sharedTrackCount = sharedTracks.size,
+          sharedUnreadCount = sharedUnreadCount,
           playlistCount = displayPlaylists.size,
           playlists = displayPlaylists,
           onNavigateLibrary = { view = MusicView.Library },
           onNavigateShared = { view = MusicView.Shared },
           onNavigatePlaylists = { view = MusicView.Playlists },
-          onOpenPlaylist = { onShowMessage("Open playlist coming soon") },
+          onOpenPlaylist = { pl ->
+            selectedPlaylist = pl
+            selectedPlaylistId = pl.id
+            view = MusicView.PlaylistDetail
+            scope.launch { loadPlaylistDetail(pl) }
+          },
         )
       }
 
@@ -846,7 +1001,6 @@ fun MusicScreen(
           onDownloadTrack = { t ->
             scope.launch { downloadSharedTrackToDevice(t, notify = true) }
           },
-          onShowMessage = onShowMessage,
         )
       }
 
@@ -867,7 +1021,55 @@ fun MusicScreen(
         PlaylistsView(
           loading = playlistsLoading,
           playlists = displayPlaylists,
-          onOpenPlaylist = { onShowMessage("Open playlist coming soon") },
+          onOpenPlaylist = { pl ->
+            selectedPlaylist = pl
+            selectedPlaylistId = pl.id
+            view = MusicView.PlaylistDetail
+            scope.launch { loadPlaylistDetail(pl) }
+          },
+        )
+      }
+
+      MusicView.PlaylistDetail -> {
+        // Recover selectedPlaylist from saveable ID after state loss (e.g. returning from Player)
+        val pl = selectedPlaylist ?: displayPlaylists.find { it.id == selectedPlaylistId }?.also { selectedPlaylist = it }
+        LaunchedEffect(pl) {
+          if (pl != null && playlistDetailTracks.isEmpty() && !playlistDetailLoading) {
+            loadPlaylistDetail(pl)
+          }
+        }
+        PirateMobileHeader(
+          title = pl?.name?.ifBlank { "Playlist" } ?: "Playlist",
+          onBackPress = { view = MusicView.Playlists },
+        )
+        PlaylistDetailView(
+          playlist = pl,
+          loading = playlistDetailLoading,
+          error = playlistDetailError,
+          tracks = playlistDetailTracks,
+          currentTrackId = currentTrack?.id,
+          isPlaying = isPlaying,
+          onPlayTrack = { t ->
+            if (t.uri.isBlank()) {
+              onShowMessage("This playlist track isn't available for playback on this device yet")
+              return@PlaylistDetailView
+            }
+            val playable = playlistDetailTracks.filter { it.uri.isNotBlank() }
+            if (currentTrack?.id == t.id) {
+              player.togglePlayPause()
+            } else {
+              player.playTrack(t, playable)
+            }
+            onOpenPlayer()
+          },
+          onTrackMenu = { t ->
+            if (t.uri.isBlank()) {
+              onShowMessage("Track actions unavailable for this item")
+              return@PlaylistDetailView
+            }
+            selectedTrack = t
+            trackMenuOpen = true
+          },
         )
       }
 
@@ -1138,7 +1340,9 @@ fun MusicScreen(
 
 @Composable
 private fun MusicHomeView(
-  sharedCount: Int,
+  sharedPlaylistCount: Int,
+  sharedTrackCount: Int,
+  sharedUnreadCount: Int,
   playlistCount: Int,
   playlists: List<PlaylistDisplayItem>,
   onNavigateLibrary: () -> Unit,
@@ -1146,6 +1350,17 @@ private fun MusicHomeView(
   onNavigatePlaylists: () -> Unit,
   onOpenPlaylist: (PlaylistDisplayItem) -> Unit,
 ) {
+  val sharedCount = sharedPlaylistCount + sharedTrackCount
+  val sharedSubtitle =
+    when {
+      sharedPlaylistCount > 0 && sharedTrackCount > 0 ->
+        "$sharedPlaylistCount playlist${if (sharedPlaylistCount == 1) "" else "s"} · $sharedTrackCount song${if (sharedTrackCount == 1) "" else "s"}"
+      sharedPlaylistCount > 0 ->
+        "$sharedPlaylistCount playlist${if (sharedPlaylistCount == 1) "" else "s"}"
+      else ->
+        "$sharedTrackCount song${if (sharedTrackCount == 1) "" else "s"}"
+    }
+
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
     contentPadding = PaddingValues(bottom = 16.dp),
@@ -1157,7 +1372,7 @@ private fun MusicHomeView(
           iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
           iconBg = MaterialTheme.colorScheme.secondaryContainer,
           title = "Library",
-          subtitle = "Local + Cloud",
+          subtitle = "On device",
           badge = null,
           onClick = onNavigateLibrary,
         )
@@ -1166,8 +1381,8 @@ private fun MusicHomeView(
           iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
           iconBg = MaterialTheme.colorScheme.primaryContainer,
           title = "Shared With You",
-          subtitle = "$sharedCount song${if (sharedCount == 1) "" else "s"}",
-          badge = if (sharedCount > 0) "$sharedCount new" else null,
+          subtitle = sharedSubtitle,
+          badge = if (sharedUnreadCount > 0) "$sharedUnreadCount" else null,
           onClick = onNavigateShared,
         )
         EntryRow(
@@ -1654,7 +1869,6 @@ private fun SharedView(
   onOpenPlaylist: (PlaylistShareEntry) -> Unit,
   onPlayTrack: (SharedCloudTrack) -> Unit,
   onDownloadTrack: (SharedCloudTrack) -> Unit,
-  onShowMessage: (String) -> Unit,
 ) {
   if (!isAuthenticated) {
     EmptyState(title = "Sign in to view shared items", actionLabel = null, onAction = null)
@@ -1662,21 +1876,8 @@ private fun SharedView(
   }
 
   val total = sharedPlaylists.size + sharedTracks.size
-  val leftLabel =
-    when {
-      sharedPlaylists.isNotEmpty() && sharedTracks.isNotEmpty() -> "${sharedPlaylists.size} playlists · ${sharedTracks.size} songs"
-      sharedPlaylists.isNotEmpty() -> "${sharedPlaylists.size} playlists"
-      else -> "${sharedTracks.size} songs"
-    }
 
   Column(modifier = Modifier.fillMaxSize()) {
-    FilterSortBar(
-      left = leftLabel,
-      right = "Sort: Recent",
-      onLeft = { /* noop */ },
-      onRight = { onShowMessage("Sorting coming soon") },
-    )
-
     if (!error.isNullOrBlank()) {
       Text(
         text = error,
@@ -1848,7 +2049,7 @@ private fun SharedPlaylistDetailView(
   }
 
   fun coverUrl(coverCid: String?): String? {
-    return CoverRef.resolveCoverUrl(coverCid, width = 192, height = 192, format = "webp", quality = 80)
+    return CoverRef.resolveCoverUrl(coverCid, width = 140, height = 140, format = "webp", quality = 80)
   }
 
   fun toRowTrack(t: SharedCloudTrack): MusicTrack {
@@ -1931,6 +2132,7 @@ private fun SharedPlaylistDetailView(
 
     if (tracks.isEmpty()) {
       if (loading) {
+        SharedPlaylistTracksSkeleton()
         return
       }
 
@@ -1954,6 +2156,52 @@ private fun SharedPlaylistDetailView(
           onPress = { onPlayTrack(t) },
           onMenuPress = { onDownloadTrack(t) },
         )
+      }
+    }
+  }
+}
+
+@Composable
+private fun SharedPlaylistTracksSkeleton() {
+  LazyColumn(
+    modifier = Modifier.fillMaxSize(),
+    contentPadding = PaddingValues(bottom = 12.dp),
+  ) {
+    items(6) {
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .height(72.dp)
+          .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        Surface(
+          modifier = Modifier.size(48.dp),
+          color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+          shape = MaterialTheme.shapes.medium,
+        ) {}
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Surface(
+            modifier = Modifier
+              .fillMaxWidth(0.7f)
+              .height(14.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+            shape = MaterialTheme.shapes.small,
+          ) {}
+          Surface(
+            modifier = Modifier
+              .fillMaxWidth(0.45f)
+              .height(12.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+            shape = MaterialTheme.shapes.small,
+          ) {}
+        }
+        Surface(
+          modifier = Modifier.size(24.dp),
+          color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+          shape = MaterialTheme.shapes.small,
+        ) {}
       }
     }
   }
@@ -1989,6 +2237,66 @@ private fun PlaylistsView(
   ) {
     items(playlists, key = { it.id }) { pl ->
       PlaylistRow(playlist = pl, onClick = { onOpenPlaylist(pl) })
+    }
+  }
+}
+
+@Composable
+private fun PlaylistDetailView(
+  playlist: PlaylistDisplayItem?,
+  loading: Boolean,
+  error: String?,
+  tracks: List<MusicTrack>,
+  currentTrackId: String?,
+  isPlaying: Boolean,
+  onPlayTrack: (MusicTrack) -> Unit,
+  onTrackMenu: (MusicTrack) -> Unit,
+) {
+  if (playlist == null) {
+    EmptyState(title = "Playlist not found", actionLabel = null, onAction = null)
+    return
+  }
+
+  Column(modifier = Modifier.fillMaxSize()) {
+    Text(
+      text = "${tracks.size} track${if (tracks.size == 1) "" else "s"}${if (!playlist.isLocal) " · on-chain" else ""}",
+      modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      style = MaterialTheme.typography.bodyMedium,
+    )
+
+    if (!error.isNullOrBlank()) {
+      Text(
+        text = error,
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+        color = MaterialTheme.colorScheme.error,
+        style = MaterialTheme.typography.bodyMedium,
+      )
+    }
+
+    if (tracks.isEmpty()) {
+      if (loading) {
+        SharedPlaylistTracksSkeleton()
+        return
+      }
+      EmptyState(title = "No tracks in this playlist", actionLabel = null, onAction = null)
+      return
+    }
+
+    LazyColumn(
+      modifier = Modifier.fillMaxSize(),
+      contentPadding = PaddingValues(bottom = 12.dp),
+    ) {
+      items(tracks, key = { it.id }) { t ->
+        val id = t.id
+        TrackItemRow(
+          track = t,
+          isActive = currentTrackId == id,
+          isPlaying = currentTrackId == id && isPlaying,
+          onPress = { onPlayTrack(t) },
+          onMenuPress = { onTrackMenu(t) },
+        )
+      }
     }
   }
 }

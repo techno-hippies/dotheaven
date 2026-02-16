@@ -1,6 +1,8 @@
 package com.pirate.app.onboarding
 
+import android.content.Context
 import android.util.Log
+import com.pirate.app.lit.LitAuthContextManager
 import com.pirate.app.lit.LitRust
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -23,8 +25,8 @@ object OnboardingLitActions {
   private const val CLAIM_NAME_CID_NAGA_DEV = "QmQB5GsQVaNbD8QS8zcXkjBMAZUjpADfbcWVaPgL3PygSA"
   private const val CLAIM_NAME_CID_NAGA_TEST = "QmXqTv35a4fV4szqEDwA6wWH4bZHgceemRniLaYTrEcU6z"
 
-  private const val SET_PROFILE_CID_NAGA_DEV = "QmUJnDz9Q92bSLvNQMLyPDNSkw69MA3fpYsSCnAeMAJtuy"
-  private const val SET_PROFILE_CID_NAGA_TEST = "QmY7iUpUwy4xqCGuWGdTSiYo8yBc8zuBRkAA2QXzuZkcWg"
+  private const val SET_PROFILE_CID_NAGA_DEV = "QmeW8t23rUs2aahBGgMJprt4dsBG1oEozTRd4H7tyu4Vcc"
+  private const val SET_PROFILE_CID_NAGA_TEST = "QmeW8t23rUs2aahBGgMJprt4dsBG1oEozTRd4H7tyu4Vcc"
 
   private const val SET_RECORDS_CID_NAGA_DEV = "QmaXJcjGbPWQ1ypKnQB3vfnDwaQ1NLEGFmN3t7gQisw9g5"
   private const val SET_RECORDS_CID_NAGA_TEST = "QmYdvepsZD3XGis7n3qCKEGHU559qeszxqD8DGgbXTPN2n"
@@ -57,6 +59,7 @@ object OnboardingLitActions {
    * the sponsor PKP broadcasts registerFor() on RegistryV1.
    */
   suspend fun registerHeavenName(
+    appContext: Context,
     label: String,
     recipientAddress: String,
     pkpPublicKey: String,
@@ -71,7 +74,7 @@ object OnboardingLitActions {
 
     // Pre-sign EIP-191 message (must match the message the Lit Action will reconstruct)
     val message = "heaven:register:$label:$checksummedAddr:$timestamp:$nonce"
-    val signature = pkpSignMessage(message, pkpPublicKey, recipientAddress, litNetwork, litRpcUrl)
+    val signature = pkpSignMessage(appContext, message, pkpPublicKey, recipientAddress, litNetwork, litRpcUrl)
 
     val jsParams = JSONObject()
       .put("recipient", checksummedAddr)
@@ -85,12 +88,14 @@ object OnboardingLitActions {
     var lastError = "Claim action failed"
     for (attempt in 1..4) {
       try {
-        val raw = LitRust.executeJsRaw(
-          network = litNetwork,
-          rpcUrl = litRpcUrl,
-          ipfsId = claimNameCid(litNetwork),
-          jsParamsJson = jsParams.toString(),
-        )
+        val raw = LitAuthContextManager.runWithSavedStateRecovery(appContext) {
+          LitRust.executeJsRaw(
+            network = litNetwork,
+            rpcUrl = litRpcUrl,
+            ipfsId = claimNameCid(litNetwork),
+            jsParamsJson = jsParams.toString(),
+          )
+        }
         val exec = LitRust.unwrapEnvelope(raw)
         val response = parseResponse(exec)
         val ok = response.optBoolean("success", false)
@@ -135,6 +140,7 @@ object OnboardingLitActions {
    * profileInput is a JSON object matching the Solidity struct fields.
    */
   suspend fun setProfile(
+    appContext: Context,
     userAddress: String,
     profileInput: JSONObject,
     pkpPublicKey: String,
@@ -150,12 +156,14 @@ object OnboardingLitActions {
       .put("nonce", nonce.toInt())
 
     try {
-      val raw = LitRust.executeJsRaw(
-        network = litNetwork,
-        rpcUrl = litRpcUrl,
-        ipfsId = setProfileCid(litNetwork),
-        jsParamsJson = jsParams.toString(),
-      )
+      val raw = LitAuthContextManager.runWithSavedStateRecovery(appContext) {
+        LitRust.executeJsRaw(
+          network = litNetwork,
+          rpcUrl = litRpcUrl,
+          ipfsId = setProfileCid(litNetwork),
+          jsParamsJson = jsParams.toString(),
+        )
+      }
       val exec = LitRust.unwrapEnvelope(raw)
       val response = parseResponse(exec)
       ProfileResult(
@@ -178,6 +186,7 @@ object OnboardingLitActions {
 
   /** Set a single text record on RecordsV1 via Lit Action. */
   suspend fun setTextRecord(
+    appContext: Context,
     node: String,
     key: String,
     value: String,
@@ -195,12 +204,14 @@ object OnboardingLitActions {
       .put("value", value)
 
     try {
-      val raw = LitRust.executeJsRaw(
-        network = litNetwork,
-        rpcUrl = litRpcUrl,
-        ipfsId = setRecordsCid(litNetwork),
-        jsParamsJson = jsParams.toString(),
-      )
+      val raw = LitAuthContextManager.runWithSavedStateRecovery(appContext) {
+        LitRust.executeJsRaw(
+          network = litNetwork,
+          rpcUrl = litRpcUrl,
+          ipfsId = setRecordsCid(litNetwork),
+          jsParamsJson = jsParams.toString(),
+        )
+      }
       val exec = LitRust.unwrapEnvelope(raw)
       val response = parseResponse(exec)
       RecordResult(
@@ -215,6 +226,7 @@ object OnboardingLitActions {
 
   /** Set multiple text records on RecordsV1 via Lit Action (batch). */
   suspend fun setTextRecords(
+    appContext: Context,
     node: String,
     keys: List<String>,
     values: List<String>,
@@ -232,12 +244,14 @@ object OnboardingLitActions {
       .put("values", JSONArray(values))
 
     try {
-      val raw = LitRust.executeJsRaw(
-        network = litNetwork,
-        rpcUrl = litRpcUrl,
-        ipfsId = setRecordsCid(litNetwork),
-        jsParamsJson = jsParams.toString(),
-      )
+      val raw = LitAuthContextManager.runWithSavedStateRecovery(appContext) {
+        LitRust.executeJsRaw(
+          network = litNetwork,
+          rpcUrl = litRpcUrl,
+          ipfsId = setRecordsCid(litNetwork),
+          jsParamsJson = jsParams.toString(),
+        )
+      }
       val exec = LitRust.unwrapEnvelope(raw)
       val response = parseResponse(exec)
       RecordResult(
@@ -305,6 +319,7 @@ object OnboardingLitActions {
    * imageBase64 should be a base64-encoded JPEG (pre-resized to ≤512px).
    */
   suspend fun uploadAvatar(
+    appContext: Context,
     imageBase64: String,
     contentType: String,
     pkpPublicKey: String,
@@ -330,12 +345,14 @@ object OnboardingLitActions {
     }
 
     try {
-      val raw = LitRust.executeJsRaw(
-        network = litNetwork,
-        rpcUrl = litRpcUrl,
-        ipfsId = avatarUploadCid(litNetwork),
-        jsParamsJson = jsParams.toString(),
-      )
+      val raw = LitAuthContextManager.runWithSavedStateRecovery(appContext) {
+        LitRust.executeJsRaw(
+          network = litNetwork,
+          rpcUrl = litRpcUrl,
+          ipfsId = avatarUploadCid(litNetwork),
+          jsParamsJson = jsParams.toString(),
+        )
+      }
       val exec = LitRust.unwrapEnvelope(raw)
       val response = parseResponse(exec)
       AvatarResult(
@@ -354,7 +371,8 @@ object OnboardingLitActions {
    * Sign a message with the user's PKP via inline Lit Action (EIP-191 personal sign).
    * Returns 0x-prefixed 65-byte signature hex.
    */
-  private fun pkpSignMessage(
+  private suspend fun pkpSignMessage(
+    appContext: Context,
     message: String,
     pkpPublicKey: String,
     expectedAddress: String,
@@ -382,12 +400,14 @@ object OnboardingLitActions {
       .put("toSign", toSignArray)
       .put("publicKey", pkpPublicKey)
 
-    val raw = LitRust.executeJsRaw(
-      network = litNetwork,
-      rpcUrl = litRpcUrl,
-      code = litActionCode,
-      jsParamsJson = jsParams.toString(),
-    )
+    val raw = LitAuthContextManager.runWithSavedStateRecovery(appContext) {
+      LitRust.executeJsRaw(
+        network = litNetwork,
+        rpcUrl = litRpcUrl,
+        code = litActionCode,
+        jsParamsJson = jsParams.toString(),
+      )
+    }
     val env = LitRust.unwrapEnvelope(raw)
     val sig = env.optJSONObject("signatures")?.optJSONObject("sig")
       ?: throw IllegalStateException("No signature returned from PKP")

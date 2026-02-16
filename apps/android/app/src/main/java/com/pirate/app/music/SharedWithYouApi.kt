@@ -9,6 +9,16 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import org.web3j.abi.FunctionEncoder
+import org.web3j.abi.FunctionReturnDecoder
+import org.web3j.abi.TypeReference
+import org.web3j.abi.datatypes.Bool
+import org.web3j.abi.datatypes.Function
+import org.web3j.abi.datatypes.Utf8String
+import org.web3j.abi.datatypes.generated.Bytes32
+import org.web3j.abi.datatypes.generated.Uint32
+import org.web3j.abi.datatypes.generated.Uint64
+import org.web3j.abi.datatypes.generated.Uint8
 
 /**
  * Shared-with-you data layer (Goldsky subgraphs).
@@ -23,6 +33,8 @@ import org.json.JSONObject
  */
 object SharedWithYouApi {
   private const val TAG = "SharedWithYouApi"
+  private const val MEGAETH_RPC = "https://carrot.megaeth.com/rpc"
+  private const val SCROBBLE_V4 = "0xBcD4EbBb964182ffC5EA03FF70761770a326Ccf1"
   private const val SUBGRAPH_ACTIVITY =
     "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/14.0.0/gn"
 
@@ -207,28 +219,47 @@ object SharedWithYouApi {
     val orderedTrackIds = fetchPlaylistTrackIdsAtCheckpoint(playlistId, tracksHash, share.playlistVersion)
     if (orderedTrackIds.isEmpty()) return@withContext emptyList()
 
-    val trackMeta = fetchTrackMeta(orderedTrackIds)
     // Resolve only content that this grantee can actually decrypt.
-    val contentByMetaHash = buildGrantedContentByMetaHash(ownerAddress = share.owner, granteeAddress = share.grantee, minUpdatedAtSec = null)
+    val granted = buildGrantedContentIndexes(ownerAddress = share.owner, granteeAddress = share.grantee, minUpdatedAtSec = null)
+    val aliasByRaw = resolveTrackIdAliasesFromContentIds(orderedTrackIds)
+    val resolvedTrackIds =
+      orderedTrackIds.map { raw ->
+        val key = raw.trim().lowercase()
+        aliasByRaw[key] ?: granted.byContentId[key]?.trackId ?: key
+      }
+    val trackMeta = fetchTrackMeta(resolvedTrackIds.distinct())
 
     val out = ArrayList<SharedCloudTrack>(orderedTrackIds.size)
     var resolvedCount = 0
-    for (trackId in orderedTrackIds) {
-      val meta = trackMeta[trackId]
+    for ((idx, rawTrackId) in orderedTrackIds.withIndex()) {
+      val resolvedTrackId = resolvedTrackIds.getOrNull(idx) ?: rawTrackId
+      val meta = trackMeta[resolvedTrackId] ?: trackMeta[rawTrackId]
       val mh = meta?.metaHash?.lowercase()
-      val content = if (!mh.isNullOrBlank()) contentByMetaHash[mh] else null
+      val content =
+        when {
+          !mh.isNullOrBlank() -> {
+            granted.byMetaHash[mh]
+              ?: granted.byTrackId[resolvedTrackId]
+              ?: granted.byTrackId[rawTrackId]
+              ?: granted.byContentId[rawTrackId]
+          }
+          else ->
+            granted.byTrackId[resolvedTrackId]
+              ?: granted.byTrackId[rawTrackId]
+              ?: granted.byContentId[rawTrackId]
+        }
       if (content != null) resolvedCount += 1
 
       out.add(
         SharedCloudTrack(
           contentId = content?.contentId.orEmpty(),
-          trackId = trackId,
+          trackId = resolvedTrackId,
           owner = share.owner.trim().lowercase(),
           pieceCid = content?.pieceCid.orEmpty(),
           datasetOwner = content?.datasetOwner.orEmpty(),
           algo = content?.algo ?: ContentCryptoConfig.ALGO_AES_GCM_256,
           updatedAtSec = share.updatedAtSec,
-          title = meta?.title ?: trackId.take(14),
+          title = meta?.title ?: "Unknown Track",
           artist = meta?.artist ?: "Unknown Artist",
           album = meta?.album.orEmpty(),
           coverCid = meta?.coverCid,
@@ -239,7 +270,7 @@ object SharedWithYouApi {
     }
     Log.d(
       TAG,
-      "fetchSharedPlaylistTracks playlistId=${share.playlistId.take(10)}.. v=${share.playlistVersion} tracks=${out.size} resolved=$resolvedCount",
+      "fetchSharedPlaylistTracks playlistId=${share.playlistId.take(10)}.. v=${share.playlistVersion} tracks=${out.size} resolved=$resolvedCount aliases=${aliasByRaw.size}",
     )
     out
   }
@@ -255,10 +286,17 @@ object SharedWithYouApi {
   )
 
   private data class ContentMeta(
+    val trackId: String,
     val contentId: String,
     val pieceCid: String,
     val datasetOwner: String,
     val algo: Int,
+  )
+
+  private data class GrantedContentIndexes(
+    val byMetaHash: Map<String, ContentMeta>,
+    val byTrackId: Map<String, ContentMeta>,
+    val byContentId: Map<String, ContentMeta>,
   )
 
   private data class TrackMeta(
@@ -404,17 +442,167 @@ object SharedWithYouApi {
       }
     }
 
+    // Subgraph can miss freshly-indexed or alias track rows. Fallback to on-chain ScrobbleV4.getTrack.
+    val missing =
+      trackIds
+        .map { it.trim().lowercase() }
+        .filter { it.isNotBlank() && !out.containsKey(it) }
+        .distinct()
+    if (missing.isNotEmpty()) {
+      val onChain = fetchTrackMetaFromScrobbleV4(missing)
+      if (onChain.isNotEmpty()) {
+        out.putAll(onChain)
+      }
+      Log.d(TAG, "fetchTrackMeta fallback v4 requested=${missing.size} resolved=${onChain.size}")
+
+      val unresolved = missing.filter { !out.containsKey(it) }
+      if (unresolved.isNotEmpty()) {
+        val registration = fetchTrackRegistrationStatusFromScrobbleV4(unresolved)
+        val notRegistered = unresolved.count { registration[it] == false }
+        val unknownStatus = unresolved.count { registration[it] == null }
+        val sample = unresolved.take(5).joinToString(",")
+        Log.w(
+          TAG,
+          "fetchTrackMeta unresolved=${unresolved.size} notRegistered=$notRegistered unknownStatus=$unknownStatus sample=[$sample]",
+        )
+      }
+    }
+
     out
   }
 
-  private suspend fun buildGrantedContentByMetaHash(
+  private fun fetchTrackMetaFromScrobbleV4(trackIds: List<String>): Map<String, TrackMeta> {
+    val out = HashMap<String, TrackMeta>(trackIds.size)
+    if (trackIds.isEmpty()) return out
+
+    val functionOutputsV4 =
+      listOf(
+        object : TypeReference<Utf8String>() {},
+        object : TypeReference<Utf8String>() {},
+        object : TypeReference<Utf8String>() {},
+        object : TypeReference<Uint8>() {},
+        object : TypeReference<Bytes32>() {},
+        object : TypeReference<Uint64>() {},
+        object : TypeReference<Utf8String>() {},
+        object : TypeReference<Uint32>() {},
+      )
+
+    for (raw in trackIds) {
+      val id = raw.trim().lowercase()
+      if (!id.matches(Regex("^0x[0-9a-f]{64}$"))) continue
+      val bytes = runCatching { hexToBytes(id) }.getOrNull() ?: continue
+      if (bytes.size != 32) continue
+      val function =
+        Function(
+          "getTrack",
+          listOf(Bytes32(bytes)),
+          functionOutputsV4,
+        )
+      val data = FunctionEncoder.encode(function)
+      val result = runCatching { ethCall(SCROBBLE_V4, data) }.getOrNull().orEmpty()
+      if (!result.startsWith("0x") || result.length <= 2) continue
+
+      val decoded = runCatching { FunctionReturnDecoder.decode(result, function.outputParameters) }.getOrNull() ?: continue
+      if (decoded.size < 8) continue
+
+      val title = (decoded[0] as? Utf8String)?.value?.trim().orEmpty()
+      val artist = (decoded[1] as? Utf8String)?.value?.trim().orEmpty()
+      val album = (decoded[2] as? Utf8String)?.value?.trim().orEmpty()
+      val payload = (decoded[4] as? Bytes32)?.value
+      val coverCid = (decoded[6] as? Utf8String)?.value?.trim().orEmpty().ifBlank { null }
+      val durationSec = (decoded[7] as? Uint32)?.value?.toInt() ?: 0
+      val metaHash = payload?.let { "0x" + it.joinToString("") { b -> "%02x".format(b) } }
+
+      out[id] =
+        TrackMeta(
+          id = id,
+          title = title.ifBlank { id.take(14) },
+          artist = artist.ifBlank { "Unknown Artist" },
+          album = album,
+          coverCid = coverCid,
+          durationSec = durationSec,
+          metaHash = metaHash,
+        )
+    }
+    return out
+  }
+
+  private fun fetchTrackRegistrationStatusFromScrobbleV4(trackIds: List<String>): Map<String, Boolean> {
+    val out = HashMap<String, Boolean>(trackIds.size)
+    if (trackIds.isEmpty()) return out
+
+    val outputs = listOf(object : TypeReference<Bool>() {})
+    for (raw in trackIds) {
+      val id = raw.trim().lowercase()
+      if (!id.matches(Regex("^0x[0-9a-f]{64}$"))) continue
+      val bytes = runCatching { hexToBytes(id) }.getOrNull() ?: continue
+      if (bytes.size != 32) continue
+
+      val function = Function("isRegistered", listOf(Bytes32(bytes)), outputs)
+      val data = FunctionEncoder.encode(function)
+      val result = runCatching { ethCall(SCROBBLE_V4, data) }.getOrNull().orEmpty()
+      if (!result.startsWith("0x") || result.length <= 2) continue
+
+      val decoded = runCatching { FunctionReturnDecoder.decode(result, function.outputParameters) }.getOrNull() ?: continue
+      val registered = (decoded.getOrNull(0) as? Bool)?.value ?: continue
+      out[id] = registered
+    }
+
+    return out
+  }
+
+  private suspend fun resolveTrackIdAliasesFromContentIds(
+    ids: List<String>,
+  ): Map<String, String> = withContext(Dispatchers.IO) {
+    if (ids.isEmpty()) return@withContext emptyMap()
+    val normalized =
+      ids
+        .map { it.trim().lowercase() }
+        .filter { it.isNotBlank() }
+        .distinct()
+    if (normalized.isEmpty()) return@withContext emptyMap()
+
+    val out = HashMap<String, String>(normalized.size)
+    val chunkSize = 200
+    for (i in normalized.indices step chunkSize) {
+      val chunk = normalized.subList(i, minOf(i + chunkSize, normalized.size))
+      val quoted = chunk.joinToString(",") { "\"${it.replace("\"", "\\\"")}\"" }
+      val query = """
+        {
+          contentEntries(where: { id_in: [$quoted] }, first: 1000) {
+            id
+            trackId
+          }
+        }
+      """.trimIndent()
+
+      val json = postQuery(SUBGRAPH_ACTIVITY, query)
+      val rows = json.optJSONObject("data")?.optJSONArray("contentEntries") ?: JSONArray()
+      for (j in 0 until rows.length()) {
+        val row = rows.optJSONObject(j) ?: continue
+        val contentId = row.optString("id", "").trim().lowercase()
+        val trackId = row.optString("trackId", "").trim().lowercase()
+        if (contentId.isEmpty() || trackId.isEmpty()) continue
+        out[contentId] = trackId
+      }
+    }
+    out
+  }
+
+  private suspend fun buildGrantedContentIndexes(
     ownerAddress: String,
     granteeAddress: String,
     minUpdatedAtSec: Long? = null,
-  ): Map<String, ContentMeta> = withContext(Dispatchers.IO) {
+  ): GrantedContentIndexes = withContext(Dispatchers.IO) {
     val owner = ownerAddress.trim().lowercase()
     val grantee = granteeAddress.trim().lowercase()
-    if (owner.isBlank() || grantee.isBlank()) return@withContext emptyMap()
+    if (owner.isBlank() || grantee.isBlank()) {
+      return@withContext GrantedContentIndexes(
+        byMetaHash = emptyMap(),
+        byTrackId = emptyMap(),
+        byContentId = emptyMap(),
+      )
+    }
 
     val query = """
       {
@@ -439,9 +627,15 @@ object SharedWithYouApi {
 
     val json = postQuery(SUBGRAPH_ACTIVITY, query)
     val grants = json.optJSONObject("data")?.optJSONArray("accessGrants") ?: JSONArray()
-    if (grants.length() == 0) return@withContext emptyMap()
+    if (grants.length() == 0) {
+      return@withContext GrantedContentIndexes(
+        byMetaHash = emptyMap(),
+        byTrackId = emptyMap(),
+        byContentId = emptyMap(),
+      )
+    }
 
-    data class Row(val trackId: String, val updatedAt: Long, val content: ContentMeta)
+    data class Row(val trackId: String, val contentId: String, val updatedAt: Long, val content: ContentMeta)
     val rows = ArrayList<Row>(grants.length())
     val trackIds = LinkedHashSet<String>()
 
@@ -458,17 +652,38 @@ object SharedWithYouApi {
       val pieceCid = decodeBytesUtf8(c.optString("pieceCid", "").trim())
       val datasetOwner = c.optString("datasetOwner", "").trim().lowercase()
       val algo = c.optInt("algo", ContentCryptoConfig.ALGO_AES_GCM_256)
-      val meta = ContentMeta(contentId = contentId, pieceCid = pieceCid, datasetOwner = datasetOwner, algo = algo)
-      rows.add(Row(trackId = trackId, updatedAt = updatedAt, content = meta))
+      val meta =
+        ContentMeta(
+          trackId = trackId,
+          contentId = contentId,
+          pieceCid = pieceCid,
+          datasetOwner = datasetOwner,
+          algo = algo,
+        )
+      rows.add(Row(trackId = trackId, contentId = contentId, updatedAt = updatedAt, content = meta))
       trackIds.add(trackId)
     }
 
-    if (rows.isEmpty() || trackIds.isEmpty()) return@withContext emptyMap()
+    if (rows.isEmpty() || trackIds.isEmpty()) {
+      return@withContext GrantedContentIndexes(
+        byMetaHash = emptyMap(),
+        byTrackId = emptyMap(),
+        byContentId = emptyMap(),
+      )
+    }
     val trackMeta = fetchTrackMeta(trackIds.toList())
 
     // Resolve the newest decryptable content per metaHash (iterating rows in updatedAt-desc order).
     val out = HashMap<String, ContentMeta>(trackIds.size)
+    val byTrackId = HashMap<String, ContentMeta>(trackIds.size)
+    val byContentId = HashMap<String, ContentMeta>(rows.size)
     for (row in rows) {
+      if (!byTrackId.containsKey(row.trackId)) {
+        byTrackId[row.trackId] = row.content
+      }
+      if (!byContentId.containsKey(row.contentId)) {
+        byContentId[row.contentId] = row.content
+      }
       val meta = trackMeta[row.trackId] ?: continue
       val mh = meta.metaHash?.lowercase().orEmpty()
       if (mh.isEmpty()) continue
@@ -476,7 +691,11 @@ object SharedWithYouApi {
       out[mh] = row.content
     }
 
-    out
+    GrantedContentIndexes(
+      byMetaHash = out,
+      byTrackId = byTrackId,
+      byContentId = byContentId,
+    )
   }
 
   private fun postQuery(url: String, query: String): JSONObject {
@@ -493,6 +712,47 @@ object SharedWithYouApi {
       }
       return json
     }
+  }
+
+  private fun ethCall(to: String, data: String): String {
+    val payload =
+      JSONObject()
+        .put("jsonrpc", "2.0")
+        .put("id", 1)
+        .put("method", "eth_call")
+        .put(
+          "params",
+          JSONArray()
+            .put(JSONObject().put("to", to).put("data", data))
+            .put("latest"),
+        )
+    val req =
+      Request.Builder()
+        .url(MEGAETH_RPC)
+        .post(payload.toString().toRequestBody(jsonMediaType))
+        .build()
+    client.newCall(req).execute().use { res ->
+      if (!res.isSuccessful) throw IllegalStateException("RPC eth_call failed: ${res.code}")
+      val raw = res.body?.string().orEmpty()
+      val json = JSONObject(raw)
+      val err = json.optJSONObject("error")
+      if (err != null) {
+        throw IllegalStateException(err.optString("message", err.toString()))
+      }
+      return json.optString("result", "0x")
+    }
+  }
+
+  private fun hexToBytes(hex0x: String): ByteArray {
+    val hex = hex0x.removePrefix("0x")
+    if (hex.length % 2 != 0) throw IllegalArgumentException("Odd hex length")
+    val out = ByteArray(hex.length / 2)
+    var i = 0
+    while (i < hex.length) {
+      out[i / 2] = hex.substring(i, i + 2).toInt(16).toByte()
+      i += 2
+    }
+    return out
   }
 
   private fun decodeBytesUtf8(value: String): String {

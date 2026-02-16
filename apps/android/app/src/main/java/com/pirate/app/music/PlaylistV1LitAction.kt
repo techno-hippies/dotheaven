@@ -1,5 +1,7 @@
 package com.pirate.app.music
 
+import android.content.Context
+import com.pirate.app.lit.LitAuthContextManager
 import com.pirate.app.lit.LitRust
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,6 +26,7 @@ object PlaylistV1LitAction {
   }
 
   suspend fun createEmptyPlaylist(
+    appContext: Context,
     litNetwork: String,
     litRpcUrl: String,
     userPkpPublicKey: String,
@@ -44,6 +47,7 @@ object PlaylistV1LitAction {
         .put("tracks", JSONArray())
 
     execute(
+      appContext = appContext,
       litNetwork = litNetwork,
       litRpcUrl = litRpcUrl,
       jsParams = jsParams,
@@ -52,6 +56,7 @@ object PlaylistV1LitAction {
   }
 
   suspend fun addTrackToPlaylist(
+    appContext: Context,
     litNetwork: String,
     litRpcUrl: String,
     userPkpPublicKey: String,
@@ -84,6 +89,7 @@ object PlaylistV1LitAction {
         .put("tracks", jsTracks)
 
     execute(
+      appContext = appContext,
       litNetwork = litNetwork,
       litRpcUrl = litRpcUrl,
       jsParams = jsParams,
@@ -101,21 +107,24 @@ object PlaylistV1LitAction {
     return obj
   }
 
-  private fun execute(
+  private suspend fun execute(
+    appContext: Context,
     litNetwork: String,
     litRpcUrl: String,
     jsParams: JSONObject,
     operation: String,
   ): PlaylistV1ActionResult {
     val raw =
-      LitRust.executeJsRaw(
-        network = litNetwork,
-        rpcUrl = litRpcUrl,
-        code = "",
-        ipfsId = playlistV1CidForNetwork(litNetwork),
-        jsParamsJson = jsParams.toString(),
-        useSingleNode = false,
-      )
+      LitAuthContextManager.runWithSavedStateRecovery(appContext) {
+        LitRust.executeJsRaw(
+          network = litNetwork,
+          rpcUrl = litRpcUrl,
+          code = "",
+          ipfsId = playlistV1CidForNetwork(litNetwork),
+          jsParamsJson = jsParams.toString(),
+          useSingleNode = false,
+        )
+      }
     val exec = LitRust.unwrapEnvelope(raw)
     val responseAny = exec.opt("response")
     val response =
@@ -137,4 +146,3 @@ object PlaylistV1LitAction {
     )
   }
 }
-

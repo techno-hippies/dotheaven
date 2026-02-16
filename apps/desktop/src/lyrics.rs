@@ -587,7 +587,11 @@ fn score_search_candidate(record: &LrclibRecord, signature: &LyricsTrackSignatur
     // Prefer results that have synced lyrics, but only when the duration is
     // a reasonable match (within 15s) so we don't pick a different mix/edit
     // just because it happens to have synced lyrics.
-    if record.synced_lyrics.as_ref().is_some_and(|s| !s.trim().is_empty()) {
+    if record
+        .synced_lyrics
+        .as_ref()
+        .is_some_and(|s| !s.trim().is_empty())
+    {
         let duration_close = match (signature.duration_sec, record.duration_sec) {
             (Some(expected), Some(found)) => expected.abs_diff(found) <= 15,
             _ => true, // no duration info — give benefit of the doubt

@@ -35,7 +35,7 @@ export const SCROBBLE_V3 = '0x144c450cd5B641404EEB5D5eD523399dD94049E0'
 // ── Profile & Identity ─────────────────────────────────────────────
 
 /** ProfileV2 — Structured profile data (enums, packed fields) */
-export const PROFILE_V2 = '0xa31545D33f6d656E62De67fd020A26608d4601E5'
+export const PROFILE_V2 = '0xe00e82086480E61AaC8d5ad8B05B56A582dD0000'
 
 /** RegistryV1 — .heaven name NFTs */
 export const REGISTRY_V1 = '0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2'

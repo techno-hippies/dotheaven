@@ -1,6 +1,8 @@
 package com.pirate.app.scarlett
 
+import android.content.Context
 import android.util.Log
+import com.pirate.app.lit.LitAuthContextManager
 import com.pirate.app.lit.LitRust
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -42,6 +44,7 @@ private val httpClient = OkHttpClient.Builder()
  * Uses PKP signing via Lit Actions for the nonce challenge.
  */
 suspend fun getWorkerToken(
+  appContext: Context,
   workerUrl: String,
   wallet: String,
   pkpPublicKey: String,
@@ -75,7 +78,7 @@ suspend fun getWorkerToken(
   }
 
   // Step 2: Sign the nonce with PKP
-  val signature = pkpSignMessage(nonce, pkpPublicKey, walletLower, litNetwork, litRpcUrl)
+  val signature = pkpSignMessage(appContext, nonce, pkpPublicKey, walletLower, litNetwork, litRpcUrl)
 
   // Step 3: Verify signature, get JWT
   val verifyPayload = JSONObject()
@@ -111,6 +114,7 @@ fun clearWorkerAuthCache() {
  * Returns the signature as a 0x-prefixed hex string.
  */
 private suspend fun pkpSignMessage(
+  appContext: Context,
   message: String,
   pkpPublicKey: String,
   expectedAddress: String,
@@ -139,14 +143,17 @@ private suspend fun pkpSignMessage(
     .put("toSign", toSignArray)
     .put("publicKey", pkpPublicKey)
 
-  val raw = LitRust.executeJsRaw(
-    network = litNetwork,
-    rpcUrl = litRpcUrl,
-    code = litActionCode,
-    ipfsId = "",
-    jsParamsJson = jsParams.toString(),
-    useSingleNode = false,
-  )
+  val raw =
+    LitAuthContextManager.runWithSavedStateRecovery(appContext) {
+      LitRust.executeJsRaw(
+        network = litNetwork,
+        rpcUrl = litRpcUrl,
+        code = litActionCode,
+        ipfsId = "",
+        jsParamsJson = jsParams.toString(),
+        useSingleNode = false,
+      )
+    }
   val env = LitRust.unwrapEnvelope(raw)
   val sig = env.optJSONObject("signatures")?.optJSONObject("sig")
     ?: throw IllegalStateException("No signature returned from PKP")

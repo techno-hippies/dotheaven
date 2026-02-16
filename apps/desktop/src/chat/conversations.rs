@@ -213,12 +213,18 @@ impl ChatView {
         let new_address = auth.display_address().map(|a| a.to_string());
 
         if new_address != self.own_address {
+            log::info!(
+                "[Chat] Auth owner changed for Scarlett history: old={} new={}",
+                self.own_address.as_deref().unwrap_or("<none>"),
+                new_address.as_deref().unwrap_or("<none>")
+            );
             match self.voice_controller.lock() {
                 Ok(mut voice) => voice.reset_auth(),
                 Err(poisoned) => poisoned.into_inner().reset_auth(),
             }
             self.own_address = new_address;
             self.disappearing_message_seconds.clear();
+            self.reload_scarlett_history_for_current_owner();
             if self.own_address.is_some() && !self.connected && !self.connecting {
                 self.try_connect(cx);
             } else if self.own_address.is_none() {
@@ -242,7 +248,6 @@ impl ChatView {
                         voice.reset_auth();
                     }
                 }
-                self.ensure_scarlett_conversation();
                 cx.notify();
             }
         }
@@ -340,6 +345,11 @@ impl ChatView {
         }
         self.active_conversation_id = Some(id.clone());
         if id == SCARLETT_CONVERSATION_ID {
+            log::info!(
+                "[Chat] Selecting Scarlett conversation owner={} messages_in_memory={}",
+                self.own_address.as_deref().unwrap_or("<none>"),
+                self.scarlett_messages.len()
+            );
             self.messages = self.scarlett_messages.clone();
             cx.notify();
             return;

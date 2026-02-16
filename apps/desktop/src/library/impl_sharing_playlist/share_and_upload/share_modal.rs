@@ -1,3 +1,6 @@
+use super::upload::{
+    build_uploaded_track_record, track_meta_input_from_row, upload_track_with_diagnostics,
+};
 use super::*;
 
 impl LibraryView {
@@ -82,6 +85,11 @@ impl LibraryView {
             ),
             cx,
         );
+        // Keep sharing in the background so the rest of the UI remains interactive.
+        self.share_modal_open = false;
+        self.share_modal_track_index = None;
+        self.share_modal_error = None;
+        cx.notify();
 
         let storage = self.storage.clone();
         let grantee_for_request = grantee_hex.clone();
@@ -95,56 +103,71 @@ impl LibraryView {
                 let uploaded = if let Some(existing) = uploaded_for_request {
                     existing
                 } else {
-                    let resolved = svc.resolve_registered_content_for_track(
-                        &auth,
-                        &path_for_lookup,
-                        TrackMetaInput {
-                            title: Some(track_for_lookup.title.clone()),
-                            artist: Some(track_for_lookup.artist.clone()),
-                            album: Some(track_for_lookup.album.clone()),
-                            mbid: track_for_lookup.mbid.clone(),
-                            ip_id: track_for_lookup.ip_id.clone(),
-                        },
-                    )?;
-                    UploadedTrackRecord {
-                        owner_address: owner_for_lookup.clone(),
-                        file_path: path_for_lookup.clone(),
-                        title: track_for_lookup.title.clone(),
-                        artist: track_for_lookup.artist.clone(),
-                        album: track_for_lookup.album.clone(),
-                        track_id: resolved
-                            .get("trackId")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("n/a")
-                            .to_string(),
-                        content_id: resolved
-                            .get("contentId")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("n/a")
-                            .to_string(),
-                        piece_cid: resolved
-                            .get("pieceCid")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("n/a")
-                            .to_string(),
-                        gateway_url: resolved
-                            .get("gatewayUrl")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("n/a")
-                            .to_string(),
-                        tx_hash: resolved
-                            .get("txHash")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("n/a")
-                            .to_string(),
-                        register_version: resolved
-                            .get("registerVersion")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("onchain-recovered")
-                            .to_string(),
-                        created_at_ms: chrono::Utc::now().timestamp_millis(),
-                        saved_forever: false,
-                    }
+                    let track_meta = track_meta_input_from_row(&track_for_lookup);
+                    let (resolved, default_register_version) = match svc
+                        .resolve_registered_content_for_track(
+                            &auth,
+                            &path_for_lookup,
+                            track_meta.clone(),
+                        ) {
+                        Ok(resolved) => (resolved, "onchain-recovered"),
+                        Err(resolve_err) => {
+                            log::warn!(
+                                "[Library] direct share resolve failed: title=\"{}\" path=\"{}\" err={}",
+                                track_for_lookup.title,
+                                path_for_lookup,
+                                resolve_err
+                            );
+                            if path_for_lookup.is_empty()
+                                || !std::path::Path::new(&path_for_lookup).exists()
+                            {
+                                return Err(format!(
+                                    "Track is not registered and file is missing on disk: {}",
+                                    summarize_status_error(&resolve_err)
+                                ));
+                            }
+                            match upload_track_with_diagnostics(
+                                &mut svc,
+                                &auth,
+                                &path_for_lookup,
+                                track_meta.clone(),
+                            ) {
+                                Ok(upload_resp) => (upload_resp, "n/a"),
+                                Err(upload_err) => {
+                                    if super::super::is_already_uploaded_error(&upload_err) {
+                                        match svc.resolve_registered_content_for_track(
+                                            &auth,
+                                            &path_for_lookup,
+                                            track_meta,
+                                        ) {
+                                            Ok(resolved_after_upload) => {
+                                                (resolved_after_upload, "onchain-recovered")
+                                            }
+                                            Err(resolve_after_err) => {
+                                                return Err(format!(
+                                                    "{upload_err}\nResolve after already-uploaded error failed: {resolve_after_err}"
+                                                ));
+                                            }
+                                        }
+                                    } else {
+                                        return Err(upload_err);
+                                    }
+                                }
+                            }
+                        }
+                    };
+
+                    build_uploaded_track_record(
+                        &owner_for_lookup,
+                        &track_for_lookup,
+                        &resolved,
+                        default_register_version,
+                        false,
+                    )
+                    .ok_or_else(|| {
+                        "Share prep failed: register/resolve response missing content details."
+                            .to_string()
+                    })?
                 };
 
                 let grant_resp =
@@ -154,6 +177,7 @@ impl LibraryView {
             .await;
 
             let _ = this.update(cx, |this, cx| {
+                let was_modal_submitting = this.share_modal_submitting;
                 this.share_modal_submitting = false;
                 match result {
                     Ok((uploaded_resolved, resp)) => {
@@ -194,9 +218,11 @@ impl LibraryView {
                             log::error!("[Library] failed to persist shared grant record: {}", e);
                         }
 
-                        this.share_modal_open = false;
-                        this.share_modal_track_index = None;
-                        this.share_modal_error = None;
+                        if this.share_modal_open && was_modal_submitting {
+                            this.share_modal_open = false;
+                            this.share_modal_track_index = None;
+                            this.share_modal_error = None;
+                        }
                         this.set_status_message(
                             format!(
                                 "Shared \"{}\" with {}.",
@@ -211,7 +237,17 @@ impl LibraryView {
                     }
                     Err(err) => {
                         log::error!("[Library] content share failed: {}", err);
-                        this.share_modal_error = Some(summarize_status_error(&err));
+                        if this.share_modal_open && was_modal_submitting {
+                            this.share_modal_error = Some(summarize_status_error(&err));
+                        }
+                        this.set_status_message(
+                            format!(
+                                "Share failed for \"{}\": {}",
+                                track.title,
+                                summarize_status_error(&err)
+                            ),
+                            cx,
+                        );
                     }
                 }
                 cx.notify();

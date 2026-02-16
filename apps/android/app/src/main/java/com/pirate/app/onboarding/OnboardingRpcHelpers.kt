@@ -19,7 +19,7 @@ object OnboardingRpcHelpers {
   private const val RPC_URL = "https://carrot.megaeth.com/rpc"
   private const val REGISTRY_V1 = "0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2"
   private const val RECORDS_V1 = "0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3"
-  private const val PROFILE_V2 = "0xa31545D33f6d656E62De67fd020A26608d4601E5"
+  private const val PROFILE_V2 = "0xe00e82086480E61AaC8d5ad8B05B56A582dD0000"
 
   /** HEAVEN_NODE = namehash("heaven.hnsbridge.eth") */
   private const val HEAVEN_NODE = "0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27"
@@ -194,6 +194,19 @@ object OnboardingRpcHelpers {
       BigInteger(r.removePrefix("0x").ifBlank { "0" }, 16).toInt()
     } catch (_: Exception) { 0 }
     followers to following
+  }
+
+  /** Check if viewer currently follows target on FollowV1 */
+  suspend fun getFollowState(viewerAddress: String, targetAddress: String): Boolean = withContext(Dispatchers.IO) {
+    val viewer = viewerAddress.trim().lowercase().removePrefix("0x").padStart(64, '0')
+    val target = targetAddress.trim().lowercase().removePrefix("0x").padStart(64, '0')
+    val followsSel = functionSelector("follows(address,address)")
+    try {
+      val r = ethCall(FOLLOW_V1, "0x$followsSel$viewer$target")
+      BigInteger(r.removePrefix("0x").ifBlank { "0" }, 16) != BigInteger.ZERO
+    } catch (_: Exception) {
+      false
+    }
   }
 
   // ── Internal helpers ──────────────────────────────────────────────

@@ -44,8 +44,10 @@ fun TrackItemRow(
   onPress: () -> Unit,
   onMenuPress: () -> Unit,
 ) {
-  var artworkUri by remember(track.id) { mutableStateOf(track.artworkUri) }
-  var artworkFailed by remember(track.id) { mutableStateOf(false) }
+  // Include artwork URLs in remember keys so rows update when async/refreshed metadata
+  // resolves cover art for an existing track id.
+  var artworkUri by remember(track.id, track.artworkUri, track.artworkFallbackUri) { mutableStateOf(track.artworkUri) }
+  var artworkFailed by remember(track.id, track.artworkUri, track.artworkFallbackUri) { mutableStateOf(false) }
 
   fun handleArtworkError() {
     if (

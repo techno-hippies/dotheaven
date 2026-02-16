@@ -36,7 +36,7 @@ const CHAIN_ID = 6343;
 const RPC_URL = "https://carrot.megaeth.com/rpc";
 
 // ProfileV2 contract (to be updated after deployment)
-const PROFILE_V2 = "0xa31545D33f6d656E62De67fd020A26608d4601E5";
+const PROFILE_V2 = "0xe00e82086480E61AaC8d5ad8B05B56A582dD0000";
 
 // Sponsor PKP — same as claim-name (naga-dev)
 const SPONSOR_PKP_PUBLIC_KEY =
@@ -74,7 +74,7 @@ const toBigNumber = (value, label) => {
 // ============================================================
 
 const PROFILE_ABI = [
-  "function upsertProfileFor(address user, tuple(uint8 profileVersion, string displayName, bytes32 nameHash, uint8 age, uint16 heightCm, bytes2 nationality, uint256 languagesPacked, uint8 friendsOpenToMask, bytes32 locationCityId, bytes32 schoolId, bytes32 skillsCommit, bytes32 hobbiesCommit, string photoURI, uint8 gender, uint8 relocate, uint8 degree, uint8 fieldBucket, uint8 profession, uint8 industry, uint8 relationshipStatus, uint8 sexuality, uint8 ethnicity, uint8 datingStyle, uint8 children, uint8 wantsChildren, uint8 drinking, uint8 smoking, uint8 drugs, uint8 lookingFor, uint8 religion, uint8 pets, uint8 diet) in_, bytes signature) external",
+  "function upsertProfileFor(address user, tuple(uint8 profileVersion, string displayName, bytes32 nameHash, uint8 age, uint16 heightCm, bytes2 nationality, uint256 languagesPacked, uint8 friendsOpenToMask, bytes32 locationCityId, int32 locationLatE6, int32 locationLngE6, bytes32 schoolId, bytes32 skillsCommit, bytes32 hobbiesCommit, string photoURI, uint8 gender, uint8 relocate, uint8 degree, uint8 fieldBucket, uint8 profession, uint8 industry, uint8 relationshipStatus, uint8 sexuality, uint8 ethnicity, uint8 datingStyle, uint8 children, uint8 wantsChildren, uint8 drinking, uint8 smoking, uint8 drugs, uint8 lookingFor, uint8 religion, uint8 pets, uint8 diet) in_, bytes signature) external",
   "function nonces(address user) external view returns (uint256)",
 ];
 
@@ -118,6 +118,8 @@ const main = async () => {
       toBigNumber(profileInput.languagesPacked || "0", "languagesPacked"),
       profileInput.friendsOpenToMask || 0,
       profileInput.locationCityId || ethers.constants.HashZero,
+      profileInput.locationLatE6 || 0,
+      profileInput.locationLngE6 || 0,
       profileInput.schoolId || ethers.constants.HashZero,
       profileInput.skillsCommit || ethers.constants.HashZero,
       profileInput.hobbiesCommit || ethers.constants.HashZero,
@@ -146,7 +148,7 @@ const main = async () => {
     // Compute profileHash = keccak256(abi.encode(profileInput))
     const profileEncoded = ethers.utils.defaultAbiCoder.encode(
       [
-        "tuple(uint8,string,bytes32,uint8,uint16,bytes2,uint256,uint8,bytes32,bytes32,bytes32,bytes32,string,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8)",
+        "tuple(uint8,string,bytes32,uint8,uint16,bytes2,uint256,uint8,bytes32,int32,int32,bytes32,bytes32,bytes32,string,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8,uint8)",
       ],
       [profileTuple]
     );

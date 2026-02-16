@@ -78,6 +78,7 @@ class ScarlettService(private val appContext: Context) {
 
     return try {
       val token = getWorkerToken(
+        appContext = appContext,
         workerUrl = CHAT_WORKER_URL,
         wallet = wallet,
         pkpPublicKey = pkpPublicKey,
@@ -93,6 +94,7 @@ class ScarlettService(private val appContext: Context) {
       val payload = JSONObject()
         .put("message", text.trim())
         .put("history", historyArray)
+        .put("activityWallet", wallet.lowercase())
         .toString()
         .toRequestBody(JSON_MEDIA_TYPE)
 

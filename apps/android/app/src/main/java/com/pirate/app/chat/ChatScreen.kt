@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -94,6 +93,7 @@ fun ChatScreen(
   onOpenDrawer: () -> Unit,
   onShowMessage: (String) -> Unit,
   onNavigateToCall: () -> Unit = {},
+  onThreadVisibilityChange: (Boolean) -> Unit = {},
 ) {
   val scope = rememberCoroutineScope()
   val connected by chatService.connected.collectAsState()
@@ -132,6 +132,11 @@ fun ChatScreen(
     currentView = if (activeConversationId != null) ChatView.Thread else ChatView.Conversations
     showDisappearingSheet = false
     disappearingRetentionSeconds = chatService.activeDisappearingSeconds()
+  }
+
+  val inThread = currentView == ChatView.Thread || currentView == ChatView.Scarlett || activeConversationId != null
+  LaunchedEffect(inThread) {
+    onThreadVisibilityChange(inThread)
   }
 
   Box(modifier = Modifier.fillMaxSize()) {
@@ -507,7 +512,6 @@ private fun MessageThread(
       modifier = Modifier
         .fillMaxWidth()
         .navigationBarsPadding()
-        .imePadding()
         .padding(horizontal = 12.dp, vertical = 8.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -744,7 +748,6 @@ private fun ScarlettThread(
       modifier = Modifier
         .fillMaxWidth()
         .navigationBarsPadding()
-        .imePadding()
         .padding(horizontal = 12.dp, vertical = 8.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -85,7 +85,9 @@ export async function startAgent(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({
+        activityWallet: pkpInfo.ethAddress,
+      }),
     })
 
     const data = (await res.json()) as {

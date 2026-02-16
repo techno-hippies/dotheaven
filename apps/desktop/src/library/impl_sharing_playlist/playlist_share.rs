@@ -34,14 +34,6 @@ fn extract_field_string(payload: &Value, key: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-fn is_already_uploaded_error(raw: &str) -> bool {
-    let lower = raw.to_ascii_lowercase();
-    lower.contains("already uploaded")
-        || lower.contains("already exists")
-        || lower.contains("content already registered")
-        || (lower.contains("simulation failed") && lower.contains("already"))
-}
-
 impl LibraryView {
     pub(in crate::library) fn open_playlist_share_modal(
         &mut self,
@@ -199,6 +191,12 @@ impl LibraryView {
             ),
             cx,
         );
+        // Keep sharing in the background so the rest of the UI remains interactive.
+        self.playlist_share_modal_open = false;
+        self.playlist_share_modal_playlist_id = None;
+        self.playlist_share_modal_playlist_name = None;
+        self.playlist_share_modal_error = None;
+        cx.notify();
 
         let storage = self.storage.clone();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {

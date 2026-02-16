@@ -128,21 +128,21 @@ private val US_CA_STATE_ABBREVS = mapOf(
 @Composable
 fun LocationStep(
   submitting: Boolean,
-  onContinue: (String) -> Unit,
+  onContinue: (LocationResult) -> Unit,
 ) {
   val keyboardController = LocalSoftwareKeyboardController.current
   var query by remember { mutableStateOf("") }
-  var selectedLabel by remember { mutableStateOf<String?>(null) }
+  var selectedResult by remember { mutableStateOf<LocationResult?>(null) }
   var searching by remember { mutableStateOf(false) }
   val suggestions = remember { mutableStateListOf<LocationResult>() }
 
-  val canContinue = selectedLabel != null && !submitting
+  val canContinue = selectedResult != null && !submitting
 
   // Debounced search
   LaunchedEffect(query) {
     // If user picked a suggestion, don't re-search
-    if (query == selectedLabel) return@LaunchedEffect
-    selectedLabel = null
+    if (query == selectedResult?.label) return@LaunchedEffect
+    selectedResult = null
     suggestions.clear()
     if (query.length < 2) {
       searching = false
@@ -184,7 +184,7 @@ fun LocationStep(
     )
 
     // Suggestions dropdown
-    if (suggestions.isNotEmpty() && selectedLabel == null) {
+    if (suggestions.isNotEmpty() && selectedResult == null) {
       Spacer(Modifier.height(4.dp))
       LazyColumn(
         modifier = Modifier
@@ -197,7 +197,7 @@ fun LocationStep(
               .fillMaxWidth()
               .clickable {
                 query = result.label
-                selectedLabel = result.label
+                selectedResult = result
                 suggestions.clear()
                 keyboardController?.hide()
               }
@@ -222,7 +222,7 @@ fun LocationStep(
     Spacer(Modifier.weight(1f))
 
     Button(
-      onClick = { selectedLabel?.let { onContinue(it) } },
+      onClick = { selectedResult?.let { onContinue(it) } },
       enabled = canContinue,
       modifier = Modifier.fillMaxWidth().height(48.dp),
       shape = RoundedCornerShape(50),

@@ -4,8 +4,9 @@ use crate::shared::config::duet_worker_base_url;
 use crate::voice::auth::WorkerAuthContext;
 
 use super::models::{
-    CreateDuetRoomRequest, CreateDuetRoomResponse, DuetPublicInfoResponse, EndDuetRoomResponse,
-    StartDuetRoomResponse, StartDuetSegmentResponse, VoiceEndpoints,
+    CreateDuetRoomRequest, CreateDuetRoomResponse, DiscoverDuetRoomsResponse,
+    DuetPublicInfoResponse, EndDuetRoomResponse, StartDuetRoomResponse, StartDuetSegmentResponse,
+    VoiceEndpoints,
 };
 use super::util::{parse_error_message, truncate_for_log};
 
@@ -75,6 +76,50 @@ pub fn get_duet_public_info(
         .body_mut()
         .read_json()
         .map_err(|e| format!("invalid duet public-info response: {e}"))
+}
+
+pub fn discover_duet_rooms(
+    _endpoints: &VoiceEndpoints,
+) -> Result<DiscoverDuetRoomsResponse, String> {
+    let duet_base = duet_worker_base_url();
+    let url = format!("{}/duet/discover", duet_base.trim_end_matches('/'));
+    let auth_token = WorkerAuthContext::from_disk()
+        .ok()
+        .and_then(|mut auth| auth.bearer_token(&duet_base).ok());
+
+    let mut request = ureq::get(&url)
+        .config()
+        .http_status_as_error(false)
+        .timeout_global(Some(Duration::from_secs(10)))
+        .build();
+    if let Some(token) = auth_token {
+        request = request.header("authorization", &format!("Bearer {token}"));
+    }
+
+    let mut response = request
+        .call()
+        .map_err(|e| format!("duet discover request failed: {e}"))?;
+
+    let status = response.status().as_u16();
+    if status == 404 {
+        log::warn!(
+            "[Rooms] duet discover endpoint not found at {}. Returning empty list. Deploy the latest session-voice worker or set HEAVEN_DUET_WORKER_URL to a worker serving /duet/discover.",
+            url
+        );
+        return Ok(DiscoverDuetRoomsResponse { rooms: vec![] });
+    }
+    if !(200..300).contains(&status) {
+        let err_body = response.body_mut().read_to_string().unwrap_or_default();
+        let err = parse_error_message(&err_body);
+        return Err(format!(
+            "duet discover failed (HTTP {status}) at {url}: {err}"
+        ));
+    }
+
+    response
+        .body_mut()
+        .read_json()
+        .map_err(|e| format!("invalid duet discover response: {e}"))
 }
 
 fn create_duet_room(

@@ -83,6 +83,25 @@ impl RoomsView {
             (live_amount, replay_amount, label)
         };
 
+        let (room_title, room_kind, room_kind_slug, open_slot_label) = match room_type {
+            RoomType::DjSet => (
+                "My Solo Room".to_string(),
+                RoomKind::DjSet,
+                "dj_set".to_string(),
+                String::new(),
+            ),
+            _ => (
+                "My Duet Room".to_string(),
+                RoomKind::Duet,
+                "duet".to_string(),
+                "open slot".to_string(),
+            ),
+        };
+        let visibility_slug = match self.visibility_mode {
+            VisibilityMode::Public => "public".to_string(),
+            VisibilityMode::Unlisted => "unlisted".to_string(),
+        };
+
         let request = CreateDuetRoomRequest {
             split_address,
             guest_wallet: guest_wallet.clone(),
@@ -92,17 +111,12 @@ impl RoomsView {
             access_window_minutes: DEFAULT_ACCESS_WINDOW_MINUTES,
             replay_mode: "worker_gated".to_string(),
             recording_mode: "host_local".to_string(),
+            visibility: visibility_slug,
+            title: Some(room_title.clone()),
+            room_kind: Some(room_kind_slug),
         };
 
         let endpoints = VoiceEndpoints::default();
-        let (room_title, room_kind, open_slot_label) = match room_type {
-            RoomType::DjSet => ("My Solo Room".to_string(), RoomKind::DjSet, String::new()),
-            _ => (
-                "My Duet Room".to_string(),
-                RoomKind::Duet,
-                "open slot".to_string(),
-            ),
-        };
         let host_display = auth::load_from_disk()
             .and_then(|p| p.pkp_address)
             .map(|value| short_address(&value))
@@ -135,22 +149,21 @@ impl RoomsView {
                     Ok(flow) => {
                         this.create_modal_open = false;
                         this.create_step = CreateStep::ChooseType;
-                        this.active_tab = RoomsTab::MyRooms;
+                        this.active_tab = RoomsTab::Following;
                         this.modal_error = None;
 
-                        this.rooms.insert(
-                            0,
-                            RoomCard {
-                                title: room_title.clone(),
-                                status: RoomStatus::Created,
-                                kind: room_kind,
-                                host_a: host_display.clone(),
-                                host_b: guest_display.clone(),
-                                meta_line: "Ready to start".to_string(),
-                                price_label: price_label.clone(),
-                                mine: true,
-                            },
-                        );
+                        this.upsert_room_card(RoomCard {
+                            room_id: flow.room_id.clone(),
+                            title: room_title.clone(),
+                            status: RoomStatus::Created,
+                            kind: room_kind,
+                            host_a: host_display.clone(),
+                            host_b: guest_display.clone(),
+                            meta_line: "Ready to start".to_string(),
+                            price_label: price_label.clone(),
+                            listener_count: 0,
+                            mine: true,
+                        });
 
                         if let Err(err) = this.stop_native_bridge_process() {
                             log::warn!(
@@ -217,6 +230,7 @@ impl RoomsView {
                             format!("Room {} created.", short_room_id(&flow.room_id)),
                             cx,
                         );
+                        this.refresh_discoverable_rooms(cx);
                     }
                     Err(err) => {
                         this.modal_error = Some(err.clone());

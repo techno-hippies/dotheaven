@@ -14,7 +14,7 @@ use crate::voice::desktop_handoff::launch_jacktrip_desktop;
 use crate::{
     auth,
     voice::{
-        create_duet_room_from_disk,
+        create_duet_room_from_disk, discover_duet_rooms,
         duet_bridge::{
             current_linux_default_source, duet_bridge_pulse_source, duet_bridge_refresh_seconds,
             duet_worker_base_url, launch_native_bridge_process, native_bridge_disabled_reason,
@@ -22,14 +22,14 @@ use crate::{
             setup_linux_duet_audio_source, NativeBridgeLaunchConfig,
         },
         end_duet_room_from_disk, get_duet_public_info, search_songs, start_duet_room_from_disk,
-        start_duet_segment_from_disk, CreateDuetRoomRequest, SongSearchItem, VoiceEndpoints,
+        start_duet_segment_from_disk, CreateDuetRoomRequest, DiscoverDuetRoomItem, SongSearchItem,
+        VoiceEndpoints,
     },
 };
 
 mod actions;
 mod helpers;
 mod model;
-mod seed_data;
 mod status_events;
 mod view;
 use model::*;
@@ -65,6 +65,10 @@ pub struct RoomsView {
     live_price_input_state: Entity<InputState>,
     replay_price_input_state: Entity<InputState>,
     rooms: Vec<RoomCard>,
+    rooms_loading: bool,
+    rooms_refresh_in_flight: bool,
+    rooms_error: Option<String>,
+    rooms_poll_generation: u64,
     activity: Vec<ActivityItem>,
     broadcast_health_poll_in_flight: bool,
     last_broadcast_health_poll_at: Option<Instant>,
@@ -86,8 +90,8 @@ impl RoomsView {
         live_price_input_state.update(cx, |state, cx| state.set_value("0.10", window, cx));
         replay_price_input_state.update(cx, |state, cx| state.set_value("0.10", window, cx));
 
-        Self {
-            active_tab: RoomsTab::All,
+        let mut this = Self {
+            active_tab: RoomsTab::Following,
             active_host_room: None,
             native_bridge_child: None,
             segment_modal_open: false,
@@ -109,23 +113,25 @@ impl RoomsView {
             guest_wallet_input_state,
             live_price_input_state,
             replay_price_input_state,
-            rooms: seed_data::seed_room_cards(),
-            activity: seed_data::seed_activity_items(),
+            rooms: Vec::new(),
+            rooms_loading: true,
+            rooms_refresh_in_flight: false,
+            rooms_error: None,
+            rooms_poll_generation: 0,
+            activity: Vec::new(),
             broadcast_health_poll_in_flight: false,
             last_broadcast_health_poll_at: None,
-        }
+        };
+        this.start_rooms_discovery_polling(cx);
+        this
     }
 
     fn filtered_rooms(&self) -> Vec<RoomCard> {
         self.rooms
             .iter()
             .filter(|room| match self.active_tab {
-                RoomsTab::All => true,
-                RoomsTab::LiveNow => room.status == RoomStatus::Live,
-                RoomsTab::Scheduled => {
-                    matches!(room.status, RoomStatus::Created | RoomStatus::Scheduled)
-                }
-                RoomsTab::MyRooms => room.mine,
+                RoomsTab::Following => room.mine || room.status == RoomStatus::Live,
+                RoomsTab::Discover => true,
             })
             .cloned()
             .collect()
@@ -142,6 +148,37 @@ impl RoomsView {
         self.create_submitting = false;
         self.modal_error = None;
         cx.notify();
+    }
+
+    pub(crate) fn dismiss_transient_ui(&mut self, cx: &mut Context<Self>) {
+        let mut changed = false;
+
+        if self.create_modal_open || self.create_submitting || self.modal_error.is_some() {
+            self.create_modal_open = false;
+            self.create_submitting = false;
+            self.modal_error = None;
+            changed = true;
+        }
+
+        if self.segment_modal_open
+            || self.segment_modal_error.is_some()
+            || self.segment_search_pending
+            || self.segment_start_pending
+            || !self.segment_song_results.is_empty()
+            || self.segment_selected_song.is_some()
+        {
+            self.segment_modal_open = false;
+            self.segment_modal_error = None;
+            self.segment_search_pending = false;
+            self.segment_start_pending = false;
+            self.segment_song_results.clear();
+            self.segment_selected_song = None;
+            changed = true;
+        }
+
+        if changed {
+            cx.notify();
+        }
     }
 
     fn reset_create_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {

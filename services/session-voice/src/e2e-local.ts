@@ -327,6 +327,10 @@ async function main() {
     ["npx", "wrangler", "d1", "execute", "session-voice", "--local", "--file=migrations/0002_song_registry.sql"],
     "Applying local migration (0002)",
   );
+  runChecked(
+    ["npx", "wrangler", "d1", "execute", "session-voice", "--local", "--file=migrations/0003_duet_discovery.sql"],
+    "Applying local migration (0003)",
+  );
 
   let localFacilitator: Bun.Subprocess | null = null;
   const normalizedRequestedBaseUrl = requestedFacilitatorBaseUrl.replace(/\/+$/, "");

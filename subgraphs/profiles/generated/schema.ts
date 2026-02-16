@@ -142,6 +142,32 @@ export class Profile extends Entity {
     this.set("locationCityId", Value.fromBytes(value));
   }
 
+  get locationLatE6(): i32 {
+    let value = this.get("locationLatE6");
+    if (!value || value.kind == ValueKind.NULL) {
+      return 0;
+    } else {
+      return value.toI32();
+    }
+  }
+
+  set locationLatE6(value: i32) {
+    this.set("locationLatE6", Value.fromI32(value));
+  }
+
+  get locationLngE6(): i32 {
+    let value = this.get("locationLngE6");
+    if (!value || value.kind == ValueKind.NULL) {
+      return 0;
+    } else {
+      return value.toI32();
+    }
+  }
+
+  set locationLngE6(value: i32) {
+    this.set("locationLngE6", Value.fromI32(value));
+  }
+
   get schoolId(): Bytes {
     let value = this.get("schoolId");
     if (!value || value.kind == ValueKind.NULL) {

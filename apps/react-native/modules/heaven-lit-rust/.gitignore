@@ -1,5 +1,0 @@
-rust-core/target/
-android/src/main/jniLibs/
-android/build/
-android/.gradle/
-ios/lib/

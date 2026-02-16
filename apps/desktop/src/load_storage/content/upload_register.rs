@@ -1,5 +1,16 @@
 use super::*;
 
+fn track_metadata_registered(track_id_hex: &str) -> bool {
+    fetch_track_metadata_subgraph(track_id_hex)
+        .ok()
+        .flatten()
+        .is_some()
+        || fetch_track_metadata_onchain(track_id_hex)
+            .ok()
+            .flatten()
+            .is_some()
+}
+
 impl LoadStorageService {
     pub fn content_encrypt_upload_register(
         &mut self,
@@ -83,9 +94,27 @@ impl LoadStorageService {
             &artist,
             &album,
         )?;
+        let track_id_hex = to_hex_prefixed(track_id.as_slice()).to_lowercase();
+        let metadata_registered = track_metadata_registered(&track_id_hex);
+        if !metadata_registered {
+            log::warn!(
+                "[LoadStorage] track metadata missing after register: trackId={} title=\"{}\" artist=\"{}\" registerVersion={} txHash={}",
+                track_id_hex,
+                title,
+                artist,
+                register_response
+                    .get("version")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown"),
+                register_response
+                    .get("txHash")
+                    .and_then(Value::as_str)
+                    .unwrap_or("n/a"),
+            );
+        }
 
         Ok(json!({
-            "trackId": to_hex_prefixed(track_id.as_slice()),
+            "trackId": track_id_hex,
             "ipId": ip_id,
             "contentId": to_hex_prefixed(content_id.as_slice()),
             "pieceCid": upload_result.id,
@@ -93,6 +122,7 @@ impl LoadStorageService {
             "uploadSize": encrypted_blob.len(),
             "gatewayUrl": upload_result.gateway_url,
             "winc": upload_result.winc,
+            "trackMetadataRegistered": metadata_registered,
             "registerVersion": register_response.get("version").cloned().unwrap_or(Value::Null),
             "txHash": register_response.get("txHash").cloned().unwrap_or(Value::Null),
             "blockNumber": register_response.get("blockNumber").cloned().unwrap_or(Value::Null),
@@ -158,6 +188,23 @@ impl LoadStorageService {
             artist,
             album,
         )?;
+        let metadata_registered = track_metadata_registered(&track_id_norm);
+        if !metadata_registered {
+            log::warn!(
+                "[LoadStorage] track metadata missing after replace register: trackId={} title=\"{}\" artist=\"{}\" registerVersion={} txHash={}",
+                track_id_norm,
+                title,
+                artist,
+                register_response
+                    .get("version")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown"),
+                register_response
+                    .get("txHash")
+                    .and_then(Value::as_str)
+                    .unwrap_or("n/a"),
+            );
+        }
 
         Ok(json!({
             "replaced": true,
@@ -169,6 +216,7 @@ impl LoadStorageService {
             "gatewayUrl": upload_result.gateway_url,
             "winc": upload_result.winc,
             "deactivate": deactivate_payload,
+            "trackMetadataRegistered": metadata_registered,
             "registerVersion": register_response.get("version").cloned().unwrap_or(Value::Null),
             "txHash": register_response.get("txHash").cloned().unwrap_or(Value::Null),
             "blockNumber": register_response.get("blockNumber").cloned().unwrap_or(Value::Null),

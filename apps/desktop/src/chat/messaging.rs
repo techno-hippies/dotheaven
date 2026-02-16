@@ -80,6 +80,12 @@ impl ChatView {
             return;
         }
 
+        log::info!(
+            "[Chat] Scarlett send start owner={} existing_messages={}",
+            self.own_address.as_deref().unwrap_or("<none>"),
+            self.scarlett_messages.len()
+        );
+
         let user_msg = make_user_message(text.clone());
         self.scarlett_messages.push(user_msg.clone());
         self.messages = self.scarlett_messages.clone();
@@ -91,6 +97,11 @@ impl ChatView {
             user_msg.sent_at_ns,
         );
         self.ensure_scarlett_conversation();
+        if let Err(err) =
+            persist_scarlett_messages(self.own_address.as_deref(), &self.scarlett_messages)
+        {
+            log::warn!("[Chat] Failed to persist Scarlett history after user message: {err}");
+        }
         cx.notify();
 
         let history: Vec<ChatHistoryItem> = self
@@ -114,12 +125,10 @@ impl ChatView {
         let endpoints = crate::voice::VoiceEndpoints::default();
 
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            let result = std::thread::spawn(move || {
+            let result = smol::unblock(move || {
                 crate::voice::send_chat_message_from_disk_auth(&endpoints, &text, &history)
             })
-            .join()
-            .map_err(|_| "Thread panicked".to_string())
-            .and_then(|r| r);
+            .await;
 
             let _ = this.update(cx, |this, cx| {
                 this.ai_sending = false;
@@ -153,6 +162,11 @@ impl ChatView {
                         );
                         this.ensure_scarlett_conversation();
                     }
+                }
+                if let Err(err) =
+                    persist_scarlett_messages(this.own_address.as_deref(), &this.scarlett_messages)
+                {
+                    log::warn!("[Chat] Failed to persist Scarlett history after reply: {err}");
                 }
                 cx.notify();
             });

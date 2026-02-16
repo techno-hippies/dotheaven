@@ -202,7 +202,7 @@ object WalletAuth {
     }
 
   /**
-   * Full auth flow: wait for connection, sign SIWE, mint/find PKP, create Lit auth context.
+   * Full auth flow: wait for connection, sign SIWE, mint/find PKP, and return auth material.
    * The wallet modal must already be open when this is called.
    */
   suspend fun connectAndAuth(
@@ -241,23 +241,6 @@ object WalletAuth {
     Log.d(TAG, "Step 4: Requesting SIWE signature...")
     val accessToken = createSiweAuthSig(checksumAddress)
     Log.d(TAG, "SIWE signature received")
-
-    // 5. Create Lit auth context
-    Log.d(TAG, "Step 5: Creating Lit auth context...")
-    val authConfigJson = PirateAuthConfig.defaultAuthConfigJson(PirateAuthConfig.DEFAULT_PASSKEY_RP_ID)
-    withContext(Dispatchers.IO) {
-      val raw = LitRust.createAuthContextFromPasskeyCallbackRaw(
-        network = litNetwork,
-        rpcUrl = litRpcUrl,
-        pkpPublicKey = pkpPublicKey,
-        authMethodType = AUTH_METHOD_TYPE_ETH_WALLET,
-        authMethodId = authMethodId,
-        accessToken = accessToken,
-        authConfigJson = authConfigJson,
-      )
-      LitRust.unwrapEnvelope(raw)
-    }
-    Log.d(TAG, "Auth context created successfully")
 
     return WalletAuthResult(
       pkpPublicKey = pkpPublicKey,

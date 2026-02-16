@@ -76,7 +76,9 @@ pub fn start_agent(
         .build()
         .header("content-type", "application/json")
         .header("authorization", &format!("Bearer {token}"))
-        .send_json(serde_json::json!({}))
+        .send_json(serde_json::json!({
+            "activityWallet": auth.wallet(),
+        }))
         .map_err(|e| format!("start agent request failed: {e}"))?;
 
     let status = response.status().as_u16();
@@ -137,6 +139,7 @@ pub fn send_chat_message(
     let payload = serde_json::json!({
         "message": message,
         "history": history,
+        "activityWallet": auth.wallet(),
     });
 
     let mut response = ureq::post(&url)

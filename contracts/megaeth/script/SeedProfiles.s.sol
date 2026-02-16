@@ -28,7 +28,7 @@ interface IRecordsV1 {
  *     --gas-price 1000000 --skip-simulation --gas-limit 200000000
  */
 contract SeedProfilesScript is Script {
-    OnchainProfilesV2 constant profile = OnchainProfilesV2(0xa31545D33f6d656E62De67fd020A26608d4601E5);
+    OnchainProfilesV2 constant profile = OnchainProfilesV2(0xe00e82086480E61AaC8d5ad8B05B56A582dD0000);
     IRegistryV1 constant registry = IRegistryV1(0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2);
     IRecordsV1 constant records = IRecordsV1(0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3);
 
@@ -197,7 +197,34 @@ contract SeedProfilesScript is Script {
             "Toronto|CA-ON|CA",
             "Barcelona|ES-CT|ES"
         ];
-        in_.locationCityId = keccak256(bytes(cities[(seed >> 80) % 10]));
+        int32[10] memory cityLatE6 = [
+            int32(37_774_900),
+            int32(51_507_400),
+            int32(52_520_008),
+            int32(48_856_600),
+            int32(35_676_400),
+            int32(37_566_500),
+            int32(40_712_800),
+            int32(-33_868_800),
+            int32(43_653_200),
+            int32(41_385_100)
+        ];
+        int32[10] memory cityLngE6 = [
+            int32(-122_419_400),
+            int32(-127_800),
+            int32(13_404_954),
+            int32(2_352_200),
+            int32(139_650_300),
+            int32(126_978_000),
+            int32(-74_006_000),
+            int32(151_209_300),
+            int32(-79_383_200),
+            int32(2_173_400)
+        ];
+        uint256 cityIdx = (seed >> 80) % 10;
+        in_.locationCityId = keccak256(bytes(cities[cityIdx]));
+        in_.locationLatE6 = cityLatE6[cityIdx];
+        in_.locationLngE6 = cityLngE6[cityIdx];
 
         // School
         string[8] memory schools = [

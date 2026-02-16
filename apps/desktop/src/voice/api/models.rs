@@ -52,6 +52,11 @@ pub struct CreateDuetRoomRequest {
     pub access_window_minutes: u32,
     pub replay_mode: String,
     pub recording_mode: String,
+    pub visibility: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub room_kind: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -91,6 +96,29 @@ pub struct DuetPublicInfoResponse {
     pub broadcast_mode: Option<String>,
     pub broadcast_heartbeat_at: Option<u64>,
     pub broadcaster_online: Option<bool>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct DiscoverDuetRoomItem {
+    pub room_id: String,
+    pub host_wallet: String,
+    pub guest_wallet: Option<String>,
+    pub status: Option<String>,
+    pub title: Option<String>,
+    pub room_kind: Option<String>,
+    pub live_amount: Option<String>,
+    pub replay_amount: Option<String>,
+    pub audience_mode: Option<String>,
+    pub listener_count: Option<u32>,
+    pub live_started_at: Option<u64>,
+    pub started_at: Option<u64>,
+    pub created_at: Option<u64>,
+    pub updated_at: Option<u64>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct DiscoverDuetRoomsResponse {
+    pub rooms: Vec<DiscoverDuetRoomItem>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

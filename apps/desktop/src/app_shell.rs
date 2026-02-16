@@ -75,6 +75,12 @@ impl HeavenApp {
         let ch = nav_channel.clone();
         cx.observe(&ch, |this, ch, cx| {
             if let Some(page) = ch.read(cx).target {
+                let leaving_rooms = this.active_page == Page::Rooms && page != Page::Rooms;
+                if leaving_rooms {
+                    let _ = this.rooms_view.update(cx, |view, cx| {
+                        view.dismiss_transient_ui(cx);
+                    });
+                }
                 this.active_page = page;
                 let _ = this.library_view.update(cx, |view, cx| {
                     view.set_mode(

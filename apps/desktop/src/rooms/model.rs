@@ -2,29 +2,20 @@ use super::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum RoomsTab {
-    All,
-    LiveNow,
-    Scheduled,
-    MyRooms,
+    Following,
+    Discover,
 }
 
 impl RoomsTab {
     pub(super) fn label(self) -> &'static str {
         match self {
-            RoomsTab::All => "All",
-            RoomsTab::LiveNow => "Live Now",
-            RoomsTab::Scheduled => "Scheduled",
-            RoomsTab::MyRooms => "My Rooms",
+            RoomsTab::Following => "Following",
+            RoomsTab::Discover => "Discover",
         }
     }
 
-    pub(super) fn all() -> [RoomsTab; 4] {
-        [
-            RoomsTab::All,
-            RoomsTab::LiveNow,
-            RoomsTab::Scheduled,
-            RoomsTab::MyRooms,
-        ]
+    pub(super) fn all() -> [RoomsTab; 2] {
+        [RoomsTab::Following, RoomsTab::Discover]
     }
 }
 
@@ -45,6 +36,7 @@ pub(super) enum RoomKind {
 
 #[derive(Clone, Debug)]
 pub(super) struct RoomCard {
+    pub(super) room_id: String,
     pub(super) title: String,
     pub(super) status: RoomStatus,
     pub(super) kind: RoomKind,
@@ -52,6 +44,7 @@ pub(super) struct RoomCard {
     pub(super) host_b: String,
     pub(super) meta_line: String,
     pub(super) price_label: String,
+    pub(super) listener_count: u32,
     pub(super) mine: bool,
 }
 

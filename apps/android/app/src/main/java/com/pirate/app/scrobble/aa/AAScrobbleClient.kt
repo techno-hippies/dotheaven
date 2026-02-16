@@ -1,5 +1,7 @@
 package com.pirate.app.scrobble.aa
 
+import com.pirate.app.auth.PirateAuthUiState
+import com.pirate.app.lit.LitAuthContextManager
 import com.pirate.app.lit.LitRust
 import com.pirate.app.music.TrackIds
 import android.util.Log
@@ -82,6 +84,7 @@ class AAScrobbleClient(
     userPkpPublicKey: String,
     litNetwork: String,
     litRpcUrl: String,
+    authState: PirateAuthUiState,
   ): AASubmitResult {
     val user = normalizeAddress(userEthAddress)
 
@@ -189,6 +192,7 @@ class AAScrobbleClient(
       userPkpPublicKey = userPkpPublicKey,
       litNetwork = litNetwork,
       litRpcUrl = litRpcUrl,
+      authState = authState,
     )
     userOp.put("signature", signature)
 
@@ -446,11 +450,12 @@ class AAScrobbleClient(
 
   // ── PKP signing (Lit Action) ─────────────────────────────────────────
 
-  private fun pkpSignDigest(
+  private suspend fun pkpSignDigest(
     digest32: ByteArray,
     userPkpPublicKey: String,
     litNetwork: String,
     litRpcUrl: String,
+    authState: PirateAuthUiState,
   ): String {
     if (digest32.size != 32) throw IllegalArgumentException("digest must be 32 bytes")
 
@@ -471,7 +476,7 @@ class AAScrobbleClient(
         .put("toSign", JSONArray(digest32.map { (it.toInt() and 0xff) }))
         .put("publicKey", userPkpPublicKey)
 
-    val raw =
+    val raw = LitAuthContextManager.runWithStateRecovery(authState) {
       LitRust.executeJsRaw(
         network = litNetwork,
         rpcUrl = litRpcUrl,
@@ -480,6 +485,7 @@ class AAScrobbleClient(
         jsParamsJson = jsParams.toString(),
         useSingleNode = false,
       )
+    }
     val env = LitRust.unwrapEnvelope(raw)
     val sig = env.optJSONObject("signatures")?.optJSONObject("sig")
       ?: throw IllegalStateException("No signature returned from PKP")

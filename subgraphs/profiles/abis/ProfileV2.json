@@ -56,6 +56,16 @@
             "internalType": "bytes32"
           },
           {
+            "name": "locationLatE6",
+            "type": "int32",
+            "internalType": "int32"
+          },
+          {
+            "name": "locationLngE6",
+            "type": "int32",
+            "internalType": "int32"
+          },
+          {
             "name": "schoolId",
             "type": "bytes32",
             "internalType": "bytes32"

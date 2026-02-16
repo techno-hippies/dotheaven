@@ -3,6 +3,7 @@ package com.pirate.app.chat
 import android.content.Context
 import android.util.Log
 import com.pirate.app.BuildConfig
+import com.pirate.app.lit.LitAuthContextManager
 import com.pirate.app.lit.LitRust
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -78,6 +79,7 @@ class XmtpChatService(private val appContext: Context) {
       }
 
       val signer = PkpSigningKey(
+        appContext = appContext,
         ethAddress = addressForXmtp,
         pkpPublicKey = pkpPublicKey,
         litNetwork = litNetwork,
@@ -344,6 +346,7 @@ class XmtpChatService(private val appContext: Context) {
  * Signs arbitrary messages by executing a Lit Action that calls Lit.Actions.signEcdsa.
  */
 private class PkpSigningKey(
+  private val appContext: Context,
   private val ethAddress: String,
   private val pkpPublicKey: String,
   private val litNetwork: String,
@@ -401,14 +404,17 @@ private class PkpSigningKey(
       .put("toSign", toSignArray)
       .put("publicKey", pkpPublicKey)
 
-    val raw = LitRust.executeJsRaw(
-      network = litNetwork,
-      rpcUrl = litRpcUrl,
-      code = litActionCode,
-      ipfsId = "",
-      jsParamsJson = jsParams.toString(),
-      useSingleNode = false,
-    )
+    val raw =
+      LitAuthContextManager.runWithSavedStateRecovery(appContext) {
+        LitRust.executeJsRaw(
+          network = litNetwork,
+          rpcUrl = litRpcUrl,
+          code = litActionCode,
+          ipfsId = "",
+          jsParamsJson = jsParams.toString(),
+          useSingleNode = false,
+        )
+      }
     val env = LitRust.unwrapEnvelope(raw)
     val sig = env.optJSONObject("signatures")?.optJSONObject("sig")
       ?: throw IllegalStateException("No signature returned from PKP")

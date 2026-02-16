@@ -1,5 +1,7 @@
 package com.pirate.app.music
 
+import android.content.Context
+import com.pirate.app.lit.LitAuthContextManager
 import com.pirate.app.lit.LitRust
 import org.json.JSONObject
 import java.util.UUID
@@ -22,7 +24,8 @@ object ContentRegisterLitAction {
     return if (litNetwork.trim().lowercase() == "naga-test") CONTENT_REGISTER_V1_CID_NAGA_TEST else CONTENT_REGISTER_V1_CID_NAGA_DEV
   }
 
-  fun registerContent(
+  suspend fun registerContent(
+    appContext: Context,
     litNetwork: String,
     litRpcUrl: String,
     userPkpPublicKey: String,
@@ -48,14 +51,16 @@ object ContentRegisterLitAction {
         .put("nonce", UUID.randomUUID().toString())
 
     val raw =
-      LitRust.executeJsRaw(
-        network = litNetwork,
-        rpcUrl = litRpcUrl,
-        code = "",
-        ipfsId = contentRegisterCidForNetwork(litNetwork),
-        jsParamsJson = jsParams.toString(),
-        useSingleNode = false,
-      )
+      LitAuthContextManager.runWithSavedStateRecovery(appContext) {
+        LitRust.executeJsRaw(
+          network = litNetwork,
+          rpcUrl = litRpcUrl,
+          code = "",
+          ipfsId = contentRegisterCidForNetwork(litNetwork),
+          jsParamsJson = jsParams.toString(),
+          useSingleNode = false,
+        )
+      }
     val exec = LitRust.unwrapEnvelope(raw)
 
     val responseAny = exec.opt("response")
@@ -79,4 +84,3 @@ object ContentRegisterLitAction {
     )
   }
 }
-

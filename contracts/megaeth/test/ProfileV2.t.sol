@@ -27,6 +27,9 @@ contract ProfileV2Test is Test {
         in_.languagesPacked =
             (uint256(0x454E0700) << 224) |
             (uint256(0x45530300) << 192);
+        in_.locationCityId = keccak256("San Francisco|US-CA|US");
+        in_.locationLatE6 = 37_774_900;
+        in_.locationLngE6 = -122_419_400;
     }
 
     // ── Direct upsertProfile ──
@@ -42,6 +45,8 @@ contract ProfileV2Test is Test {
         assertEq(p.age, 25);
         assertEq(p.displayName, "Alice");
         assertEq(p.languagesPacked, in_.languagesPacked);
+        assertEq(p.locationLatE6, in_.locationLatE6);
+        assertEq(p.locationLngE6, in_.locationLngE6);
 
         // Verify unpacking
         (bytes2[8] memory langs, uint8[8] memory profs) = profile.unpackLanguages(p.languagesPacked);
@@ -86,6 +91,8 @@ contract ProfileV2Test is Test {
         assertEq(p.age, 25);
         assertEq(p.displayName, "Alice");
         assertEq(p.languagesPacked, in_.languagesPacked);
+        assertEq(p.locationLatE6, in_.locationLatE6);
+        assertEq(p.locationLngE6, in_.locationLngE6);
         assertEq(profile.nonces(user), 1);
     }
 
@@ -117,6 +124,31 @@ contract ProfileV2Test is Test {
 
         vm.expectRevert("Invalid signature");
         profile.upsertProfileFor(user, in_, signature);
+    }
+
+    function test_upsertProfile_rejectsCoordsWithoutCity() public {
+        OnchainProfilesV2.ProfileInput memory in_ = _defaultInput();
+        in_.locationCityId = bytes32(0);
+
+        vm.prank(user);
+        vm.expectRevert("Coords require city");
+        profile.upsertProfile(in_);
+    }
+
+    function test_upsertProfile_rejectsOutOfRangeCoords() public {
+        OnchainProfilesV2.ProfileInput memory in_ = _defaultInput();
+        in_.locationLatE6 = 90_000_001;
+
+        vm.prank(user);
+        vm.expectRevert("Invalid lat");
+        profile.upsertProfile(in_);
+
+        in_.locationLatE6 = 37_774_900;
+        in_.locationLngE6 = 180_000_001;
+
+        vm.prank(user);
+        vm.expectRevert("Invalid lng");
+        profile.upsertProfile(in_);
     }
 
     function test_upsertProfileFor_replayBlocked() public {
@@ -241,6 +273,8 @@ contract ProfileV2Test is Test {
             (uint256(0x41520700));          // AR Native
         in_.friendsOpenToMask = 7; // all bits set
         in_.locationCityId = keccak256("Berlin|DE-BE|DE");
+        in_.locationLatE6 = 52_520_008;
+        in_.locationLngE6 = 13_404_954;
         in_.schoolId = keccak256("TU Berlin");
         // 16 hobby tag IDs packed into bytes32
         in_.hobbiesCommit = bytes32(uint256(0x0001000200030004000500060007000800090010001100120013001400150016));

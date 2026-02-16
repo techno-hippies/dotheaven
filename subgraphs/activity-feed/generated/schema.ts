@@ -1272,6 +1272,248 @@ export class Scrobble extends Entity {
   }
 }
 
+export class UserListeningStats extends Entity {
+  constructor(id: string) {
+    super();
+    this.set("id", Value.fromString(id));
+  }
+
+  save(): void {
+    let id = this.get("id");
+    assert(id != null, "Cannot save UserListeningStats entity without an ID");
+    if (id) {
+      assert(
+        id.kind == ValueKind.STRING,
+        `Entities of type UserListeningStats must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
+      );
+      store.set("UserListeningStats", id.toString(), this);
+    }
+  }
+
+  static loadInBlock(id: string): UserListeningStats | null {
+    return changetype<UserListeningStats | null>(
+      store.get_in_block("UserListeningStats", id),
+    );
+  }
+
+  static load(id: string): UserListeningStats | null {
+    return changetype<UserListeningStats | null>(
+      store.get("UserListeningStats", id),
+    );
+  }
+
+  get id(): string {
+    let value = this.get("id");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set id(value: string) {
+    this.set("id", Value.fromString(value));
+  }
+
+  get user(): Bytes {
+    let value = this.get("user");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set user(value: Bytes) {
+    this.set("user", Value.fromBytes(value));
+  }
+
+  get totalScrobbles(): BigInt {
+    let value = this.get("totalScrobbles");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set totalScrobbles(value: BigInt) {
+    this.set("totalScrobbles", Value.fromBigInt(value));
+  }
+
+  get lastScrobbleAt(): BigInt {
+    let value = this.get("lastScrobbleAt");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set lastScrobbleAt(value: BigInt) {
+    this.set("lastScrobbleAt", Value.fromBigInt(value));
+  }
+
+  get topArtist(): string {
+    let value = this.get("topArtist");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set topArtist(value: string) {
+    this.set("topArtist", Value.fromString(value));
+  }
+
+  get topArtistScrobbleCount(): BigInt {
+    let value = this.get("topArtistScrobbleCount");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set topArtistScrobbleCount(value: BigInt) {
+    this.set("topArtistScrobbleCount", Value.fromBigInt(value));
+  }
+
+  get updatedAtBlock(): BigInt {
+    let value = this.get("updatedAtBlock");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set updatedAtBlock(value: BigInt) {
+    this.set("updatedAtBlock", Value.fromBigInt(value));
+  }
+}
+
+export class UserArtistStats extends Entity {
+  constructor(id: string) {
+    super();
+    this.set("id", Value.fromString(id));
+  }
+
+  save(): void {
+    let id = this.get("id");
+    assert(id != null, "Cannot save UserArtistStats entity without an ID");
+    if (id) {
+      assert(
+        id.kind == ValueKind.STRING,
+        `Entities of type UserArtistStats must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
+      );
+      store.set("UserArtistStats", id.toString(), this);
+    }
+  }
+
+  static loadInBlock(id: string): UserArtistStats | null {
+    return changetype<UserArtistStats | null>(
+      store.get_in_block("UserArtistStats", id),
+    );
+  }
+
+  static load(id: string): UserArtistStats | null {
+    return changetype<UserArtistStats | null>(store.get("UserArtistStats", id));
+  }
+
+  get id(): string {
+    let value = this.get("id");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set id(value: string) {
+    this.set("id", Value.fromString(value));
+  }
+
+  get user(): Bytes {
+    let value = this.get("user");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set user(value: Bytes) {
+    this.set("user", Value.fromBytes(value));
+  }
+
+  get artistKey(): string {
+    let value = this.get("artistKey");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set artistKey(value: string) {
+    this.set("artistKey", Value.fromString(value));
+  }
+
+  get artist(): string {
+    let value = this.get("artist");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set artist(value: string) {
+    this.set("artist", Value.fromString(value));
+  }
+
+  get scrobbleCount(): BigInt {
+    let value = this.get("scrobbleCount");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set scrobbleCount(value: BigInt) {
+    this.set("scrobbleCount", Value.fromBigInt(value));
+  }
+
+  get lastScrobbleAt(): BigInt {
+    let value = this.get("lastScrobbleAt");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set lastScrobbleAt(value: BigInt) {
+    this.set("lastScrobbleAt", Value.fromBigInt(value));
+  }
+
+  get updatedAtBlock(): BigInt {
+    let value = this.get("updatedAtBlock");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set updatedAtBlock(value: BigInt) {
+    this.set("updatedAtBlock", Value.fromBigInt(value));
+  }
+}
+
 export class ContentEntry extends Entity {
   constructor(id: string) {
     super();

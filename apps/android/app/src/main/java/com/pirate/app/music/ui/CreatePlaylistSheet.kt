@@ -135,6 +135,7 @@ fun CreatePlaylistSheet(
               val result =
                 runCatching {
                   PlaylistV1LitAction.createEmptyPlaylist(
+                    appContext = context,
                     litNetwork = litNetwork,
                     litRpcUrl = litRpcUrl,
                     userPkpPublicKey = pkpPublicKey!!,

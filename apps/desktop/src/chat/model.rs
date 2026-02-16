@@ -13,7 +13,7 @@ pub struct ConversationItem {
     pub unread: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ChatMessage {
     pub id: String,
     pub sender_address: String,

@@ -54,7 +54,7 @@ const megaeth = {
 
 // ── Contracts ────────────────────────────────────────────────────────
 
-const PROFILE_V2 = "0xa31545D33f6d656E62De67fd020A26608d4601E5" as const;
+const PROFILE_V2 = "0xe00e82086480E61AaC8d5ad8B05B56A582dD0000" as const;
 const RECORDS_V1 = "0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3" as const;
 const REGISTRY_V1 = "0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2" as const;
 const HEAVEN_NODE =
@@ -67,8 +67,8 @@ const registryAbi = parseAbi([
 
 const profileAbi = parseAbi([
   "function nonces(address user) external view returns (uint256)",
-  "function upsertProfileFor(address user, (uint8 profileVersion, string displayName, bytes32 nameHash, uint8 age, uint16 heightCm, bytes2 nationality, uint256 languagesPacked, uint8 friendsOpenToMask, bytes32 locationCityId, bytes32 schoolId, bytes32 skillsCommit, bytes32 hobbiesCommit, string photoURI, uint8 gender, uint8 relocate, uint8 degree, uint8 fieldBucket, uint8 profession, uint8 industry, uint8 relationshipStatus, uint8 sexuality, uint8 ethnicity, uint8 datingStyle, uint8 children, uint8 wantsChildren, uint8 drinking, uint8 smoking, uint8 drugs, uint8 lookingFor, uint8 religion, uint8 pets, uint8 diet) calldata in_, bytes calldata signature) external",
-  "function getProfile(address user) external view returns ((uint8 profileVersion, bool exists, uint8 age, uint16 heightCm, bytes2 nationality, uint8 friendsOpenToMask, uint256 languagesPacked, bytes32 locationCityId, bytes32 schoolId, bytes32 skillsCommit, bytes32 hobbiesCommit, bytes32 nameHash, uint256 packed, string displayName, string photoURI))",
+  "function upsertProfileFor(address user, (uint8 profileVersion, string displayName, bytes32 nameHash, uint8 age, uint16 heightCm, bytes2 nationality, uint256 languagesPacked, uint8 friendsOpenToMask, bytes32 locationCityId, int32 locationLatE6, int32 locationLngE6, bytes32 schoolId, bytes32 skillsCommit, bytes32 hobbiesCommit, string photoURI, uint8 gender, uint8 relocate, uint8 degree, uint8 fieldBucket, uint8 profession, uint8 industry, uint8 relationshipStatus, uint8 sexuality, uint8 ethnicity, uint8 datingStyle, uint8 children, uint8 wantsChildren, uint8 drinking, uint8 smoking, uint8 drugs, uint8 lookingFor, uint8 religion, uint8 pets, uint8 diet) calldata in_, bytes calldata signature) external",
+  "function getProfile(address user) external view returns ((uint8 profileVersion, bool exists, uint8 age, uint16 heightCm, bytes2 nationality, uint8 friendsOpenToMask, uint256 languagesPacked, bytes32 locationCityId, int32 locationLatE6, int32 locationLngE6, bytes32 schoolId, bytes32 skillsCommit, bytes32 hobbiesCommit, bytes32 nameHash, uint256 packed, string displayName, string photoURI))",
 ]);
 
 const recordsAbi = parseAbi([
@@ -614,6 +614,8 @@ function buildProfileTuple(p: SeedProfile) {
     languagesPacked: packLanguages(p.languages),
     friendsOpenToMask: 0,
     locationCityId: keccak256(toBytes(p.location)),
+    locationLatE6: 0,
+    locationLngE6: 0,
     schoolId: ZERO,
     skillsCommit: packTagIds(p.skills),
     hobbiesCommit: packTagIds(p.hobbies),
@@ -646,7 +648,7 @@ function buildProfileTuple(p: SeedProfile) {
 // Solidity's keccak256(abi.encode(struct)) encodes the struct as a tuple,
 // so we must wrap all fields in a tuple type to match.
 const PROFILE_INPUT_TUPLE = parseAbiParameters(
-  "(uint8, string, bytes32, uint8, uint16, bytes2, uint256, uint8, bytes32, bytes32, bytes32, bytes32, string, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8)"
+  "(uint8, string, bytes32, uint8, uint16, bytes2, uint256, uint8, bytes32, int32, int32, bytes32, bytes32, bytes32, string, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8, uint8)"
 );
 
 function profileHash(tuple: ReturnType<typeof buildProfileTuple>): Hex {
@@ -661,6 +663,8 @@ function profileHash(tuple: ReturnType<typeof buildProfileTuple>): Hex {
       tuple.languagesPacked,
       tuple.friendsOpenToMask,
       tuple.locationCityId,
+      tuple.locationLatE6,
+      tuple.locationLngE6,
       tuple.schoolId,
       tuple.skillsCommit,
       tuple.hobbiesCommit,

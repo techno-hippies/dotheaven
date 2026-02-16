@@ -1,35 +1,38 @@
 use super::*;
 
-pub(super) fn render_room_card(room: &RoomCard, theme: &Theme) -> impl IntoElement {
+pub(super) fn render_room_card(
+    room: &RoomCard,
+    theme: &Theme,
+    cx: &mut Context<RoomsView>,
+) -> impl IntoElement {
     let (badge_text, badge_bg, badge_fg) = badge_style(room.status);
-    let kind_text = room_kind_text(room.kind);
+    let room_clone = room.clone();
     let is_solo = room.kind == RoomKind::DjSet;
+    let price_is_free = room.price_label.eq_ignore_ascii_case("free");
 
-    let avatar = |letter: char| {
+    let avatar_ring = |accent: Hsla| {
         div()
-            .size(px(22.))
+            .size(px(28.))
             .rounded_full()
-            .bg(theme.primary)
-            .flex()
-            .items_center()
-            .justify_center()
-            .child(
-                div()
-                    .text_xs()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(theme.primary_foreground)
-                    .child(letter.to_string()),
-            )
+            .border_2()
+            .border_color(accent)
+            .bg(hsla(0.0, 0.0, 0.12, 1.0))
     };
 
     div()
+        .id(SharedString::from(format!("rooms-card-{}", room.room_id)))
         .v_flex()
-        .gap_4()
+        .gap_3()
         .p_4()
         .rounded(px(10.))
         .border_1()
         .border_color(theme.border)
-        .bg(theme.sidebar)
+        .bg(hsla(0.0, 0.0, 0.10, 1.0))
+        .cursor_pointer()
+        .hover(|style| style.bg(hsla(0.0, 0.0, 0.12, 1.0)))
+        .on_click(cx.listener(move |this, _, _, cx| {
+            this.open_room_card(room_clone.clone(), cx);
+        }))
         .child(
             div()
                 .h_flex()
@@ -55,17 +58,48 @@ pub(super) fn render_room_card(room: &RoomCard, theme: &Theme) -> impl IntoEleme
                 )
                 .child(
                     div()
-                        .text_sm()
+                        .h_flex()
+                        .items_center()
+                        .gap_1()
+                        .text_xs()
                         .text_color(theme.muted_foreground)
-                        .child(kind_text),
+                        .child(
+                            gpui::svg()
+                                .path("icons/user.svg")
+                                .size(px(12.))
+                                .text_color(theme.muted_foreground),
+                        )
+                        .child(room.listener_count.to_string()),
                 ),
         )
         .child(
             div()
-                .text_xl()
+                .text_lg()
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(theme.foreground)
                 .child(room.title.clone()),
+        )
+        .child(
+            div().h_flex().items_center().justify_between().child(
+                div()
+                    .h_flex()
+                    .items_center()
+                    .gap_2()
+                    .child(avatar_ring(hsla(0.61, 0.84, 0.76, 1.0)))
+                    .when(!is_solo, |el| {
+                        el.child(avatar_ring(hsla(0.73, 0.78, 0.76, 1.0)))
+                    })
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(theme.muted_foreground)
+                            .child(if is_solo {
+                                room.host_a.clone()
+                            } else {
+                                format!("{} & {}", room.host_a, room.host_b)
+                            }),
+                    ),
+            ),
         )
         .child(
             div()
@@ -74,29 +108,20 @@ pub(super) fn render_room_card(room: &RoomCard, theme: &Theme) -> impl IntoEleme
                 .justify_between()
                 .child(
                     div()
-                        .h_flex()
-                        .items_center()
-                        .gap_2()
-                        .child(avatar('A'))
-                        .when(!is_solo, |el| el.child(avatar('B')))
-                        .child(div().text_color(theme.muted_foreground).child(if is_solo {
-                            room.host_a.clone()
-                        } else {
-                            format!("{}  & {}", room.host_a, room.host_b)
-                        })),
+                        .text_sm()
+                        .text_color(theme.muted_foreground)
+                        .child(room.meta_line.clone()),
                 )
                 .child(
                     div()
                         .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(theme.primary)
+                        .text_color(if price_is_free {
+                            hsla(0.40, 0.86, 0.72, 1.0)
+                        } else {
+                            hsla(0.08, 0.84, 0.72, 1.0)
+                        })
                         .child(room.price_label.clone()),
                 ),
-        )
-        .child(
-            div()
-                .text_sm()
-                .text_color(theme.muted_foreground)
-                .child(room.meta_line.clone()),
         )
 }
 
@@ -122,13 +147,5 @@ fn badge_style(status: RoomStatus) -> (&'static str, Hsla, Hsla) {
             hsla(0.11, 0.50, 0.24, 1.0),
             hsla(0.13, 0.90, 0.70, 1.0),
         ),
-    }
-}
-
-fn room_kind_text(kind: RoomKind) -> &'static str {
-    match kind {
-        RoomKind::DjSet => "Solo Room",
-        RoomKind::Duet => "Duet",
-        RoomKind::OpenJam => "Open Jam",
     }
 }

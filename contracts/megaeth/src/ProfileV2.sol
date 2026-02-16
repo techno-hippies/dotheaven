@@ -46,6 +46,10 @@ contract OnchainProfilesV2 {
 
     uint8 public constant MAX_LANGUAGE_SLOTS = 8;
     uint8 public constant PROF_NATIVE = 7;
+    int32 private constant MIN_LAT_E6 = -90_000_000;
+    int32 private constant MAX_LAT_E6 = 90_000_000;
+    int32 private constant MIN_LNG_E6 = -180_000_000;
+    int32 private constant MAX_LNG_E6 = 180_000_000;
 
     struct Profile {
         uint8  profileVersion;
@@ -61,6 +65,8 @@ contract OnchainProfilesV2 {
         uint256 languagesPacked; // 8 x 32-bit entries: [langCode:16][prof:8][reserved:8]
 
         bytes32 locationCityId;  // keccak256("San Francisco|US-CA|US") etc
+        int32 locationLatE6;     // latitude * 1_000_000
+        int32 locationLngE6;     // longitude * 1_000_000
         bytes32 schoolId;        // keccak256("Stanford University")
         bytes32 skillsCommit;    // packed uint16 tag IDs
         bytes32 hobbiesCommit;   // same
@@ -172,6 +178,8 @@ contract OnchainProfilesV2 {
 
         // commitments / pointers
         bytes32 locationCityId;
+        int32 locationLatE6;
+        int32 locationLngE6;
         bytes32 schoolId;
         bytes32 skillsCommit;
         bytes32 hobbiesCommit;
@@ -272,7 +280,16 @@ contract OnchainProfilesV2 {
 
         pr.friendsOpenToMask = in_.friendsOpenToMask;
 
+        if (in_.locationCityId == bytes32(0)) {
+            require(in_.locationLatE6 == 0 && in_.locationLngE6 == 0, "Coords require city");
+        } else {
+            require(in_.locationLatE6 >= MIN_LAT_E6 && in_.locationLatE6 <= MAX_LAT_E6, "Invalid lat");
+            require(in_.locationLngE6 >= MIN_LNG_E6 && in_.locationLngE6 <= MAX_LNG_E6, "Invalid lng");
+        }
+
         pr.locationCityId = in_.locationCityId;
+        pr.locationLatE6 = in_.locationLatE6;
+        pr.locationLngE6 = in_.locationLngE6;
         pr.schoolId = in_.schoolId;
         pr.skillsCommit = in_.skillsCommit;
         pr.hobbiesCommit = in_.hobbiesCommit;

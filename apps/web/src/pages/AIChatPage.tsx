@@ -272,6 +272,7 @@ export const AIChatPage: Component = () => {
         body: JSON.stringify({
           message: content,
           history,
+          activityWallet: pkpInfo.ethAddress,
         }),
       })
 

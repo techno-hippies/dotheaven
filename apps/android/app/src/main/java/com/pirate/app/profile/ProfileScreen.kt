@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.QueueMusic
@@ -55,6 +56,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -64,6 +66,7 @@ import com.pirate.app.music.OnChainPlaylist
 import com.pirate.app.music.OnChainPlaylistsApi
 import com.pirate.app.onboarding.OnboardingRpcHelpers
 import com.pirate.app.theme.PiratePalette
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -99,6 +102,13 @@ fun ProfileScreen(
   onRegister: () -> Unit,
   onLogin: () -> Unit,
   onLogout: () -> Unit = {},
+  onBack: (() -> Unit)? = null,
+  onMessage: ((String) -> Unit)? = null,
+  onEditProfile: (() -> Unit)? = null,
+  viewerEthAddress: String? = ethAddress,
+  pkpPublicKey: String? = null,
+  litNetwork: String = "naga-dev",
+  litRpcUrl: String = "https://yellowstone-rpc.litprotocol.com",
 ) {
   if (!isAuthenticated || ethAddress.isNullOrBlank()) {
     Column(
@@ -125,10 +135,25 @@ fun ProfileScreen(
 
   var selectedTab by remember { mutableIntStateOf(0) }
   val tabs = ProfileTab.entries
+  val appContext = LocalContext.current.applicationContext
+  val scope = rememberCoroutineScope()
+  val canFollow = remember(viewerEthAddress, ethAddress) {
+    !viewerEthAddress.isNullOrBlank() &&
+      !ethAddress.isNullOrBlank() &&
+      !viewerEthAddress.equals(ethAddress, ignoreCase = true)
+  }
+  val isOwnProfile = remember(viewerEthAddress, ethAddress) {
+    !viewerEthAddress.isNullOrBlank() &&
+      !ethAddress.isNullOrBlank() &&
+      viewerEthAddress.equals(ethAddress, ignoreCase = true)
+  }
 
   // Follow counts
   var followerCount by remember { mutableIntStateOf(0) }
   var followingCount by remember { mutableIntStateOf(0) }
+  var isFollowing by remember { mutableStateOf(false) }
+  var followBusy by remember { mutableStateOf(false) }
+  var followError by remember { mutableStateOf<String?>(null) }
 
   // Scrobble state
   var scrobbles by remember { mutableStateOf<List<ScrobbleRow>>(emptyList()) }
@@ -140,8 +165,18 @@ fun ProfileScreen(
   var playlists by remember { mutableStateOf<List<OnChainPlaylist>>(emptyList()) }
   var playlistsLoading by remember { mutableStateOf(true) }
 
+  // Contract profile (all ProfileV2-supported fields)
+  var contractProfile by remember { mutableStateOf<ContractProfileData?>(null) }
+  var contractLoading by remember { mutableStateOf(true) }
+  var contractError by remember { mutableStateOf<String?>(null) }
+  var contractRetryKey by remember { mutableIntStateOf(0) }
+
   // Settings sheet
   var showSettings by remember { mutableStateOf(false) }
+
+  val displayName = heavenName?.let { "$it.heaven" }
+    ?: contractProfile?.displayName?.takeIf { it.isNotBlank() }
+    ?: shortAddr(ethAddress)
 
   // Fetch follow counts
   LaunchedEffect(ethAddress) {
@@ -149,6 +184,18 @@ fun ProfileScreen(
       val (followers, following) = OnboardingRpcHelpers.getFollowCounts(ethAddress)
       followerCount = followers
       followingCount = following
+    }
+  }
+
+  // Fetch follow state for viewer -> profile target
+  LaunchedEffect(viewerEthAddress, ethAddress) {
+    followError = null
+    if (!canFollow) {
+      isFollowing = false
+      return@LaunchedEffect
+    }
+    isFollowing = withContext(Dispatchers.IO) {
+      OnboardingRpcHelpers.getFollowState(viewerEthAddress!!, ethAddress!!)
     }
   }
 
@@ -169,19 +216,55 @@ fun ProfileScreen(
       .onFailure { playlistsLoading = false }
   }
 
+  // Fetch full contract profile for About/Edit
+  LaunchedEffect(ethAddress, contractRetryKey) {
+    contractLoading = true
+    contractError = null
+    runCatching { ProfileContractApi.fetchProfile(ethAddress) }
+      .onSuccess {
+        contractProfile = it
+        contractLoading = false
+      }
+      .onFailure {
+        contractError = it.message ?: "Failed to load profile"
+        contractLoading = false
+      }
+  }
+
   Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-    // Banner + settings gear
+    // Banner + top actions
     Box(modifier = Modifier.fillMaxWidth().height(100.dp)) {
       Box(modifier = Modifier.fillMaxSize().background(BannerGradient))
-      IconButton(
-        onClick = { showSettings = true },
-        modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(end = 8.dp),
-      ) {
-        Icon(Icons.Rounded.Settings, contentDescription = "Settings", tint = Color.White, modifier = Modifier.size(24.dp))
+      if (onBack != null) {
+        IconButton(
+          onClick = onBack,
+          modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(start = 8.dp),
+        ) {
+          Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(24.dp))
+        }
+      }
+      if (isOwnProfile) {
+        IconButton(
+          onClick = { showSettings = true },
+          modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(end = 8.dp),
+        ) {
+          Icon(Icons.Rounded.Settings, contentDescription = "Settings", tint = Color.White, modifier = Modifier.size(24.dp))
+        }
+      }
+      if (!isOwnProfile) {
+        Text(
+          displayName,
+          modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 12.dp),
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.SemiBold,
+          color = Color.White,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
       }
     }
 
-    // Avatar + name row
+    // Avatar + stats row
     Row(
       modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 12.dp),
       verticalAlignment = Alignment.CenterVertically,
@@ -210,25 +293,108 @@ fun ProfileScreen(
         }
       }
       Spacer(Modifier.width(16.dp))
-      Column {
-        Text(
-          heavenName?.let { "$it.heaven" } ?: shortAddr(ethAddress),
-          style = MaterialTheme.typography.titleLarge,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.onBackground,
-        )
+      Row(
+        modifier = Modifier.weight(1f),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        FollowStat("$followerCount", "followers")
+        FollowStat("$followingCount", "following")
+      }
+    }
+
+    Spacer(Modifier.height(10.dp))
+
+    Text(
+      displayName,
+      modifier = Modifier.padding(horizontal = 20.dp),
+      style = MaterialTheme.typography.titleLarge,
+      fontWeight = FontWeight.Bold,
+      color = MaterialTheme.colorScheme.onBackground,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+    )
+
+    if (isOwnProfile && onEditProfile != null) {
+      Spacer(Modifier.height(10.dp))
+      OutlinedButton(
+        onClick = onEditProfile,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+      ) {
+        Text("Edit Profile")
+      }
+    }
+
+    if (canFollow) {
+      Spacer(Modifier.height(10.dp))
+      Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+      ) {
+        Button(
+          modifier = if (onMessage != null && !ethAddress.isNullOrBlank()) Modifier.weight(1f) else Modifier.fillMaxWidth(),
+          onClick = {
+            if (followBusy) return@Button
+            val viewer = viewerEthAddress
+            val pubkey = pkpPublicKey
+            if (viewer.isNullOrBlank() || pubkey.isNullOrBlank()) {
+              followError = "Missing follow auth context"
+              return@Button
+            }
+            followBusy = true
+            followError = null
+            val action = if (isFollowing) "unfollow" else "follow"
+            scope.launch {
+              val result = FollowLitAction.toggleFollow(
+                appContext = appContext,
+                targetAddress = ethAddress!!,
+                action = action,
+                userPkpPublicKey = pubkey,
+                userEthAddress = viewer,
+                litNetwork = litNetwork,
+                litRpcUrl = litRpcUrl,
+              )
+              if (result.success) {
+                isFollowing = !isFollowing
+                val (followers, following) = OnboardingRpcHelpers.getFollowCounts(ethAddress!!)
+                followerCount = followers
+                followingCount = following
+              } else {
+                followError = result.error ?: "Follow action failed"
+              }
+              followBusy = false
+            }
+          },
+          enabled = !followBusy,
+        ) {
+          Text(
+            if (followBusy) {
+              if (isFollowing) "Unfollowing..." else "Following..."
+            } else {
+              if (isFollowing) "Following" else "Follow"
+            },
+          )
+        }
+        if (onMessage != null && !ethAddress.isNullOrBlank()) {
+          OutlinedButton(
+            modifier = Modifier.weight(1f),
+            onClick = { onMessage(ethAddress) },
+            enabled = !followBusy,
+          ) {
+            Text("Message")
+          }
+        }
       }
     }
 
     Spacer(Modifier.height(12.dp))
-
-    // Follower stats
-    Row(
-      modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 12.dp),
-      horizontalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-      FollowStat("$followerCount", "followers")
-      FollowStat("$followingCount", "following")
+    if (!followError.isNullOrBlank()) {
+      Text(
+        followError!!,
+        modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 8.dp),
+        color = MaterialTheme.colorScheme.error,
+        style = MaterialTheme.typography.bodySmall,
+      )
     }
 
     // Tab row
@@ -269,7 +435,15 @@ fun ProfileScreen(
         scrobbleRetryKey++
       }
       ProfileTab.Schedule -> EmptyTabPanel("Schedule")
-      ProfileTab.About -> AboutPanel(ethAddress)
+      ProfileTab.About -> AboutPanel(
+        profile = contractProfile,
+        loading = contractLoading,
+        error = contractError,
+        isOwnProfile = isOwnProfile,
+        onEditProfile = onEditProfile,
+      ) {
+        contractRetryKey++
+      }
     }
   }
 
@@ -482,15 +656,152 @@ private fun PlaylistRowItem(playlist: OnChainPlaylist) {
 // ── About tab ──
 
 @Composable
-private fun AboutPanel(ethAddress: String) {
-  Column(modifier = Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-    Text("Heaven", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-    Text("Version 0.1.0", style = MaterialTheme.typography.bodyLarge, color = PiratePalette.TextMuted)
-    Text(
-      "Decentralized music player with on-chain scrobbling, encrypted storage, and peer-to-peer messaging.",
-      style = MaterialTheme.typography.bodyLarge,
-      color = MaterialTheme.colorScheme.onBackground,
-    )
+private fun AboutPanel(
+  profile: ContractProfileData?,
+  loading: Boolean,
+  error: String?,
+  isOwnProfile: Boolean,
+  onEditProfile: (() -> Unit)?,
+  onRetry: () -> Unit,
+) {
+  if (loading) {
+    CenteredStatus { CircularProgressIndicator(Modifier.size(32.dp)); Spacer(Modifier.height(12.dp)); Text("Loading profile fields...", color = PiratePalette.TextMuted) }
+    return
+  }
+  if (!error.isNullOrBlank()) {
+    CenteredStatus {
+      Text(error, color = MaterialTheme.colorScheme.error)
+      Spacer(Modifier.height(8.dp))
+      TextButton(onClick = onRetry) { Text("Retry") }
+    }
+    return
+  }
+  if (profile == null) {
+    CenteredStatus {
+      Text(
+        if (isOwnProfile) "No on-chain profile fields yet." else "No profile fields yet.",
+        color = PiratePalette.TextMuted,
+      )
+      if (isOwnProfile && onEditProfile != null) {
+        Spacer(Modifier.height(12.dp))
+        Button(onClick = onEditProfile) { Text("Create Profile") }
+      }
+    }
+    return
+  }
+
+  val identityRows = buildList<Pair<String, String>> {
+    if (profile.displayName.isNotBlank()) add("Display Name" to profile.displayName)
+    if (profile.nationality.isNotBlank()) add("Nationality" to profile.nationality)
+    if (profile.nameHash.isNotBlank()) add("Name Hash" to profile.nameHash)
+    if (profile.photoUri.isNotBlank()) add("Photo URI" to profile.photoUri)
+  }
+
+  val basicsRows = buildList<Pair<String, String>> {
+    if (profile.age > 0) add("Age" to "${profile.age}")
+    if (profile.heightCm > 0) add("Height" to "${profile.heightCm} cm")
+    if (profile.languages.isNotEmpty()) {
+      val langs = profile.languages.joinToString(" · ") { entry ->
+        "${ProfileContractApi.languageLabel(entry.code)} (${ProfileContractApi.proficiencyLabel(entry.proficiency)})"
+      }
+      add("Languages" to langs)
+    }
+    val openTo = ProfileContractApi.selectedFriendsLabels(profile.friendsOpenToMask)
+    if (openTo.isNotEmpty()) add("Open To" to openTo.joinToString(", "))
+  }
+
+  val locationRows = buildList<Pair<String, String>> {
+    if (profile.locationCityId.isNotBlank()) add("Location City ID" to profile.locationCityId)
+    if (ProfileContractApi.hasCoords(profile.locationLatE6, profile.locationLngE6)) {
+      val lat = profile.locationLatE6.toDouble() / 1_000_000.0
+      val lng = profile.locationLngE6.toDouble() / 1_000_000.0
+      add("Coordinates" to String.format(Locale.US, "%.5f, %.5f", lat, lng))
+    }
+    if (profile.schoolId.isNotBlank()) add("School ID" to profile.schoolId)
+    if (profile.hobbiesCommit.isNotBlank()) add("Hobbies IDs" to profile.hobbiesCommit)
+    if (profile.skillsCommit.isNotBlank()) add("Skills IDs" to profile.skillsCommit)
+  }
+
+  val preferenceRows = buildList<Pair<String, String>> {
+    ProfileContractApi.enumLabel(ProfileContractApi.GENDER_OPTIONS, profile.gender)?.let { add("Gender" to it) }
+    ProfileContractApi.enumLabel(ProfileContractApi.RELOCATE_OPTIONS, profile.relocate)?.let { add("Relocate" to it) }
+    ProfileContractApi.enumLabel(ProfileContractApi.DEGREE_OPTIONS, profile.degree)?.let { add("Degree" to it) }
+    ProfileContractApi.enumLabel(ProfileContractApi.FIELD_OPTIONS, profile.fieldBucket)?.let { add("Field" to it) }
+    ProfileContractApi.enumLabel(ProfileContractApi.PROFESSION_OPTIONS, profile.profession)?.let { add("Profession" to it) }
+    ProfileContractApi.enumLabel(ProfileContractApi.INDUSTRY_OPTIONS, profile.industry)?.let { add("Industry" to it) }
+    ProfileContractApi.enumLabel(ProfileContractApi.RELATIONSHIP_OPTIONS, profile.relationshipStatus)?.let { add("Relationship" to it) }
+    ProfileContractApi.enumLabel(ProfileContractApi.SEXUALITY_OPTIONS, profile.sexuality)?.let { add("Sexuality" to it) }
+    ProfileContractApi.enumLabel(ProfileContractApi.ETHNICITY_OPTIONS, profile.ethnicity)?.let { add("Ethnicity" to it) }
+    ProfileContractApi.enumLabel(ProfileContractApi.DATING_STYLE_OPTIONS, profile.datingStyle)?.let { add("Dating Style" to it) }
+    ProfileContractApi.enumLabel(ProfileContractApi.CHILDREN_OPTIONS, profile.children)?.let { add("Children" to it) }
+    ProfileContractApi.enumLabel(ProfileContractApi.WANTS_CHILDREN_OPTIONS, profile.wantsChildren)?.let { add("Wants Children" to it) }
+    ProfileContractApi.enumLabel(ProfileContractApi.LOOKING_FOR_OPTIONS, profile.lookingFor)?.let { add("Looking For" to it) }
+    ProfileContractApi.enumLabel(ProfileContractApi.DRINKING_OPTIONS, profile.drinking)?.let { add("Drinking" to it) }
+    ProfileContractApi.enumLabel(ProfileContractApi.SMOKING_OPTIONS, profile.smoking)?.let { add("Smoking" to it) }
+    ProfileContractApi.enumLabel(ProfileContractApi.DRUGS_OPTIONS, profile.drugs)?.let { add("Drugs" to it) }
+    ProfileContractApi.enumLabel(ProfileContractApi.RELIGION_OPTIONS, profile.religion)?.let { add("Religion" to it) }
+    ProfileContractApi.enumLabel(ProfileContractApi.PETS_OPTIONS, profile.pets)?.let { add("Pets" to it) }
+    ProfileContractApi.enumLabel(ProfileContractApi.DIET_OPTIONS, profile.diet)?.let { add("Diet" to it) }
+  }
+
+  LazyColumn(
+    modifier = Modifier.fillMaxSize().padding(16.dp),
+    verticalArrangement = Arrangement.spacedBy(10.dp),
+  ) {
+    if (isOwnProfile && onEditProfile != null) {
+      item {
+        OutlinedButton(onClick = onEditProfile, modifier = Modifier.fillMaxWidth()) {
+          Text("Edit Profile")
+        }
+      }
+    }
+
+    if (identityRows.isNotEmpty()) {
+      item { AboutSectionCard("Identity", identityRows) }
+    }
+    if (basicsRows.isNotEmpty()) {
+      item { AboutSectionCard("Basics", basicsRows) }
+    }
+    if (locationRows.isNotEmpty()) {
+      item { AboutSectionCard("Location & Commitments", locationRows) }
+    }
+    if (preferenceRows.isNotEmpty()) {
+      item { AboutSectionCard("Preferences", preferenceRows) }
+    }
+    if (identityRows.isEmpty() && basicsRows.isEmpty() && locationRows.isEmpty() && preferenceRows.isEmpty()) {
+      item {
+        Text(
+          "No populated fields yet.",
+          color = PiratePalette.TextMuted,
+          style = MaterialTheme.typography.bodyLarge,
+          modifier = Modifier.padding(8.dp),
+        )
+      }
+    }
+  }
+}
+
+@Composable
+private fun AboutSectionCard(
+  title: String,
+  rows: List<Pair<String, String>>,
+) {
+  Surface(
+    modifier = Modifier.fillMaxWidth(),
+    color = Color(0xFF1C1C1C),
+    shape = RoundedCornerShape(14.dp),
+  ) {
+    Column(
+      modifier = Modifier.padding(14.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+      rows.forEachIndexed { index, row ->
+        if (index > 0) HorizontalDivider(color = Color(0xFF2A2A2A))
+        Text(row.first, style = MaterialTheme.typography.labelLarge, color = PiratePalette.TextMuted)
+        Text(row.second, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
+      }
+    }
   }
 }
 

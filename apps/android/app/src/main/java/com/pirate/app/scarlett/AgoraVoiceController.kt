@@ -123,6 +123,7 @@ class AgoraVoiceController(private val appContext: Context) {
       try {
         // 1. Get JWT
         val token = getWorkerToken(
+          appContext = appContext,
           workerUrl = CHAT_WORKER_URL,
           wallet = wallet,
           pkpPublicKey = pkpPublicKey,
@@ -131,9 +132,13 @@ class AgoraVoiceController(private val appContext: Context) {
         )
 
         // 2. POST /agent/start
+        val startPayload = JSONObject()
+          .put("activityWallet", wallet.lowercase())
+          .toString()
+          .toRequestBody(JSON_MT)
         val startReq = Request.Builder()
           .url("$CHAT_WORKER_URL/agent/start")
-          .post("{}".toRequestBody(JSON_MT))
+          .post(startPayload)
           .header("Authorization", "Bearer $token")
           .build()
 

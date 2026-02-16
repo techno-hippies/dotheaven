@@ -6,7 +6,7 @@ impl RoomsView {
             log::warn!("[Rooms] failed stopping native bridge on close: {err}");
         }
         self.active_host_room = None;
-        self.active_tab = RoomsTab::MyRooms;
+        self.active_tab = RoomsTab::Following;
         cx.notify();
     }
 
@@ -50,6 +50,7 @@ impl RoomsView {
                 let mut start_success_status: Option<String> = None;
                 let mut start_error_status: Option<String> = None;
                 let mut jacktrip_error_status: Option<String> = None;
+                let mut started_room_id: Option<String> = None;
                 if let Some(active) = this.active_host_room.as_mut() {
                     if active.room_id != room_id_for_update {
                         return;
@@ -89,19 +90,10 @@ impl RoomsView {
                             active.native_bridge_running = false;
                             active.native_bridge_pending = false;
                             active.native_bridge_error = None;
-                            this.active_tab = RoomsTab::LiveNow;
-                            this.activity.insert(
-                                0,
-                                ActivityItem {
-                                    color: hsla(0.40, 0.78, 0.70, 1.0),
-                                    text: format!(
-                                        "you started {} live",
-                                        short_room_id(&active.room_id)
-                                    ),
-                                },
-                            );
+                            let room_id = active.room_id.clone();
+                            started_room_id = Some(room_id.clone());
                             start_success_status =
-                                Some(format!("Room {} started.", short_room_id(&active.room_id)));
+                                Some(format!("Room {} started.", short_room_id(&room_id)));
                         }
                         Err(err) => {
                             active.start_error = Some(err.clone());
@@ -141,6 +133,19 @@ impl RoomsView {
 
                     this.activity.truncate(8);
                 }
+                if let Some(room_id) = started_room_id {
+                    this.active_tab = RoomsTab::Following;
+                    this.update_room_card_status(&room_id, RoomStatus::Live);
+                    this.activity.insert(
+                        0,
+                        ActivityItem {
+                            color: hsla(0.40, 0.78, 0.70, 1.0),
+                            text: format!("you started {} live", short_room_id(&room_id)),
+                        },
+                    );
+                    this.activity.truncate(8);
+                }
+                let should_refresh_discovery = start_success_status.is_some();
                 if let Some(message) = start_success_status {
                     this.publish_status_success("rooms.host.start", message, cx);
                 }
@@ -149,6 +154,9 @@ impl RoomsView {
                 }
                 if let Some(message) = jacktrip_error_status {
                     this.publish_status_error("rooms.host.jacktrip", message, cx);
+                }
+                if should_refresh_discovery {
+                    this.refresh_discoverable_rooms(cx);
                 }
                 cx.notify();
             });
@@ -191,6 +199,7 @@ impl RoomsView {
             let _ = this.update(cx, |this, cx| {
                 let mut end_success_status: Option<String> = None;
                 let mut end_error_status: Option<String> = None;
+                let mut ended_room_id: Option<String> = None;
                 if let Some(active) = this.active_host_room.as_mut() {
                     if active.room_id != room_id_for_update {
                         return;
@@ -205,17 +214,10 @@ impl RoomsView {
                             active.broadcast_state = Some("stopped".to_string());
                             active.restore_system_mic_pending = false;
                             active.info_message = Some("Room ended.".to_string());
-                            this.active_tab = RoomsTab::MyRooms;
-                            this.activity.insert(
-                                0,
-                                ActivityItem {
-                                    color: hsla(0.11, 0.50, 0.70, 1.0),
-                                    text: format!("you ended {}", short_room_id(&active.room_id)),
-                                },
-                            );
-                            this.activity.truncate(8);
+                            let room_id = active.room_id.clone();
+                            ended_room_id = Some(room_id.clone());
                             end_success_status =
-                                Some(format!("Room {} ended.", short_room_id(&active.room_id)));
+                                Some(format!("Room {} ended.", short_room_id(&room_id)));
                         }
                         Err(err) => {
                             active.info_message = Some("End room failed.".to_string());
@@ -233,11 +235,27 @@ impl RoomsView {
                         }
                     }
                 }
+                if let Some(room_id) = ended_room_id {
+                    this.active_tab = RoomsTab::Following;
+                    this.update_room_card_status(&room_id, RoomStatus::Ended);
+                    this.activity.insert(
+                        0,
+                        ActivityItem {
+                            color: hsla(0.11, 0.50, 0.70, 1.0),
+                            text: format!("you ended {}", short_room_id(&room_id)),
+                        },
+                    );
+                    this.activity.truncate(8);
+                }
+                let should_refresh_discovery = end_success_status.is_some();
                 if let Some(message) = end_success_status {
                     this.publish_status_success("rooms.host.end", message, cx);
                 }
                 if let Some(message) = end_error_status {
                     this.publish_status_error("rooms.host.end", message, cx);
+                }
+                if should_refresh_discovery {
+                    this.refresh_discoverable_rooms(cx);
                 }
                 cx.notify();
             });

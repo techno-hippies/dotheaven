@@ -115,6 +115,26 @@ type Scrobble @entity(immutable: true) {
   transactionHash: Bytes!
 }
 
+type UserListeningStats @entity(immutable: false) {
+  id: ID!                      # user address hex (lowercase)
+  user: Bytes!                 # wallet address
+  totalScrobbles: BigInt!      # total lifetime scrobbles from indexed history
+  lastScrobbleAt: BigInt!      # unix seconds of most recent scrobble
+  topArtist: String!           # top artist by scrobble count for this user
+  topArtistScrobbleCount: BigInt! # listens for topArtist
+  updatedAtBlock: BigInt!      # latest block that touched this row
+}
+
+type UserArtistStats @entity(immutable: false) {
+  id: ID!                      # "{user}-{artistKey}"
+  user: Bytes!                 # wallet address
+  artistKey: String!           # normalized artist key (lowercase)
+  artist: String!              # display artist label (latest seen)
+  scrobbleCount: BigInt!       # lifetime listens for this user + artist
+  lastScrobbleAt: BigInt!      # unix seconds of latest scrobble for this artist
+  updatedAtBlock: BigInt!      # latest block that touched this row
+}
+
 # ── ContentRegistry — Filecoin content pointers + access control ──
 
 type ContentEntry @entity(immutable: false) {

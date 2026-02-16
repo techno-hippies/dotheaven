@@ -3,6 +3,7 @@ package com.pirate.app.scrobble
 import android.util.Log
 import com.pirate.app.BuildConfig
 import com.pirate.app.auth.PirateAuthUiState
+import com.pirate.app.lit.LitAuthContextManager
 import com.pirate.app.player.PlayerController
 import com.pirate.app.scrobble.aa.AAScrobbleClient
 import com.pirate.app.scrobble.aa.SubmitScrobbleInput
@@ -36,6 +37,7 @@ class ScrobbleService(
   private var tickJob: Job? = null
   private var trackJob: Job? = null
   private var playbackJob: Job? = null
+  private var expiredAuthFingerprint: String? = null
 
   fun start() {
     if (tickJob != null) return
@@ -92,7 +94,22 @@ class ScrobbleService(
 
   private suspend fun submit(scrobble: ReadyScrobble) {
     val auth = getAuthState()
-    val isAuthed = auth.pkpPublicKey != null && auth.pkpEthAddress != null && auth.accessToken != null && auth.authMethodId != null
+    val authFingerprint =
+      listOf(
+        auth.authMethodType?.toString().orEmpty(),
+        auth.authMethodId.orEmpty(),
+        auth.accessToken?.hashCode()?.toString().orEmpty(),
+        auth.pkpPublicKey.orEmpty(),
+      ).joinToString("|")
+    if (expiredAuthFingerprint != null && expiredAuthFingerprint != authFingerprint) {
+      expiredAuthFingerprint = null
+    }
+    if (expiredAuthFingerprint == authFingerprint) {
+      Log.d(TAG, "Skipping scrobble; auth session marked expired until re-login")
+      return
+    }
+
+    val isAuthed = auth.hasLitAuthCredentials()
     if (!isAuthed) {
       Log.d(TAG, "Not authenticated; skipping scrobble")
       if (BuildConfig.DEBUG) {
@@ -114,25 +131,32 @@ class ScrobbleService(
       onShowMessage("Scrobbling: ${track.title} \u00b7 ${track.artist}")
     }
 
-    val result =
-      runCatching {
-        withContext(Dispatchers.IO) {
-          aa.submitScrobble(
-            input = track,
-            userEthAddress = auth.pkpEthAddress!!,
-            userPkpPublicKey = auth.pkpPublicKey!!,
-            litNetwork = auth.litNetwork,
-            litRpcUrl = auth.litRpcUrl,
-          )
-        }
+    suspend fun submitOnce() =
+      withContext(Dispatchers.IO) {
+        aa.submitScrobble(
+          input = track,
+          userEthAddress = auth.pkpEthAddress!!,
+          userPkpPublicKey = auth.pkpPublicKey!!,
+          litNetwork = auth.litNetwork,
+          litRpcUrl = auth.litRpcUrl,
+          authState = auth,
+        )
       }
+
+    val result = runCatching { submitOnce() }
 
     result.onFailure { err ->
       Log.w(TAG, "Scrobble submit failed", err)
-      onShowMessage("Scrobble failed: ${err.message ?: "unknown error"}")
+      if (LitAuthContextManager.isExpiredAuthChallengeError(err)) {
+        expiredAuthFingerprint = authFingerprint
+        onShowMessage("Scrobble paused: session expired. Please sign in again.")
+      } else {
+        onShowMessage("Scrobble failed: ${err.message ?: "unknown error"}")
+      }
     }
 
     result.onSuccess { ok ->
+      expiredAuthFingerprint = null
       Log.d(TAG, "Scrobbled! userOpHash=${ok.userOpHash} sender=${ok.sender}")
       if (BuildConfig.DEBUG) {
         onShowMessage("Scrobbled: ${track.title}")

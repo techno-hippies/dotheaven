@@ -65,32 +65,40 @@ export class ProfileV2__getProfileResultValue0Struct extends ethereum.Tuple {
     return this[7].toBytes();
   }
 
+  get locationLatE6(): i32 {
+    return this[8].toI32();
+  }
+
+  get locationLngE6(): i32 {
+    return this[9].toI32();
+  }
+
   get schoolId(): Bytes {
-    return this[8].toBytes();
-  }
-
-  get skillsCommit(): Bytes {
-    return this[9].toBytes();
-  }
-
-  get hobbiesCommit(): Bytes {
     return this[10].toBytes();
   }
 
-  get nameHash(): Bytes {
+  get skillsCommit(): Bytes {
     return this[11].toBytes();
   }
 
+  get hobbiesCommit(): Bytes {
+    return this[12].toBytes();
+  }
+
+  get nameHash(): Bytes {
+    return this[13].toBytes();
+  }
+
   get packed(): BigInt {
-    return this[12].toBigInt();
+    return this[14].toBigInt();
   }
 
   get displayName(): string {
-    return this[13].toString();
+    return this[15].toString();
   }
 
   get photoURI(): string {
-    return this[14].toString();
+    return this[16].toString();
   }
 }
 
@@ -102,7 +110,7 @@ export class ProfileV2 extends ethereum.SmartContract {
   getProfile(user: Address): ProfileV2__getProfileResultValue0Struct {
     let result = super.call(
       "getProfile",
-      "getProfile(address):((uint8,bool,uint8,uint16,bytes2,uint8,uint256,bytes32,bytes32,bytes32,bytes32,bytes32,uint256,string,string))",
+      "getProfile(address):((uint8,bool,uint8,uint16,bytes2,uint8,uint256,bytes32,int32,int32,bytes32,bytes32,bytes32,bytes32,uint256,string,string))",
       [ethereum.Value.fromAddress(user)],
     );
 
@@ -116,7 +124,7 @@ export class ProfileV2 extends ethereum.SmartContract {
   ): ethereum.CallResult<ProfileV2__getProfileResultValue0Struct> {
     let result = super.tryCall(
       "getProfile",
-      "getProfile(address):((uint8,bool,uint8,uint16,bytes2,uint8,uint256,bytes32,bytes32,bytes32,bytes32,bytes32,uint256,string,string))",
+      "getProfile(address):((uint8,bool,uint8,uint16,bytes2,uint8,uint256,bytes32,int32,int32,bytes32,bytes32,bytes32,bytes32,uint256,string,string))",
       [ethereum.Value.fromAddress(user)],
     );
     if (result.reverted) {

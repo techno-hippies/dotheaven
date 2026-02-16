@@ -17,6 +17,8 @@ type Profile @entity(immutable: false) {
 
   # commitments / pointers (bytes32)
   locationCityId: Bytes!
+  locationLatE6: Int!
+  locationLngE6: Int!
   schoolId: Bytes!
   skillsCommit: Bytes!           # packed uint16 tag IDs
   hobbiesCommit: Bytes!          # packed uint16 tag IDs

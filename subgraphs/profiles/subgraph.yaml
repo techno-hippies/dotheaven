@@ -8,9 +8,9 @@ dataSources:
     name: ProfileV2
     network: megaeth-testnet-v2
     source:
-      address: "0xa31545D33f6d656E62De67fd020A26608d4601E5"
+      address: "0xe00e82086480E61AaC8d5ad8B05B56A582dD0000"
       abi: ProfileV2
-      startBlock: 10484810
+      startBlock: 11522811
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7

@@ -40,10 +40,10 @@ use theme::{render_avatar_with_flag, Colors};
 
 pub(super) use helpers::{
     encode_jacktrip_invite, format_duration, format_ns_to_time, format_relative_time,
-    is_xmtp_identity_validation_error, load_messages_with_dm_reactivate, lock_xmtp,
-    make_scarlett_message, make_user_message, normalize_preview_text, now_unix_ns,
-    parse_jacktrip_invite, preview_text_for_content, run_with_timeout, send_with_dm_reactivate,
-    should_trigger_xmtp_hard_reset, JackTripRoomInvite,
+    is_xmtp_identity_validation_error, load_messages_with_dm_reactivate, load_scarlett_messages,
+    lock_xmtp, make_scarlett_message, make_user_message, normalize_preview_text, now_unix_ns,
+    parse_jacktrip_invite, persist_scarlett_messages, preview_text_for_content, run_with_timeout,
+    send_with_dm_reactivate, should_trigger_xmtp_hard_reset, JackTripRoomInvite,
 };
 
 const SCARLETT_CONVERSATION_ID: &str = "ai-scarlett";
@@ -118,7 +118,7 @@ impl ChatView {
             XmtpService::new().expect("Failed to create XmtpService"),
         ));
         let voice_controller = Arc::new(Mutex::new(ScarlettVoiceController::new()));
-        let scarlett_messages = vec![make_scarlett_message(SCARLETT_INTRO.to_string())];
+        let scarlett_messages = Self::load_or_init_scarlett_messages(own_address.as_deref());
 
         // Observe auth state changes — auto-connect when authenticated
         cx.observe_global::<crate::auth::AuthState>(|this, cx| {
@@ -216,5 +216,34 @@ impl ChatView {
         .detach();
 
         view
+    }
+
+    fn load_or_init_scarlett_messages(owner_address: Option<&str>) -> Vec<ChatMessage> {
+        let mut scarlett_messages = load_scarlett_messages(owner_address);
+        if scarlett_messages.is_empty() {
+            log::info!(
+                "[Chat] Initializing Scarlett history for owner={} with intro message",
+                owner_address.unwrap_or("<none>")
+            );
+            scarlett_messages.push(make_scarlett_message(SCARLETT_INTRO.to_string()));
+            if let Err(err) = persist_scarlett_messages(owner_address, &scarlett_messages) {
+                log::warn!("[Chat] Failed to persist initial Scarlett history: {err}");
+            }
+        }
+        scarlett_messages
+    }
+
+    pub(super) fn reload_scarlett_history_for_current_owner(&mut self) {
+        log::info!(
+            "[Chat] Reloading Scarlett history for owner={}",
+            self.own_address.as_deref().unwrap_or("<none>")
+        );
+        self.scarlett_messages = Self::load_or_init_scarlett_messages(self.own_address.as_deref());
+        if self.active_conversation_id.as_deref() == Some(SCARLETT_CONVERSATION_ID)
+            || self.active_conversation_id.is_none()
+        {
+            self.messages = self.scarlett_messages.clone();
+        }
+        self.ensure_scarlett_conversation();
     }
 }

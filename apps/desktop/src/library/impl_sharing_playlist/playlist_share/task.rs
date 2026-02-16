@@ -116,7 +116,7 @@ pub(super) async fn run_playlist_share_task(
                         ) {
                             Ok(upload_resp) => Ok((upload_resp, Some(local_track), "uploaded")),
                             Err(upload_err) => {
-                                if super::is_already_uploaded_error(&upload_err) {
+                                if super::super::is_already_uploaded_error(&upload_err) {
                                     match svc.resolve_registered_content_for_track(
                                         &auth,
                                         &local_track.file_path,
@@ -260,9 +260,12 @@ pub(super) async fn run_playlist_share_task(
             failures.join("\n")
         };
         let _ = this.update(cx, |this, cx| {
+            let was_modal_submitting = this.playlist_share_modal_submitting;
             this.upload_busy = false;
             this.playlist_share_modal_submitting = false;
-            this.playlist_share_modal_error = Some(summary);
+            if this.playlist_share_modal_open && was_modal_submitting {
+                this.playlist_share_modal_error = Some(summary.clone());
+            }
             this.set_status_message(
                 format!(
                     "Playlist share failed: no registered tracks were prepared (\"{}\").",
@@ -404,10 +407,11 @@ pub(super) async fn run_playlist_share_task(
     };
 
     let _ = this.update(cx, |this, cx| {
+        let was_modal_submitting = this.playlist_share_modal_submitting;
         this.upload_busy = false;
         this.playlist_share_modal_submitting = false;
 
-        if this.playlist_share_modal_open {
+        if this.playlist_share_modal_open && was_modal_submitting {
             if full_success {
                 this.playlist_share_modal_open = false;
                 this.playlist_share_modal_playlist_id = None;

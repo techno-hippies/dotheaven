@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "migrate:local": "wrangler d1 execute session-voice --local --file=migrations/0001_credits_rooms.sql && wrangler d1 execute session-voice --local --file=migrations/0002_song_registry.sql",
-    "migrate:remote": "wrangler d1 execute session-voice --remote --file=migrations/0001_credits_rooms.sql && wrangler d1 execute session-voice --remote --file=migrations/0002_song_registry.sql",
+    "migrate:local": "wrangler d1 execute session-voice --local --file=migrations/0001_credits_rooms.sql && wrangler d1 execute session-voice --local --file=migrations/0002_song_registry.sql && wrangler d1 execute session-voice --local --file=migrations/0003_duet_discovery.sql",
+    "migrate:remote": "wrangler d1 execute session-voice --remote --file=migrations/0001_credits_rooms.sql && wrangler d1 execute session-voice --remote --file=migrations/0002_song_registry.sql && wrangler d1 execute session-voice --remote --file=migrations/0003_duet_discovery.sql",
     "test:smoke": "bun src/smoke-test.ts",
     "test:facilitator": "bun test src/x402-facilitator.test.ts",
     "test:duet:unit": "bun test src/duet-room-do.test.ts src/duet-routes.test.ts",
@@ -37,4 +37,3 @@
     "wrangler": "^3.80.0"
   }
 }
-

@@ -2,8 +2,8 @@ package com.pirate.app.music
 
 import android.content.Context
 import android.net.Uri
+import com.pirate.app.lit.LitAuthContextManager
 import com.pirate.app.lit.LitRust
-import com.pirate.app.lit.PirateAuthConfig
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -30,7 +30,7 @@ object SongPublishService {
 
   private const val TAG = "SongPublish"
   private const val IPFS_GATEWAY = "https://ipfs.filebase.io/ipfs/"
-  private const val HEAVEN_API_URL = "https://heaven-api.dotheaven.org"
+  private const val HEAVEN_API_URL = "https://heaven-api.deletion-backup782.workers.dev"
 
   // ── CID maps (mirrors action-cids.ts) ──────────────────────────
 
@@ -51,9 +51,16 @@ object SongPublishService {
 
   // ── Encrypted API keys (bound to song-publish-v1 action CID) ────
 
-  private fun filebaseEncryptedKey(songPublishCid: String) = JSONObject().apply {
-    put("ciphertext", "rZKsuJAFr0bAmB0sB8Y47wMafboSsI48rUIG2KVfhW689ZxFTh2WbdplO64b574FSWw+KvKOB0xKA3jqNWARbeXUVvsZiAYSj737msRXDSBllUdZ5VvOmypIl0YpAXxFv+ZrvBI6jBIiakm20Uvl7wbKm3ic2YJyEkfSurFsAwC+DXvMfWVbnBXc4mNuzsjPTMS9nriUz6/y4q2xMHiquFi3qu6PeWCzIcjXjNOL2TCk0GECaqsC")
-    put("dataToEncryptHash", "23ab539bda3900163da16db23be0e6e6c6003d35bd1ac54aeaada176f8f1e0d4")
+  private fun actionBoundEncryptedKey(
+    actionCid: String,
+    dataToEncryptHash: String,
+    ciphertextByCid: Map<String, String>,
+    keyLabel: String,
+  ) = JSONObject().apply {
+    val ciphertext = ciphertextByCid[actionCid]
+      ?: throw IllegalStateException("Missing $keyLabel for action CID: $actionCid")
+    put("ciphertext", ciphertext)
+    put("dataToEncryptHash", dataToEncryptHash)
     put("accessControlConditions", JSONArray().put(JSONObject().apply {
       put("conditionType", "evmBasic")
       put("contractAddress", "")
@@ -61,67 +68,71 @@ object SongPublishService {
       put("chain", "ethereum")
       put("method", "")
       put("parameters", JSONArray().put(":currentActionIpfsId"))
-      put("returnValueTest", JSONObject().put("comparator", "=").put("value", songPublishCid))
+      put("returnValueTest", JSONObject().put("comparator", "=").put("value", actionCid))
     }))
   }
 
-  private fun elevenlabsEncryptedKey(songPublishCid: String) = JSONObject().apply {
-    put("ciphertext", "kO4ArVoy+keulKjuvMzCoftMcDEAbze0RwCScxqZvk5rkJNBkV+UDu9a6ZT2aZ8al4mygNhhz1S0yjz2DMhKyu/a/kRrJwseyaRDGh6O7ec0P58orQ27bYCeEPNiZgQBsTOcjZlkcJP4SxKPaGzt/SY6P2nIQuz3lMgwhGQVtpnjT/ngzQI=")
-    put("dataToEncryptHash", "6d1863a0dd36fcff73e8d00eaec3f038d143e4bea663b57f8b9810d786b73f6c")
-    put("accessControlConditions", JSONArray().put(JSONObject().apply {
-      put("conditionType", "evmBasic")
-      put("contractAddress", "")
-      put("standardContractType", "")
-      put("chain", "ethereum")
-      put("method", "")
-      put("parameters", JSONArray().put(":currentActionIpfsId"))
-      put("returnValueTest", JSONObject().put("comparator", "=").put("value", songPublishCid))
-    }))
-  }
+  private val songPublishFilebaseCiphertextByCid = mapOf(
+    CID_MAP.getValue("naga-dev").getValue("songPublish") to "tWWiSlN4hS1j5zT6xBLC61/D3tFVwo7IbMCx2omAdZHXNldU4xwVtr36fy5HozAY92GCU+jx8pmooLRKTolxt04JviE16IlIpVAR5XajqV5lIgYcmZ8ZLejkqDITO1GoF0juzkwL8u+TlD+kLnczUuCOKiizpRjiB/2dyLRFttfT5cUEOJSiWxyN/xl2t/KzKI0RGM1VXQje3s4Mp2cn9Vs5iiyVq0XzZ1unMmqZne4mBWstl3cC",
+    CID_MAP.getValue("naga-test").getValue("songPublish") to "rG/IQhwV9GxbF62qSXIby+c+MJO/jj9K5CJlSbFcJsiI9M6xL/2bSGL5qfGR5ODpX0XNBHN51u0VuA+iVXR/CW7KjS/jX2Af8t9FcOVS5Z1l9tjy5BJRJxfPzI+axSIqd9L8wntI/nWgt16eML2V0B6ltgzCgwTfztNofNZrgdVKifvpTB1gfsRNY6aFtmzdejOQIZ3PuRK8j7Vcx7jmp4Y5fDUb2jAsjpPHf3wWJ3CFVYlaA6EC",
+  )
 
-  private fun openrouterEncryptedKey(songPublishCid: String) = JSONObject().apply {
-    put("ciphertext", "hJRS8qOvZLdsQv9Xy8MYAnYE15GQlRqh4bBdJdHiWcDApX5Gk501qNOc2wXw8Q9oXVIDQz4ggZPyzMoQS91Ux/jQUTk4ZHZ2l5Mp2+llzwhK8xf6Ix0FD8ZJnusBTPu+u7aNdpyzGbTnuJ1qSJFYRT8DskjVSDm+IVtd436+miqkmmbFDuIa7yoynXsCZSxBr6uGunn2/Ne4y50C")
-    put("dataToEncryptHash", "2ca783d51c4bfd1a8b80e1c8aee5e94d3f17c3089f8bca45e48d40b3435ae092")
-    put("accessControlConditions", JSONArray().put(JSONObject().apply {
-      put("conditionType", "evmBasic")
-      put("contractAddress", "")
-      put("standardContractType", "")
-      put("chain", "ethereum")
-      put("method", "")
-      put("parameters", JSONArray().put(":currentActionIpfsId"))
-      put("returnValueTest", JSONObject().put("comparator", "=").put("value", songPublishCid))
-    }))
-  }
+  private val songPublishElevenlabsCiphertextByCid = mapOf(
+    CID_MAP.getValue("naga-dev").getValue("songPublish") to "kZPov5eAHRzrlnvndj1W3HXWRgTIhAjr5MKVB5sUeoW63HinMg4fZT7KLbPGC2KZX0NLkVHPDl59lV+hyUadxlrDuDaDnTkU4r5oR4X5C700uxSgli0vUXqFAdhm3jYKpf+1QuS9srFQp9R1zUKlQSj2dQy7ucJHZOXqK2cQ4xu/ytRcyAI=",
+    CID_MAP.getValue("naga-test").getValue("songPublish") to "sA9lX823Ag3z1aHKbXTwsj+aCVHUj2RbO5BXpe9+HGh+1IXoTtnJ1O6Rrxcwe3BXapMZCpI6O3HftHPpQWheMt3K66Zc7+05rL4WHZeK5/g0ALX+HZTV3fwUoJmkvYFjZ2eLF8+ADVxpqMSsXOB3p70FyfdaTa1XPiN1HG74GT5U/rf0WgI=",
+  )
+
+  private val songPublishOpenrouterCiphertextByCid = mapOf(
+    CID_MAP.getValue("naga-dev").getValue("songPublish") to "iRVcOcNnPeejpfrZ8rmQeynHl0pj8xoVvJBo3nVPzKCEHXNB+MBp6tq6phUaM7kVTRX2iIY/upFkXrJrBhAhXcIfxB3ZkVRuiThFs9x+rlBKyxZkHhpCld8z+3+bVR7gxwoNunt9Bm5lz3pJLiRzx0t2D0rVij0jjpt90rUqHvfvqzduO1v75b3fpSv2YpJkSb+0tSmpv2VN1tIC",
+    CID_MAP.getValue("naga-test").getValue("songPublish") to "qpLLZkw3eBthek6QLNB0l5lb9EyZlHFd8RRnJyGWa365643ib6f1gDlV2pbleWsHVBCWF5HkoNwgFvK1pugxfkRKJydbp+Da+nPFFw5+8SpKGrie+4bKi4IHHjrgm7F6azdbJGlyphGDvUdIvvFapRi0YHeS9fd72Ekqv7fWJ7faQM67oOucjEFPRdyr44+xEGFfxVDAK60LT+sC",
+  )
+
+  private fun filebaseEncryptedKey(songPublishCid: String) = actionBoundEncryptedKey(
+    actionCid = songPublishCid,
+    dataToEncryptHash = "23ab539bda3900163da16db23be0e6e6c6003d35bd1ac54aeaada176f8f1e0d4",
+    ciphertextByCid = songPublishFilebaseCiphertextByCid,
+    keyLabel = "songPublish.filebase_api_key",
+  )
+
+  private fun elevenlabsEncryptedKey(songPublishCid: String) = actionBoundEncryptedKey(
+    actionCid = songPublishCid,
+    dataToEncryptHash = "6d1863a0dd36fcff73e8d00eaec3f038d143e4bea663b57f8b9810d786b73f6c",
+    ciphertextByCid = songPublishElevenlabsCiphertextByCid,
+    keyLabel = "songPublish.elevenlabs_api_key",
+  )
+
+  private fun openrouterEncryptedKey(songPublishCid: String) = actionBoundEncryptedKey(
+    actionCid = songPublishCid,
+    dataToEncryptHash = "2ca783d51c4bfd1a8b80e1c8aee5e94d3f17c3089f8bca45e48d40b3435ae092",
+    ciphertextByCid = songPublishOpenrouterCiphertextByCid,
+    keyLabel = "songPublish.openrouter_api_key",
+  )
 
   // ── Encrypted keys (bound to lyrics-translate-v1 action CID) ────
 
-  private fun lyricsFilebaseEncryptedKey(lyricsTranslateCid: String) = JSONObject().apply {
-    put("ciphertext", "tKYa+oVjx6F2Ja3rm4OWeinfcyENLf3dwSIIMEa7g/XQP/wnGE9nXGiR2JMuXGYpLx03kppJfMdbv25N+yRjORw8KDuKHAMXGZqFbXTmYMxls8tH1zpaHxLlcicKVxIXeReXvSOgJVZ9cELNSMDSByVBNM6ka70jPT6RdFbCrs9mUyQUb0XZaEyzmjTjZ/K2/Uqz7pwkxu+3iBHBnKLCDV8hoBQdXO9CLspRXCycy7LCPNSUpSMC")
-    put("dataToEncryptHash", "23ab539bda3900163da16db23be0e6e6c6003d35bd1ac54aeaada176f8f1e0d4")
-    put("accessControlConditions", JSONArray().put(JSONObject().apply {
-      put("conditionType", "evmBasic")
-      put("contractAddress", "")
-      put("standardContractType", "")
-      put("chain", "ethereum")
-      put("method", "")
-      put("parameters", JSONArray().put(":currentActionIpfsId"))
-      put("returnValueTest", JSONObject().put("comparator", "=").put("value", lyricsTranslateCid))
-    }))
-  }
+  private val lyricsFilebaseCiphertextByCid = mapOf(
+    CID_MAP.getValue("naga-dev").getValue("lyricsTranslate") to "tKYa+oVjx6F2Ja3rm4OWeinfcyENLf3dwSIIMEa7g/XQP/wnGE9nXGiR2JMuXGYpLx03kppJfMdbv25N+yRjORw8KDuKHAMXGZqFbXTmYMxls8tH1zpaHxLlcicKVxIXeReXvSOgJVZ9cELNSMDSByVBNM6ka70jPT6RdFbCrs9mUyQUb0XZaEyzmjTjZ/K2/Uqz7pwkxu+3iBHBnKLCDV8hoBQdXO9CLspRXCycy7LCPNSUpSMC",
+    CID_MAP.getValue("naga-test").getValue("lyricsTranslate") to "r4XJJo7YOcfxJUp87pmNEAgupBmqR8sqh5wmS2e1HQIbNCK/Yp0F0Lmblm3HXDtx1mYuhDuoV5PoBuXSNJ9lEb6GcS6aZtTqgHPr2oiCMnhlpEssFRuKRx05HU19Ar0gB1tFiqiIewcn+4FtkMWiy8HGJT7nCikKWd81cIToLV5Zr8RH1Ht1w0av1dse+fHm0CMjJdrKcyAKOW+u5ImOYmf2sImx4B+TyuTEdgbbZBqBdFPnWPQC",
+  )
 
-  private fun lyricsOpenrouterEncryptedKey(lyricsTranslateCid: String) = JSONObject().apply {
-    put("ciphertext", "o/7W0AEqLIdlO6GriIAs5iwxPJ/3JG2ctRysJKRZN0j67xW1kl23sD9fkTRCXr2FhnmFMfSoLB5r0cGD7hAEP3J7jCZIJa0k+xrWn7gjnORKqMpZl1G5LR+V9MV1UVSmrydFubnmnNWF3pBGkvUGDVl/RrYGgUJ0G9XOSYqHjxcFZ6VDcKw/ByOMOL/OmM8QDOVnV5Va6E+76EUC")
-    put("dataToEncryptHash", "2ca783d51c4bfd1a8b80e1c8aee5e94d3f17c3089f8bca45e48d40b3435ae092")
-    put("accessControlConditions", JSONArray().put(JSONObject().apply {
-      put("conditionType", "evmBasic")
-      put("contractAddress", "")
-      put("standardContractType", "")
-      put("chain", "ethereum")
-      put("method", "")
-      put("parameters", JSONArray().put(":currentActionIpfsId"))
-      put("returnValueTest", JSONObject().put("comparator", "=").put("value", lyricsTranslateCid))
-    }))
-  }
+  private val lyricsOpenrouterCiphertextByCid = mapOf(
+    CID_MAP.getValue("naga-dev").getValue("lyricsTranslate") to "o/7W0AEqLIdlO6GriIAs5iwxPJ/3JG2ctRysJKRZN0j67xW1kl23sD9fkTRCXr2FhnmFMfSoLB5r0cGD7hAEP3J7jCZIJa0k+xrWn7gjnORKqMpZl1G5LR+V9MV1UVSmrydFubnmnNWF3pBGkvUGDVl/RrYGgUJ0G9XOSYqHjxcFZ6VDcKw/ByOMOL/OmM8QDOVnV5Va6E+76EUC",
+    CID_MAP.getValue("naga-test").getValue("lyricsTranslate") to "qhama/oTfv8O8UjKIw2dIyNeEf5Kny47nrtwRUjC/C3VfFxBgSpNmcIqQA+Oys1X0unAqVZKBu1uELJB795xUmbjaRZ/8Uo4H9YM8kW9V4hKcso+oOaELyFt4fZCFlO4Zt2vsouIzJd3g2S1P9A7LaVvpb8u1geBWvSdqk5UmhTpxVduNoQgQv7JAnzqaqMgVLgCxsoISnR4UGwC",
+  )
+
+  private fun lyricsFilebaseEncryptedKey(lyricsTranslateCid: String) = actionBoundEncryptedKey(
+    actionCid = lyricsTranslateCid,
+    dataToEncryptHash = "23ab539bda3900163da16db23be0e6e6c6003d35bd1ac54aeaada176f8f1e0d4",
+    ciphertextByCid = lyricsFilebaseCiphertextByCid,
+    keyLabel = "lyricsTranslate.filebase_api_key",
+  )
+
+  private fun lyricsOpenrouterEncryptedKey(lyricsTranslateCid: String) = actionBoundEncryptedKey(
+    actionCid = lyricsTranslateCid,
+    dataToEncryptHash = "2ca783d51c4bfd1a8b80e1c8aee5e94d3f17c3089f8bca45e48d40b3435ae092",
+    ciphertextByCid = lyricsOpenrouterCiphertextByCid,
+    keyLabel = "lyricsTranslate.openrouter_api_key",
+  )
 
   // ── Language mapping ────────────────────────────────────────────
 
@@ -184,6 +195,28 @@ object SongPublishService {
     return context.contentResolver.getType(uri) ?: "application/octet-stream"
   }
 
+  private suspend fun executeJsResultWithAuthRecovery(
+    context: Context,
+    network: String,
+    rpcUrl: String,
+    code: String = "",
+    ipfsId: String = "",
+    jsParamsJson: String = "",
+    useSingleNode: Boolean = false,
+  ): JSONObject {
+    val raw = LitAuthContextManager.runWithSavedStateRecovery(context) {
+      LitRust.executeJsRaw(
+        network = network,
+        rpcUrl = rpcUrl,
+        code = code,
+        ipfsId = ipfsId,
+        jsParamsJson = jsParamsJson,
+        useSingleNode = useSingleNode,
+      )
+    }
+    return LitRust.unwrapEnvelope(raw)
+  }
+
   /**
    * Upload files to Filebase via heaven-api proxy.
    * Returns map of slot name → CID.
@@ -230,7 +263,8 @@ object SongPublishService {
   /**
    * Sign an EIP-191 message via PKP using a Lit Action.
    */
-  private fun signMessageWithPKP(
+  private suspend fun signMessageWithPKP(
+    context: Context,
     litNetwork: String,
     litRpcUrl: String,
     pkpPublicKey: String,
@@ -256,13 +290,13 @@ object SongPublishService {
       put("message", message)
     }
 
-    val raw = LitRust.executeJsRaw(
+    val result = executeJsResultWithAuthRecovery(
+      context = context,
       network = litNetwork,
       rpcUrl = litRpcUrl,
       code = code,
       jsParamsJson = jsParams.toString(),
     )
-    val result = LitRust.unwrapEnvelope(raw)
     val response = result.optString("response", "")
     if (response.isBlank()) throw IllegalStateException("No signature response from PKP")
 
@@ -277,7 +311,8 @@ object SongPublishService {
   /**
    * Sign EIP-712 typed data via PKP using a Lit Action.
    */
-  private fun signTypedDataWithPKP(
+  private suspend fun signTypedDataWithPKP(
+    context: Context,
     litNetwork: String,
     litRpcUrl: String,
     pkpPublicKey: String,
@@ -306,13 +341,13 @@ object SongPublishService {
       put("hashHex", typedDataHashHex)
     }
 
-    val raw = LitRust.executeJsRaw(
+    val result = executeJsResultWithAuthRecovery(
+      context = context,
       network = litNetwork,
       rpcUrl = litRpcUrl,
       code = code,
       jsParamsJson = jsParams.toString(),
     )
-    val result = LitRust.unwrapEnvelope(raw)
     val response = result.optString("response", "")
     if (response.isBlank()) throw IllegalStateException("No EIP-712 signature response from PKP")
 
@@ -328,7 +363,10 @@ object SongPublishService {
    * Compute EIP-712 typed data hash for Story registration.
    * Uses the same domain/types as the SolidJS version.
    */
-  private fun computeStoryTypedDataHash(
+  private suspend fun computeStoryTypedDataHash(
+    context: Context,
+    litNetwork: String,
+    litRpcUrl: String,
     recipient: String,
     ipMetadataHash: String,
     nftMetadataHash: String,
@@ -383,15 +421,15 @@ object SongPublishService {
       put("nonce", nonce)
     }
 
-    // Use single node for this hash computation (faster, no consensus needed)
-    val raw = LitRust.executeJsRaw(
-      network = PirateAuthConfig.DEFAULT_LIT_NETWORK,
-      rpcUrl = PirateAuthConfig.DEFAULT_LIT_RPC_URL,
+    // Use single node for this hash computation (faster, no consensus needed).
+    val result = executeJsResultWithAuthRecovery(
+      context = context,
+      network = litNetwork,
+      rpcUrl = litRpcUrl,
       code = code,
       jsParamsJson = jsParams.toString(),
       useSingleNode = true,
     )
-    val result = LitRust.unwrapEnvelope(raw)
     val response = JSONObject(result.getString("response"))
     return response.getString("hash")
   }
@@ -409,7 +447,7 @@ object SongPublishService {
    * @param pkpEthAddress User's PKP Ethereum address
    * @param onProgress Callback for progress updates (0-100)
    */
-  fun publish(
+  suspend fun publish(
     context: Context,
     formData: SongFormData,
     litNetwork: String,
@@ -521,7 +559,13 @@ object SongPublishService {
       "$songMetadataHash:$ipaMetadataHash:$nftMetadataHashStr:$lyricsHash:" +
       "$sourceLanguageName:$targetLanguage:$timestamp:$nonce"
 
-    val signature = signMessageWithPKP(litNetwork, litRpcUrl, pkpPublicKey, message)
+    val signature = signMessageWithPKP(
+      context = context,
+      litNetwork = litNetwork,
+      litRpcUrl = litRpcUrl,
+      pkpPublicKey = pkpPublicKey,
+      message = message,
+    )
 
     onProgress(30)
 
@@ -549,13 +593,13 @@ object SongPublishService {
       put("openrouterEncryptedKey", openrouterEncryptedKey(songPublishCid))
     }
 
-    val publishRaw = LitRust.executeJsRaw(
+    val publishResult = executeJsResultWithAuthRecovery(
+      context = context,
       network = litNetwork,
       rpcUrl = litRpcUrl,
       ipfsId = songPublishCid,
       jsParamsJson = publishJsParams.toString(),
     )
-    val publishResult = LitRust.unwrapEnvelope(publishRaw)
     val publishResponseStr = publishResult.optString("response", "")
     if (publishResponseStr.isBlank()) throw IllegalStateException("No response from song-publish-v1")
     val publishResponse = JSONObject(publishResponseStr)
@@ -576,6 +620,9 @@ object SongPublishService {
     val nftMetadataHashHex = "0x$nftMetadataHashStr"
 
     val typedDataHash = computeStoryTypedDataHash(
+      context = context,
+      litNetwork = litNetwork,
+      litRpcUrl = litRpcUrl,
       recipient = pkpEthAddress,
       ipMetadataHash = ipMetadataHashHex,
       nftMetadataHash = nftMetadataHashHex,
@@ -585,7 +632,13 @@ object SongPublishService {
       nonce = storyNonce,
     )
 
-    val storySignature = signTypedDataWithPKP(litNetwork, litRpcUrl, pkpPublicKey, typedDataHash)
+    val storySignature = signTypedDataWithPKP(
+      context = context,
+      litNetwork = litNetwork,
+      litRpcUrl = litRpcUrl,
+      pkpPublicKey = pkpPublicKey,
+      typedDataHashHex = typedDataHash,
+    )
 
     onProgress(70)
 
@@ -605,13 +658,13 @@ object SongPublishService {
       put("nonce", storyNonce)
     }
 
-    val storyRaw = LitRust.executeJsRaw(
+    val storyResult = executeJsResultWithAuthRecovery(
+      context = context,
       network = litNetwork,
       rpcUrl = litRpcUrl,
       ipfsId = storyRegisterCid,
       jsParamsJson = storyJsParams.toString(),
     )
-    val storyResult = LitRust.unwrapEnvelope(storyRaw)
     val storyResponseStr = storyResult.optString("response", "")
     if (storyResponseStr.isBlank()) throw IllegalStateException("No response from story-register-sponsor-v1")
     val storyResponse = JSONObject(storyResponseStr)
@@ -624,7 +677,14 @@ object SongPublishService {
     // ── Step 9: Register on ContentRegistry MegaETH (88-95%) ────
     if (contentRegisterCid.isNotBlank()) {
       try {
-        val trackId = computeTrackId(formData.title, formData.artist, "")
+        val trackId = computeTrackId(
+          context = context,
+          litNetwork = litNetwork,
+          litRpcUrl = litRpcUrl,
+          title = formData.title,
+          artist = formData.artist,
+          album = "",
+        )
         val audioCid = publishResponse.getString("audioCID")
         android.util.Log.i(TAG, "Registering on ContentRegistry (MegaETH): trackId=$trackId audioCid=$audioCid")
 
@@ -643,13 +703,13 @@ object SongPublishService {
           put("album", "")
         }
 
-        val regRaw = LitRust.executeJsRaw(
+        val regResult = executeJsResultWithAuthRecovery(
+          context = context,
           network = litNetwork,
           rpcUrl = litRpcUrl,
           ipfsId = contentRegisterCid,
           jsParamsJson = regJsParams.toString(),
         )
-        val regResult = LitRust.unwrapEnvelope(regRaw)
         val regResponse = JSONObject(regResult.optString("response", "{}"))
         if (!regResponse.optBoolean("success", false)) {
           android.util.Log.w(TAG, "ContentRegistry registration failed: ${regResponse.optString("error")}")
@@ -675,7 +735,13 @@ object SongPublishService {
           val sortedLangs = targetLangs.sorted().joinToString(",")
           val translateMessage = "heaven:translate:$ipIdAddress:$translateLyricsHash:$sourceLanguageName:$sortedLangs:$translateTimestamp:$translateNonce"
 
-          val translateSignature = signMessageWithPKP(litNetwork, litRpcUrl, pkpPublicKey, translateMessage)
+          val translateSignature = signMessageWithPKP(
+            context = context,
+            litNetwork = litNetwork,
+            litRpcUrl = litRpcUrl,
+            pkpPublicKey = pkpPublicKey,
+            message = translateMessage,
+          )
 
           val translateJsParams = JSONObject().apply {
             put("userPkpPublicKey", pkpPublicKey)
@@ -690,7 +756,8 @@ object SongPublishService {
             put("openrouterEncryptedKey", lyricsOpenrouterEncryptedKey(lyricsTranslateCid))
           }
 
-          LitRust.executeJsRaw(
+          executeJsResultWithAuthRecovery(
+            context = context,
             network = litNetwork,
             rpcUrl = litRpcUrl,
             ipfsId = lyricsTranslateCid,
@@ -723,7 +790,14 @@ object SongPublishService {
    *
    * We compute this via a Lit Action since ethers is available there.
    */
-  private fun computeTrackId(title: String, artist: String, album: String): String {
+  private suspend fun computeTrackId(
+    context: Context,
+    litNetwork: String,
+    litRpcUrl: String,
+    title: String,
+    artist: String,
+    album: String,
+  ): String {
     val code = """
       (async () => {
         const inner = ethers.utils.defaultAbiCoder.encode(
@@ -746,14 +820,14 @@ object SongPublishService {
       put("album", album)
     }
 
-    val raw = LitRust.executeJsRaw(
-      network = PirateAuthConfig.DEFAULT_LIT_NETWORK,
-      rpcUrl = PirateAuthConfig.DEFAULT_LIT_RPC_URL,
+    val result = executeJsResultWithAuthRecovery(
+      context = context,
+      network = litNetwork,
+      rpcUrl = litRpcUrl,
       code = code,
       jsParamsJson = jsParams.toString(),
       useSingleNode = true,
     )
-    val result = LitRust.unwrapEnvelope(raw)
     val response = JSONObject(result.getString("response"))
     return response.getString("trackId")
   }

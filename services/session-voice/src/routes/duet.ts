@@ -3,6 +3,7 @@
  *
  * Endpoints:
  * - POST /create
+ * - GET  /discover
  * - POST /:id/guest/accept
  * - POST /:id/start
  * - POST /:id/segments/start
@@ -26,6 +27,46 @@ import { verifyJWT } from '../auth'
 type NetworkId = 'eip155:8453' | 'eip155:84532'
 type ReplayMode = 'load_gated' | 'worker_gated'
 type RecordingMode = 'host_local' | 'agora_cloud'
+type RoomVisibility = 'public' | 'unlisted'
+type RoomStatus = 'created' | 'live' | 'ended'
+
+interface DuetDiscoverIndexRow {
+  room_id: string
+  host_wallet: string
+  guest_wallet: string | null
+  status: RoomStatus
+  live_amount: string
+  replay_amount: string
+  audience_mode: 'free' | 'ticketed'
+  visibility: RoomVisibility
+  title: string | null
+  room_kind: string | null
+  listener_count: number
+  live_started_at: number | null
+  ended_at: number | null
+  created_at: number
+  updated_at: number
+}
+
+interface DuetDiscoverUpsertRow {
+  room_id: string
+  host_wallet: string
+  guest_wallet: string | null
+  status: RoomStatus
+  split_address: string
+  network: NetworkId
+  live_amount: string
+  replay_amount: string
+  audience_mode: 'free' | 'ticketed'
+  visibility: RoomVisibility
+  title: string | null
+  room_kind: string | null
+  listener_count: number
+  live_started_at: number | null
+  ended_at: number | null
+  created_at: number
+  updated_at: number
+}
 
 const DEFAULT_NETWORK: NetworkId = 'eip155:84532'
 const DEFAULT_ACCESS_WINDOW_MINUTES = 1440
@@ -50,6 +91,9 @@ duetRoutes.post('/create', async (c) => {
     access_window_minutes?: number
     replay_mode?: ReplayMode
     recording_mode?: RecordingMode
+    visibility?: RoomVisibility
+    title?: string
+    room_kind?: string
   }>().catch(() => ({}))
 
   if (!body.split_address || !isAddress(body.split_address)) {
@@ -88,6 +132,10 @@ duetRoutes.post('/create', async (c) => {
   const recordingMode: RecordingMode = body.recording_mode ?? 'host_local'
   if (!isRecordingMode(recordingMode)) return c.json({ error: 'invalid_recording_mode' }, 400)
 
+  const visibility: RoomVisibility = body.visibility === 'unlisted' ? 'unlisted' : 'public'
+  const title = normalizeRoomTitle(body.title)
+  const roomKind = normalizeRoomKind(body.room_kind)
+
   const roomId = crypto.randomUUID()
   const agoraChannel = `heaven-duet-${roomId}`
 
@@ -110,7 +158,34 @@ duetRoutes.post('/create', async (c) => {
     }),
   }))
 
-  return forwardDoResponse(doResp)
+  const forwarded = await forwardDoResponse(doResp)
+  if (!forwarded.ok) return forwarded
+
+  const payload = await forwarded.clone().json<any>().catch(() => null)
+  const persistedRoomId = typeof payload?.room_id === 'string' ? payload.room_id : roomId
+  const now = nowEpochSeconds()
+
+  await upsertDuetDiscoveryRow(c.env, {
+    room_id: persistedRoomId,
+    host_wallet: wallet.toLowerCase(),
+    guest_wallet: body.guest_wallet?.toLowerCase() || null,
+    status: 'created',
+    split_address: body.split_address.toLowerCase(),
+    network,
+    live_amount: liveAmount,
+    replay_amount: replayAmount,
+    audience_mode: liveAmount === '0' ? 'free' : 'ticketed',
+    visibility,
+    title,
+    room_kind: roomKind,
+    listener_count: 0,
+    live_started_at: null,
+    ended_at: null,
+    created_at: now,
+    updated_at: now,
+  })
+
+  return forwarded
 })
 
 duetRoutes.post('/:id/guest/accept', async (c) => {
@@ -124,22 +199,110 @@ duetRoutes.post('/:id/guest/accept', async (c) => {
     body: JSON.stringify({ wallet }),
   }))
 
-  return forwardDoResponse(doResp)
+  const forwarded = await forwardDoResponse(doResp)
+  if (forwarded.ok) {
+    const payload = await forwarded.clone().json<any>().catch(() => null)
+    const guestWallet = typeof payload?.guest_wallet === 'string'
+      ? payload.guest_wallet.toLowerCase()
+      : wallet.toLowerCase()
+    await updateDuetDiscoveryGuest(c.env, roomId, guestWallet)
+  }
+  return forwarded
 })
 
-  duetRoutes.post('/:id/start', async (c) => {
-    const wallet = await requireWallet(c, c.env)
-    if (!wallet) return c.json({ error: 'unauthorized' }, 401)
+duetRoutes.post('/:id/start', async (c) => {
+  const wallet = await requireWallet(c, c.env)
+  if (!wallet) return c.json({ error: 'unauthorized' }, 401)
 
-    const roomId = c.req.param('id')
-    const stub = getDuetRoomStub(c.env, roomId)
-    const doResp = await stub.fetch(new Request('http://do/start', {
-      method: 'POST',
-      body: JSON.stringify({ wallet }),
-    }))
+  const roomId = c.req.param('id')
+  const stub = getDuetRoomStub(c.env, roomId)
+  const doResp = await stub.fetch(new Request('http://do/start', {
+    method: 'POST',
+    body: JSON.stringify({ wallet }),
+  }))
 
-    return forwardDoResponse(doResp)
+  const forwarded = await forwardDoResponse(doResp)
+  if (forwarded.ok) {
+    const payload = await forwarded.clone().json<any>().catch(() => null)
+    const status: RoomStatus = payload?.status === 'ended' ? 'ended' : 'live'
+    const liveStartedAt = asOptionalEpoch(payload?.live_started_at) ?? nowEpochSeconds()
+    await updateDuetDiscoveryStatus(c.env, roomId, status, liveStartedAt, null)
+  }
+  return forwarded
+})
+
+duetRoutes.get('/discover', async (c) => {
+  const wallet = (await resolveOptionalWallet(c.req.header('authorization'), c.env))?.toLowerCase()
+  const discoverWallet = wallet ?? ''
+  const discoveryDb = getDiscoveryDb(c.env)
+  if (!discoveryDb) {
+    return c.json({ rooms: [] })
+  }
+  let rows:
+    | D1Result<DuetDiscoverIndexRow>
+    | null = null
+  try {
+    rows = await discoveryDb.prepare(
+      `SELECT
+         room_id,
+         host_wallet,
+         guest_wallet,
+         status,
+         live_amount,
+         replay_amount,
+         audience_mode,
+         visibility,
+         title,
+         room_kind,
+         listener_count,
+         live_started_at,
+         ended_at,
+         created_at,
+         updated_at
+       FROM duet_rooms
+       WHERE status IN ('created', 'live')
+         AND (
+           visibility = 'public'
+           OR host_wallet = ?
+           OR guest_wallet = ?
+         )
+       ORDER BY
+         CASE status WHEN 'live' THEN 0 ELSE 1 END,
+         COALESCE(live_started_at, created_at) DESC
+       LIMIT 100`,
+    )
+      .bind(discoverWallet, discoverWallet)
+      .all<DuetDiscoverIndexRow>()
+  } catch (err) {
+    // Backward compatibility for deployments that have not applied migration 0003 yet.
+    console.warn('[duet/discover] query failed (returning empty list):', String(err))
+    return c.json({ rooms: [] })
+  }
+
+  const rooms = (rows?.results ?? []).map((row) => {
+    const createdAt = asOptionalEpoch(row.created_at) ?? nowEpochSeconds()
+    const liveStartedAt = asOptionalEpoch(row.live_started_at)
+    const updatedAt = asOptionalEpoch(row.updated_at) ?? createdAt
+    return {
+      room_id: row.room_id,
+      host_wallet: row.host_wallet,
+      guest_wallet: row.guest_wallet ?? null,
+      status: row.status,
+      title: row.title ?? null,
+      room_kind: row.room_kind ?? null,
+      live_amount: row.live_amount,
+      replay_amount: row.replay_amount,
+      audience_mode: row.audience_mode,
+      listener_count: toNonNegativeInt(row.listener_count),
+      live_started_at: liveStartedAt,
+      started_at: liveStartedAt ?? createdAt,
+      created_at: createdAt,
+      updated_at: updatedAt,
+    }
   })
+
+  return c.json({ rooms })
+})
 
   duetRoutes.post('/:id/segments/start', async (c) => {
     const wallet = await requireWallet(c, c.env)
@@ -200,7 +363,14 @@ duetRoutes.post('/:id/enter', async (c) => {
     }),
   }))
 
-  return forwardDoResponse(doResp)
+  const forwarded = await forwardDoResponse(doResp)
+  if (forwarded.ok) {
+    const payload = await forwarded.clone().json<any>().catch(() => null)
+    if (typeof payload?.agora_viewer_token === 'string') {
+      await incrementDuetDiscoveryListenerCount(c.env, roomId)
+    }
+  }
+  return forwarded
 })
 
 duetRoutes.get('/:id/public-info', async (c) => {
@@ -224,7 +394,14 @@ duetRoutes.post('/:id/public-enter', async (c) => {
       resource: body.resource || `/duet/${roomId}/public-enter`,
     }),
   }))
-  return forwardDoResponse(doResp)
+  const forwarded = await forwardDoResponse(doResp)
+  if (forwarded.ok) {
+    const payload = await forwarded.clone().json<any>().catch(() => null)
+    if (typeof payload?.agora_viewer_token === 'string') {
+      await incrementDuetDiscoveryListenerCount(c.env, roomId)
+    }
+  }
+  return forwarded
 })
 
 duetRoutes.get('/:id/watch', async (c) => {
@@ -1614,7 +1791,13 @@ duetRoutes.post('/:id/end', async (c) => {
     body: JSON.stringify({ wallet }),
   }))
 
-  return forwardDoResponse(doResp)
+  const forwarded = await forwardDoResponse(doResp)
+  if (forwarded.ok) {
+    const payload = await forwarded.clone().json<any>().catch(() => null)
+    const endedAt = asOptionalEpoch(payload?.ended_at) ?? nowEpochSeconds()
+    await updateDuetDiscoveryStatus(c.env, roomId, 'ended', null, endedAt)
+  }
+  return forwarded
 })
 
 duetRoutes.post('/:id/broadcast/heartbeat', async (c) => {
@@ -1802,6 +1985,170 @@ function parseUsdcAmountToBaseUnits(value: string | number | undefined, fallback
   return baseUnits
 }
 
+function normalizeRoomTitle(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  return trimmed.slice(0, 120)
+}
+
+function normalizeRoomKind(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim().toLowerCase()
+  if (!normalized) return null
+  if (normalized === 'dj_set' || normalized === 'duet' || normalized === 'open_jam' || normalized === 'class') {
+    return normalized
+  }
+  return null
+}
+
+function nowEpochSeconds(): number {
+  return Math.floor(Date.now() / 1000)
+}
+
+function asOptionalEpoch(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.floor(value)
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return Math.floor(parsed)
+  }
+  return null
+}
+
+function toNonNegativeInt(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.floor(value))
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return Math.max(0, Math.floor(parsed))
+  }
+  return 0
+}
+
+async function upsertDuetDiscoveryRow(env: Env, row: DuetDiscoverUpsertRow): Promise<void> {
+  const discoveryDb = getDiscoveryDb(env)
+  if (!discoveryDb) return
+  try {
+    await discoveryDb.prepare(
+      `INSERT INTO duet_rooms (
+        room_id,
+        host_wallet,
+        guest_wallet,
+        status,
+        split_address,
+        network,
+        live_amount,
+        replay_amount,
+        audience_mode,
+        visibility,
+        title,
+        room_kind,
+        listener_count,
+        live_started_at,
+        ended_at,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(room_id) DO UPDATE SET
+        host_wallet = excluded.host_wallet,
+        guest_wallet = COALESCE(excluded.guest_wallet, duet_rooms.guest_wallet),
+        status = excluded.status,
+        split_address = excluded.split_address,
+        network = excluded.network,
+        live_amount = excluded.live_amount,
+        replay_amount = excluded.replay_amount,
+        audience_mode = excluded.audience_mode,
+        visibility = excluded.visibility,
+        title = COALESCE(excluded.title, duet_rooms.title),
+        room_kind = COALESCE(excluded.room_kind, duet_rooms.room_kind),
+        listener_count = MAX(duet_rooms.listener_count, excluded.listener_count),
+        live_started_at = COALESCE(excluded.live_started_at, duet_rooms.live_started_at),
+        ended_at = COALESCE(excluded.ended_at, duet_rooms.ended_at),
+        updated_at = excluded.updated_at`,
+    )
+      .bind(
+        row.room_id,
+        row.host_wallet,
+        row.guest_wallet,
+        row.status,
+        row.split_address,
+        row.network,
+        row.live_amount,
+        row.replay_amount,
+        row.audience_mode,
+        row.visibility,
+        row.title,
+        row.room_kind,
+        row.listener_count,
+        row.live_started_at,
+        row.ended_at,
+        row.created_at,
+        row.updated_at,
+      )
+      .run()
+  } catch (err) {
+    console.warn('[duet/discover] upsert failed:', String(err))
+  }
+}
+
+async function updateDuetDiscoveryGuest(env: Env, roomId: string, guestWallet: string): Promise<void> {
+  const discoveryDb = getDiscoveryDb(env)
+  if (!discoveryDb) return
+  try {
+    await discoveryDb.prepare(
+      `UPDATE duet_rooms
+       SET guest_wallet = ?,
+           updated_at = ?
+       WHERE room_id = ?`,
+    )
+      .bind(guestWallet, nowEpochSeconds(), roomId)
+      .run()
+  } catch (err) {
+    console.warn('[duet/discover] guest update failed:', String(err))
+  }
+}
+
+async function updateDuetDiscoveryStatus(
+  env: Env,
+  roomId: string,
+  status: RoomStatus,
+  liveStartedAt: number | null,
+  endedAt: number | null,
+): Promise<void> {
+  const discoveryDb = getDiscoveryDb(env)
+  if (!discoveryDb) return
+  try {
+    await discoveryDb.prepare(
+      `UPDATE duet_rooms
+       SET status = ?,
+           live_started_at = COALESCE(?, live_started_at),
+           ended_at = COALESCE(?, ended_at),
+           updated_at = ?
+       WHERE room_id = ?`,
+    )
+      .bind(status, liveStartedAt, endedAt, nowEpochSeconds(), roomId)
+      .run()
+  } catch (err) {
+    console.warn('[duet/discover] status update failed:', String(err))
+  }
+}
+
+async function incrementDuetDiscoveryListenerCount(env: Env, roomId: string): Promise<void> {
+  const discoveryDb = getDiscoveryDb(env)
+  if (!discoveryDb) return
+  try {
+    await discoveryDb.prepare(
+      `UPDATE duet_rooms
+       SET listener_count = listener_count + 1,
+           updated_at = ?
+       WHERE room_id = ?`,
+    )
+      .bind(nowEpochSeconds(), roomId)
+      .run()
+  } catch (err) {
+    console.warn('[duet/discover] listener count increment failed:', String(err))
+  }
+}
+
 function isAddress(value: string): boolean {
   return /^0x[a-fA-F0-9]{40}$/.test(value)
 }
@@ -1816,4 +2163,10 @@ function isReplayMode(value: string): value is ReplayMode {
 
 function isRecordingMode(value: string): value is RecordingMode {
   return value === 'host_local' || value === 'agora_cloud'
+}
+
+function getDiscoveryDb(env: Env): D1Database | null {
+  const db = (env as Partial<Env> & { DB?: D1Database }).DB
+  if (!db || typeof db.prepare !== 'function') return null
+  return db
 }

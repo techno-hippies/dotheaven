@@ -23,18 +23,11 @@ pub(super) fn render_main_header(
     create_button: Option<AnyElement>,
     cx: &mut Context<RoomsView>,
 ) -> impl IntoElement {
-    render_rooms_back_bar(
-        theme,
-        "Rooms",
-        "Live duets, classes, and jam sessions",
-        false,
-        create_button,
-        cx,
-    )
+    render_rooms_back_bar(theme, "Rooms", "", false, create_button, cx)
 }
 
 pub(super) fn render_main_panel_create_button(
-    theme: &Theme,
+    _theme: &Theme,
     cx: &mut Context<RoomsView>,
 ) -> AnyElement {
     div()
@@ -43,14 +36,11 @@ pub(super) fn render_main_panel_create_button(
         .items_center()
         .gap_2()
         .px_5()
-        .py(px(10.))
+        .py(px(9.))
         .rounded_full()
-        .bg(theme.primary)
+        .bg(hsla(0.61, 0.72, 0.75, 1.0))
         .cursor_pointer()
-        .hover({
-            let hover = theme.primary_hover;
-            move |s| s.bg(hover)
-        })
+        .hover(|s| s.bg(hsla(0.61, 0.72, 0.78, 1.0)))
         .on_click(cx.listener(|this, _, window, cx| {
             this.open_create_modal(window, cx);
         }))
@@ -58,12 +48,12 @@ pub(super) fn render_main_panel_create_button(
             gpui::svg()
                 .path("icons/plus.svg")
                 .size(px(14.))
-                .text_color(theme.primary_foreground),
+                .text_color(hsla(0.63, 0.20, 0.22, 1.0)),
         )
         .child(
             div()
                 .font_weight(FontWeight::SEMIBOLD)
-                .text_color(theme.primary_foreground)
+                .text_color(hsla(0.63, 0.20, 0.22, 1.0))
                 .child("Create Room"),
         )
         .into_any_element()
@@ -76,7 +66,7 @@ pub(super) fn render_tabs(
 ) -> impl IntoElement {
     div()
         .h_flex()
-        .gap_6()
+        .gap_5()
         .border_b_1()
         .border_color(theme.border)
         .children(RoomsTab::all().into_iter().map(|tab| {
@@ -84,8 +74,8 @@ pub(super) fn render_tabs(
             div()
                 .id(SharedString::from(format!("rooms-tab-{}", tab.label())))
                 .v_flex()
-                .gap_2()
-                .pb_2()
+                .gap_1()
+                .pb_0p5()
                 .cursor_pointer()
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.active_tab = tab;
@@ -97,7 +87,7 @@ pub(super) fn render_tabs(
                         .font_weight(if is_active {
                             FontWeight::SEMIBOLD
                         } else {
-                            FontWeight::NORMAL
+                            FontWeight::MEDIUM
                         })
                         .text_color(if is_active {
                             theme.foreground
@@ -106,7 +96,7 @@ pub(super) fn render_tabs(
                         })
                         .child(tab.label()),
                 )
-                .child(div().h(px(2.)).w(px(40.)).rounded(px(2.)).bg(if is_active {
+                .child(div().h(px(2.)).w(px(78.)).rounded(px(2.)).bg(if is_active {
                     theme.primary
                 } else {
                     hsla(0., 0., 0., 0.)
@@ -118,23 +108,36 @@ pub(super) fn render_room_columns(
     left_col: &[RoomCard],
     right_col: &[RoomCard],
     theme: &Theme,
+    cx: &mut Context<RoomsView>,
 ) -> impl IntoElement {
+    if left_col.is_empty() && right_col.is_empty() {
+        return div()
+            .w_full()
+            .h(px(220.))
+            .v_flex()
+            .items_center()
+            .justify_center()
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(theme.muted_foreground)
+                    .child("No rooms found right now."),
+            );
+    }
+
+    let left_cards: Vec<AnyElement> = left_col
+        .iter()
+        .map(|room| render_room_card(room, theme, cx).into_any_element())
+        .collect();
+    let right_cards: Vec<AnyElement> = right_col
+        .iter()
+        .map(|room| render_room_card(room, theme, cx).into_any_element())
+        .collect();
+
     div()
         .h_flex()
         .items_start()
         .gap_4()
-        .child(
-            div()
-                .v_flex()
-                .flex_1()
-                .gap_4()
-                .children(left_col.iter().map(|room| render_room_card(room, theme))),
-        )
-        .child(
-            div()
-                .v_flex()
-                .flex_1()
-                .gap_4()
-                .children(right_col.iter().map(|room| render_room_card(room, theme))),
-        )
+        .child(div().v_flex().flex_1().gap_4().children(left_cards))
+        .child(div().v_flex().flex_1().gap_4().children(right_cards))
 }

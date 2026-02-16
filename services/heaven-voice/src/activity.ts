@@ -1,130 +1,134 @@
 /**
  * Activity Context for Scarlett
  *
- * Queries the activity-feed subgraph for a user's recent scrobbles, sleep,
- * runs, and meals, then formats them as natural-language context for the
- * system prompt.
+ * Keeps prompt context compact:
+ * - latest 5 scrobbles
+ * - all-time total scrobbles + #1 artist (from aggregate entities when available)
  */
 
 import type { Env } from "./env";
 
-interface FeedItem {
-  kind: string;
-  source: string;
-  ts: string;
-  durationSeconds: number | null;
-  distanceMeters: number | null;
-  count: number | null;
-  calories: number | null;
-  proteinG: number | null;
-  carbsG: number | null;
-  fatG: number | null;
-  cid: string | null;
-  photoCid: string | null;
-  analysisCid: string | null;
-}
-
 interface ScrobbleTrack {
   artist: string;
   title: string;
-  album?: string;
+  album?: string | null;
 }
 
-interface ScrobbleTrackWrapped {
-  raw?: ScrobbleTrack;
-  artist?: string;
-  title?: string;
-  album?: string;
+interface ScrobbleRow {
+  timestamp: string;
+  track: ScrobbleTrack | null;
 }
 
-interface ScrobbleBatch {
-  tracks: ScrobbleTrackWrapped[];
-}
-
-interface SubgraphResponse {
-  data?: { feedItems: FeedItem[] };
+interface RecentScrobblesResponse {
+  data?: { scrobbles: ScrobbleRow[] };
   errors?: Array<{ message: string }>;
 }
 
-interface MealAnalysis {
-  description: string;
-  items?: Array<{ name: string; calories: number; protein_g: number; carbs_g: number; fat_g: number }>;
-  totals?: { calories: number; protein_g: number; carbs_g: number; fat_g: number };
+interface ListeningStatsRow {
+  totalScrobbles: string;
+  lastScrobbleAt: string;
+  topArtist: string;
+  topArtistScrobbleCount: string;
 }
 
-const FEED_QUERY = `
-query UserFeed($user: Bytes!) {
-  feedItems(
-    where: { user: $user, revoked: false }
-    orderBy: ts
+interface ListeningStatsResponse {
+  data?: { userListeningStats: ListeningStatsRow | null };
+  errors?: Array<{ message: string }>;
+}
+
+const RECENT_LIMIT = 5;
+
+const RECENT_SCROBBLES_QUERY = `
+query UserRecentScrobbles($user: Bytes!, $limit: Int!) {
+  scrobbles(
+    where: { user: $user }
+    orderBy: timestamp
     orderDirection: desc
-    first: 30
+    first: $limit
   ) {
-    kind
-    source
-    ts
-    durationSeconds
-    distanceMeters
-    count
-    calories
-    proteinG
-    carbsG
-    fatG
-    cid
-    photoCid
-    analysisCid
+    timestamp
+    track {
+      artist
+      title
+      album
+    }
   }
 }`;
 
-/**
- * Fetch recent activity items from the subgraph for a wallet address.
- */
-async function fetchFeedItems(env: Env, wallet: string): Promise<FeedItem[]> {
-  if (!env.SUBGRAPH_URL) return [];
+const LISTENING_STATS_QUERY = `
+query UserListeningStats($userId: ID!) {
+  userListeningStats(id: $userId) {
+    totalScrobbles
+    lastScrobbleAt
+    topArtist
+    topArtistScrobbleCount
+  }
+}`;
+
+async function postGraphql<T>(
+  env: Env,
+  query: string,
+  variables: Record<string, unknown>,
+): Promise<T | null> {
+  if (!env.SUBGRAPH_URL) return null;
 
   try {
     const res = await fetch(env.SUBGRAPH_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: FEED_QUERY,
-        variables: { user: wallet.toLowerCase() },
-      }),
+      body: JSON.stringify({ query, variables }),
     });
 
     if (!res.ok) {
       console.warn(`[activity] Subgraph returned ${res.status}`);
-      return [];
+      return null;
     }
 
-    const json = (await res.json()) as SubgraphResponse;
-    if (json.errors?.length) {
-      console.warn("[activity] Subgraph errors:", json.errors[0].message);
-      return [];
-    }
-
-    return json.data?.feedItems ?? [];
+    return (await res.json()) as T;
   } catch (e) {
     console.warn("[activity] Subgraph fetch failed:", e);
-    return [];
+    return null;
   }
 }
 
-function formatDuration(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
+async function fetchRecentScrobbles(env: Env, wallet: string): Promise<ScrobbleRow[]> {
+  const json = await postGraphql<RecentScrobblesResponse>(
+    env,
+    RECENT_SCROBBLES_QUERY,
+    { user: wallet.toLowerCase(), limit: RECENT_LIMIT },
+  );
+  if (!json) return [];
+  if (json.errors?.length) {
+    console.warn("[activity] recent scrobbles query error:", json.errors[0].message);
+    return [];
+  }
+  return Array.isArray(json.data?.scrobbles) ? json.data.scrobbles : [];
 }
 
-function formatDistance(meters: number): string {
-  const km = meters / 1000;
-  return km >= 1 ? `${km.toFixed(1)}km` : `${meters}m`;
+async function fetchListeningStats(env: Env, wallet: string): Promise<ListeningStatsRow | null> {
+  const json = await postGraphql<ListeningStatsResponse>(
+    env,
+    LISTENING_STATS_QUERY,
+    { userId: wallet.toLowerCase() },
+  );
+  if (!json) return null;
+  if (json.errors?.length) {
+    // Aggregate entities may not exist yet on older deployments; fallback to recents-only context.
+    console.warn("[activity] listening stats query error:", json.errors[0].message);
+    return null;
+  }
+  return json.data?.userListeningStats ?? null;
+}
+
+function parseTimestamp(value: string): number | null {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 function relativeTime(tsSeconds: number): string {
   const now = Math.floor(Date.now() / 1000);
-  const diff = now - tsSeconds;
+  const diff = Math.max(0, now - tsSeconds);
+  if (diff < 60) return "just now";
   if (diff < 3600) return `${Math.floor(diff / 60)}min ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   const days = Math.floor(diff / 86400);
@@ -133,160 +137,53 @@ function relativeTime(tsSeconds: number): string {
   return `${Math.floor(days / 7)}w ago`;
 }
 
+function formatUtc(tsSeconds: number): string {
+  return new Date(tsSeconds * 1000).toISOString().replace(".000Z", "Z");
+}
+
+function formatIntString(value: string): string {
+  const num = Number.parseInt(value, 10);
+  return Number.isFinite(num) ? num.toLocaleString("en-US") : value;
+}
+
 /**
- * Build a natural-language summary of the user's recent activity.
- * Returns null if no activity data is available.
+ * Build a compact natural-language summary of listening behavior.
+ * Returns null if no relevant data is available.
  */
 export async function getActivityContext(env: Env, wallet: string): Promise<string | null> {
-  const items = await fetchFeedItems(env, wallet);
-  if (items.length === 0) return null;
-
-  const sleep: string[] = [];
-  const runs: string[] = [];
-  const musicItems: FeedItem[] = [];
-  const mealItems: FeedItem[] = [];
-
-  for (const item of items) {
-    switch (item.kind) {
-      case "MUSIC":
-        musicItems.push(item);
-        break;
-      case "SLEEP": {
-        const when = relativeTime(parseInt(item.ts));
-        const dur = item.durationSeconds ? formatDuration(item.durationSeconds) : "?";
-        sleep.push(`${dur} (${when})`);
-        break;
-      }
-      case "RUN": {
-        const when = relativeTime(parseInt(item.ts));
-        const dist = item.distanceMeters ? formatDistance(item.distanceMeters) : "?";
-        const dur = item.durationSeconds ? formatDuration(item.durationSeconds) : "";
-        runs.push(`${dist}${dur ? " in " + dur : ""} (${when})`);
-        break;
-      }
-      case "MEAL":
-        mealItems.push(item);
-        break;
-    }
-  }
-
-  // Resolve meal analysis from IPFS (description + macros) and scrobble tracks in parallel
-  const mealCids = mealItems.filter((m) => m.analysisCid).slice(0, 5);
-  const musicCids = musicItems.filter((m) => m.cid).slice(0, 3);
-
-  const [mealAnalyses, trackResults] = await Promise.all([
-    Promise.all(mealCids.map((m) => fetchMealAnalysis(m.analysisCid!))),
-    Promise.all(musicCids.map((m) => fetchScrobbleTracks(m.cid!))),
+  const [recentRows, listeningStats] = await Promise.all([
+    fetchRecentScrobbles(env, wallet),
+    fetchListeningStats(env, wallet),
   ]);
 
-  // Build meal sections
-  const meals: string[] = [];
-  for (let i = 0; i < mealItems.length && meals.length < 5; i++) {
-    const item = mealItems[i];
-    const when = relativeTime(parseInt(item.ts));
-    const cidIdx = mealCids.indexOf(item);
-    const analysis = cidIdx >= 0 ? mealAnalyses[cidIdx] : null;
+  const recent = recentRows
+    .map((row) => {
+      const ts = parseTimestamp(row.timestamp);
+      const artist = row.track?.artist?.trim() ?? "";
+      const title = row.track?.title?.trim() ?? "";
+      if (!ts || !artist || !title) return null;
+      return `${artist} - ${title} (${relativeTime(ts)}; ${formatUtc(ts)})`;
+    })
+    .filter((v): v is string => v != null)
+    .slice(0, RECENT_LIMIT);
 
-    if (analysis?.description) {
-      const parts: string[] = [analysis.description];
-      if (analysis.totals && (analysis.totals.calories > 0 || analysis.totals.protein_g > 0)) {
-        let macros = `~${analysis.totals.calories} cal`;
-        if (analysis.totals.protein_g) macros += `, ${analysis.totals.protein_g}g protein`;
-        if (analysis.totals.carbs_g) macros += `, ${analysis.totals.carbs_g}g carbs`;
-        if (analysis.totals.fat_g) macros += `, ${analysis.totals.fat_g}g fat`;
-        parts.push(macros);
-      }
-      meals.push(`${parts.join(" — ")} (${when})`);
-    } else if (item.calories != null && item.calories > 0) {
-      meals.push(`~${item.calories} cal (${when})`);
-    } else {
-      meals.push(`photo logged (${when})`);
-    }
+  const lines: string[] = [];
+
+  if (recent.length > 0) {
+    lines.push(`Recent listens (latest ${RECENT_LIMIT}): ${recent.join("; ")}.`);
   }
 
-  // Build music sections
-  const musicSections: string[] = [];
-  for (let i = 0; i < musicCids.length; i++) {
-    const item = musicCids[i];
-    const tracks = trackResults[i];
-    const when = relativeTime(parseInt(item.ts));
-
-    if (tracks.length > 0) {
-      const trackList = tracks.slice(0, 5).map((t) => `${t.artist} – ${t.title}`).join(", ");
-      musicSections.push(`${trackList} (${when})`);
-    } else {
-      musicSections.push(`${item.count ?? 0} tracks (${when})`);
-    }
+  if (listeningStats) {
+    const total = formatIntString(listeningStats.totalScrobbles);
+    const topArtist = listeningStats.topArtist?.trim() || "Unknown Artist";
+    const topArtistCount = formatIntString(listeningStats.topArtistScrobbleCount);
+    const lastTs = parseTimestamp(listeningStats.lastScrobbleAt);
+    const lastPart = lastTs ? ` Last scrobble: ${relativeTime(lastTs)} (${formatUtc(lastTs)}).` : "";
+    lines.push(
+      `All-time listening: ${total} scrobbles. #1 artist: ${topArtist} (${topArtistCount} scrobbles).${lastPart}`,
+    );
   }
 
-  const sections: string[] = [];
-
-  if (meals.length > 0) {
-    sections.push(`Meals: ${meals.join("; ")}`);
-  }
-  if (musicSections.length > 0) {
-    sections.push(`Music listened to: ${musicSections.join("; ")}`);
-  }
-  if (sleep.length > 0) {
-    sections.push(`Sleep: ${sleep.slice(0, 5).join(", ")}`);
-  }
-  if (runs.length > 0) {
-    sections.push(`Runs: ${runs.slice(0, 5).join(", ")}`);
-  }
-
-  if (sections.length === 0) return null;
-
-  return sections.join("\n");
-}
-
-/**
- * Fetch track list from an IPFS CID (Filebase gateway).
- * Best-effort with a short timeout.
- */
-async function fetchScrobbleTracks(cid: string): Promise<ScrobbleTrack[]> {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
-
-    const res = await fetch(`https://ipfs.filebase.io/ipfs/${cid}`, {
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-
-    if (!res.ok) return [];
-
-    const batch = (await res.json()) as ScrobbleBatch;
-    if (!batch.tracks) return [];
-
-    // Handle both v2 (flat) and v3 (wrapped in .raw) formats
-    return batch.tracks.map((t) => {
-      if (t.raw) return { artist: t.raw.artist, title: t.raw.title, album: t.raw.album };
-      return { artist: t.artist ?? "", title: t.title ?? "", album: t.album };
-    }).filter((t) => t.artist && t.title);
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Fetch meal analysis JSON from IPFS (has description + items + macros).
- * Best-effort with a short timeout.
- */
-async function fetchMealAnalysis(analysisCid: string): Promise<MealAnalysis | null> {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
-
-    const res = await fetch(`https://ipfs.filebase.io/ipfs/${analysisCid}`, {
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-
-    if (!res.ok) return null;
-
-    const json = (await res.json()) as MealAnalysis;
-    return json.description ? json : null;
-  } catch {
-    return null;
-  }
+  if (lines.length === 0) return null;
+  return lines.join("\n");
 }

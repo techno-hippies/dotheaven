@@ -16,6 +16,17 @@ data class PirateAuthUiState(
   val output: String = "Ready.",
   val busy: Boolean = false,
 ) {
+  fun hasLitAuthContextParams(): Boolean {
+    return !pkpPublicKey.isNullOrBlank() &&
+      authMethodType != null &&
+      !authMethodId.isNullOrBlank() &&
+      !accessToken.isNullOrBlank()
+  }
+
+  fun hasLitAuthCredentials(): Boolean {
+    return hasLitAuthContextParams() && !pkpEthAddress.isNullOrBlank()
+  }
+
   companion object {
     private const val PREFS_NAME = "pirate_auth"
 

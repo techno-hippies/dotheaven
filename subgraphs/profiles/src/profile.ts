@@ -42,6 +42,8 @@ export function handleProfileUpserted(event: ProfileUpsertedEvent): void {
   profile.languagesPacked = data.languagesPacked;
   profile.friendsOpenToMask = data.friendsOpenToMask;
   profile.locationCityId = data.locationCityId;
+  profile.locationLatE6 = data.locationLatE6;
+  profile.locationLngE6 = data.locationLngE6;
   profile.schoolId = data.schoolId;
   profile.skillsCommit = data.skillsCommit;
   profile.hobbiesCommit = data.hobbiesCommit;

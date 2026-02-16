@@ -140,7 +140,12 @@ fn render_identity_row(view: &ProfileView, cx: &mut Context<ProfileView>) -> imp
                         .text_color(TEXT_PRIMARY())
                         .child(PROFILE_DISPLAY_NAME),
                 )
-                .child(div().text_sm().text_color(TEXT_MUTED()).child(PROFILE_HANDLE)),
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(TEXT_MUTED())
+                        .child(PROFILE_HANDLE),
+                ),
         )
         .child(
             div()
@@ -159,7 +164,11 @@ fn render_follow_button(is_following: bool, cx: &mut Context<ProfileView>) -> im
         ACCENT_BLUE()
     };
     let text = if is_following { "Following" } else { "Follow" };
-    let text_color = if is_following { TEXT_PRIMARY() } else { BG_PAGE() };
+    let text_color = if is_following {
+        TEXT_PRIMARY()
+    } else {
+        BG_PAGE()
+    };
 
     div()
         .id("profile-follow-button")
@@ -298,7 +307,11 @@ fn render_tabs(active_tab: ProfileTab, cx: &mut Context<ProfileView>) -> impl In
                                 } else {
                                     FontWeight::MEDIUM
                                 })
-                                .text_color(if is_active { TEXT_PRIMARY() } else { TEXT_MUTED() })
+                                .text_color(if is_active {
+                                    TEXT_PRIMARY()
+                                } else {
+                                    TEXT_MUTED()
+                                })
                                 .child(tab.label()),
                         )
                         .child(
@@ -341,12 +354,12 @@ fn render_scrobbles_panel(
                 .items_center()
                 .justify_center()
                 .gap_3()
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(TEXT_MUTED())
-                                .child(format!("Failed to load scrobbles: {err}")),
-                        )
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(TEXT_MUTED())
+                        .child(format!("Failed to load scrobbles: {err}")),
+                )
                 .child(
                     div()
                         .id("profile-scrobbles-retry")

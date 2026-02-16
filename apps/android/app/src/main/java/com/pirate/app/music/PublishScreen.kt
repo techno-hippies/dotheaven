@@ -64,6 +64,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.pirate.app.auth.PirateAuthUiState
+import com.pirate.app.lit.LitAuthContextManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -117,6 +119,7 @@ private val LICENSE_OPTIONS = listOf(
 fun PublishScreen(
   litNetwork: String,
   litRpcUrl: String,
+  authState: PirateAuthUiState,
   pkpPublicKey: String?,
   pkpEthAddress: String?,
   heavenName: String?,
@@ -159,7 +162,7 @@ fun PublishScreen(
   }
 
   fun doPublish() {
-    if (!isAuthenticated || pkpPublicKey == null || pkpEthAddress == null) {
+    if (!isAuthenticated || !authState.hasLitAuthCredentials() || pkpPublicKey == null || pkpEthAddress == null) {
       onShowMessage("Please sign in first")
       return
     }
@@ -169,6 +172,7 @@ fun PublishScreen(
     scope.launch {
       try {
         val result = withContext(Dispatchers.IO) {
+          LitAuthContextManager.ensureFromState(authState)
           SongPublishService.publish(
             context = context,
             formData = formData,
@@ -183,7 +187,12 @@ fun PublishScreen(
         step = PublishStep.SUCCESS
       } catch (e: Exception) {
         android.util.Log.e("PublishScreen", "Publish failed", e)
-        errorMessage = e.message ?: "Unknown error"
+        if (LitAuthContextManager.isExpiredAuthChallengeError(e)) {
+          errorMessage = "Session expired. Please sign in again."
+          onShowMessage("Publish paused: session expired. Please sign in again.")
+        } else {
+          errorMessage = e.message ?: "Unknown error"
+        }
         step = PublishStep.ERROR
       }
     }

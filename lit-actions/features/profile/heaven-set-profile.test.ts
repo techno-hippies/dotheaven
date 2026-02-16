@@ -34,11 +34,11 @@ const ROOT_DIR = join(__dirname, "../../");
 // MegaETH testnet
 const MEGAETH_RPC = "https://carrot.megaeth.com/rpc";
 // ProfileV2 contract (to be updated after deployment)
-const PROFILE_V2 = "0xa31545D33f6d656E62De67fd020A26608d4601E5";
+const PROFILE_V2 = "0xe00e82086480E61AaC8d5ad8B05B56A582dD0000";
 
 const profileAbi = parseAbi([
   "function nonces(address user) external view returns (uint256)",
-  "function getProfile(address user) external view returns ((uint8 profileVersion, bool exists, uint8 age, uint16 heightCm, bytes2 nationality, uint8 friendsOpenToMask, uint256 languagesPacked, bytes32 locationCityId, bytes32 schoolId, bytes32 skillsCommit, bytes32 hobbiesCommit, bytes32 nameHash, uint256 packed, string displayName, string photoURI))",
+  "function getProfile(address user) external view returns ((uint8 profileVersion, bool exists, uint8 age, uint16 heightCm, bytes2 nationality, uint8 friendsOpenToMask, uint256 languagesPacked, bytes32 locationCityId, int32 locationLatE6, int32 locationLngE6, bytes32 schoolId, bytes32 skillsCommit, bytes32 hobbiesCommit, bytes32 nameHash, uint256 packed, string displayName, string photoURI))",
 ]);
 
 async function main() {
@@ -105,6 +105,8 @@ async function main() {
     languagesPacked: langPacked,
     friendsOpenToMask: 0,
     locationCityId: ZeroHash,
+    locationLatE6: 0,
+    locationLngE6: 0,
     schoolId: ZeroHash,
     skillsCommit: ZeroHash,
     hobbiesCommit: ZeroHash,

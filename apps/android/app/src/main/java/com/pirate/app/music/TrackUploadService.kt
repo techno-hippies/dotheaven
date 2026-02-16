@@ -64,6 +64,7 @@ object TrackUploadService {
     val register =
       runCatching {
         ContentRegisterLitAction.registerContent(
+          appContext = context,
           litNetwork = litNetwork,
           litRpcUrl = litRpcUrl,
           userPkpPublicKey = userPkpPublicKey,
@@ -92,6 +93,7 @@ object TrackUploadService {
   }
 
   suspend fun registerExistingEncrypted(
+    context: Context,
     litNetwork: String,
     litRpcUrl: String,
     userPkpPublicKey: String,
@@ -103,6 +105,7 @@ object TrackUploadService {
     if (pieceCid.isEmpty()) return@withContext ContentRegisterResult(success = false, error = "missing pieceCid")
 
     ContentRegisterLitAction.registerContent(
+      appContext = context,
       litNetwork = litNetwork,
       litRpcUrl = litRpcUrl,
       userPkpPublicKey = userPkpPublicKey,

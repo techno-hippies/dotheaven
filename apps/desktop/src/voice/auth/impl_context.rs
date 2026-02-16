@@ -68,6 +68,10 @@ impl WorkerAuthContext {
         Ok(format!("0x{}", hex::encode(signature)))
     }
 
+    pub fn wallet(&self) -> &str {
+        &self.wallet
+    }
+
     pub fn clear(&mut self) {
         self.cache.clear();
         self.signer = None;

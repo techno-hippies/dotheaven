@@ -4,6 +4,8 @@ import { duetRoutes } from './routes/duet'
 import type { Env } from './types'
 
 const HOST_WALLET = '0x1111111111111111111111111111111111111111'
+const GUEST_WALLET = '0x2222222222222222222222222222222222222222'
+const OTHER_WALLET = '0x3333333333333333333333333333333333333333'
 const BASE_MAINNET_USDC = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913'
 const BASE_SEPOLIA_USDC = '0x036cbd53842c5426634e7929541ec2318f3dcf7e'
 
@@ -60,6 +62,49 @@ function makeApp() {
   const app = new Hono<{ Bindings: Env }>()
   app.route('/duet', duetRoutes)
   return app
+}
+
+type DiscoverDbRow = {
+  room_id: string
+  host_wallet: string
+  guest_wallet: string | null
+  status: 'created' | 'live' | 'ended'
+  live_amount: string
+  replay_amount: string
+  audience_mode: 'free' | 'ticketed'
+  visibility: 'public' | 'unlisted'
+  title: string | null
+  room_kind: string | null
+  listener_count: number
+  live_started_at: number | null
+  ended_at: number | null
+  created_at: number
+  updated_at: number
+}
+
+function makeDiscoverDb(rows: DiscoverDbRow[]): D1Database {
+  return {
+    prepare: (_sql: string) => ({
+      bind: (walletA: string, walletB: string) => ({
+        all: async () => ({
+          results: rows
+            .filter((row) => {
+              if (row.status !== 'created' && row.status !== 'live') return false
+              if (row.visibility === 'public') return true
+              return row.host_wallet === walletA || row.guest_wallet === walletB
+            })
+            .sort((a, b) => {
+              const aLiveRank = a.status === 'live' ? 0 : 1
+              const bLiveRank = b.status === 'live' ? 0 : 1
+              if (aLiveRank !== bLiveRank) return aLiveRank - bLiveRank
+              const aStarted = a.live_started_at ?? a.created_at
+              const bStarted = b.live_started_at ?? b.created_at
+              return bStarted - aStarted
+            }),
+        }),
+      }),
+    }),
+  } as unknown as D1Database
 }
 
 describe('duet routes', () => {
@@ -171,5 +216,112 @@ describe('duet routes', () => {
     expect(initBody?.assetUsdc).toBe(BASE_SEPOLIA_USDC)
     expect(typeof initBody?.roomId).toBe('string')
     expect(initBody?.agoraChannel).toMatch(/^heaven-duet-/)
+  })
+
+  test('GET /duet/discover returns empty list when DB binding is unavailable', async () => {
+    const env = makeEnv({ DB: {} as D1Database })
+    const app = makeApp()
+    const res = await app.request('/duet/discover', { method: 'GET' }, env)
+
+    expect(res.status).toBe(200)
+    const body = await res.json() as any
+    expect(Array.isArray(body?.rooms)).toBe(true)
+    expect(body.rooms).toEqual([])
+  })
+
+  test('GET /duet/discover returns public + viewer-related unlisted rooms', async () => {
+    const now = Math.floor(Date.now() / 1000)
+    const env = makeEnv({
+      DB: makeDiscoverDb([
+        {
+          room_id: 'public-live',
+          host_wallet: HOST_WALLET,
+          guest_wallet: null,
+          status: 'live',
+          live_amount: '100000',
+          replay_amount: '100000',
+          audience_mode: 'ticketed',
+          visibility: 'public',
+          title: 'Public Live Room',
+          room_kind: 'duet',
+          listener_count: 12,
+          live_started_at: now - 60,
+          ended_at: null,
+          created_at: now - 120,
+          updated_at: now - 30,
+        },
+        {
+          room_id: 'unlisted-guest',
+          host_wallet: HOST_WALLET,
+          guest_wallet: GUEST_WALLET,
+          status: 'created',
+          live_amount: '0',
+          replay_amount: '0',
+          audience_mode: 'free',
+          visibility: 'unlisted',
+          title: 'Guest Invite',
+          room_kind: 'duet',
+          listener_count: 0,
+          live_started_at: null,
+          ended_at: null,
+          created_at: now - 90,
+          updated_at: now - 45,
+        },
+        {
+          room_id: 'unlisted-other',
+          host_wallet: OTHER_WALLET,
+          guest_wallet: null,
+          status: 'live',
+          live_amount: '100000',
+          replay_amount: '100000',
+          audience_mode: 'ticketed',
+          visibility: 'unlisted',
+          title: 'Private Other',
+          room_kind: 'dj_set',
+          listener_count: 4,
+          live_started_at: now - 30,
+          ended_at: null,
+          created_at: now - 150,
+          updated_at: now - 20,
+        },
+        {
+          room_id: 'public-ended',
+          host_wallet: HOST_WALLET,
+          guest_wallet: null,
+          status: 'ended',
+          live_amount: '100000',
+          replay_amount: '100000',
+          audience_mode: 'ticketed',
+          visibility: 'public',
+          title: 'Ended Public',
+          room_kind: 'duet',
+          listener_count: 20,
+          live_started_at: now - 400,
+          ended_at: now - 100,
+          created_at: now - 600,
+          updated_at: now - 80,
+        },
+      ]),
+    })
+    const token = await mintJWT(GUEST_WALLET, env.JWT_SECRET)
+    const app = makeApp()
+    const res = await app.request(
+      '/duet/discover',
+      {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+      },
+      env,
+    )
+
+    expect(res.status).toBe(200)
+    const body = await res.json() as any
+    const rooms = Array.isArray(body?.rooms) ? body.rooms : []
+    const roomIds = rooms.map((r: any) => r.room_id)
+    expect(roomIds).toEqual(['public-live', 'unlisted-guest'])
+
+    const guestRoom = rooms.find((r: any) => r.room_id === 'unlisted-guest')
+    expect(guestRoom?.started_at).toBe(guestRoom?.created_at)
+    expect(guestRoom?.audience_mode).toBe('free')
   })
 })

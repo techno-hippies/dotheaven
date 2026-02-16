@@ -184,6 +184,7 @@ fun AddToPlaylistSheet(
                   val result =
                     runCatching {
                       PlaylistV1LitAction.addTrackToPlaylist(
+                        appContext = context,
                         litNetwork = litNetwork,
                         litRpcUrl = litRpcUrl,
                         userPkpPublicKey = pkpPublicKey,

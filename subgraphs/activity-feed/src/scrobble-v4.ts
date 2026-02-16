@@ -7,6 +7,7 @@ import {
   TrackUpdated as TrackUpdatedEvent,
 } from "../generated/ScrobbleV4/ScrobbleV4";
 import { Scrobble, Track, UserVerification } from "../generated/schema";
+import { applyUserScrobbleStats } from "./scrobble-stats";
 
 export function handleTrackRegisteredV4(event: TrackRegisteredEvent): void {
   let id = event.params.trackId.toHexString();
@@ -81,6 +82,13 @@ export function handleScrobbledV4(event: ScrobbledEvent): void {
     }
 
     track.save();
+
+    applyUserScrobbleStats(
+      event.params.user,
+      track.artist,
+      scrobble.timestamp,
+      event.block.number,
+    );
   }
 }
 
