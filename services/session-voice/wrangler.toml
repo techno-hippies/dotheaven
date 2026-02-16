@@ -31,8 +31,8 @@ VERIFICATION_MIRROR_ADDRESS = "0xb0864603A4d6b62eACB53fbFa32E7665BADCc7Fb"
 CHAIN_ID = "6343"
 LLM_BASE_URL = "https://openrouter.ai/api/v1"
 ELEVENLABS_VOICE_ID = "rf0RyZGEDtFGS4U6yghI"
-X402_FACILITATOR_MODE = "mock"
-X402_FACILITATOR_BASE_URL = "https://api.cdp.coinbase.com/platform/v2/x402"
+X402_FACILITATOR_BASE_URL = "https://facil-x402rs-sepolia.dotheaven.org"
+X402_FACILITATOR_MODE = "self"
 
 # Secrets (set via wrangler secret put):
 # AGORA_APP_ID

@@ -214,6 +214,14 @@ export class Playlist extends Entity {
       "tracks",
     );
   }
+
+  get shares(): PlaylistShareLoader {
+    return new PlaylistShareLoader(
+      "Playlist",
+      this.get("id")!.toString(),
+      "shares",
+    );
+  }
 }
 
 export class PlaylistTrack extends Entity {
@@ -297,6 +305,365 @@ export class PlaylistTrack extends Entity {
   }
 }
 
+export class PlaylistTrackVersion extends Entity {
+  constructor(id: string) {
+    super();
+    this.set("id", Value.fromString(id));
+  }
+
+  save(): void {
+    let id = this.get("id");
+    assert(id != null, "Cannot save PlaylistTrackVersion entity without an ID");
+    if (id) {
+      assert(
+        id.kind == ValueKind.STRING,
+        `Entities of type PlaylistTrackVersion must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
+      );
+      store.set("PlaylistTrackVersion", id.toString(), this);
+    }
+  }
+
+  static loadInBlock(id: string): PlaylistTrackVersion | null {
+    return changetype<PlaylistTrackVersion | null>(
+      store.get_in_block("PlaylistTrackVersion", id),
+    );
+  }
+
+  static load(id: string): PlaylistTrackVersion | null {
+    return changetype<PlaylistTrackVersion | null>(
+      store.get("PlaylistTrackVersion", id),
+    );
+  }
+
+  get id(): string {
+    let value = this.get("id");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set id(value: string) {
+    this.set("id", Value.fromString(value));
+  }
+
+  get playlist(): string {
+    let value = this.get("playlist");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set playlist(value: string) {
+    this.set("playlist", Value.fromString(value));
+  }
+
+  get playlistId(): Bytes {
+    let value = this.get("playlistId");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set playlistId(value: Bytes) {
+    this.set("playlistId", Value.fromBytes(value));
+  }
+
+  get version(): i32 {
+    let value = this.get("version");
+    if (!value || value.kind == ValueKind.NULL) {
+      return 0;
+    } else {
+      return value.toI32();
+    }
+  }
+
+  set version(value: i32) {
+    this.set("version", Value.fromI32(value));
+  }
+
+  get tracksHash(): Bytes {
+    let value = this.get("tracksHash");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set tracksHash(value: Bytes) {
+    this.set("tracksHash", Value.fromBytes(value));
+  }
+
+  get trackId(): Bytes {
+    let value = this.get("trackId");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set trackId(value: Bytes) {
+    this.set("trackId", Value.fromBytes(value));
+  }
+
+  get position(): i32 {
+    let value = this.get("position");
+    if (!value || value.kind == ValueKind.NULL) {
+      return 0;
+    } else {
+      return value.toI32();
+    }
+  }
+
+  set position(value: i32) {
+    this.set("position", Value.fromI32(value));
+  }
+
+  get updatedAt(): BigInt {
+    let value = this.get("updatedAt");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set updatedAt(value: BigInt) {
+    this.set("updatedAt", Value.fromBigInt(value));
+  }
+
+  get blockNumber(): BigInt {
+    let value = this.get("blockNumber");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set blockNumber(value: BigInt) {
+    this.set("blockNumber", Value.fromBigInt(value));
+  }
+
+  get transactionHash(): Bytes {
+    let value = this.get("transactionHash");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set transactionHash(value: Bytes) {
+    this.set("transactionHash", Value.fromBytes(value));
+  }
+}
+
+export class PlaylistShare extends Entity {
+  constructor(id: string) {
+    super();
+    this.set("id", Value.fromString(id));
+  }
+
+  save(): void {
+    let id = this.get("id");
+    assert(id != null, "Cannot save PlaylistShare entity without an ID");
+    if (id) {
+      assert(
+        id.kind == ValueKind.STRING,
+        `Entities of type PlaylistShare must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
+      );
+      store.set("PlaylistShare", id.toString(), this);
+    }
+  }
+
+  static loadInBlock(id: string): PlaylistShare | null {
+    return changetype<PlaylistShare | null>(
+      store.get_in_block("PlaylistShare", id),
+    );
+  }
+
+  static load(id: string): PlaylistShare | null {
+    return changetype<PlaylistShare | null>(store.get("PlaylistShare", id));
+  }
+
+  get id(): string {
+    let value = this.get("id");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set id(value: string) {
+    this.set("id", Value.fromString(value));
+  }
+
+  get playlist(): string {
+    let value = this.get("playlist");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set playlist(value: string) {
+    this.set("playlist", Value.fromString(value));
+  }
+
+  get playlistId(): Bytes {
+    let value = this.get("playlistId");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set playlistId(value: Bytes) {
+    this.set("playlistId", Value.fromBytes(value));
+  }
+
+  get owner(): Bytes {
+    let value = this.get("owner");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set owner(value: Bytes) {
+    this.set("owner", Value.fromBytes(value));
+  }
+
+  get grantee(): Bytes {
+    let value = this.get("grantee");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set grantee(value: Bytes) {
+    this.set("grantee", Value.fromBytes(value));
+  }
+
+  get granted(): boolean {
+    let value = this.get("granted");
+    if (!value || value.kind == ValueKind.NULL) {
+      return false;
+    } else {
+      return value.toBoolean();
+    }
+  }
+
+  set granted(value: boolean) {
+    this.set("granted", Value.fromBoolean(value));
+  }
+
+  get playlistVersion(): i32 {
+    let value = this.get("playlistVersion");
+    if (!value || value.kind == ValueKind.NULL) {
+      return 0;
+    } else {
+      return value.toI32();
+    }
+  }
+
+  set playlistVersion(value: i32) {
+    this.set("playlistVersion", Value.fromI32(value));
+  }
+
+  get trackCount(): i32 {
+    let value = this.get("trackCount");
+    if (!value || value.kind == ValueKind.NULL) {
+      return 0;
+    } else {
+      return value.toI32();
+    }
+  }
+
+  set trackCount(value: i32) {
+    this.set("trackCount", Value.fromI32(value));
+  }
+
+  get tracksHash(): Bytes {
+    let value = this.get("tracksHash");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set tracksHash(value: Bytes) {
+    this.set("tracksHash", Value.fromBytes(value));
+  }
+
+  get sharedAt(): BigInt {
+    let value = this.get("sharedAt");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set sharedAt(value: BigInt) {
+    this.set("sharedAt", Value.fromBigInt(value));
+  }
+
+  get updatedAt(): BigInt {
+    let value = this.get("updatedAt");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set updatedAt(value: BigInt) {
+    this.set("updatedAt", Value.fromBigInt(value));
+  }
+
+  get blockNumber(): BigInt {
+    let value = this.get("blockNumber");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set blockNumber(value: BigInt) {
+    this.set("blockNumber", Value.fromBigInt(value));
+  }
+
+  get transactionHash(): Bytes {
+    let value = this.get("transactionHash");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set transactionHash(value: Bytes) {
+    this.set("transactionHash", Value.fromBytes(value));
+  }
+}
+
 export class PlaylistTrackLoader extends Entity {
   _entity: string;
   _field: string;
@@ -312,5 +679,23 @@ export class PlaylistTrackLoader extends Entity {
   load(): PlaylistTrack[] {
     let value = store.loadRelated(this._entity, this._id, this._field);
     return changetype<PlaylistTrack[]>(value);
+  }
+}
+
+export class PlaylistShareLoader extends Entity {
+  _entity: string;
+  _field: string;
+  _id: string;
+
+  constructor(entity: string, id: string, field: string) {
+    super();
+    this._entity = entity;
+    this._id = id;
+    this._field = field;
+  }
+
+  load(): PlaylistShare[] {
+    let value = store.loadRelated(this._entity, this._id, this._field);
+    return changetype<PlaylistShare[]>(value);
   }
 }

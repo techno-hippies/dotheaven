@@ -11,7 +11,7 @@ const __dirname = dirname(__filename)
 const config: StorybookConfig = {
   stories: [
     '../src/**/*.stories.@(js|jsx|ts|tsx)',
-    '../../../apps/frontend/src/**/*.stories.@(js|jsx|ts|tsx)',
+    '../../../apps/web/src/**/*.stories.@(js|jsx|ts|tsx)',
   ],
   addons: [],
   framework: {
@@ -27,7 +27,7 @@ const config: StorybookConfig = {
       plugins: [solid(), tailwindcss()],
       resolve: {
         alias: [
-          { find: '@', replacement: resolve(__dirname, '../../../apps/frontend/src') },
+          { find: '@', replacement: resolve(__dirname, '../../../apps/web/src') },
           { find: '@heaven/ui/styles', replacement: resolve(__dirname, '../src/styles/index.css') },
           { find: '@heaven/ui/.storybook/mocks', replacement: mockPlatformPath },
           { find: '@heaven/ui', replacement: resolve(__dirname, '../src') },
@@ -40,9 +40,6 @@ const config: StorybookConfig = {
         include: ['solid-js', 'solid-js/web', 'solid-js/store'],
         exclude: [
           '@heaven/platform',
-          '@tauri-apps/api',
-          '@tauri-apps/plugin-dialog',
-          '@tauri-apps/plugin-shell',
           '@xmtp/browser-sdk',
           '@xmtp/wasm-bindings',
         ],

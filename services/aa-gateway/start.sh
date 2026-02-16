@@ -36,7 +36,10 @@ fi
 
 # ── Optional env vars ───────────────────────────────────────────────────────
 ALTO_PORT="${ALTO_PORT:-4337}"
-GATEWAY_PORT="${PORT:-3337}"
+# Keep app port resolution aligned with EigenCloud TLS/Caddy conventions.
+# Caddy forwards to APP_PORT; gateway listens on PORT.
+# Resolve once and export both so either env style works.
+GATEWAY_PORT="${PORT:-${APP_PORT:-3337}}"
 
 echo "=== Heaven AA Gateway ==="
 echo "  Chain:    ${CHAIN_ID}"
@@ -48,6 +51,7 @@ echo ""
 # ── Set gateway env vars ────────────────────────────────────────────────────
 export BUNDLER_URL="http://127.0.0.1:${ALTO_PORT}"
 export PORT="${GATEWAY_PORT}"
+export APP_PORT="${GATEWAY_PORT}"
 
 # ── Start Alto bundler in background (localhost only) ─────────────────────
 node "$ALTO_DIR/src/esm/cli/alto.js" run \

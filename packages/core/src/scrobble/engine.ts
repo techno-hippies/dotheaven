@@ -25,9 +25,9 @@ export interface ReadyScrobble {
   mbid: string | null
   /** Optional IPFS CID for album cover art */
   coverCid: string | null
-  /** Local file path for the track (Tauri only) */
+  /** Local file path for the track (legacy desktop metadata) */
   filePath: string | null
-  /** Local cover image path (Tauri only) */
+  /** Local cover image path (legacy desktop metadata) */
   coverPath: string | null
 }
 
@@ -42,9 +42,9 @@ export interface TrackMetadata {
   mbid?: string | null
   /** IPFS CID for album cover art (if already uploaded) */
   coverCid?: string | null
-  /** Local file path for the track (Tauri only) */
+  /** Local file path for the track (legacy desktop metadata) */
   filePath?: string | null
-  /** Local cover image path (Tauri only) */
+  /** Local cover image path (legacy desktop metadata) */
   coverPath?: string | null
 }
 

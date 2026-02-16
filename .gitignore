@@ -8,8 +8,7 @@ dist/
 **/dist-web/
 storybook-static/
 
-# Tauri build output
-**/src-tauri/target/
+# Legacy desktop build output
 **/target/
 
 # Environment
@@ -34,7 +33,7 @@ storybook-static/
 .local/
 
 # Bundled Lit engine (regenerated from lit-webview)
-apps/frontend/public/lit-bundle/
+apps/web/public/lit-bundle/
 
 # OS
 .DS_Store

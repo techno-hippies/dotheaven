@@ -1,6 +1,6 @@
 /**
  * Posts data layer — fetch posts from dotheaven-activity subgraph.
- * Port of apps/frontend/src/lib/heaven/posts.ts (read-only parts).
+ * Port of apps/web/src/lib/heaven/posts.ts (read-only parts).
  */
 
 import { createPublicClient, http, parseAbi } from 'viem';

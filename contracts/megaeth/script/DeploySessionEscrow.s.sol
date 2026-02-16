@@ -87,7 +87,7 @@ contract DeploySessionEscrowScript is Script {
         vm.stopBroadcast();
 
         console2.log("");
-        console2.log("Update in apps/frontend/src/lib/heaven/escrow.ts:");
+        console2.log("Update in apps/web/src/lib/heaven/escrow.ts:");
         console2.log(string.concat("  SESSION_ESCROW_V1 = '", vm.toString(address(escrow)), "'"));
         console2.log("");
         console2.log("Update in contracts/megaeth/CLAUDE.md:");

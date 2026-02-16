@@ -4,7 +4,7 @@ Cloudflare Worker providing the Heaven Names Registry API, claim/matching endpoi
 
 ## Claim Flow
 
-Claim logic: `src/routes/claim.ts`. Frontend: `apps/frontend/src/pages/ClaimPage.tsx`.
+Claim logic: `src/routes/claim.ts`. Frontend: `apps/web/src/pages/ClaimPage.tsx`.
 
 - `POST /api/claim/start` — protected by `CLAIM_START_SECRET`. Creates claim token + verification code.
 - `POST /api/claim/verify-dm` — validates DM verification code (enforces `method = 'dm'`).

@@ -2,7 +2,7 @@
  * Scrobble history for React Native — fetches from Goldsky subgraph
  * and resolves track metadata from on-chain (ScrobbleV4 → V3 fallback).
  *
- * Port of apps/frontend/src/lib/heaven/scrobbles.ts
+ * Port of apps/web/src/lib/heaven/scrobbles.ts
  */
 
 import { SUBGRAPH_ACTIVITY, MEGA_RPC, IPFS_GATEWAY } from './heaven-constants';

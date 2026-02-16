@@ -1,4 +1,4 @@
-// Common types shared across web and tauri
+// Common types shared across clients
 
 export interface User {
   id: string

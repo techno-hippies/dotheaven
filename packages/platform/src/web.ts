@@ -3,7 +3,6 @@ export { PlatformProvider, usePlatform, type PlatformAPI } from './api.tsx'
 
 export const platform: PlatformAPI = {
   platform: 'web',
-  isTauri: false,
 
   resolveDNS: undefined,
 

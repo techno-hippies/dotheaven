@@ -2,20 +2,15 @@ import { createContext, useContext, type JSX } from 'solid-js'
 
 export interface PlatformAPI {
   /** Platform identifier */
-  readonly platform: 'web' | 'tauri'
-
-  /** Check if running in Tauri */
-  readonly isTauri: boolean
+  readonly platform: 'web'
 
   /**
-   * Resolve DNS hostname (Tauri only)
-   * Web implementation throws or returns null
+   * Optional custom DNS resolver
    */
   resolveDNS?(hostname: string): Promise<string | null>
 
   /**
-   * HTTP fetch with optional custom DNS resolution (Tauri)
-   * Web uses standard fetch
+   * HTTP fetch
    */
   fetch(url: string, init?: RequestInit): Promise<Response>
 

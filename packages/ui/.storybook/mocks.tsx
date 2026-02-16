@@ -6,8 +6,7 @@ import { createContext, useContext, createSignal } from 'solid-js'
 // ============================================================================
 
 export interface PlatformAPI {
-  readonly platform: 'web' | 'tauri'
-  readonly isTauri: boolean
+  readonly platform: 'web'
   resolveDNS?(hostname: string): Promise<string | null>
   fetch(url: string, init?: RequestInit): Promise<Response>
   openExternal(url: string): Promise<void>
@@ -16,7 +15,6 @@ export interface PlatformAPI {
 
 const mockPlatform: PlatformAPI = {
   platform: 'web',
-  isTauri: false,
   resolveDNS: undefined,
   async fetch(url: string, init?: RequestInit): Promise<Response> {
     return globalThis.fetch(url, init)

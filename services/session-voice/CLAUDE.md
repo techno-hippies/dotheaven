@@ -62,6 +62,7 @@ Secrets (via `wrangler secret put`):
 - `AGORA_APP_ID`, `AGORA_APP_CERTIFICATE`
 - `JWT_SECRET`
 - `ORACLE_PRIVATE_KEY` (optional, for attestation)
+- `X402_FACILITATOR_AUTH_TOKEN` (required for `X402_FACILITATOR_MODE=self`, used for `Authorization: Bearer ...` to the facilitator)
 
 ## Running
 
@@ -98,5 +99,16 @@ DUET_TEST_FACILITATOR_PRIVATE_KEY=0x... npm run dev:duet:onchain
 ## Facilitator Modes
 
 - `X402_FACILITATOR_MODE=mock`: local validation only (no on-chain transfer).
-- `X402_FACILITATOR_MODE=cdp`: call remote facilitator `/settle` (CDP/OpenX402-compatible payload).
-- `X402_FACILITATOR_MODE=self`: same as `cdp`, but intended for our own hosted facilitator service.
+- `X402_FACILITATOR_MODE=self`: call our self-hosted facilitator `/settle` (preferred; supports dynamic `payTo` without OpenX402 whitelisting).
+- `X402_FACILITATOR_MODE=cdp`: call a CDP/OpenX402-style facilitator `/settle` (not preferred long-term due to whitelisting constraints).
+
+## Deployed (Base Sepolia ticketed duet)
+
+Current known-good wiring:
+
+- Session Voice Worker: `https://session-voice.deletion-backup782.workers.dev`
+- Facilitator (EigenCloud, Cloudflare proxied): `https://facil-x402rs-sepolia.dotheaven.org`
+
+Notes:
+
+- `/auth/verify` signature verification is tolerant to wallet/provider differences in `personal_sign` handling (string vs raw-hex interpretation).

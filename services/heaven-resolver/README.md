@@ -147,7 +147,7 @@ wrangler deploy
 
 ## Frontend Integration
 
-The frontend automatically rehosts external images via `apps/frontend/src/lib/image-cache.ts`:
+The frontend automatically rehosts external images via `apps/web/src/lib/image-cache.ts`:
 - Artist background images (Wikipedia/Wikimedia Commons)
 - Album cover art (coverartarchive.org)
 - Any external image URLs

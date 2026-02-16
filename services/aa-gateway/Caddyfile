@@ -39,8 +39,8 @@
     @for_domain expression {host} != "localhost"
     redir @for_domain https://{host}{uri} permanent
 
-    # Health check endpoint (always available via HTTP)
+    # Health check endpoint (proxy to app health)
     handle /health {
-        respond "OK" 200
+        reverse_proxy localhost:{$APP_PORT:3000}
     }
 }

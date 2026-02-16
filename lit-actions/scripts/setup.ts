@@ -27,12 +27,16 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = join(__dirname, '../');
 
 // Chronicle Yellowstone chain (for PKP permissions)
+const CHRONICLE_YELLOWSTONE_RPC_URL =
+  process.env.CHRONICLE_YELLOWSTONE_RPC_URL
+  || 'https://quickrpc.com/api/lpy';
+
 const chronicleYellowstone = {
   id: 175188,
   name: 'Chronicle Yellowstone',
   nativeCurrency: { name: 'tstLPX', symbol: 'tstLPX', decimals: 18 },
   rpcUrls: {
-    default: { http: ['https://yellowstone-rpc.litprotocol.com'] },
+    default: { http: [CHRONICLE_YELLOWSTONE_RPC_URL] },
   },
 };
 
@@ -98,6 +102,12 @@ const ACTIONS: Record<string, ActionDef> = {
     keys: [
       { name: 'filebase_covers_key', envVar: 'FILEBASE_COVERS_KEY' },
     ],
+  },
+  playlistShareV1: {
+    name: 'playlistShareV1',
+    path: 'features/music/playlist-share-v1.js',
+    displayName: 'Playlist Share v1',
+    keys: [], // No encrypted keys — sponsor PKP pays gas directly
   },
   trackCoverV4: {
     name: 'trackCoverV4',

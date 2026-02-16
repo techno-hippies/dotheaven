@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@source "../../../apps/frontend/src";
+@source "../../../apps/web/src";
 @plugin "tailwindcss-animate";
 
 /* Corvu drawer transitioning variant */

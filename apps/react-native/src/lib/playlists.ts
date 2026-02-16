@@ -1,7 +1,7 @@
 /**
  * Playlist data layer — reads playlist data from Goldsky subgraph + on-chain track metadata.
  *
- * Ported from apps/frontend/src/lib/heaven/playlists.ts (SolidJS/Tauri).
+ * Ported from apps/web/src/lib/heaven/playlists.ts (SolidJS/desktop-native).
  * Same subgraph queries, same track resolution logic.
  */
 

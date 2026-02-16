@@ -41,9 +41,9 @@ export interface Track {
   contentId?: string
   /** Encryption algorithm: 0 = plaintext, 1 = AES-GCM-256 (cloud playback) */
   algo?: number
-  /** Local file path (Tauri only - indicates user owns this track) */
+  /** Local file path (desktop metadata; indicates user owns this track) */
   filePath?: string
-  /** Local cover image path (Tauri only) */
+  /** Local cover image path (desktop metadata) */
   coverPath?: string
   /** IPFS CID for cover art */
   coverCid?: string

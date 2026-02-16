@@ -2,8 +2,8 @@
 - **Service**: `services/aa-gateway/` — Bun HTTP server that validates UserOps and sponsors gas via a VerifyingPaymaster
 - **Alto bundler**: `services/alto/` — Pimlico's ERC-4337 bundler (git submodule), submits UserOps to EntryPoint
 - **Deployed on EigenCloud TEE**: App ID `0xF2E275a9A27C1bc684f7d546100687601111Dec4`, IP `34.168.65.48`
-- **Current URL**: `http://34.168.65.48:3337` (TLS pending — see quirks below)
-- **TLS URL (when working)**: `https://34-168-65-48.nip.io`
+- **Current URL**: prefer HTTPS via domain configured in `DOMAIN` env (Cloudflare/custom DNS recommended)
+- **Raw HTTP URL**: `http://34.168.65.48:3337` (debug fallback only)
 - **Docker image**: `t3333333k/heaven-aa:latest` on Docker Hub
 - **Endpoints**:
   - `GET /health` → `{"ok":true,"chainId":6343}`
@@ -28,11 +28,10 @@
   - `app start` restarts with existing image; `app upgrade` pulls new image from registry
   - nip.io wildcard DNS used for Let's Encrypt certs on raw IPs (e.g. `34-168-65-48.nip.io`)
   - `DOMAIN` in `.env` MUST match the assigned IP — if EigenCloud assigns a new IP on redeploy, update `DOMAIN` before upgrading
-  - Switching from staging to production LE certs requires a fresh deploy (terminate + deploy) — `upgrade` reuses cached certs
+  - For production certs: set `ACME_STAGING=false`; use `ACME_FORCE_ISSUE=true` once, then turn it back off
   - Container startup must be fast — Caddy health checks failing at startup can cause the TEE launcher to terminate the container. Gateway starts immediately alongside Alto (not sequentially) so `/health` responds right away.
-  - Caddyfile should NOT have active health checks on the reverse_proxy — they cause startup race conditions
+  - Caddyfile should avoid aggressive upstream health-check loops during startup — they can cause race conditions
   - Staging certs (`ACME_STAGING=true`) work for TLS but aren't trusted by browsers; switch to `false` for production
-  - **TLS provisioning bug (Feb 2026)**: After terminate+redeploy, EigenCloud may fail to inject the `tls-keygen` binary. Logs show `TLS not configured (no tls-keygen binary)`. This is a platform-side issue — ticket opened with EigenLayer team. Workaround: use HTTP on port 3337 directly (works for dev/testnet, not for production web clients due to mixed-content blocking)
   - **Env file on upgrade**: Always select "Enter path to existing env file" when upgrading to ensure DOMAIN/APP_PORT/TLS vars are injected into KMS. Without this, TLS won't be provisioned even if the Caddyfile is in the image.
 - **Key files**:
   - `services/aa-gateway/src/index.ts` — HTTP server (Bun.serve)
@@ -43,4 +42,4 @@
   - `services/aa-gateway/Dockerfile` — multi-stage build (Foundry → Alto TS → Runtime)
   - `services/aa-gateway/Caddyfile` — Caddy reverse proxy config for EigenCloud TLS
   - `services/aa-gateway/.env` — config (keys, contracts, TLS vars)
-  - `apps/frontend/src/lib/aa-client.ts` — frontend AA client (builds UserOps, calls gateway)
+  - `apps/web/src/lib/aa-client.ts` — frontend AA client (builds UserOps, calls gateway)

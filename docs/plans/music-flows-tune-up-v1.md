@@ -4,12 +4,12 @@
 
 Execution scope for this plan is **GPUI desktop only**:
 
-1. `apps/gpui-poc/*`
+1. `apps/desktop/*`
 2. `contracts/megaeth/*` and `lit-actions/*` only where needed by GPUI flows
 
 Deferred scope:
 
-1. `apps/frontend/*` web work is postponed to a later plan.
+1. `apps/web/*` web work is postponed to a later plan.
 
 ## Goal
 
@@ -89,8 +89,8 @@ Constraint to respect:
 ## Current GPUI State (Corrected)
 
 1. Shared-with-me decrypt/playback exists in GPUI:
-   - `apps/gpui-poc/src/library.rs` (`play_shared_record`)
-   - `apps/gpui-poc/src/load_storage.rs` (`decrypt_shared_content_to_local_file`)
+   - `apps/desktop/src/library.rs` (`play_shared_record`)
+   - `apps/desktop/src/load_storage.rs` (`decrypt_shared_content_to_local_file`)
 2. Shared decrypt currently caches in app data, not library folder insertion.
 3. Single-track share/access grant flow exists in GPUI modal path.
 4. Playlist integration in GPUI is not wired (placeholder menu text indicates this).
@@ -290,6 +290,6 @@ Mitigation:
 
 After GPUI stabilization, produce separate web plan for:
 
-1. `apps/frontend` parity implementation.
+1. `apps/web` parity implementation.
 2. Shared transport/envelope compatibility with GPUI.
 3. Web-specific persistence and player UI adaptations.

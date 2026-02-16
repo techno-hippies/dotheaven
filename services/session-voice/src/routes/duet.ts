@@ -250,7 +250,24 @@ duetRoutes.get('/:id/watch', async (c) => {
     .warn { color:#ffb870; }
     .err { color:#ff8d8d; white-space:pre-wrap; }
   </style>
-  <script src="https://download.agora.io/sdk/release/AgoraRTC_N.js"></script>
+  <script>
+    // Load Agora Web SDK with a fallback CDN for more reliable local/dev runs.
+    // If neither loads, AgoraRTC will remain undefined and the UI will show an error.
+    window.__heavenAgoraLoaded = false;
+    window.__heavenAgoraLoadError = null;
+    function __heavenLoadAgoraFallback() {
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/agora-rtc-sdk-ng@4.24.2/AgoraRTC_N.js';
+      s.onload = function () { window.__heavenAgoraLoaded = true; };
+      s.onerror = function () { window.__heavenAgoraLoadError = 'Agora Web SDK failed to load (primary + fallback).'; };
+      document.head.appendChild(s);
+    }
+  </script>
+  <script
+    src="https://download.agora.io/sdk/release/AgoraRTC_N.js"
+    onload="window.__heavenAgoraLoaded = true;"
+    onerror="window.__heavenAgoraLoadError = 'Agora Web SDK primary CDN failed; trying fallback...'; __heavenLoadAgoraFallback();"
+  ></script>
 </head>
 <body>
   <div class="wrap">
@@ -402,7 +419,7 @@ duetRoutes.get('/:id/watch', async (c) => {
             params: [{
               chainId: BASE_SEPOLIA_CHAIN_ID_HEX,
               chainName: 'Base Sepolia',
-              rpcUrls: ['https://sepolia.base.org'],
+              rpcUrls: ['https://base-sepolia-rpc.publicnode.com/'],
               nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
               blockExplorerUrls: ['https://sepolia.basescan.org'],
             }],
@@ -418,6 +435,9 @@ duetRoutes.get('/:id/watch', async (c) => {
       const acct = Array.isArray(accounts) ? accounts[0] : null;
       if (!acct || typeof acct !== 'string') throw new Error('Wallet connection failed (no accounts returned).');
       connectedWallet = acct.toLowerCase();
+      // Some providers are picky about checksum casing when selecting the account to sign with.
+      // Keep the original address for wallet RPC calls, but always send lowercase to our backend.
+      window.__heavenConnectedWalletRaw = acct;
       setWalletStatus('Wallet: ' + shortAddr(connectedWallet) + ' (Base Sepolia)');
       return connectedWallet;
     }
@@ -455,17 +475,48 @@ duetRoutes.get('/:id/watch', async (c) => {
       if (!nonceBody.nonce) throw new Error('Auth nonce missing from server response.');
 
       setMessage('Sign in: please sign the nonce in your wallet...');
-      const signature = await window.ethereum.request({
-        method: 'personal_sign',
-        params: [nonceBody.nonce, connectedWallet],
-      });
+      const walletRaw = (window.__heavenConnectedWalletRaw && typeof window.__heavenConnectedWalletRaw === 'string')
+        ? window.__heavenConnectedWalletRaw
+        : connectedWallet;
 
-      const verifyRes = await fetch('/auth/verify', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ wallet: connectedWallet, signature, nonce: nonceBody.nonce }),
-      });
-      const verifyBody = await verifyRes.json().catch(() => ({}));
+      async function signNoncePersonal(nonce, wallet, reverseParams) {
+        // Wallet providers disagree on personal_sign param ordering.
+        // MetaMask: [message, address]. Some others: [address, message].
+        const params = reverseParams ? [wallet, nonce] : [nonce, wallet];
+        return await window.ethereum.request({ method: 'personal_sign', params });
+      }
+
+      let signature = null;
+      try {
+        signature = await signNoncePersonal(nonceBody.nonce, walletRaw, false);
+      } catch (e) {
+        // If the provider rejected the call, try the alternate order before failing.
+        signature = await signNoncePersonal(nonceBody.nonce, walletRaw, true);
+      }
+
+      async function verifySig(sig) {
+        const res = await fetch('/auth/verify', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ wallet: connectedWallet, signature: sig, nonce: nonceBody.nonce }),
+        });
+        const body = await res.json().catch(() => ({}));
+        return { res, body };
+      }
+
+      let verifyRes = null;
+      let verifyBody = null;
+      ({ res: verifyRes, body: verifyBody } = await verifySig(signature));
+
+      if (!verifyRes.ok && verifyBody && verifyBody.error === 'invalid signature') {
+        // If we got a signature but the backend can't verify it, retry with reversed param ordering.
+        // The nonce is not consumed on invalid signatures, so this is safe.
+        setMessage('Sign in: signature mismatch; retrying...');
+        const altSig = await signNoncePersonal(nonceBody.nonce, walletRaw, true);
+        ({ res: verifyRes, body: verifyBody } = await verifySig(altSig));
+        signature = altSig;
+      }
+
       if (!verifyRes.ok) throw new Error(verifyBody.error || ('HTTP ' + verifyRes.status));
       if (!verifyBody.token) throw new Error('Auth token missing from server response.');
 
@@ -1037,41 +1088,58 @@ duetRoutes.get('/:id/broadcast', async (c) => {
       margin: 6px 0 0;
     }
   </style>
-  <script src="https://download.agora.io/sdk/release/AgoraRTC_N.js"></script>
+  <script>
+    // Load Agora Web SDK with a fallback CDN for more reliable local/dev runs.
+    // If neither loads, AgoraRTC will remain undefined and the UI will show an error.
+    window.__heavenAgoraLoaded = false;
+    window.__heavenAgoraLoadError = null;
+    function __heavenLoadAgoraFallback() {
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/agora-rtc-sdk-ng@4.24.2/AgoraRTC_N.js';
+      s.onload = function () { window.__heavenAgoraLoaded = true; };
+      s.onerror = function () { window.__heavenAgoraLoadError = 'Agora Web SDK failed to load (primary + fallback).'; };
+      document.head.appendChild(s);
+    }
+  </script>
+  <script
+    src="https://download.agora.io/sdk/release/AgoraRTC_N.js"
+    onload="window.__heavenAgoraLoaded = true;"
+    onerror="window.__heavenAgoraLoadError = 'Agora Web SDK primary CDN failed; trying fallback...'; __heavenLoadAgoraFallback();"
+  ></script>
 </head>
 <body>
   <div class="wrap">
     <div class="topbar">
-      <div>
-        <h1>Heaven Duet Host Broadcast</h1>
-        <p class="sub">Room ${escapedRoomId}</p>
-      </div>
+	      <div>
+	        <h1>Heaven Host Broadcast</h1>
+	        <p class="sub">Room ${escapedRoomId}</p>
+	      </div>
       <div class="pill" id="statePill">Ready</div>
     </div>
     <div class="grid">
-      <section class="card">
-        <h2>Broadcast Source</h2>
-        <p class="muted">Recommended: use <strong>Start App Audio Share</strong> for JackTrip output. Use mic fallback only when needed.</p>
-        <div class="actions">
-          <button class="btn" id="shareBtn">Start App Audio Share</button>
-          <button class="btn alt" id="startBtn">Start Mic Broadcast</button>
+	      <section class="card">
+	        <h2>Broadcast Source</h2>
+	        <p class="muted">Recommended: use <strong>Start App Audio Share</strong> to capture app/system audio. Use mic fallback only when needed.</p>
+	        <div class="actions">
+	          <button class="btn" id="shareBtn">Start App Audio Share</button>
+	          <button class="btn alt" id="startBtn">Start Mic Broadcast</button>
           <button class="btn good" id="toneBtn">Start Test Tone</button>
           <button class="btn stop" id="stopBtn" disabled>Stop</button>
         </div>
         <div id="message" class="notice"></div>
         <div id="error" class="notice err" style="margin-top:10px;display:none;"></div>
       </section>
-      <aside class="card">
-        <div class="field">
-          <label class="label" for="micSelect">Mic source for “Start Mic Broadcast”</label>
+	      <aside class="card">
+	        <div class="field">
+	          <label class="label" for="micSelect">Mic source for “Start Mic Broadcast”</label>
           <div class="row-inline">
             <select id="micSelect"></select>
             <button class="btn alt small" id="refreshMicsBtn" type="button">Refresh</button>
           </div>
-          <p class="muted tiny" id="micHint">Choose your JackTrip monitor source here.</p>
-        </div>
-        <h3>Detected devices</h3>
-        <div id="diag" class="diag">Loading microphone devices…</div>
+	          <p class="muted tiny" id="micHint">Choose your microphone source here.</p>
+	        </div>
+	        <h3>Detected devices</h3>
+	        <div id="diag" class="diag">Loading microphone devices…</div>
       </aside>
     </div>
     <div class="card" style="margin-top:12px;">
@@ -1120,21 +1188,70 @@ duetRoutes.get('/:id/broadcast', async (c) => {
       error.textContent = text;
       setState('Error', 'error');
     }
-    function setMessage(text, warning=false) {
-      message.textContent = text || '';
-      message.className = warning ? 'notice warn' : 'notice';
-    }
-    function errText(err) {
-      if (!err) return 'unknown_error';
-      if (typeof err === 'string') return err;
-      if (err.message) return String(err.message);
-      return String(err);
-    }
-    function stopHeartbeatLoop() {
-      if (heartbeatTimer) {
-        clearInterval(heartbeatTimer);
-        heartbeatTimer = null;
-      }
+	    function setMessage(text, warning=false) {
+	      message.textContent = text || '';
+	      message.className = warning ? 'notice warn' : 'notice';
+	    }
+	    function errText(err) {
+	      if (!err) return 'unknown_error';
+	      if (typeof err === 'string') return err;
+	      if (err.message) return String(err.message);
+	      return String(err);
+	    }
+	    function safeStringify(value) {
+	      try {
+	        return JSON.stringify(value, null, 2);
+	      } catch (_) {
+	        try {
+	          return JSON.stringify(String(value));
+	        } catch (_) {
+	          return String(value);
+	        }
+	      }
+	    }
+	    function errDetails(err) {
+	      if (!err) return 'unknown_error';
+	      if (typeof err === 'string') return err;
+
+	      const out = [];
+	      try {
+	        const name = err && err.name ? String(err.name) : '';
+	        const code = err && (err.code ?? err.errorCode) ? String(err.code ?? err.errorCode) : '';
+	        const msg = err && err.message ? String(err.message) : '';
+	        const desc = err && err.desc ? String(err.desc) : '';
+	        const reason = err && err.reason ? String(err.reason) : '';
+
+	        const headLeft = (name || 'Error') + (code ? ' (' + code + ')' : '');
+	        const head = (headLeft + (msg ? ': ' + msg : '')).trim();
+	        if (head) out.push(head);
+	        if (desc && desc !== msg) out.push('desc: ' + desc);
+	        if (reason) out.push('reason: ' + reason);
+
+	        if (err && err.debug) {
+	          out.push('debug: ' + safeStringify(err.debug));
+	        }
+
+	        if (err && err.stack) out.push(String(err.stack));
+
+	        // Best-effort capture of extra fields on AgoraRTCError (and friends).
+	        try {
+	          const json = typeof err.toJSON === 'function' ? err.toJSON() : err;
+	          const raw = JSON.parse(JSON.stringify(json));
+	          if (raw && typeof raw === 'object') {
+	            out.push('raw: ' + safeStringify(raw));
+	          }
+	        } catch (_) {}
+	      } catch (_) {
+	        out.push(errText(err));
+	      }
+
+	      return out.join('\\n');
+	    }
+	    function stopHeartbeatLoop() {
+	      if (heartbeatTimer) {
+	        clearInterval(heartbeatTimer);
+	        heartbeatTimer = null;
+	      }
     }
     async function sendHeartbeat(status = 'live', mode = broadcastMode) {
       if (!bridgeTicket) return;
@@ -1166,42 +1283,37 @@ duetRoutes.get('/:id/broadcast', async (c) => {
         || text.includes('permission denied');
     }
 
-    function findPreferredMicIndex(mics, savedDeviceId) {
-      const jacktripIdx = mics.findIndex((m) => {
-        const label = String(m.label || '').toLowerCase();
-        return label.includes('jacktrip')
-          || label.includes('monitor of jacktrip_duet')
-          || label.includes('remapped jacktrip_duet.monitor');
-      });
+	    function findPreferredMicIndex(mics, savedDeviceId) {
+	      const jacktripIdx = mics.findIndex((m) => {
+	        const label = String(m.label || '').toLowerCase();
+	        return label.includes('jacktrip')
+	          || label.includes('monitor of jacktrip_duet')
+	          || label.includes('remapped jacktrip_duet.monitor');
+	      });
 
-      if (savedDeviceId) {
-        const savedIdx = mics.findIndex((m) => m.deviceId === savedDeviceId);
-        // Do not pin to generic "default" when a JackTrip virtual source is available.
-        if (savedIdx >= 0 && !(savedDeviceId === 'default' && jacktripIdx >= 0)) {
-          return savedIdx;
-        }
-      }
+	      if (savedDeviceId) {
+	        const savedIdx = mics.findIndex((m) => m.deviceId === savedDeviceId);
+	        // Do not pin to generic "default" when a specific virtual source is available.
+	        if (savedIdx >= 0 && !(savedDeviceId === 'default' && jacktripIdx >= 0)) {
+	          return savedIdx;
+	        }
+	      }
 
       if (jacktripIdx >= 0) return jacktripIdx;
       return 0;
     }
 
-    function setSelectedMicFromSelect() {
-      const idx = micSelect.selectedIndex;
-      selectedMicDeviceId = micSelect.value || '';
-      selectedMicLabel = idx >= 0 ? (micSelect.options[idx].textContent || 'Default') : 'Default';
+	    function setSelectedMicFromSelect() {
+	      const idx = micSelect.selectedIndex;
+	      selectedMicDeviceId = micSelect.value || '';
+	      selectedMicLabel = idx >= 0 ? (micSelect.options[idx].textContent || 'Default') : 'Default';
       if (selectedMicDeviceId) {
         localStorage.setItem(MIC_DEVICE_STORAGE_KEY, selectedMicDeviceId);
       } else {
         localStorage.removeItem(MIC_DEVICE_STORAGE_KEY);
       }
-      const labelLower = selectedMicLabel.toLowerCase();
-      if (labelLower.includes('jacktrip') || labelLower.includes('monitor of jacktrip_duet') || jacktripSourceDetected) {
-        micHint.textContent = 'Selected source: ' + selectedMicLabel;
-      } else {
-        micHint.textContent = 'Selected source: ' + selectedMicLabel + ' (switch to JackTrip monitor for JackTrip audio).';
-      }
-    }
+	      micHint.textContent = 'Selected source: ' + selectedMicLabel;
+	    }
 
     async function writeDeviceDiagnostics() {
       try {
@@ -1223,40 +1335,45 @@ duetRoutes.get('/:id/broadcast', async (c) => {
         });
         const savedDeviceId = localStorage.getItem(MIC_DEVICE_STORAGE_KEY) || '';
         const preferredIdx = findPreferredMicIndex(mics, savedDeviceId);
-        mics.forEach((m, idx) => {
-          const opt = document.createElement('option');
-          opt.value = m.deviceId || '';
-          opt.textContent = (idx + 1) + '. ' + (m.label || '(unlabeled device)');
-          if (idx === preferredIdx) opt.selected = true;
-          micSelect.appendChild(opt);
-        });
-        setSelectedMicFromSelect();
-        if (!jacktripSourceDetected) {
-          micHint.textContent = 'JackTrip virtual mic not detected. In GPUI click Connect Audio Source, then Refresh.';
-        }
-        diag.textContent = mics.map((m, idx) =>
-          (idx + 1) + '. ' + (m.label || '(unlabeled device)')
-        ).join('\\n');
+	        mics.forEach((m, idx) => {
+	          const opt = document.createElement('option');
+	          opt.value = m.deviceId || '';
+	          opt.textContent = (idx + 1) + '. ' + (m.label || '(unlabeled device)');
+	          if (idx === preferredIdx) opt.selected = true;
+	          micSelect.appendChild(opt);
+	        });
+	        setSelectedMicFromSelect();
+	        diag.textContent = mics.map((m, idx) =>
+	          (idx + 1) + '. ' + (m.label || '(unlabeled device)')
+	        ).join('\\n');
       } catch (e) {
         diag.textContent = 'Could not enumerate microphones: ' + errText(e);
       }
     }
 
-    async function fetchBridgeToken() {
-      const res = await fetch('/duet/' + roomId + '/bridge/token', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'authorization': 'Bearer ' + bridgeTicket,
-        },
-        body: JSON.stringify({}),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(body.error || ('HTTP ' + res.status));
-      }
-      return body;
-    }
+	    async function fetchBridgeToken() {
+	      const res = await fetch('/duet/' + roomId + '/bridge/token', {
+	        method: 'POST',
+	        headers: {
+	          'content-type': 'application/json',
+	          'authorization': 'Bearer ' + bridgeTicket,
+	        },
+	        body: JSON.stringify({}),
+	      });
+	      const body = await res.json().catch(() => ({}));
+	      if (!res.ok) {
+	        const err = new Error(body.error || ('HTTP ' + res.status));
+	        err.name = 'bridge_token_error';
+	        err.status = res.status;
+	        err.body = body;
+	        err.debug = {
+	          roomId,
+	          http_status: res.status,
+	        };
+	        throw err;
+	      }
+	      return body;
+	    }
 
     async function createToneTrack() {
       const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -1325,32 +1442,56 @@ duetRoutes.get('/:id/broadcast', async (c) => {
       }
     }
 
-    async function joinAndPublish(mode) {
-      const creds = await fetchBridgeToken();
-      if (!creds.agora_broadcaster_token || !creds.agora_channel) {
-        throw new Error('invalid_bridge_credentials');
-      }
+	    async function joinAndPublish(mode) {
+	      const creds = await fetchBridgeToken();
+	      if (!creds.agora_broadcaster_token || !creds.agora_channel) {
+	        const err = new Error('invalid_bridge_credentials');
+	        err.name = 'bridge_credentials_error';
+	        err.debug = {
+	          roomId,
+	          has_channel: !!creds.agora_channel,
+	          has_token: !!creds.agora_broadcaster_token,
+	        };
+	        throw err;
+	      }
 
-      client = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' });
-      await client.setClientRole('host');
-      await client.join(appId, creds.agora_channel, creds.agora_broadcaster_token, creds.agora_broadcaster_uid);
-      if (mode === 'share') {
-        audioTrack = await createSharedAudioTrack();
-      } else {
-        audioTrack = await createMicTrackOrFallback(mode === 'tone');
+	      client = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' });
+	      await client.setClientRole('host');
+	      try {
+	        setMessage('Joining Agora...');
+	        await client.join(appId, creds.agora_channel, creds.agora_broadcaster_token, creds.agora_broadcaster_uid);
+	      } catch (e) {
+	        try {
+	          e.debug = {
+	            roomId,
+	            mode,
+	            appId,
+	            agora_channel: creds.agora_channel,
+	            agora_uid: creds.agora_broadcaster_uid,
+	            token_len: String(creds.agora_broadcaster_token || '').length,
+	            sdk_version: AgoraRTC && AgoraRTC.VERSION ? String(AgoraRTC.VERSION) : undefined,
+	            ua: navigator && navigator.userAgent ? String(navigator.userAgent) : undefined,
+	          };
+	        } catch (_) {}
+	        throw e;
+	      }
+	      if (mode === 'share') {
+	        audioTrack = await createSharedAudioTrack();
+	      } else {
+	        audioTrack = await createMicTrackOrFallback(mode === 'tone');
       }
       await client.publish([audioTrack]);
     }
 
-    async function startBroadcast(mode = 'mic') {
-      setError('');
-      setMessage('Requesting bridge credentials...');
-      setState('Starting…', 'idle');
-      shareBtn.disabled = true;
-      startBtn.disabled = true;
-      toneBtn.disabled = true;
-      try {
-        await joinAndPublish(mode);
+	    async function startBroadcast(mode = 'mic') {
+	      setError('');
+	      setMessage('Requesting bridge credentials...');
+	      setState('Starting…', 'idle');
+	      shareBtn.disabled = true;
+	      startBtn.disabled = true;
+	      toneBtn.disabled = true;
+	      try {
+	        await joinAndPublish(mode);
         if (broadcastMode === 'share') {
           setState('Live · App Audio', 'live');
           setMessage('Shared audio is live.');
@@ -1363,14 +1504,15 @@ duetRoutes.get('/:id/broadcast', async (c) => {
         }
         await sendHeartbeat('live', broadcastMode);
         startHeartbeatLoop();
-        stopBtn.disabled = false;
-      } catch (e) {
-        setError(errText(e));
-        await stopBroadcast(true);
-        if (!message.textContent) {
-          setMessage('Could not start broadcast.', true);
-        }
-        shareBtn.disabled = false;
+	        stopBtn.disabled = false;
+	      } catch (e) {
+	        console.error('broadcast start failed', e);
+	        setError(errDetails(e));
+	        await stopBroadcast(true);
+	        if (!message.textContent) {
+	          setMessage('Could not start broadcast.', true);
+	        }
+	        shareBtn.disabled = false;
         startBtn.disabled = false;
         toneBtn.disabled = false;
       }
@@ -1449,12 +1591,12 @@ duetRoutes.get('/:id/broadcast', async (c) => {
       toneBtn.disabled = true;
       setState('Blocked', 'error');
       setMessage('Agora app is not configured on this worker.', true);
-    } else {
-      setState('Ready');
-      setMessage('Ready. Select JackTrip monitor source, then start broadcast.');
-      void writeDeviceDiagnostics();
-    }
-  </script>
+	    } else {
+	      setState('Ready');
+	      setMessage('Ready. Start App Audio Share or Start Mic Broadcast.');
+	      void writeDeviceDiagnostics();
+	    }
+	  </script>
 </body>
 </html>`
 

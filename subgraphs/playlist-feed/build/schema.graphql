@@ -15,6 +15,7 @@ type Playlist @entity(immutable: false) {
   blockNumber: BigInt!
   transactionHash: Bytes!
   tracks: [PlaylistTrack!]! @derivedFrom(field: "playlist")
+  shares: [PlaylistShare!]! @derivedFrom(field: "playlist")
 }
 
 type PlaylistTrack @entity(immutable: false) {
@@ -22,4 +23,33 @@ type PlaylistTrack @entity(immutable: false) {
   playlist: Playlist!
   trackId: Bytes!                # bytes32 — references ScrobbleV3 track registry
   position: Int!                 # 0-indexed order in list
+}
+
+type PlaylistTrackVersion @entity(immutable: true) {
+  id: ID!                        # "{playlistId}-v{version}-{position}"
+  playlist: Playlist!
+  playlistId: Bytes!
+  version: Int!
+  tracksHash: Bytes!
+  trackId: Bytes!
+  position: Int!
+  updatedAt: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type PlaylistShare @entity(immutable: false) {
+  id: ID!                        # "{playlistId}-{grantee}"
+  playlist: Playlist!
+  playlistId: Bytes!
+  owner: Bytes!
+  grantee: Bytes!
+  granted: Boolean!
+  playlistVersion: Int!
+  trackCount: Int!
+  tracksHash: Bytes!
+  sharedAt: BigInt!
+  updatedAt: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
 }

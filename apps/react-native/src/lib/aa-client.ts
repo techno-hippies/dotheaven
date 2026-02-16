@@ -2,7 +2,7 @@
  * AA Client — builds ERC-4337 UserOps for ScrobbleV4 and submits
  * via the AA gateway's two-step handshake.
  *
- * React Native port of apps/frontend/src/lib/aa-client.ts.
+ * React Native port of apps/web/src/lib/aa-client.ts.
  * PKP signing goes through the LitBridge WebView instead of direct Lit client.
  */
 
@@ -30,7 +30,7 @@ const FACTORY = '0xB66BF4066F40b36Da0da34916799a069CBc79408' as Address
 const SCROBBLE_V4 = '0xBcD4EbBb964182ffC5EA03FF70761770a326Ccf1' as Address
 
 // Gateway URL — same as web frontend .env
-const AA_GATEWAY_URL = 'http://34.168.65.48:3337'
+const AA_GATEWAY_URL = 'https://aa-sepolia.dotheaven.org'
 const AA_GATEWAY_KEY = ''
 
 // Gas params for MegaEVM

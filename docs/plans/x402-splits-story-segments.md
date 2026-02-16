@@ -1,6 +1,6 @@
 # x402 + Splits + Story: Segments, Royalties, Self-Hosted Facilitator
 
-Last updated: 2026-02-14
+Last updated: 2026-02-15
 
 ## Context
 
@@ -243,11 +243,17 @@ Why:
 
 Current implementation (in-repo):
 
-- `services/x402-facilitator` is a minimal self-host facilitator (Bun/TypeScript) exposing:
+- `services/x402-facilitator-rs` is the preferred self-host facilitator (Rust, `x402-rs`) exposing:
   - `GET /health`
   - `GET /supported`
   - `POST /settle` (bearer-authenticated)
 - `services/session-voice` supports `X402_FACILITATOR_MODE=self` and calls the configured base URL for settlement.
+
+Current deployment (EigenCloud, Base Sepolia):
+
+- Facilitator URL (Cloudflare proxied): `https://facil-x402rs-sepolia.dotheaven.org`
+- EigenCloud app id: `0x0a39771D1d7c024badB0922dfd4EC929709484bd`
+- This exists specifically so the Cloudflare Worker can call the facilitator over HTTPS (Workers cannot reliably call arbitrary ports/origins; use a proxied hostname).
 
 Implementation target (hardening / preferred long-term):
 
@@ -302,10 +308,10 @@ Phase 2: Splits receiver creation
 
 Phase 3: Self-host facilitator
 
-- Use the in-repo `services/x402-facilitator` for Base Sepolia-only settlement (ship path).
-- Lock down settle endpoint (auth or private binding).
-- Deploy on EigenCompute when we want enclave isolation for the relayer key.
-- Optional upgrade: replace the facilitator implementation with `x402-rs` once we want a Rust-only stack.
+- Use `services/x402-facilitator-rs` as the canonical Base Sepolia-only settlement path (ship path).
+- Lock down `POST /settle` with Bearer auth and strict settle policy (chain/token/amount bounds + idempotency).
+- Deploy on EigenCloud for key isolation + stable ops.
+- Keep `services/x402-facilitator` (Bun) as deprecated/reference only.
 
 Phase 4: Story integration
 

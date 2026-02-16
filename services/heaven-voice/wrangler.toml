@@ -1,0 +1,23 @@
+name = "neodate-voice"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# LLM provider (Groq direct — no OpenRouter hop)
+LLM_BASE_URL = "https://api.groq.com/openai/v1"
+LLM_MODEL = "qwen/qwen3-32b"
+# Agora
+AGORA_REST_BASE = "https://api.agora.io"
+AGORA_CUSTOM_LLM_BEARER_PREFIX = "neo_"
+# Activity feed subgraph
+SUBGRAPH_URL = "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/14.0.0/gn"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "heaven-voice"
+database_id = "17a75aea-374c-46f5-b80d-be9144485955"
+
+# Secrets (set via `wrangler secret put`):
+# JWT_SECRET, LLM_API_KEY, AGORA_APP_ID, AGORA_APP_CERT, AGORA_REST_AUTH
+# ELEVENLABS_API_KEY, HONCHO_API_KEY, PSEUDONYM_SECRET

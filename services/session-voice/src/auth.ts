@@ -17,6 +17,14 @@ interface JWTPayload {
   exp: number
 }
 
+function isHex32NoPrefix(value: string): boolean {
+  return /^[a-fA-F0-9]{64}$/.test(value)
+}
+
+function isHex32WithPrefix(value: string): value is `0x${string}` {
+  return /^0x[a-fA-F0-9]{64}$/.test(value)
+}
+
 function base64UrlEncode(data: ArrayBuffer | Uint8Array): string {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data)
   let binary = ''
@@ -115,12 +123,28 @@ export async function verifySignature(
   message: string,
   signature: `0x${string}`,
 ): Promise<boolean> {
+  // Wallet providers disagree on how to interpret `personal_sign` messages that look like hex.
+  // Some sign the UTF-8 string, others treat 32-byte hex as raw bytes. Accept either.
+  const address = wallet as Address
+  const trimmed = message.trim()
+
+  // 1) Verify as plain string (UTF-8).
   try {
-    return await verifyMessage({
-      address: wallet as Address,
-      message,
-      signature,
-    })
+    const ok = await verifyMessage({ address, message: trimmed, signature })
+    if (ok) return true
+  } catch {
+    // keep trying fallbacks
+  }
+
+  // 2) If it looks like a 32-byte hex message, verify as raw bytes too.
+  const rawHex: `0x${string}` | null =
+    isHex32WithPrefix(trimmed) ? (trimmed.toLowerCase() as `0x${string}`)
+    : (isHex32NoPrefix(trimmed) ? (`0x${trimmed.toLowerCase()}` as `0x${string}`) : null)
+
+  if (!rawHex) return false
+
+  try {
+    return await verifyMessage({ address, message: { raw: rawHex }, signature })
   } catch {
     return false
   }

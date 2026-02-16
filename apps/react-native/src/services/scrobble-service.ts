@@ -1,7 +1,7 @@
 /**
  * ScrobbleService — wires ScrobbleEngine to AA client (ScrobbleV4).
  *
- * React Native port of apps/frontend/src/lib/scrobble-service.ts.
+ * React Native port of apps/web/src/lib/scrobble-service.ts.
  * Each scrobble submits a UserOp via the AA gateway immediately (no batching).
  */
 

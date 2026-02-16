@@ -16,13 +16,13 @@
 ```
 dotheaven/
 ├── apps/
-│   ├── frontend/          # SolidJS app (web + Tauri desktop)
+│   ├── frontend/          # SolidJS web app
 │   │   ├── src/
 │   │   │   ├── components/    # App-specific components
 │   │   │   ├── lib/           # Client libraries (xmtp, voice, lit, web3)
 │   │   │   ├── pages/         # Route pages
 │   │   │   └── providers/     # Context providers (Auth, XMTP, Wallet)
-│   │   └── src-tauri/         # Tauri Rust backend (native libxmtp)
+│   ├── desktop/          # GPUI desktop app (Rust)
 │   └── react-native/     # React Native app (Expo, Android)
 ├── packages/
 │   ├── ui/                # Shared UI components + Storybook
@@ -46,7 +46,6 @@ dotheaven/
 ## Commands
 ```bash
 bun dev              # Run frontend dev server
-bun dev:tauri        # Run Tauri desktop app
 bun storybook        # Run Storybook (UI components)
 bun check            # Type check all packages
 ```
@@ -57,13 +56,13 @@ bun check            # Type check all packages
 - **WebAuthn/Passkey auth** via Lit Protocol PKPs (Programmable Key Pairs)
 - User signs in with passkey → gets a PKP wallet address
 - PKP can sign messages for XMTP and other services
-- See `apps/frontend/src/providers/AuthContext.tsx`
+- See `apps/web/src/providers/AuthContext.tsx`
 
 #### Lit Network Switching (naga-dev ↔ naga-test)
 Two Lit networks are supported. **Switching is a single env var change:**
 
 ```bash
-# In apps/frontend/.env:
+# In apps/web/.env:
 VITE_LIT_NETWORK=naga-test   # (default) — stable, requires tstLPX tokens
 VITE_LIT_NETWORK=naga-dev    # free but less stable (can have 500 errors)
 ```
@@ -71,8 +70,8 @@ VITE_LIT_NETWORK=naga-dev    # free but less stable (can have 500 errors)
 Preferred one-command switch (repo root):
 
 ```bash
-bun run lit:env:dev   # sets naga-dev in apps/frontend/.env + lit-actions/.env
-bun run lit:env:test  # sets naga-test in apps/frontend/.env + lit-actions/.env
+bun run lit:env:dev   # sets naga-dev in apps/web/.env + lit-actions/.env
+bun run lit:env:test  # sets naga-test in apps/web/.env + lit-actions/.env
 ```
 
 **How it works:**
@@ -108,9 +107,9 @@ LIT_NETWORK=naga-test bun scripts/deposit-payment.ts 5
 **After deploying a new action**, update the CID in `action-cids.ts`'s `CID_MAP` for the deployed network to match the value in `lit-actions/cids/*.json`.
 
 **Key files**:
-- `apps/frontend/src/lib/lit/config.ts` — network object + auth service URL (reads `VITE_LIT_NETWORK`)
-- `apps/frontend/src/lib/lit/action-cids.ts` — dual CID maps + per-CID env overrides
-- `apps/frontend/src/lib/lit/signer-pkp.ts` — PKP signer (reads sponsor PKP from config)
+- `apps/web/src/lib/lit/config.ts` — network object + auth service URL (reads `VITE_LIT_NETWORK`)
+- `apps/web/src/lib/lit/action-cids.ts` — dual CID maps + per-CID env overrides
+- `apps/web/src/lib/lit/signer-pkp.ts` — PKP signer (reads sponsor PKP from config)
 - `services/lit-relayer/` — Vercel-deployed relayer (reads `LIT_NETWORK` env var)
 
 ### Messaging (XMTP)
@@ -119,34 +118,32 @@ LIT_NETWORK=naga-test bun scripts/deposit-payment.ts 5
 - Real-time message streaming
 - **Dual-target architecture**: platform-aware `XmtpTransport` interface
   - **Web**: `BrowserTransport` using `@xmtp/browser-sdk` with OPFS storage
-  - **Tauri**: `TauriTransport` using native libxmtp via Tauri commands (`src-tauri/src/xmtp.rs`)
-- Platform selected at runtime via `VITE_PLATFORM` env var + dynamic imports in `factory.ts`
-- Tauri backend: signature requests emitted as events, frontend signs via PKP, resolves via command
+- Desktop/native messaging is handled in `apps/desktop/`
+- Frontend transport selection is web-only in `apps/web/src/lib/xmtp/factory.ts`
 - **Unread tracking**: Global `streamAllMessages` stream detects incoming peer messages. `activeChat` signal tracks which chat is open. localStorage persists `lastRead` timestamps per peer so unread state survives restarts.
-- **Tauri events**: `xmtp://sign-request` (identity signing), `xmtp://message` (per-chat stream), `xmtp://message-all` (global stream for unread)
-- See `apps/frontend/src/lib/xmtp/` (transport layer) and `providers/XMTPProvider.tsx`
+- See `apps/web/src/lib/xmtp/` (transport layer) and `providers/XMTPProvider.tsx`
 
 ### AI Chat (Cloudflare Workers)
 - **Text chat with AI** via Cloudflare Worker backend
 - Auth: wallet signature → JWT token
 - Worker URL: `VITE_CHAT_WORKER_URL` env var
-- See `apps/frontend/src/pages/AIChatPage.tsx`
+- See `apps/web/src/pages/AIChatPage.tsx`
 
 ### Voice Calls (Agora WebRTC)
 - **Real-time voice** with AI via Agora RTC
 - Integrated into AI chat page (not a separate route)
 - Call state shown in chat header with duration
-- See `apps/frontend/src/lib/voice/` and `AIChatPage.tsx`
+- See `apps/web/src/lib/voice/` and `AIChatPage.tsx`
 
 ### Scrobbling (On-chain listening history)
 - **ScrobbleEngine** (`packages/core/src/scrobble/engine.ts`): State machine tracking play time per session. Threshold: `min(duration × 50%, 240s)`. Emits `ReadyScrobble` when met
-- **ScrobbleService** (`apps/frontend/src/lib/scrobble-service.ts`): Wires engine to AA client (ScrobbleV4). Each scrobble submits a UserOp via the AA gateway immediately (no queue/batch)
-- **AA client** (`apps/frontend/src/lib/aa-client.ts`): Builds ERC-4337 UserOps targeting ScrobbleV4. PKP signs `userOpHash`, gateway adds paymaster signature, bundler (Alto) submits to EntryPoint
+- **ScrobbleService** (`apps/web/src/lib/scrobble-service.ts`): Wires engine to AA client (ScrobbleV4). Each scrobble submits a UserOp via the AA gateway immediately (no queue/batch)
+- **AA client** (`apps/web/src/lib/aa-client.ts`): Builds ERC-4337 UserOps targeting ScrobbleV4. PKP signs `userOpHash`, gateway adds paymaster signature, bundler (Alto) submits to EntryPoint
 - **ScrobbleV4 contract**: `0xBcD4EbBb964182ffC5EA03FF70761770a326Ccf1` on MegaETH (chain 6343). AA-enabled — `onlyAccountOf(user)` gating via factory-derived SimpleAccount. Stores `uint32 durationSec` per track.
 - **ScrobbleV3 contract**: `0x144c450cd5B641404EEB5D5eD523399dD94049E0` on MegaETH (chain 6343). Legacy sponsor-gated version — still deployed, used by playlists Lit Action for track registration
 - **Subgraph**: Goldsky `dotheaven-activity/14.0.0` indexes `TrackRegistered` + `TrackCoverSet` + `Scrobbled` + `PostCreated` + `ContentRegistered` + `TranslationAdded` + `Liked` + `Unliked` + `CommentAdded` + `Flagged` + `LyricsTranslationAdded` + `Followed` + `Unfollowed` events from ScrobbleV3, ScrobbleV4, PostsV1, EngagementV2, LyricsEngagementV1, and FollowV1
 - **Frontend**: Profile page fetches scrobble history from subgraph, displays verified/unidentified status with cover art
-- **Cover art pipeline** (Tauri): Rust extracts cover from audio tags → Tauri reads bytes → base64 sent via AA → cached in local SQLite → displayed via `heaven.myfilebase.com` dedicated gateway with image optimization params
+- **Cover art pipeline** (legacy desktop): Rust extracted cover from audio tags → native layer read bytes → base64 sent via AA → cached in local SQLite → displayed via `heaven.myfilebase.com` dedicated gateway with image optimization params
 - **Auto-refresh**: After scrobble, `queryClient.invalidateQueries(['scrobbles'])` refreshes profile. Waits for cover TX confirmation before invalidating.
 - **MBID extraction**: Rust `music_db.rs` reads MusicBrainz recording ID from tags via lofty
 - **IPFS gateway**: `https://heaven.myfilebase.com/ipfs/` (dedicated Filebase gateway) with optimization params (`?img-width=96&img-height=96&img-format=webp&img-quality=80`)
@@ -175,8 +172,8 @@ LIT_NETWORK=naga-test bun scripts/deposit-payment.ts 5
 - **SDK quirk**: `endpointType` must be `'staging_celo'` (not `'celo-staging'`) in `@selfxyz/sdk-common` v1.0.0
 - See `contracts/celo/CLAUDE.md` for full details
 - **Key files**:
-  - `apps/frontend/src/lib/heaven/verification.ts` — `getVerificationStatus()`, `buildSelfVerifyLink()`, `syncVerificationToMegaEth()`
-  - `apps/frontend/src/pages/ProfilePage.tsx` — dialog + polling wiring in `MyProfilePage`
+  - `apps/web/src/lib/heaven/verification.ts` — `getVerificationStatus()`, `buildSelfVerifyLink()`, `syncVerificationToMegaEth()`
+  - `apps/web/src/pages/ProfilePage.tsx` — dialog + polling wiring in `MyProfilePage`
   - `packages/ui/src/composite/profile/verify-identity-dialog.tsx` — QR code dialog
   - `packages/ui/src/composite/profile/verification-badge.tsx` — verified/unverified badge
   - `contracts/celo/src/SelfProfileVerifier.sol` — Celo verifier (stores nationality + verifiedAt)
@@ -198,11 +195,11 @@ LIT_NETWORK=naga-test bun scripts/deposit-payment.ts 5
   - Address visits do reverse lookup via `primaryName()` to resolve heaven name + load text records
   - Handshake hostname detection redirects `alice.heaven` → `/#/u/alice.heaven`
 - **Name → address resolution**: `getAddr(node)` calls `RegistryV1.ownerOf(uint256(node))` (NOT `RecordsV1.addr()` — addr records are never set during registration)
-- **Own profile heaven name discovery**: `MyProfilePage` uses a `primaryNameQuery` (TanStack) to discover the name on-chain, syncs to `heavenName` signal + localStorage. Handles cross-client (web↔Tauri) where localStorage differs.
+- **Own profile heaven name discovery**: `MyProfilePage` uses a `primaryNameQuery` (TanStack) to discover the name on-chain, syncs to `heavenName` signal + localStorage. Handles cross-client (web↔desktop-native) where localStorage differs.
 - **ProfileInfoSection**: Identity, Bio & Links, and Photos cards are wrapped in `Show when={isOwnProfile}` — only visible on own profile. Public viewers see the header (name, bio, links) + info cards (Basics, Location, etc.)
 - **Key files**:
-  - `apps/frontend/src/lib/heaven/registry.ts` — `getAddr()`, `getPrimaryName()`, `getPrimaryNode()`, `computeNode()`
-  - `apps/frontend/src/pages/ProfilePage.tsx` — `PublicProfilePage`, `MyProfilePage`, `parseProfileId()`, `resolveProfileId()`
+  - `apps/web/src/lib/heaven/registry.ts` — `getAddr()`, `getPrimaryName()`, `getPrimaryNode()`, `computeNode()`
+  - `apps/web/src/pages/ProfilePage.tsx` — `PublicProfilePage`, `MyProfilePage`, `parseProfileId()`, `resolveProfileId()`
   - `packages/ui/src/composite/profile/profile-info-section.tsx` — edit-only sections gated on `isOwnProfile`
 
 ### Profile (On-chain via ProfileV2 + RecordsV1)
@@ -237,9 +234,9 @@ LIT_NETWORK=naga-test bun scripts/deposit-payment.ts 5
 - **Subgraph**: Goldsky `dotheaven-profiles/1.0.0` indexes `ProfileUpserted` events, denormalizes all 19 packed enums into individual fields for subgraph-level filtering
   - API: `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-profiles/1.0.0/gn`
 - **Key files**:
-  - `apps/frontend/src/lib/heaven/profile.ts` — buildProfileInput, getProfile, parseTagCsv
-  - `apps/frontend/src/lib/heaven/community.ts` — subgraph queries for community page
-  - `apps/frontend/src/pages/ProfilePage.tsx` — save/load orchestration
+  - `apps/web/src/lib/heaven/profile.ts` — buildProfileInput, getProfile, parseTagCsv
+  - `apps/web/src/lib/heaven/community.ts` — subgraph queries for community page
+  - `apps/web/src/pages/ProfilePage.tsx` — save/load orchestration
   - `packages/ui/src/composite/profile/profile-info-section.tsx` — editable profile UI
   - `packages/ui/src/data/tags.ts` — tag dictionary + pack/unpack helpers
   - `subgraphs/profiles/` — subgraph definition (schema, mapping, ABI)
@@ -264,9 +261,9 @@ LIT_NETWORK=naga-test bun scripts/deposit-payment.ts 5
 - **Feed resolution**: Each post resolves author name/avatar via heaven name lookup + RecordsV1, fetches text/photos from IPFS metadata
 - **Compose**: `ComposeBox` (desktop inline) / `ComposeDrawer` (mobile FAB) — currently stubbed (`console.log`), not yet wired to Lit Action
 - **Key files**:
-  - `apps/frontend/src/pages/FeedPage.tsx` — feed with TanStack Query, engagement (like/comment/report/translate), optimistic liked state
-  - `apps/frontend/src/pages/PostPage.tsx` — single post detail view with like, comment submit, report, translate
-  - `apps/frontend/src/lib/heaven/posts.ts` — subgraph queries, IPFS metadata fetch, engagement service functions (`likePost`, `commentPost`, `flagPost`, `translatePost`), RPC liked-state queries (`getHasLiked`, `batchGetLikedStates`)
+  - `apps/web/src/pages/FeedPage.tsx` — feed with TanStack Query, engagement (like/comment/report/translate), optimistic liked state
+  - `apps/web/src/pages/PostPage.tsx` — single post detail view with like, comment submit, report, translate
+  - `apps/web/src/lib/heaven/posts.ts` — subgraph queries, IPFS metadata fetch, engagement service functions (`likePost`, `commentPost`, `flagPost`, `translatePost`), RPC liked-state queries (`getHasLiked`, `batchGetLikedStates`)
   - `packages/ui/src/composite/feed/feed-post.tsx` — FeedPost component with `isLiked`, `postLang` / `needsTranslation()` logic
   - `lit-actions/features/social/post-register-v1.js` — post creation action
   - `lit-actions/features/social/post-translate-v1.js` — translation action
@@ -279,7 +276,7 @@ LIT_NETWORK=naga-test bun scripts/deposit-payment.ts 5
 - **Lit Action**: `follow-v1.js` — sponsor PKP broadcasts `followFor()`/`unfollowFor()` gaslessly
 - **On-chain state**: `follows(a,b)` mapping, `followerCount`/`followingCount` counters — readable via RPC
 - **Subgraph**: `Follow` + `UserFollowStats` entities in `dotheaven-activity/14.0.0` — used for follower/following list pages
-- **Frontend service** (`apps/frontend/src/lib/heaven/follow.ts`):
+- **Frontend service** (`apps/web/src/lib/heaven/follow.ts`):
   - `getFollowState(viewer, target)` — RPC: `follows(viewer, target)`
   - `getFollowCounts(address)` — RPC: `followerCount()` + `followingCount()`
   - `toggleFollow(target, action, ...)` — Lit Action mutation
@@ -287,9 +284,9 @@ LIT_NETWORK=naga-test bun scripts/deposit-payment.ts 5
 - **Profile integration**: `PublicProfilePage` shows follow button + counts; `MyProfilePage` shows own counts
 - **List pages**: `/u/:id/followers` and `/u/:id/following` — uses `FollowList` component with `MediaRow`, resolves names/avatars/nationality flags
 - **Key files**:
-  - `apps/frontend/src/lib/heaven/follow.ts` — service layer (RPC + subgraph + Lit Action)
-  - `apps/frontend/src/pages/FollowListPage.tsx` — follower/following list page
-  - `apps/frontend/src/pages/ProfilePage.tsx` — follow button + count wiring
+  - `apps/web/src/lib/heaven/follow.ts` — service layer (RPC + subgraph + Lit Action)
+  - `apps/web/src/pages/FollowListPage.tsx` — follower/following list page
+  - `apps/web/src/pages/ProfilePage.tsx` — follow button + count wiring
   - `packages/ui/src/composite/follow/follow-list.tsx` — presentational FollowList component
   - `lit-actions/features/social/follow-v1.js` — follow Lit Action
 
@@ -300,8 +297,8 @@ LIT_NETWORK=naga-test bun scripts/deposit-payment.ts 5
 - **Resolution**: Each profile card resolves heaven name + avatar + bio via RPC (getPrimaryName, getTextRecord, resolveAvatarUri)
 - **TanStack Query**: `fetchCommunityMembers()` queries subgraph, `fetchUserLocationCityId()` gets user's location for Nearby tab
 - **Key files**:
-  - `apps/frontend/src/App.tsx` — CommunityFeed wiring
-  - `apps/frontend/src/lib/heaven/community.ts` — subgraph queries + profile resolution
+  - `apps/web/src/App.tsx` — CommunityFeed wiring
+  - `apps/web/src/lib/heaven/community.ts` — subgraph queries + profile resolution
 
 ### Subgraphs (Goldsky)
 Three Goldsky subgraphs on MegaETH testnet (3-slot limit):
@@ -318,20 +315,14 @@ Deploy: `cd subgraphs/<dir> && npx graph codegen && npx graph build && goldsky s
 
 **Note**: `dotheaven-content` was merged into `dotheaven-activity` v7.0.0. ScrobbleV4 was added in v11.0.0. EngagementV2 (translations, likes, comments, flags) was added in v12.0.0. LyricsEngagementV1 (song lyrics translations) was added in v13.0.0. FollowV1 (social follow graph) was added in v14.0.0.
 
-### Local Music Library (Tauri-only)
-- **Rust SQLite backend** (`src-tauri/src/music_db.rs`): rusqlite + lofty + walkdir
-  - `music.db` in app data dir with `tracks` table (file_path PK) and `settings` table
-  - Metadata extraction via lofty (ID3, Vorbis Comments, iTunes ilst, etc.)
-  - Cache invalidation by `(file_size, file_mtime)` — skips re-extraction for unchanged files
-  - Recursive folder scan with progress events (`music://scan-progress`)
-  - Pruning of deleted files on rescan
-  - Paginated queries: `LIMIT/OFFSET` via `music_get_tracks` + `music_get_track_count`
-  - All Tauri commands use `spawn_blocking` (sync rusqlite behind `Arc<Mutex<MusicDb>>`)
-- **Frontend** (`src/lib/local-music.ts`): Thin invoke wrappers, no JS-side metadata parsing
+### Local Music Library
+- Desktop-native local filesystem scanning and Rust SQLite caching were removed from `apps/web/`.
+- Desktop-native local library functionality now lives under `apps/desktop/`.
+- **Frontend** (`src/lib/local-music.ts`) keeps compatibility stubs for removed desktop APIs.
 - **LibraryPage** (`src/pages/LibraryPage.tsx`):
   - Loads tracks in PAGE_SIZE=200 batches with epoch guard for cancellation
   - Updates DOM on first page, then every 5th batch, and at end
-  - Platform-guarded: early-returns on web, dynamic imports for Tauri event API
+  - Platform-guarded: early-returns on web, dynamic imports for legacy desktop event APIs
   - Scan progress UI shows done/total next to spinner
 - **TrackList virtualization** (`packages/ui/src/composite/media/track-list.tsx`):
   - Renders only visible rows + 10 overscan buffer (ROW_HEIGHT=48)
@@ -369,11 +360,11 @@ Deploy: `cd subgraphs/<dir> && npx graph codegen && npx graph build && goldsky s
 - **Heaven Resolver** (Cloudflare Worker): MusicBrainz API proxy + external image rehosting
   - Artist/album metadata fetched from MusicBrainz via `/artist/:mbid` and `/release-group/:mbid`
   - Wikimedia Commons images automatically rehosted to IPFS via Filebase
-  - Client-side rehosting (`apps/frontend/src/lib/image-cache.ts`) detects external URLs and calls `/rehost/image`
+  - Client-side rehosting (`apps/web/src/lib/image-cache.ts`) detects external URLs and calls `/rehost/image`
   - In-memory cache + KV cache (1 year TTL) prevents duplicate work
   - Eliminates 429 rate limit errors from Wikipedia servers
   - IPFS gateway: `https://heaven.myfilebase.com/ipfs/`
-- **Artist Page** (`apps/frontend/src/pages/ArtistPage.tsx`):
+- **Artist Page** (`apps/web/src/pages/ArtistPage.tsx`):
   - Hero image from MusicBrainz artist info (Wikimedia Commons)
   - Track list with scrobble counts
   - Skeleton loader while rehosting images

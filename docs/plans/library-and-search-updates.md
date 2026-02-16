@@ -13,9 +13,9 @@ Ship a responsive GPUI library experience for large local collections (21k+ trac
 
 In scope:
 
-1. `apps/gpui-poc/src/main.rs`
-2. `apps/gpui-poc/src/library.rs`
-3. `apps/gpui-poc/src/music_db.rs`
+1. `apps/desktop/src/main.rs`
+2. `apps/desktop/src/library.rs`
+3. `apps/desktop/src/music_db.rs`
 
 Out of scope (this plan):
 
@@ -54,7 +54,7 @@ Targets for a 21k+ track library on a typical dev machine:
 
 ### Phase 0: Baseline Safety
 
-1. Ensure `apps/gpui-poc` is compiling before perf refactors proceed.
+1. Ensure `apps/desktop` is compiling before perf refactors proceed.
 2. Capture baseline timings:
    1. startup load to first list paint
    2. search latency

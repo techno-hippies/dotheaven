@@ -1,0 +1,23 @@
+[package]
+name = "heaven-x402-facilitator"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2"
+
+# Upstream Rust x402 facilitator implementation (axum handlers + env loading).
+# NOTE: 0.11.0 currently fails to compile due to an upstream dependency break
+# (BlobGasFiller is no longer a unit struct). We patch it locally below.
+x402-facilitator = "0.11.0"
+
+[patch.crates-io]
+# Local patch until upstream releases a fixed version.
+x402-facilitator = { path = "vendor/x402-facilitator" }

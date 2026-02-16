@@ -5,7 +5,7 @@ import {
   PlaylistMetaUpdated as PlaylistMetaUpdatedEvent,
   PlaylistDeleted as PlaylistDeletedEvent,
 } from "../generated/PlaylistV1/PlaylistV1";
-import { Playlist, PlaylistTrack } from "../generated/schema";
+import { Playlist, PlaylistTrack, PlaylistTrackVersion } from "../generated/schema";
 
 export function handlePlaylistCreated(event: PlaylistCreatedEvent): void {
   let id = event.params.playlistId.toHexString();
@@ -51,6 +51,27 @@ export function handlePlaylistTracksSet(event: PlaylistTracksSetEvent): void {
     pt.trackId = trackIds[i];
     pt.position = i;
     pt.save();
+  }
+
+  // Write versioned snapshot track entries (immutable)
+  let version = event.params.version.toI32();
+  let tracksHash = event.params.tracksHash;
+  let updatedAt = BigInt.fromI64(event.params.updatedAt.toI64());
+  let playlistBytes = event.params.playlistId;
+
+  for (let i = 0; i < trackIds.length; i++) {
+    let snapshotId = playlistId + "-v" + version.toString() + "-" + i.toString();
+    let pv = new PlaylistTrackVersion(snapshotId);
+    pv.playlist = playlistId;
+    pv.playlistId = playlistBytes;
+    pv.version = version;
+    pv.tracksHash = tracksHash;
+    pv.trackId = trackIds[i];
+    pv.position = i;
+    pv.updatedAt = updatedAt;
+    pv.blockNumber = event.block.number;
+    pv.transactionHash = event.transaction.hash;
+    pv.save();
   }
 
   // Update playlist header

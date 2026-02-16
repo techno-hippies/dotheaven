@@ -32,6 +32,7 @@
  * - openrouterEncryptedKey: Lit-encrypted OpenRouter API key
  *
  * - instrumentalUrl: URL or inline {base64, contentType} for instrumental/karaoke track
+ * - vocalsUrl: URL or inline {base64, contentType} for isolated vocals stem (used for FA alignment)
  *
  * Optional jsParams:
  * - canvasUrl: URL or inline {base64, contentType} for 9:16 looping canvas video (MP4/WebM)
@@ -387,6 +388,7 @@ const main = async () => {
       audioUrl,
       coverUrl,
       instrumentalUrl,
+      vocalsUrl,
       canvasUrl,
       songMetadataJson,
       ipaMetadataJson,
@@ -410,6 +412,7 @@ const main = async () => {
     must(audioUrl, "audioUrl");
     must(coverUrl, "coverUrl");
     must(instrumentalUrl, "instrumentalUrl");
+    must(vocalsUrl, "vocalsUrl");
     must(songMetadataJson, "songMetadataJson");
     must(ipaMetadataJson, "ipaMetadataJson");
     must(nftMetadataJson, "nftMetadataJson");
@@ -437,11 +440,13 @@ const main = async () => {
     const audio = await fetchAndValidate(audioUrl, 50 * 1024 * 1024, ALLOWED_AUDIO_TYPES);
     const cover = await fetchAndValidate(coverUrl, 5 * 1024 * 1024, ALLOWED_IMAGE_TYPES);
     const instrumental = await fetchAndValidate(instrumentalUrl, 50 * 1024 * 1024, ALLOWED_AUDIO_TYPES);
+    const vocals = await fetchAndValidate(vocalsUrl, 50 * 1024 * 1024, ALLOWED_AUDIO_TYPES);
     const canvas = canvasUrl ? await fetchAndValidate(canvasUrl, 30 * 1024 * 1024, ALLOWED_VIDEO_TYPES) : null;
 
     const audioHash = await sha256HexFromBuffer(audio.data);
     const coverHash = await sha256HexFromBuffer(cover.data);
     const instrumentalHash = await sha256HexFromBuffer(instrumental.data);
+    const vocalsHash = await sha256HexFromBuffer(vocals.data);
     const canvasHash = canvas ? await sha256HexFromBuffer(canvas.data) : null;
     const songMetadataHash = await sha256Hex(songMetadataJson);
     const ipaMetadataHash = await sha256Hex(ipaMetadataJson);
@@ -451,7 +456,7 @@ const main = async () => {
     // ========================================
     // STEP 3: Verify signature binds all content
     // ========================================
-    const message = `heaven:publish:${audioHash}:${coverHash}:${instrumentalHash}:${canvasHash || ''}:${songMetadataHash}:${ipaMetadataHash}:${nftMetadataHash}:${lyricsHash}:${sourceLanguage}:${targetLanguage}:${timestamp}:${nonce}`;
+    const message = `heaven:publish:${audioHash}:${coverHash}:${instrumentalHash}:${vocalsHash}:${canvasHash || ''}:${songMetadataHash}:${ipaMetadataHash}:${nftMetadataHash}:${lyricsHash}:${sourceLanguage}:${targetLanguage}:${timestamp}:${nonce}`;
     const recovered = ethers.utils.verifyMessage(message, signature);
     if (recovered.toLowerCase() !== userAddress.toLowerCase()) {
       throw new Error("Invalid signature: recovered address does not match user PKP");
@@ -498,6 +503,11 @@ const main = async () => {
             filebaseKey, instrumental.data, instrumental.contentType,
             `instrumental-${prefix}.${instrExt}`
           );
+          const vocalExt = extMap[vocals.contentType] || "mp3";
+          const vocalsCID = await uploadToFilebase(
+            filebaseKey, vocals.data, vocals.contentType,
+            `vocals-${prefix}.${vocalExt}`
+          );
           const songMetadataCID = await uploadToFilebase(
             filebaseKey, songMetadataJson, "application/json",
             `song-meta-${prefix}.json`
@@ -523,12 +533,14 @@ const main = async () => {
 
           if (!isInstrumental) {
             // --- STEP 6: Lyrics alignment (ElevenLabs) ---
+            // Use vocals stem for alignment (cleaner signal = better FA results)
             // Strip section markers and empty lines before alignment
             const { alignmentText } = prepareLyricsForAlignment(lyricsText);
 
-            const audioBlob = new Blob([audio.data], { type: audio.contentType });
+            const vocalsExt = extMap[vocals.contentType] || "mp3";
+            const vocalsBlob = new Blob([vocals.data], { type: vocals.contentType });
             const formData = new FormData();
-            formData.append("file", audioBlob, `audio.${audioExt}`);
+            formData.append("file", vocalsBlob, `vocals.${vocalsExt}`);
             formData.append("text", alignmentText);
 
             const alignResponse = await fetch("https://api.elevenlabs.io/v1/forced-alignment", {
@@ -608,7 +620,7 @@ const main = async () => {
           }
 
           return JSON.stringify({
-            audioCID, coverCID, instrumentalCID, canvasCID,
+            audioCID, coverCID, instrumentalCID, vocalsCID, canvasCID,
             songMetadataCID, ipaMetadataCID, nftMetadataCID,
             alignmentCID, translationCID,
             alignment,
@@ -633,6 +645,7 @@ const main = async () => {
           audio: `0x${audioHash}`,
           cover: `0x${coverHash}`,
           instrumental: `0x${instrumentalHash}`,
+          vocals: `0x${vocalsHash}`,
           canvas: canvasHash ? `0x${canvasHash}` : null,
           songMetadata: `0x${songMetadataHash}`,
         },

@@ -114,7 +114,7 @@ VITE_SELF_MIRROR_ACTION_CID=           # IPFS CID of self-verify-mirror-v1.js (o
 
 Frontend reads `verifiedAt(user)` and `nationality(user)` from Celo for badge display and profile override. Verified nationality overrides self-reported ProfileV2 value. Age is always self-reported. Mirror sync to MegaETH is triggered on-demand.
 
-See: `apps/frontend/src/lib/heaven/verification.ts`
+See: `apps/web/src/lib/heaven/verification.ts`
 
 ## Frontend Flow
 
@@ -143,9 +143,9 @@ Related files in other packages:
 ```
 contracts/megaeth/src/VerificationMirror.sol              # MegaETH mirror contract
 lit-actions/features/verification/self-verify-mirror-v1.js # Lit Action for Celo→MegaETH sync
-apps/frontend/src/lib/heaven/verification.ts              # Frontend verification helpers
-apps/frontend/src/pages/ProfilePage.tsx                   # Verification dialog + polling wiring
+apps/web/src/lib/heaven/verification.ts              # Frontend verification helpers
+apps/web/src/pages/ProfilePage.tsx                   # Verification dialog + polling wiring
 packages/ui/src/composite/profile/verify-identity-dialog.tsx  # QR code dialog component
 packages/ui/src/composite/profile/verification-badge.tsx     # Verified/unverified badge
-apps/frontend/src/components/profile/profile-header.tsx   # "Verify Identity" button
+apps/web/src/components/profile/profile-header.tsx   # "Verify Identity" button
 ```

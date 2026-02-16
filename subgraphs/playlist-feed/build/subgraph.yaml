@@ -18,6 +18,7 @@ dataSources:
       entities:
         - Playlist
         - PlaylistTrack
+        - PlaylistTrackVersion
       abis:
         - name: PlaylistV1
           file: PlaylistV1/PlaylistV1.json
@@ -32,3 +33,27 @@ dataSources:
         - event: PlaylistDeleted(indexed bytes32,uint32,uint64)
           handler: handlePlaylistDeleted
       file: PlaylistV1/PlaylistV1.wasm
+  - kind: ethereum
+    name: PlaylistShareV1
+    network: megaeth-testnet-v2
+    source:
+      address: "0xb1E233221FB25c65090A75cc60Df5164A2eA4B98"
+      abi: PlaylistShareV1
+      startBlock: 11450074
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - PlaylistShare
+      abis:
+        - name: PlaylistShareV1
+          file: PlaylistShareV1/PlaylistShareV1.json
+      eventHandlers:
+        - event: PlaylistShared(indexed bytes32,indexed address,indexed
+            address,uint32,uint32,bytes32,uint64)
+          handler: handlePlaylistShared
+        - event: PlaylistUnshared(indexed bytes32,indexed address,indexed
+            address,uint32,uint32,bytes32,uint64)
+          handler: handlePlaylistUnshared
+      file: PlaylistShareV1/PlaylistShareV1.wasm

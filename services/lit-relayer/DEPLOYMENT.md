@@ -48,7 +48,7 @@ In Vercel dashboard, add environment variables:
 
 ### 6. Update Frontend
 
-Update `apps/frontend/src/lib/lit/auth-eoa.ts`:
+Update `apps/web/src/lib/lit/auth-eoa.ts`:
 
 ```typescript
 const LIT_SPONSORSHIP_API_URL =

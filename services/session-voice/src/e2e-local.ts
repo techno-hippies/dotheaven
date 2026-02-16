@@ -10,6 +10,10 @@
  *   bun src/e2e-local.ts --duet-onchain
  *   bun src/e2e-local.ts --duet-openx402
  *   bun src/e2e-local.ts --duet-onchain --serve
+ *
+ * Onchain/self mode:
+ * - If X402_FACILITATOR_BASE_URL points at http://127.0.0.1:<LOCAL_FACILITATOR_PORT>,
+ *   this runner will start `services/x402-facilitator-rs` automatically.
  */
 
 import { readFileSync } from "node:fs";
@@ -18,34 +22,10 @@ import { fileURLToPath } from "node:url";
 
 const BASE_URL = process.env.SESSION_VOICE_URL || "http://localhost:3338";
 const FULL = process.argv.includes("--full");
-const DUET_CDP_ONLY = process.argv.includes("--duet-cdp");
-const DUET_ONCHAIN = process.argv.includes("--duet-onchain");
-const DUET_OPENX402 = process.argv.includes("--duet-openx402");
-const DUET_REAL_ONLY = DUET_CDP_ONLY || DUET_ONCHAIN || DUET_OPENX402;
+const WITH_BROADCAST = process.argv.includes("--with-broadcast");
 const SERVE = process.argv.includes("--serve");
 const SCRIPT_DIR = fileURLToPath(new URL(".", import.meta.url));
 const SERVICE_DIR = resolve(SCRIPT_DIR, "..");
-
-const CORE_TESTS = [
-  "src/smoke-test.ts",
-  "src/smoke-test-rooms.ts",
-  "src/smoke-test-visibility.ts",
-  "src/smoke-test-duet.ts",
-];
-
-const FULL_TESTS = [
-  ...CORE_TESTS,
-  "src/smoke-test-compensate.ts",
-  "src/smoke-test-concurrent.ts",
-];
-
-const DUET_CDP_TESTS = [
-  "src/smoke-test-duet-cdp.ts",
-];
-
-const TESTS = DUET_REAL_ONLY
-  ? DUET_CDP_TESTS
-  : (FULL ? FULL_TESTS : CORE_TESTS);
 
 function loadDotEnv(filePath: string): Record<string, string> {
   const env: Record<string, string> = {};
@@ -79,9 +59,65 @@ const CHILD_ENV = {
   SESSION_VOICE_URL: BASE_URL,
 };
 
-const facilitatorMode = DUET_REAL_ONLY
+const DUET_CDP_ONLY = process.argv.includes("--duet-cdp");
+const DUET_OPENX402 = process.argv.includes("--duet-openx402");
+const ENV_FACILITATOR_MODE =
+  (LOCAL_ENV.X402_FACILITATOR_MODE || process.env.X402_FACILITATOR_MODE || "mock").trim();
+
+// If you're explicitly running in "self" facilitator mode (our own settlement service),
+// default to an on-chain (real settlement) duet test run.
+const AUTO_ONCHAIN =
+  ENV_FACILITATOR_MODE === "self"
+  && !DUET_CDP_ONLY
+  && !DUET_OPENX402
+  && !process.argv.includes("--duet-onchain");
+const DUET_ONCHAIN = process.argv.includes("--duet-onchain") || AUTO_ONCHAIN;
+const DUET_REAL_ONLY = DUET_CDP_ONLY || DUET_ONCHAIN || DUET_OPENX402;
+
+const facilitatorMode = DUET_CDP_ONLY
   ? "cdp"
-  : (LOCAL_ENV.X402_FACILITATOR_MODE || process.env.X402_FACILITATOR_MODE || "mock");
+  : (DUET_OPENX402
+    ? "cdp"
+    : (DUET_ONCHAIN
+      ? (ENV_FACILITATOR_MODE === "self" ? "self" : "cdp")
+      : ENV_FACILITATOR_MODE));
+
+const CORE_TESTS = [
+  "src/smoke-test.ts",
+  "src/smoke-test-rooms.ts",
+  "src/smoke-test-visibility.ts",
+  "src/smoke-test-duet.ts",
+];
+
+const BROADCAST_TESTS = [
+  "src/smoke-test-duet-broadcast.ts",
+];
+
+const FULL_TESTS = [
+  ...CORE_TESTS,
+  "src/smoke-test-compensate.ts",
+  "src/smoke-test-concurrent.ts",
+];
+
+const DUET_CDP_TESTS = [
+  "src/smoke-test-duet-cdp.ts",
+];
+
+const DUET_SELF_TESTS = [
+  "src/smoke-test-duet-self.ts",
+];
+
+const DUET_REAL_TESTS = facilitatorMode === "self"
+  ? DUET_SELF_TESTS
+  : DUET_CDP_TESTS;
+
+const selectedBase = DUET_REAL_ONLY
+  ? DUET_REAL_TESTS
+  : (FULL ? FULL_TESTS : CORE_TESTS);
+
+const TESTS = WITH_BROADCAST
+  ? [...selectedBase, ...BROADCAST_TESTS]
+  : selectedBase;
 
 const WRANGLER_LOCAL_VARS: Record<string, string> = {
   JWT_SECRET: LOCAL_ENV.JWT_SECRET || "dev-secret-for-testing-only",
@@ -96,13 +132,18 @@ const WRANGLER_LOCAL_VARS: Record<string, string> = {
 
 const localFacilitatorPort = Number((process.env.LOCAL_FACILITATOR_PORT || "3340").trim());
 const localFacilitatorBaseUrl = `http://127.0.0.1:${localFacilitatorPort}`;
+const localRustFacilitatorDir = resolve(SERVICE_DIR, "..", "x402-facilitator-rs");
 
-const requestedFacilitatorBaseUrl =
+const envFacilitatorBaseUrl =
   LOCAL_ENV.X402_FACILITATOR_BASE_URL
   || process.env.X402_FACILITATOR_BASE_URL
-  || (DUET_ONCHAIN
-    ? localFacilitatorBaseUrl
-    : (DUET_OPENX402 ? "https://facilitator.openx402.ai" : "https://api.cdp.coinbase.com/platform/v2/x402"));
+  || "";
+
+const requestedFacilitatorBaseUrl =
+  DUET_ONCHAIN
+    ? (envFacilitatorBaseUrl || localFacilitatorBaseUrl)
+    : (envFacilitatorBaseUrl
+      || (DUET_OPENX402 ? "https://facilitator.openx402.ai" : "https://api.cdp.coinbase.com/platform/v2/x402"));
 
 WRANGLER_LOCAL_VARS.X402_FACILITATOR_BASE_URL = requestedFacilitatorBaseUrl;
 
@@ -113,7 +154,7 @@ const facilitatorAuthToken =
 
 if (facilitatorAuthToken) WRANGLER_LOCAL_VARS.X402_FACILITATOR_AUTH_TOKEN = facilitatorAuthToken;
 if (DUET_ONCHAIN && facilitatorAuthToken) {
-  // The local facilitator process reads LOCAL_FACILITATOR_AUTH_TOKEN (or X402_FACILITATOR_AUTH_TOKEN).
+  // The local facilitator process reads FACILITATOR_AUTH_TOKEN (or X402_FACILITATOR_AUTH_TOKEN).
   CHILD_ENV.LOCAL_FACILITATOR_AUTH_TOKEN = facilitatorAuthToken;
 }
 
@@ -139,7 +180,7 @@ async function preflightOpenX402Gas(): Promise<void> {
   if (!signer || typeof signer !== "string" || !/^0x[a-fA-F0-9]{40}$/.test(signer)) return;
 
   try {
-    const rpcRes = await fetch("https://sepolia.base.org", {
+    const rpcRes = await fetch("https://base-sepolia-rpc.publicnode.com/", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -241,11 +282,16 @@ async function main() {
   console.log("[e2e] Starting local e2e run");
   console.log(`[e2e] Base URL: ${BASE_URL}`);
   console.log(`[e2e] Mode: ${DUET_ONCHAIN ? "duet-onchain" : (DUET_OPENX402 ? "duet-openx402" : (DUET_CDP_ONLY ? "duet-cdp" : (FULL ? "full" : "core")))}`);
+  if (AUTO_ONCHAIN) console.log("[e2e] Auto: duet-onchain enabled because X402_FACILITATOR_MODE=self");
+  if (DUET_REAL_ONLY) console.log(`[e2e] Facilitator mode: ${facilitatorMode}`);
   if (SERVE) console.log("[e2e] Serve: enabled (no tests will run; press Ctrl+C to stop)");
 
   if (DUET_REAL_ONLY) {
     if (facilitatorRequiresAuthToken(requestedFacilitatorBaseUrl) && !facilitatorAuthToken) {
       throw new Error("X402_FACILITATOR_AUTH_TOKEN is required for duet payment tests with Coinbase CDP");
+    }
+    if (facilitatorMode === "self" && !facilitatorAuthToken) {
+      throw new Error("X402_FACILITATOR_AUTH_TOKEN is required for duet payment tests with X402_FACILITATOR_MODE=self");
     }
 
     if (!SERVE) {
@@ -254,7 +300,11 @@ async function main() {
         || CHILD_ENV.X402_EVM_PRIVATE_KEY
         || CHILD_ENV.EVM_PRIVATE_KEY
         || CHILD_ENV.PRIVATE_KEY;
-      if (!payerPrivateKey) {
+      if (payerPrivateKey) {
+        // Ensure the smoke-test subprocesses can see the payer key even if runChecked
+        // uses a trimmed env.
+        CHILD_ENV.DUET_TEST_PAYER_PRIVATE_KEY = payerPrivateKey;
+      } else {
         throw new Error("DUET_TEST_PAYER_PRIVATE_KEY (or X402_EVM_PRIVATE_KEY / EVM_PRIVATE_KEY / PRIVATE_KEY) is required for duet payment smoke tests");
       }
     }
@@ -279,18 +329,50 @@ async function main() {
   );
 
   let localFacilitator: Bun.Subprocess | null = null;
-  if (DUET_ONCHAIN) {
-    console.log("\n[e2e] Starting local facilitator...");
+  const normalizedRequestedBaseUrl = requestedFacilitatorBaseUrl.replace(/\/+$/, "");
+  const normalizedLocalBaseUrl = localFacilitatorBaseUrl.replace(/\/+$/, "");
+  const shouldStartLocalFacilitator = DUET_ONCHAIN && normalizedRequestedBaseUrl === normalizedLocalBaseUrl;
+  if (shouldStartLocalFacilitator) {
+    console.log("\n[e2e] Starting local facilitator (rust)...");
+
+    const facilitatorPrivateKey =
+      CHILD_ENV.DUET_TEST_FACILITATOR_PRIVATE_KEY
+      || CHILD_ENV.DUET_TEST_PAYER_PRIVATE_KEY
+      || CHILD_ENV.X402_EVM_PRIVATE_KEY
+      || CHILD_ENV.EVM_PRIVATE_KEY
+      || CHILD_ENV.PRIVATE_KEY;
+
+    if (!facilitatorPrivateKey) {
+      throw new Error("DUET_TEST_FACILITATOR_PRIVATE_KEY (or DUET_TEST_PAYER_PRIVATE_KEY / EVM_PRIVATE_KEY) is required to start the local rust facilitator");
+    }
+
+    const rpcUrlBaseSepolia =
+      CHILD_ENV.DUET_TEST_RPC_URL
+      || CHILD_ENV.HEAVEN_BASE_SEPOLIA_RPC_URL
+      || "https://base-sepolia-rpc.publicnode.com";
+
     localFacilitator = Bun.spawn(
-      ["bun", "src/local-facilitator.ts"],
+      ["bash", "start.sh"],
       {
-        cwd: SERVICE_DIR,
-        env: CHILD_ENV,
+        cwd: localRustFacilitatorDir,
+        env: {
+          ...CHILD_ENV,
+          FACILITATOR_HOST: "127.0.0.1",
+          FACILITATOR_PORT: String(localFacilitatorPort),
+          FACILITATOR_AUTH_TOKEN: facilitatorAuthToken || "",
+          X402_FACILITATOR_AUTH_TOKEN: facilitatorAuthToken || "",
+          SIGNER_TYPE: "private-key",
+          EVM_PRIVATE_KEY: String(facilitatorPrivateKey),
+          RPC_URL_BASE_SEPOLIA: String(rpcUrlBaseSepolia),
+        },
         stdout: "inherit",
         stderr: "inherit",
       },
     );
-    await waitForUrl(localFacilitator, `${localFacilitatorBaseUrl}/health`, 30_000);
+    // The Rust facilitator may need a first-time `cargo build --release` (cold cache),
+    // which can take longer than 30s. Give it a bigger window so local onchain smoke tests
+    // are reliable without manual prebuild steps.
+    await waitForUrl(localFacilitator, `${localFacilitatorBaseUrl}/health`, 180_000);
     console.log("[e2e] Local facilitator is healthy");
   }
 

@@ -109,17 +109,16 @@ Use explicit payment fields in room metadata:
 Use one adapter interface and swap backend by env:
 
 1. `X402_FACILITATOR_MODE=mock` for local e2e/dev smoke tests (no chain settlement).
-2. `X402_FACILITATOR_MODE=cdp` for real settlement via facilitator `/settle`.
-3. `X402_FACILITATOR_BASE_URL` selects provider endpoint.
-4. `X402_FACILITATOR_AUTH_TOKEN` is provider-specific:
-   1. required for Coinbase CDP and our local facilitator
-   2. not required for OpenX402
+2. `X402_FACILITATOR_MODE=self` for real settlement via our own facilitator (`POST /settle`).
+3. `X402_FACILITATOR_MODE=cdp` remains supported for CDP/OpenX402-style facilitators, but is not our preferred long-term path because OpenX402 whitelisting blocks dynamic `payTo`.
+4. `X402_FACILITATOR_BASE_URL` selects the facilitator base URL (must be HTTPS for a deployed Worker).
+5. `X402_FACILITATOR_AUTH_TOKEN` is required for `self` (and often for CDP); it is sent as `Authorization: Bearer ...` by the worker to the facilitator.
 
 Notes:
 
 1. Load-gated replay links (`402.load.network`) can use Load-managed paywall/settlement.
 2. Worker-gated endpoints (`/duet/:id/enter`, `/duet/:id/replay`) still require our DO to call a facilitator before granting entitlement.
-3. Planned (not wired by default yet): OpenFacilitator + multi-facilitator failover for better liveness/censorship-resistance.
+3. Multi-facilitator failover is optional future hardening; the current shipped path is a single self-hosted facilitator.
 
 ## Durable Object Schema (Minimal + Correct)
 
@@ -342,11 +341,11 @@ This preserves remaining time when users renew early.
    3. `services/session-voice/src/room-do.ts` (extend) or `duet-room-do.ts` (new)
    4. `services/session-voice/wrangler.toml`
 2. GPUI:
-   1. `apps/gpui-poc/src/chat.rs`
-   2. `apps/gpui-poc/src/voice/session.rs`
+   1. `apps/desktop/src/chat.rs`
+   2. `apps/desktop/src/voice/session.rs`
 3. Frontend:
-   1. `apps/frontend/src/lib/voice/rooms.ts`
-   2. `apps/frontend/src/pages/RoomPage.tsx`
+   1. `apps/web/src/lib/voice/rooms.ts`
+   2. `apps/web/src/pages/RoomPage.tsx`
 
 ## Acceptance Criteria
 
@@ -357,7 +356,7 @@ This preserves remaining time when users renew early.
 5. Replay access is enforced by the selected replay mode with 24h expiry.
 6. All payees for live and replay are the room split contract address.
 
-## Current Implementation Status (2026-02-14)
+## Current Implementation Status (2026-02-15)
 
 ### Implemented now
 
@@ -396,7 +395,7 @@ This preserves remaining time when users renew early.
    2. no longer stuck on “waiting for host audio” when subscribed audio is already flowing
 8. Ticketed `/watch` parity (mock + real):
    1. In `X402_FACILITATOR_MODE=mock`, `/watch` completes 402 -> mock pay -> retry automatically (no chain settlement).
-   2. In non-mock facilitator modes, `/watch` now does real Base Sepolia x402 checkout:
+   2. In `X402_FACILITATOR_MODE=self`, `/watch` does real Base Sepolia x402 checkout:
       1. MetaMask connect + Base Sepolia switch
       2. wallet sign-in (`/auth/nonce` + `/auth/verify` → JWT)
       3. EIP-712 `TransferWithAuthorization` signing (`eth_signTypedData_v4`) → `PAYMENT-SIGNATURE`
@@ -422,13 +421,9 @@ This preserves remaining time when users renew early.
 
 ### Known gaps
 
-1. Deployed Cloudflare worker is still configured for mock settlement by default:
-   1. `services/session-voice/wrangler.toml` sets `X402_FACILITATOR_MODE=mock`.
-   2. Real settlement requires configuring a public facilitator (`X402_FACILITATOR_MODE=cdp`, `X402_FACILITATOR_BASE_URL`, and optionally `X402_FACILITATOR_AUTH_TOKEN` depending on the provider).
-   3. OpenFacilitator + multi-facilitator failover is planned but not enabled by default yet.
-2. Broadcast health is heartbeat-based (publisher liveness), not true end-to-end audio-level verification.
-3. Native Linux bridge remains experimental and is not the default path.
-4. Recording finalize/upload path is not completed end-to-end from bridge to replay UX.
+1. Broadcast health is heartbeat-based (publisher liveness), not true end-to-end audio-level verification.
+2. Native Linux bridge remains experimental and is not the default path.
+3. Recording finalize/upload path is not completed end-to-end from bridge to replay UX.
 
 ### Platform status (V1)
 
@@ -447,9 +442,9 @@ This preserves remaining time when users renew early.
 2. `/watch` renews Agora viewer tokens without re-payment while entitlement is valid.
 3. Entitlements are wallet-bound in real mode (authenticated `/enter`), not device-bound.
 
-### Milestone 1.5: Public facilitator (Cloudflare) wiring (Next)
+### Milestone 1.5: Facilitator hardening (Next)
 
-1. Configure the deployed worker to use a public facilitator (likely OpenFacilitator), rather than `mock`.
+1. Keep `services/x402-facilitator-rs` as the canonical settlement path for dynamic `payTo`.
 2. Optional: add multi-facilitator failover for liveness/censorship-resistance.
 
 ### Milestone 2: Truthful live state

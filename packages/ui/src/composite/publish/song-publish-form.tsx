@@ -18,6 +18,7 @@ export interface SongFormData {
   lyrics: string
   coverFile: File | null
   audioFile: File | null
+  vocalsFile: File | null
   instrumentalFile: File | null
   canvasFile: File | null
   license: LicenseType

@@ -6,8 +6,7 @@
   "types": "./src/api.ts",
   "exports": {
     ".": "./src/api.ts",
-    "./web": "./src/web.ts",
-    "./tauri": "./src/tauri.ts"
+    "./web": "./src/web.ts"
   },
   "scripts": {
     "check": "tsc --noEmit"
@@ -16,7 +15,6 @@
     "solid-js": "^1.9.3"
   },
   "devDependencies": {
-    "typescript": "^5.9.3",
-    "@tauri-apps/api": "^2.0.0"
+    "typescript": "^5.9.3"
   }
 }

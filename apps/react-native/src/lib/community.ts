@@ -1,6 +1,6 @@
 /**
  * Community data layer — fetches member profiles from dotheaven-profiles subgraph.
- * Port of apps/frontend/src/lib/heaven/community.ts (read-only).
+ * Port of apps/web/src/lib/heaven/community.ts (read-only).
  */
 
 import { createPublicClient, http, parseAbi } from 'viem';
