@@ -31,6 +31,15 @@ ENABLE_MB_FALLBACK_SEARCH = "false"
 # CLAIM_START_SECRET = "your-secret-here" # Required in production to call /api/claim/start
 # FAL_KEY = "your-fal-key"  # Set via wrangler secret
 # BASE_SEPOLIA_RELAY_PK = "..."  # Set via wrangler secret for EAS attestations
+# STORY_SPONSOR_PRIVATE_KEY = "0x..." # Optional; falls back to PRIVATE_KEY if unset
+# STORY_RPC_URL = "https://aeneid.storyrpc.io"
+# STORY_CHAIN_ID = "1315"
+# STORY_SPG_NFT_CONTRACT = "0xb1764abf89e6a151ea27824612145ef89ed70a73"
+# STORY_LICENSE_ATTACHMENT_WORKFLOWS = "0xcC2E862bCee5B6036Db0de6E06Ae87e524a79fd8"
+# STORY_IP_ASSET_REGISTRY = "0x77319B4031e6eF1250907aa00018B8B1c67a244b"
+# STORY_LICENSE_REGISTRY = "0x529a750E02d8E2f15649c13D69a465286a780e24"
+# STORY_ROYALTY_POLICY_LAP = "0xBe54FB168b3c982b7AaE60dB6CF75Bd8447b390E"
+# STORY_WIP_TOKEN = "0x1514000000000000000000000000000000000000"
 # FILEBASE_KEY = "ACCESS_KEY:SECRET_KEY:BUCKET"  # Set via wrangler secret for IPFS pinning
 
 # Self.xyz verification

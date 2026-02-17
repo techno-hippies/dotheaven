@@ -25,6 +25,7 @@ import wallet from './routes/wallet'
 import upload from './routes/upload'
 import load from './routes/load'
 import arweave from './routes/arweave'
+import music from './routes/music'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -32,7 +33,7 @@ const app = new Hono<{ Bindings: Env }>()
 app.use('/*', cors({
   origin: ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:4173', 'https://heaven.computer', 'https://heaven.xyz'],
   allowMethods: ['GET', 'POST', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization', 'X-User-Pkp', 'X-Claim-Start-Secret'],
+  allowHeaders: ['Content-Type', 'Authorization', 'X-User-Pkp', 'X-Claim-Start-Secret', 'Idempotency-Key'],
 }))
 
 // Health check
@@ -52,6 +53,7 @@ app.route('/api/wallet', wallet)
 app.route('/api/upload', upload)
 app.route('/api/load', load)
 app.route('/api/arweave', arweave)
+app.route('/api/music', music)
 
 // 404 fallback
 app.notFound((c) => c.json({ error: 'Not found' }, 404))

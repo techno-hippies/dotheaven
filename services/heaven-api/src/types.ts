@@ -105,6 +105,18 @@ export interface Env {
   BASE_SEPOLIA_RELAY_PK?: string
   BASE_SEPOLIA_RPC?: string
 
+  // Story relay wallet + contract config (music publish registration)
+  STORY_SPONSOR_PRIVATE_KEY?: string
+  PRIVATE_KEY?: string // Compatibility fallback to existing relay key naming
+  STORY_RPC_URL?: string
+  STORY_CHAIN_ID?: string
+  STORY_SPG_NFT_CONTRACT?: string
+  STORY_LICENSE_ATTACHMENT_WORKFLOWS?: string
+  STORY_IP_ASSET_REGISTRY?: string
+  STORY_LICENSE_REGISTRY?: string
+  STORY_ROYALTY_POLICY_LAP?: string
+  STORY_WIP_TOKEN?: string
+
   // R2 buckets for photo pipeline
   R2_RAW: R2Bucket      // Temporary upload storage
   R2_ORIG: R2Bucket     // Sanitized originals (EXIF stripped)
@@ -463,6 +475,74 @@ export interface SelfSessionStatusResponse {
   nationality?: string
   verifiedAt?: number
   reason?: string
+}
+
+// ============================================================================
+// Music Publish Pipeline Types
+// ============================================================================
+
+export type MusicPublishStatus =
+  | 'staged'
+  | 'checking'
+  | 'policy_passed'
+  | 'manual_review'
+  | 'rejected'
+  | 'anchoring'
+  | 'anchored'
+  | 'registering'
+  | 'registered'
+  | 'failed'
+
+export type MusicPublishType = 'original' | 'derivative' | 'cover'
+
+export interface MusicPublishJobRow {
+  job_id: string
+  user_pkp: string
+  status: MusicPublishStatus
+  publish_type: MusicPublishType | null
+  idempotency_key: string | null
+  file_name: string | null
+  content_type: string | null
+  file_size: number | null
+  audio_sha256: string | null
+  fingerprint: string | null
+  duration_s: number | null
+  staged_dataitem_id: string | null
+  staged_gateway_url: string | null
+  staged_payload_json: string | null
+  policy_decision: 'pending' | 'pass' | 'reject' | 'manual_review'
+  policy_reason_code: string | null
+  policy_reason: string | null
+  parent_ip_ids_json: string | null
+  license_terms_ids_json: string | null
+  anchored_dataitem_id: string | null
+  arweave_ref: string | null
+  arweave_url: string | null
+  arweave_available: number
+  anchor_payload_json: string | null
+  story_tx_hash: string | null
+  story_ip_id: string | null
+  story_token_id: string | null
+  story_license_terms_ids_json: string | null
+  story_block_number: string | null
+  megaeth_tx_hash: string | null
+  error_code: string | null
+  error_message: string | null
+  created_at: number
+  updated_at: number
+}
+
+export interface MusicUploadBanRow {
+  ban_id: number
+  user_pkp: string
+  self_nullifier: string | null
+  reason_code: string
+  reason: string
+  evidence_json: string | null
+  active: number
+  expires_at: number | null
+  created_by: string | null
+  created_at: number
 }
 
 // ============================================================================

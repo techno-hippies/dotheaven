@@ -40,7 +40,8 @@ app.post('/', async (c) => {
 
   const results: Record<string, { cid: string; gatewayUrl: string }> = {}
 
-  for (const [slot, value] of formData.entries()) {
+  // Worker FormData is iterable even when entries() is missing from TS libs.
+  for (const [slot, value] of formData as unknown as Iterable<[string, FormDataEntryValue]>) {
     if (!(value instanceof File)) continue
 
     if (!ALLOWED_CONTENT_TYPES.has(value.type)) {
