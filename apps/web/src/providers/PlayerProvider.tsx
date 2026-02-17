@@ -101,10 +101,7 @@ export const PlayerProvider: ParentComponent = (props) => {
   let scrobbleService: ScrobbleService | null = null
 
   onMount(() => {
-    scrobbleService = createScrobbleService(
-      () => auth.getAuthContext(),
-      () => auth.pkpInfo(),
-    )
+    scrobbleService = createScrobbleService()
     scrobbleService!.start()
   })
 

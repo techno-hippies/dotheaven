@@ -34,15 +34,6 @@ if [ -n "$MISSING" ]; then
     exit 1
 fi
 
-# Optional but recommended
-if [ -z "$HEAVEN_AA_GATEWAY_URL" ] && [ -z "$AA_GATEWAY_URL" ]; then
-    echo "Warning: HEAVEN_AA_GATEWAY_URL not set, scrobbling will use default: http://127.0.0.1:3337"
-fi
-
-if [ -z "$HEAVEN_AA_RPC_URL" ] && [ -z "$AA_RPC_URL" ]; then
-    echo "Warning: HEAVEN_AA_RPC_URL not set, scrobbling will use default: https://carrot.megaeth.com/rpc"
-fi
-
 LOAD_UPLOAD_URL="${HEAVEN_LOAD_TURBO_UPLOAD_URL:-https://loaded-turbo-api.load.network}"
 LOAD_UPLOAD_TOKEN="${HEAVEN_LOAD_TURBO_TOKEN:-ethereum}"
 HEAVEN_XMTP_ENV="${HEAVEN_XMTP_ENV:-${XMTP_ENV:-dev}}"
@@ -69,10 +60,9 @@ echo "  LOAD_UPLOAD_TOKEN: ${LOAD_UPLOAD_TOKEN}"
 echo "Environment validated. Starting Heaven GPUI..."
 echo "  LIT_NETWORK: ${HEAVEN_LIT_NETWORK:-${LIT_NETWORK:-naga-dev}}"
 echo "  LIT_RPC_URL: ${HEAVEN_LIT_RPC_URL:-$LIT_RPC_URL}"
-echo "  AA_GATEWAY: ${HEAVEN_AA_GATEWAY_URL:-${AA_GATEWAY_URL:-http://127.0.0.1:3337}}"
-echo "  AA_RPC: ${HEAVEN_AA_RPC_URL:-${AA_RPC_URL:-https://carrot.megaeth.com/rpc}}"
 echo "  XMTP_ENV: ${HEAVEN_XMTP_ENV}"
 echo "  XMTP_NONCE: ${HEAVEN_XMTP_NONCE:-${XMTP_NONCE:-auto}}"
+echo "  TEMPO_SCROBBLE_API: ${HEAVEN_TEMPO_SCROBBLE_API:-${TEMPO_SCROBBLE_API:-unset}}"
 echo "  LOAD_MODE: offchain"
 echo "  LOAD_UPLOAD_URL: ${LOAD_UPLOAD_URL}"
 echo "  LOAD_UPLOAD_TOKEN: ${LOAD_UPLOAD_TOKEN}"

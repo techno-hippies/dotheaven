@@ -6,10 +6,15 @@ use gpui_component::Sizable;
 impl Render for SettingsView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let auth_state = cx.global::<auth::AuthState>();
-        let addr = auth_state
-            .persisted
-            .as_ref()
-            .and_then(|a| a.pkp_address.clone());
+        let persisted = auth_state.persisted.as_ref();
+        let addr =
+            persisted.and_then(|a| a.primary_wallet_address().map(|value| value.to_string()));
+        let auth_provider = persisted
+            .map(|a| a.provider_kind().as_str())
+            .unwrap_or("none");
+        let lit_compatible = persisted
+            .map(|a| a.has_lit_auth_material())
+            .unwrap_or(false);
         let is_authed = auth_state.is_authenticated();
 
         let lit_ready = self
@@ -40,7 +45,7 @@ impl Render for SettingsView {
                     .child("Settings"),
             )
             // ── Account ──
-            .child(self.render_account_section(is_authed, addr.as_deref(), cx))
+            .child(self.render_account_section(is_authed, addr.as_deref(), auth_provider, cx))
             // ── Appearance ──
             .child(self.render_appearance_section(cx))
             // ── Developer Tools (collapsible) ──
@@ -48,6 +53,8 @@ impl Render for SettingsView {
                 lit_ready,
                 &lit_network,
                 addr.as_deref().unwrap_or("N/A"),
+                auth_provider,
+                lit_compatible,
                 cx,
             ))
     }
@@ -58,6 +65,7 @@ impl SettingsView {
         &self,
         is_authed: bool,
         addr: Option<&str>,
+        auth_provider: &str,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         div()
@@ -81,7 +89,7 @@ impl SettingsView {
                             .child(
                                 div()
                                     .v_flex()
-                                    .gap_1()
+                                    .gap_2()
                                     .child(
                                         div().text_base().text_color(TEXT_MUTED()).child("Wallet"),
                                     )
@@ -96,6 +104,18 @@ impl SettingsView {
                                             })
                                             .unwrap_or_else(|| "Not signed in".to_string()),
                                         ),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_base()
+                                            .text_color(TEXT_MUTED())
+                                            .child("Provider"),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_base()
+                                            .text_color(TEXT_PRIMARY())
+                                            .child(auth_provider.to_string()),
                                     ),
                             )
                             .child(
@@ -195,6 +215,8 @@ impl SettingsView {
         lit_ready: bool,
         lit_network: &str,
         addr: &str,
+        auth_provider: &str,
+        lit_compatible: bool,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let chevron = if self.show_dev_tools { "▾" } else { "▸" };
@@ -240,7 +262,12 @@ impl SettingsView {
                         .border_color(BORDER_SUBTLE())
                         .child(info_line("Lit Ready", if lit_ready { "yes" } else { "no" }))
                         .child(info_line("Lit Network", lit_network))
-                        .child(info_line("Auth PKP", addr))
+                        .child(info_line("Auth Provider", auth_provider))
+                        .child(info_line("Auth Wallet", addr))
+                        .child(info_line(
+                            "Lit Compatible",
+                            if lit_compatible { "yes" } else { "no" },
+                        ))
                         .child(
                             div()
                                 .h_flex()
@@ -248,19 +275,19 @@ impl SettingsView {
                                 .flex_wrap()
                                 .child(action_button(
                                     "Init Lit Context",
-                                    !self.busy,
+                                    !self.busy && lit_compatible,
                                     true,
                                     cx.listener(|this, _, _, cx| this.init_lit_context(cx)),
                                 ))
                                 .child(action_button(
                                     "Execute Smoke Action",
-                                    !self.busy && lit_ready,
+                                    !self.busy && lit_ready && lit_compatible,
                                     false,
                                     cx.listener(|this, _, _, cx| this.execute_smoke_action(cx)),
                                 ))
                                 .child(action_button(
                                     "Sign Smoke Payload",
-                                    !self.busy && lit_ready,
+                                    !self.busy && lit_ready && lit_compatible,
                                     false,
                                     cx.listener(|this, _, _, cx| this.sign_smoke_payload(cx)),
                                 ))

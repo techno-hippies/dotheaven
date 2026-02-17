@@ -52,11 +52,39 @@ const must = (v, label) => {
   return v;
 };
 
+const strip0x = (v) => (String(v || "").startsWith("0x") ? String(v).slice(2) : String(v));
+
 const toBigNumber = (v, label) => {
   if (typeof v === "number") return ethers.BigNumber.from(v);
   if (typeof v === "string") return ethers.BigNumber.from(v);
   throw new Error(`Invalid ${label}`);
 };
+
+function normalizePublicKeyHex(v, label) {
+  if (v === undefined || v === null) throw new Error(`${label} is required`);
+  const raw = String(v).trim();
+  if (!raw) throw new Error(`${label} is required`);
+  const noPrefix = raw.startsWith("0x") || raw.startsWith("0X") ? raw.slice(2) : raw;
+  return `0x${noPrefix}`;
+}
+
+function parseJsonResult(raw, label) {
+  if (typeof raw !== "string") {
+    throw new Error(`${label} returned non-string response`);
+  }
+  if (raw.startsWith("[ERROR]")) {
+    throw new Error(`${label} failed: ${raw}`);
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    throw new Error(
+      `${label} returned non-JSON: ${
+        raw.length > 240 ? `${raw.slice(0, 240)}…` : raw
+      } (${err?.message || String(err)})`
+    );
+  }
+}
 
 function toBytes(input, label) {
   if (typeof input !== "string") throw new Error(`${label} must be string`);
@@ -74,7 +102,7 @@ async function sha256Hex(message) {
 async function signTx(unsignedTx, sigName) {
   const serialized = ethers.utils.serializeTransaction(unsignedTx);
   const hash = ethers.utils.keccak256(serialized);
-  const toSign = ethers.utils.arrayify(hash);
+  const toSign = Array.from(ethers.utils.arrayify(hash));
 
   const sigShare = await Lit.Actions.signAndCombineEcdsa({
     toSign,
@@ -82,28 +110,43 @@ async function signTx(unsignedTx, sigName) {
     sigName,
   });
 
-  const sig = JSON.parse(sigShare);
-  const r = `0x${sig.r.padStart(64, "0")}`;
-  const s = `0x${sig.s.padStart(64, "0")}`;
-  const v = sig.recid + (unsignedTx.type === 2 ? 0 : 27);
+  const sig = parseJsonResult(sigShare, `PKP signing (${sigName})`);
+  let v = Number(sig.recid ?? sig.recoveryId ?? sig.v);
+  if (v === 0 || v === 1) v += 27;
+  const signature = ethers.utils.joinSignature({
+    r: `0x${strip0x(sig.r)}`,
+    s: `0x${strip0x(sig.s)}`,
+    v,
+  });
 
-  return ethers.utils.serializeTransaction(unsignedTx, { r, s, v });
+  return ethers.utils.serializeTransaction(unsignedTx, signature);
 }
 
 async function broadcastSignedTx(signedTx, rpcUrl, label) {
   const result = await Lit.Actions.runOnce(
     { waitForResponse: true, name: `broadcast_${label}` },
     async () => {
-      const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
-      const resp = await provider.sendTransaction(signedTx);
-      const receipt = await resp.wait(1);
-      return JSON.stringify({
-        txHash: receipt.transactionHash,
-        blockNumber: receipt.blockNumber,
-      });
+      try {
+        const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+        const resp = await provider.sendTransaction(signedTx);
+        const receipt = await resp.wait(1);
+        return JSON.stringify({
+          txHash: receipt.transactionHash,
+          blockNumber: receipt.blockNumber,
+          status: receipt.status,
+        });
+      } catch (err) {
+        return JSON.stringify({
+          broadcastError: err?.reason || err?.message || String(err),
+          code: err?.code,
+        });
+      }
     }
   );
-  const parsed = JSON.parse(result);
+  const parsed = parseJsonResult(result, `broadcast_${label}`);
+  if (parsed.broadcastError) {
+    throw new Error(`TX broadcast failed (${label}): ${parsed.broadcastError} (code: ${parsed.code})`);
+  }
   if (!parsed.txHash) throw new Error(`TX broadcast failed (${label}): no txHash`);
   return parsed;
 }
@@ -146,10 +189,13 @@ const SCROBBLE_V4_ABI = [
 
     // Derive user address
     let userAddress;
+    const userPublicKey = jsParams.userPkpPublicKey
+      ? normalizePublicKeyHex(jsParams.userPkpPublicKey, "userPkpPublicKey")
+      : null;
     const preSignedSig = jsParams.signature;
 
-    if (jsParams.userPkpPublicKey) {
-      userAddress = ethers.utils.computeAddress(`0x${jsParams.userPkpPublicKey}`).toLowerCase();
+    if (userPublicKey) {
+      userAddress = ethers.utils.computeAddress(userPublicKey).toLowerCase();
     }
 
     // Verify or create signature
@@ -168,15 +214,17 @@ const SCROBBLE_V4_ABI = [
     } else {
       const toSign = ethers.utils.arrayify(ethers.utils.hashMessage(message));
       const sigShare = await Lit.Actions.signAndCombineEcdsa({
-        toSign,
-        publicKey: jsParams.userPkpPublicKey,
+        toSign: Array.from(toSign),
+        publicKey: userPublicKey,
         sigName: "userSig",
       });
-      const sig = JSON.parse(sigShare);
+      const sig = parseJsonResult(sigShare, "User PKP signing");
+      let userV = Number(sig.recid ?? sig.recoveryId ?? sig.v);
+      if (userV === 0 || userV === 1) userV += 27;
       signature = ethers.utils.joinSignature({
-        r: `0x${sig.r.padStart(64, "0")}`,
-        s: `0x${sig.s.padStart(64, "0")}`,
-        v: sig.recid + 27,
+        r: `0x${strip0x(sig.r)}`,
+        s: `0x${strip0x(sig.s)}`,
+        v: userV,
       });
     }
 
@@ -192,13 +240,26 @@ const SCROBBLE_V4_ABI = [
     const isRegJson = await Lit.Actions.runOnce(
       { waitForResponse: true, name: "checkTrackRegistered" },
       async () => {
-        const provider = new ethers.providers.JsonRpcProvider(MEGAETH_RPC_URL);
-        const c = scrobbleContract.connect(provider);
-        const registered = await c.isRegistered(trackId32);
-        return JSON.stringify({ registered });
+        try {
+          const provider = new ethers.providers.JsonRpcProvider(MEGAETH_RPC_URL);
+          const c = scrobbleContract.connect(provider);
+          const registered = await c.isRegistered(trackId32);
+          return JSON.stringify({ registered });
+        } catch (err) {
+          return JSON.stringify({
+            checkError: err?.reason || err?.message || String(err),
+            code: err?.code,
+          });
+        }
       }
     );
-    const { registered: isReg } = JSON.parse(isRegJson);
+    const regCheck = parseJsonResult(isRegJson, "checkTrackRegistered");
+    if (regCheck.checkError) {
+      throw new Error(
+        `checkTrackRegistered failed: ${regCheck.checkError} (code: ${regCheck.code || "n/a"})`
+      );
+    }
+    const isReg = Boolean(regCheck.registered);
 
     if (!isReg) {
       const titleNorm = (title || "").toLowerCase().trim().replace(/\s+/g, " ");
@@ -218,16 +279,29 @@ const SCROBBLE_V4_ABI = [
         [kind], [metaPayload], [title], [artist], [album], [0],
       ]);
 
-      const regNonceResult = JSON.parse(
+      const regNonceResult = parseJsonResult(
         await Lit.Actions.runOnce(
           { waitForResponse: true, name: "getRegNonce" },
           async () => {
-            const provider = new ethers.providers.JsonRpcProvider(MEGAETH_RPC_URL);
-            const n = await provider.getTransactionCount(SPONSOR_PKP_ADDRESS, "pending");
-            return JSON.stringify({ nonce: n.toString() });
+            try {
+              const provider = new ethers.providers.JsonRpcProvider(MEGAETH_RPC_URL);
+              const n = await provider.getTransactionCount(SPONSOR_PKP_ADDRESS, "pending");
+              return JSON.stringify({ nonce: n.toString() });
+            } catch (err) {
+              return JSON.stringify({
+                nonceError: err?.reason || err?.message || String(err),
+                code: err?.code,
+              });
+            }
           }
-        )
+        ),
+        "getRegNonce"
       );
+      if (regNonceResult.nonceError) {
+        throw new Error(
+          `getRegNonce failed: ${regNonceResult.nonceError} (code: ${regNonceResult.code || "n/a"})`
+        );
+      }
 
       const unsignedRegTx = {
         type: 0,
@@ -258,12 +332,25 @@ const SCROBBLE_V4_ABI = [
     const nonceJson = await Lit.Actions.runOnce(
       { waitForResponse: true, name: "getTxNonce" },
       async () => {
-        const provider = new ethers.providers.JsonRpcProvider(MEGAETH_RPC_URL);
-        const n = await provider.getTransactionCount(SPONSOR_PKP_ADDRESS, "pending");
-        return JSON.stringify({ nonce: n.toString() });
+        try {
+          const provider = new ethers.providers.JsonRpcProvider(MEGAETH_RPC_URL);
+          const n = await provider.getTransactionCount(SPONSOR_PKP_ADDRESS, "pending");
+          return JSON.stringify({ nonce: n.toString() });
+        } catch (err) {
+          return JSON.stringify({
+            nonceError: err?.reason || err?.message || String(err),
+            code: err?.code,
+          });
+        }
       }
     );
-    const txNonce = Number(JSON.parse(nonceJson).nonce);
+    const nonceResult = parseJsonResult(nonceJson, "getTxNonce");
+    if (nonceResult.nonceError) {
+      throw new Error(
+        `getTxNonce failed: ${nonceResult.nonceError} (code: ${nonceResult.code || "n/a"})`
+      );
+    }
+    const txNonce = Number(nonceResult.nonce);
 
     const unsignedTx = {
       type: 0,

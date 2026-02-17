@@ -21,12 +21,18 @@ export const MockAuthProvider: ParentComponent<{ mockValue?: Partial<AuthContext
     isAuthenticating: () => false,
     authError: () => null,
     isSessionRestoring: () => false,
+    tempoSession: () => null,
     loginWithPasskey: async () => {},
     registerWithPasskey: async () => {},
     connectWallet: async () => {},
     logout: async () => {},
     cancelAuth: () => {},
     clearError: () => {},
+    saveTempoSession: () => {},
+    clearTempoSession: () => {},
+    ensureTempoSession: async () => {
+      throw new Error('Tempo session unavailable in mock context')
+    },
     signMessage: async () => '0x1234567890abcdef',
     getAuthContext: async () => ({}) as any,
     ...props.mockValue,

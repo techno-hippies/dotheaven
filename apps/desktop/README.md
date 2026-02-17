@@ -21,11 +21,6 @@ export HEAVEN_XMTP_ENV="dev"          # dev | production (defaults to dev)
 # Optional: force XMTP inbox nonce when troubleshooting legacy inbox mismatches
 # export HEAVEN_XMTP_NONCE="0"         # auto if unset
 
-# Required for gasless scrobbling via AA gateway
-export HEAVEN_AA_GATEWAY_URL="http://127.0.0.1:3337"
-export HEAVEN_AA_RPC_URL="https://carrot.megaeth.com/rpc"
-export HEAVEN_AA_GATEWAY_KEY=""  # optional
-
 # Storage upload (direct offchain)
 export HEAVEN_LOAD_TURBO_UPLOAD_URL="https://loaded-turbo-api.load.network"
 export HEAVEN_LOAD_TURBO_TOKEN="ethereum"
@@ -39,7 +34,7 @@ export HEAVEN_BASE_SEPOLIA_RPC_URL="https://base-sepolia-rpc.publicnode.com/"
 export HEAVEN_LOAD_MIN_UPLOAD_CREDIT="0.00000001"
 ```
 
-**Important**: Without these environment variables set, scrobbling will fail with "Missing Lit RPC URL" error. The scrobble hook will fire correctly, but submission will fail due to missing configuration.
+**Important**: Without Lit Protocol environment variables set, scrobbling will fail with "Missing Lit RPC URL" error. The scrobble hook will fire correctly, but submission will fail due to missing configuration.
 
 ### Running
 

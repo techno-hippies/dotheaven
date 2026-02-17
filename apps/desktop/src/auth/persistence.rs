@@ -42,7 +42,16 @@ pub fn load_from_disk() -> Option<PersistedAuth> {
     }
 
     log::debug!(
-        "[Auth] Loaded auth from disk: pkp_address={:?}, pkp_public_key={}, pkp_token_id={:?}, eoa_address={:?}, auth_method_type={:?}",
+        "[Auth] Loaded auth from disk: version={:?}, provider={:?}, wallet_address={:?}, tempo_credential_id={:?}, tempo_public_key={}, pkp_address={:?}, pkp_public_key={}, pkp_token_id={:?}, eoa_address={:?}, auth_method_type={:?}",
+        parsed.version,
+        parsed.provider,
+        parsed.primary_wallet_address(),
+        parsed.tempo_credential_id,
+        parsed
+            .tempo_public_key
+            .as_deref()
+            .map(short_hex)
+            .unwrap_or_else(|| "-".to_string()),
         parsed.pkp_address,
         parsed
             .pkp_public_key
@@ -85,6 +94,19 @@ pub fn delete_from_disk() {
 /// Convert AuthResult → PersistedAuth (strips transient fields)
 pub fn to_persisted(result: &AuthResult) -> PersistedAuth {
     PersistedAuth {
+        version: result.version,
+        provider: result.provider.clone(),
+        wallet_address: result.wallet_address.clone(),
+        tempo_credential_id: result.tempo_credential_id.clone(),
+        tempo_public_key: result.tempo_public_key.clone(),
+        tempo_rp_id: result.tempo_rp_id.clone(),
+        tempo_key_manager_url: result.tempo_key_manager_url.clone(),
+        tempo_fee_payer_url: result.tempo_fee_payer_url.clone(),
+        tempo_chain_id: result.tempo_chain_id,
+        tempo_session_private_key: result.tempo_session_private_key.clone(),
+        tempo_session_address: result.tempo_session_address.clone(),
+        tempo_session_expires_at: result.tempo_session_expires_at,
+        tempo_session_key_authorization: result.tempo_session_key_authorization.clone(),
         pkp_address: result.pkp_address.clone(),
         pkp_public_key: result.pkp_public_key.clone(),
         pkp_token_id: result.pkp_token_id.clone(),

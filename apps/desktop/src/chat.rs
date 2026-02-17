@@ -15,7 +15,6 @@ use gpui_component::theme::Theme;
 use gpui_component::{ActiveTheme, StyledExt};
 use serde::{Deserialize, Serialize};
 
-use crate::lit_wallet::LitWalletService;
 use crate::shared::address::{abbreviate_address, is_evm_address};
 use crate::voice::desktop_handoff::{jacktrip_web_url, launch_jacktrip_desktop};
 use crate::voice::{ChatHistoryItem, ScarlettVoiceController, VoiceSnapshot, VoiceState};

@@ -4,3 +4,4 @@ src/chat/conversations.rs
 src/discover.rs
 src/lyrics.rs
 src/scrobble/cover.rs
+src/scrobble/tempo.rs

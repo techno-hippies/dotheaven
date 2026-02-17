@@ -4,7 +4,7 @@
  * Server-side decryption of Lit-encrypted AES keys for content playback.
  *
  * This Lit Action performs:
- *   1. Verify the caller (user PKP) has access via canAccess() on MegaETH ContentRegistry
+ *   1. Verify the caller has access via canAccess() on MegaETH ContentRegistry
  *   2. Decrypt the AES key using Lit.Actions.decryptAndCombine() (server-side BLS threshold decrypt)
  *   3. Return the decrypted key payload to the caller
  *
@@ -18,7 +18,9 @@
  * session keys for EOA) are not accepted during Lit Action ACC evaluation.
  *
  * jsParams:
- *   - userPkpPublicKey: string  — user's PKP public key (for auth via signAndCombineEcdsa)
+ *   - userPkpPublicKey?: string  — PKP public key (optional path)
+ *   - userAddress?: string       — EOA address (required for signature path)
+ *   - signature?: string         — EIP-191 signature over decrypt message (optional path)
  *   - contentId: string          — bytes32 hex content ID
  *   - ciphertext: string         — Lit ciphertext (from encrypted AES key)
  *   - dataToEncryptHash: string  — Lit data-to-encrypt hash
@@ -65,6 +67,8 @@ const main = async () => {
   try {
     const {
       userPkpPublicKey,
+      userAddress: providedUserAddress,
+      signature: preSignedSig,
       contentId,
       ciphertext,
       dataToEncryptHash,
@@ -73,14 +77,15 @@ const main = async () => {
     } = jsParams;
 
     // ── Validate params ───────────────────────────────────────────────
-    if (!userPkpPublicKey || !contentId || !ciphertext || !dataToEncryptHash) {
+    if (!contentId || !ciphertext || !dataToEncryptHash) {
       return fail("Missing required params");
     }
     if (!timestamp || !nonce) {
       return fail("Missing timestamp or nonce");
     }
-
-    const userAddress = pkpToAddress(userPkpPublicKey);
+    if (!userPkpPublicKey && !preSignedSig) {
+      return fail("Missing auth: provide userPkpPublicKey or signature");
+    }
 
     // ── Timestamp freshness ───────────────────────────────────────────
     const age = Date.now() - Number(timestamp);
@@ -88,14 +93,36 @@ const main = async () => {
       return fail(`Timestamp too old or in future (age: ${age}ms)`);
     }
 
-    // ── Verify caller owns PKP (signAndCombineEcdsa = auth) ──────────
+    // ── Verify caller auth (PKP or EOA signature) ────────────────────
     const message = `heaven:decrypt:${contentId.toLowerCase()}:${timestamp}:${nonce}`;
+    let userAddress;
 
-    await Lit.Actions.signAndCombineEcdsa({
-      toSign: ethers.utils.arrayify(ethers.utils.hashMessage(message)),
-      publicKey: userPkpPublicKey,
-      sigName: "decrypt-sig",
-    });
+    if (preSignedSig) {
+      if (!providedUserAddress) {
+        return fail("Missing userAddress for signature auth");
+      }
+      try {
+        const expectedUser = ethers.utils.getAddress(providedUserAddress).toLowerCase();
+        const recovered = ethers.utils.verifyMessage(message, preSignedSig).toLowerCase();
+        if (recovered !== expectedUser) {
+          return fail(`Signature mismatch: recovered ${recovered}, expected ${expectedUser}`);
+        }
+        userAddress = expectedUser;
+      } catch (err) {
+        return fail(`Invalid signature auth: ${err?.message || String(err)}`);
+      }
+    } else {
+      try {
+        await Lit.Actions.signAndCombineEcdsa({
+          toSign: ethers.utils.arrayify(ethers.utils.hashMessage(message)),
+          publicKey: userPkpPublicKey,
+          sigName: "decrypt-sig",
+        });
+        userAddress = pkpToAddress(userPkpPublicKey);
+      } catch (err) {
+        return fail(`PKP auth failed: ${err?.message || String(err)}`);
+      }
+    }
 
     // ── Check canAccess() on MegaETH ─────────────────────────────────
     const accessResult = await Lit.Actions.runOnce(

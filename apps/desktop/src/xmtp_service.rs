@@ -3,7 +3,7 @@
 //! Port of the legacy desktop XMTP module adapted for GPUI:
 //! - No desktop commands/events — plain struct with sync methods
 //! - Own tokio runtime (same pattern as LitWalletService)
-//! - Direct PKP signing via lit_wallet.rs (no event round-trip)
+//! - Device-local secp256k1 signing for XMTP identity registration
 
 use std::collections::HashSet;
 use std::sync::Arc;

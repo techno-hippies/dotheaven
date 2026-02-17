@@ -120,7 +120,6 @@ impl LibraryView {
                 return;
             }
         };
-
         if track.file_path.is_empty() || !std::path::Path::new(&track.file_path).exists() {
             self.set_status_message("Track file is missing on disk; upload cancelled.", cx);
             return;
@@ -251,7 +250,6 @@ impl LibraryView {
                 return;
             }
         };
-
         let owner_address = auth.pkp_address.clone().unwrap_or_default().to_lowercase();
         if owner_address.is_empty() {
             self.set_status_message("PKP wallet is unavailable; sign in again.", cx);

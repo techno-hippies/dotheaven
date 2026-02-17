@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -41,6 +42,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -55,9 +57,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.pirate.app.onboarding.OnboardingRpcHelpers
 import com.pirate.app.onboarding.steps.LANGUAGE_OPTIONS
+import com.pirate.app.profile.TempoNameRecordsApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
@@ -89,6 +96,7 @@ fun CommunityScreen(
   var viewerLatE6 by remember { mutableStateOf<Int?>(null) }
   var viewerLngE6 by remember { mutableStateOf<Int?>(null) }
   var members by remember { mutableStateOf<List<CommunityMemberPreview>>(emptyList()) }
+  var resolvedPrimaryNames by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
   var loading by remember { mutableStateOf(true) }
   var error by remember { mutableStateOf<String?>(null) }
   var showFilterSheet by remember { mutableStateOf(false) }
@@ -142,7 +150,21 @@ fun CommunityScreen(
         )
       }
     }.onSuccess {
-      members = it
+      val fetchedMembers = it
+      val unresolvedAddresses =
+        fetchedMembers
+          .map { member -> member.address }
+          .filter { address -> !resolvedPrimaryNames.containsKey(address) }
+
+      val resolvedBatch =
+        withContext(Dispatchers.IO) {
+          resolvePrimaryNames(unresolvedAddresses)
+        }
+      if (resolvedBatch.isNotEmpty()) {
+        resolvedPrimaryNames = resolvedPrimaryNames + resolvedBatch
+      }
+
+      members = fetchedMembers
       loading = false
     }.onFailure { throwable ->
       if (throwable is CancellationException) throw throwable
@@ -153,15 +175,16 @@ fun CommunityScreen(
 
   val activeFilterCount = CommunityApi.activeFilterCount(filters)
   val hasViewerCoords = viewerLatE6 != null && viewerLngE6 != null
-  val visibleMembers = remember(members, searchText) {
+  val visibleMembers = remember(members, resolvedPrimaryNames, searchText) {
     val query = searchText.trim().lowercase()
     if (query.isBlank()) {
       members
     } else {
       members.filter { member ->
         val name = member.displayName.lowercase()
+        val primary = resolvedPrimaryNames[member.address]?.lowercase().orEmpty()
         val addr = member.address.lowercase()
-        name.contains(query) || addr.contains(query)
+        name.contains(query) || primary.contains(query) || addr.contains(query)
       }
     }
   }
@@ -232,6 +255,7 @@ fun CommunityScreen(
           items(visibleMembers, key = { it.address }) { member ->
             CommunityPreviewRow(
               member = member,
+              resolvedPrimaryName = resolvedPrimaryNames[member.address],
               onClick = { onMemberClick(member.address) },
             )
             HorizontalDivider(
@@ -258,19 +282,46 @@ fun CommunityScreen(
   }
 }
 
+private suspend fun resolvePrimaryNames(
+  addresses: List<String>,
+  maxLookups: Int = 36,
+): Map<String, String> = coroutineScope {
+  val limited = addresses.distinct().take(maxLookups)
+  limited
+    .map { address ->
+      async {
+        val fullName =
+          runCatching {
+            TempoNameRecordsApi.getPrimaryName(address)
+              ?.trim()
+              ?.takeIf { it.isNotBlank() }
+              ?: OnboardingRpcHelpers.getPrimaryName(address)
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { label -> if (label.contains('.')) label else "$label.heaven" }
+          }.getOrNull()
+        if (fullName.isNullOrBlank()) null else address to fullName
+      }
+    }
+    .awaitAll()
+    .filterNotNull()
+    .toMap()
+}
+
 @Composable
 private fun CommunityPreviewRow(
   member: CommunityMemberPreview,
+  resolvedPrimaryName: String?,
   onClick: () -> Unit,
 ) {
   val rawDisplay = member.displayName.trim()
-  val hasHeavenName = rawDisplay.isNotBlank() && !rawDisplay.startsWith("0x", ignoreCase = true)
-  val handle = if (hasHeavenName) {
-    if (rawDisplay.endsWith(".heaven", ignoreCase = true)) rawDisplay else "$rawDisplay.heaven"
-  } else {
-    shortAddress(member.address)
-  }
-  val subtitle = if (hasHeavenName) shortAddress(member.address) else null
+  val hasReadableDisplay = rawDisplay.isNotBlank() && !rawDisplay.startsWith("0x", ignoreCase = true)
+  val handle =
+    when {
+      !resolvedPrimaryName.isNullOrBlank() -> resolvedPrimaryName
+      hasReadableDisplay -> rawDisplay
+      else -> shortAddress(member.address)
+    }
   val meta = buildList {
     member.age?.let { add("$it") }
     CommunityApi.genderLabel(member.gender)?.let { add(it) }
@@ -310,22 +361,15 @@ private fun CommunityPreviewRow(
     Column(modifier = Modifier.weight(1f)) {
       Text(
         text = handle,
-        style = MaterialTheme.typography.titleMedium,
+        style = MaterialTheme.typography.bodyLarge,
         fontWeight = FontWeight.SemiBold,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
       )
-      if (!subtitle.isNullOrBlank()) {
-        Text(
-          text = subtitle,
-          style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-      }
       if (meta.isNotBlank()) {
         Text(
           text = meta,
-          style = MaterialTheme.typography.bodySmall,
+          style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
       }
@@ -350,77 +394,102 @@ private fun CommunityFilterSheet(
   var radiusKm by remember(filters.radiusKm, hasViewerCoords) {
     mutableStateOf(if (hasViewerCoords) filters.radiusKm else null)
   }
+  val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-  ModalBottomSheet(onDismissRequest = onDismiss) {
+  ModalBottomSheet(
+    sheetState = sheetState,
+    onDismissRequest = onDismiss,
+    modifier = Modifier.fillMaxHeight(),
+  ) {
     Column(
-      modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
+      modifier = Modifier
+        .fillMaxHeight()
+        .fillMaxWidth()
+        .padding(horizontal = 20.dp)
+        .padding(top = 12.dp, bottom = 16.dp),
     ) {
-      Text("Filter Members", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-
-      GenderDropdown(
-        selectedGender = gender,
-        onSelected = { gender = it },
-      )
-
-      Text("Age range", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(
-          value = minAgeText,
-          onValueChange = { minAgeText = it.filter { ch -> ch.isDigit() }.take(2) },
-          modifier = Modifier.weight(1f),
-          label = { Text("Min age") },
-          placeholder = { Text("Any") },
-          singleLine = true,
-        )
-        OutlinedTextField(
-          value = maxAgeText,
-          onValueChange = { maxAgeText = it.filter { ch -> ch.isDigit() }.take(2) },
-          modifier = Modifier.weight(1f),
-          label = { Text("Max age") },
-          placeholder = { Text("Any") },
-          singleLine = true,
-        )
-      }
-
-      LanguageDropdown(
-        label = "Native Language",
-        selectedLanguage = nativeLanguage,
-        onSelected = { nativeLanguage = it },
-      )
-      LanguageDropdown(
-        label = "Learning Language",
-        selectedLanguage = learningLanguage,
-        onSelected = { learningLanguage = it },
-      )
-
-      Text("Nearby radius", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-      if (hasViewerCoords) {
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          item {
-            FilterChip(
-              selected = radiusKm == null,
-              onClick = { radiusKm = null },
-              label = { Text("Any distance") },
+      LazyColumn(
+        modifier = Modifier.weight(1f),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        item {
+          Text("Filter Members", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+        item {
+          GenderDropdown(
+            selectedGender = gender,
+            onSelected = { gender = it },
+          )
+        }
+        item {
+          Text("Age range", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+              value = minAgeText,
+              onValueChange = { minAgeText = it.filter { ch -> ch.isDigit() }.take(2) },
+              modifier = Modifier.weight(1f),
+              label = { Text("Min age") },
+              placeholder = { Text("Any") },
+              singleLine = true,
             )
-          }
-          items(RadiusOptionsKm, key = { it }) { radius ->
-            FilterChip(
-              selected = radiusKm == radius,
-              onClick = { radiusKm = radius },
-              label = { Text("${radius}km") },
+            OutlinedTextField(
+              value = maxAgeText,
+              onValueChange = { maxAgeText = it.filter { ch -> ch.isDigit() }.take(2) },
+              modifier = Modifier.weight(1f),
+              label = { Text("Max age") },
+              placeholder = { Text("Any") },
+              singleLine = true,
             )
           }
         }
-      } else {
-        Text(
-          "Set your location in profile to enable nearby radius filtering.",
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          style = MaterialTheme.typography.bodyMedium,
-        )
+        item {
+          LanguageDropdown(
+            label = "Native Language",
+            selectedLanguage = nativeLanguage,
+            onSelected = { nativeLanguage = it },
+          )
+        }
+        item {
+          LanguageDropdown(
+            label = "Learning Language",
+            selectedLanguage = learningLanguage,
+            onSelected = { learningLanguage = it },
+          )
+        }
+        item {
+          Text("Nearby radius", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+          if (hasViewerCoords) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+              item {
+                FilterChip(
+                  selected = radiusKm == null,
+                  onClick = { radiusKm = null },
+                  label = { Text("Any distance") },
+                )
+              }
+              items(RadiusOptionsKm, key = { it }) { radius ->
+                FilterChip(
+                  selected = radiusKm == radius,
+                  onClick = { radiusKm = radius },
+                  label = { Text("${radius}km") },
+                )
+              }
+            }
+          } else {
+            Text(
+              "Set your location in profile to enable nearby radius filtering.",
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              style = MaterialTheme.typography.bodyMedium,
+            )
+          }
+        }
       }
 
-      Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+      Spacer(Modifier.height(12.dp))
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+      ) {
         OutlinedButton(
           modifier = Modifier.weight(1f),
           onClick = {

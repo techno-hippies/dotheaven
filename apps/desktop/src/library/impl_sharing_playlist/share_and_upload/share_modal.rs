@@ -73,7 +73,15 @@ impl LibraryView {
                 return;
             }
         };
-        let owner_address = auth.pkp_address.clone().unwrap_or_default().to_lowercase();
+        if let Err(err) = auth.require_lit_auth("Track sharing") {
+            self.share_modal_error = Some(err);
+            cx.notify();
+            return;
+        }
+        let owner_address = auth
+            .primary_wallet_address()
+            .map(|value| value.to_lowercase())
+            .unwrap_or_default();
 
         self.share_modal_submitting = true;
         self.share_modal_error = None;

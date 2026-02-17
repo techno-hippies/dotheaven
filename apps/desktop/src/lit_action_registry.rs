@@ -7,9 +7,9 @@
 //!
 //! Resolution precedence:
 //!   1. Explicit env CID override  (`HEAVEN_{ACTION}_CID`)
-//!   2. Canonical CID map          (from JSON files)
-//!   3. Local JS file              (only when `HEAVEN_ALLOW_LOCAL_ACTION_FALLBACK=1`)
-//!   4. Explicit code-path env var (`HEAVEN_{ACTION}_CODE_PATH` — always honoured)
+//!   2. Explicit code-path env var (`HEAVEN_{ACTION}_CODE_PATH`)
+//!   3. Canonical CID map          (from JSON files)
+//!   4. Local JS file              (only when `HEAVEN_ALLOW_LOCAL_ACTION_FALLBACK=1`)
 
 use std::collections::HashMap;
 use std::env;
@@ -101,6 +101,10 @@ fn local_code_path_for_action(action: &str) -> Option<&'static [&'static str]> {
         "../../lit-actions/features/music/playlist-v1.js",
         "lit-actions/features/music/playlist-v1.js",
     ];
+    const CONTENT_REGISTER_MEGAETH_V1: [&str; 2] = [
+        "../../lit-actions/features/music/content-register-megaeth-v1.js",
+        "lit-actions/features/music/content-register-megaeth-v1.js",
+    ];
     const CONTENT_REGISTER_V2: [&str; 2] = [
         "../../lit-actions/features/music/content-register-v2.js",
         "lit-actions/features/music/content-register-v2.js",
@@ -111,10 +115,36 @@ fn local_code_path_for_action(action: &str) -> Option<&'static [&'static str]> {
     ];
     match action {
         "playlistV1" => Some(&PLAYLIST_V1),
+        "contentRegisterMegaethV1" => Some(&CONTENT_REGISTER_MEGAETH_V1),
         "contentRegisterV2" => Some(&CONTENT_REGISTER_V2),
         "contentAccessV1" => Some(&CONTENT_ACCESS_V1),
         _ => None,
     }
+}
+
+fn load_local_action_code(action: &str) -> Option<ResolvedAction> {
+    let paths = local_code_path_for_action(action)?;
+    for rel in paths {
+        let path = PathBuf::from(rel);
+        if let Ok(code) = fs::read_to_string(&path) {
+            if !code.trim().is_empty() {
+                return Some(ResolvedAction::Code {
+                    code,
+                    source: format!("local:{rel}"),
+                });
+            }
+        }
+    }
+    None
+}
+
+/// Resolve an action directly from the local repository JS file paths.
+///
+/// This bypasses CID maps and is intended for explicit emergency recovery paths
+/// when a deployed CID is known-bad.
+pub fn resolve_local_action(action: &str) -> Result<ResolvedAction, String> {
+    load_local_action_code(action)
+        .ok_or_else(|| format!("No local JS file available for action '{action}'"))
 }
 
 fn allow_local_fallback() -> bool {
@@ -154,32 +184,7 @@ pub fn resolve_action(
         }
     }
 
-    // 2. Canonical CID map (from JSON)
-    if let Some(cid) = action_cid(network, action) {
-        return Ok(ResolvedAction::Ipfs {
-            cid,
-            source: format!("cid-map:{network}:{action}"),
-        });
-    }
-
-    // 3. Local JS file fallback (only when allowed)
-    if allow_local_fallback() {
-        if let Some(paths) = local_code_path_for_action(action) {
-            for rel in paths {
-                let path = PathBuf::from(rel);
-                if let Ok(code) = fs::read_to_string(&path) {
-                    if !code.trim().is_empty() {
-                        return Ok(ResolvedAction::Code {
-                            code,
-                            source: format!("local:{rel}"),
-                        });
-                    }
-                }
-            }
-        }
-    }
-
-    // 4. Explicit code path env var (always honoured, even without fallback flag)
+    // 2. Explicit code path env var
     if let Some(key) = env_code_path_key {
         if let Ok(v) = env::var(key) {
             let code_path = v.trim().to_string();
@@ -196,37 +201,49 @@ pub fn resolve_action(
         }
     }
 
+    // 3. Canonical CID map (from JSON)
+    if let Some(cid) = action_cid(network, action) {
+        return Ok(ResolvedAction::Ipfs {
+            cid,
+            source: format!("cid-map:{network}:{action}"),
+        });
+    }
+
+    // 4. Local JS file fallback (only when allowed)
+    if allow_local_fallback() {
+        if let Some(action) = load_local_action_code(action) {
+            return Ok(action);
+        }
+    }
+
     Err(format!(
         "No CID available for action '{action}' on network '{network}'. \
          Deploy it or set an env override."
     ))
 }
 
-/// Resolve a content-register action with v2→v1 fallback.
-/// Only falls back when v2 is "not found" (no CID configured), not on read errors.
+/// Resolve the content-register action.
+///
+/// We require `contentRegisterMegaethV1` so content registration always includes
+/// track metadata registration (title/artist/album) for cross-device share UX.
+/// Legacy `contentRegisterV2` / `contentRegisterV1` fallback is intentionally disabled.
 pub fn resolve_content_register(network: &str) -> Result<ResolvedAction, String> {
-    let v2_result = resolve_action(
+    let megaeth_v1_result = resolve_action(
         network,
-        "contentRegisterV2",
-        &[
-            "HEAVEN_CONTENT_REGISTER_V2_CID",
-            "HEAVEN_CONTENT_REGISTER_V1_CID",
-        ],
-        Some("HEAVEN_CONTENT_REGISTER_V2_CODE_PATH"),
+        "contentRegisterMegaethV1",
+        &["HEAVEN_CONTENT_REGISTER_MEGAETH_V1_CID"],
+        Some("HEAVEN_CONTENT_REGISTER_MEGAETH_V1_CODE_PATH"),
     );
-
-    match v2_result {
+    match megaeth_v1_result {
         Ok(action) => Ok(action),
-        Err(ref e) if e.contains("No CID available") => {
-            // v2 not configured — fall back to v1
-            resolve_action(
-                network,
-                "contentRegisterV1",
-                &["HEAVEN_CONTENT_REGISTER_V1_CID"],
-                None,
-            )
-        }
-        Err(e) => Err(e), // Real error (read failure, etc.) — don't mask it
+        Err(ref e) if e.contains("No CID available") => Err(
+            "contentRegisterMegaethV1 is required for desktop content registration; \
+                 legacy contentRegisterV2/contentRegisterV1 fallback is disabled. \
+                 Configure HEAVEN_CONTENT_REGISTER_MEGAETH_V1_CID or \
+                 HEAVEN_CONTENT_REGISTER_MEGAETH_V1_CODE_PATH."
+                .to_string(),
+        ),
+        Err(e) => Err(e),
     }
 }
 

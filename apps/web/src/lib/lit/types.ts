@@ -36,6 +36,16 @@ export interface LitDelegationAuthSig {
  * Auth result from callback flow.
  */
 export interface AuthResult {
+  version?: number
+  provider?: string
+  walletAddress?: `0x${string}` | string
+  state?: string
+  tempoCredentialId?: string
+  tempoPublicKey?: string
+  tempoRpId?: string
+  tempoKeyManagerUrl?: string
+  tempoFeePayerUrl?: string
+  tempoChainId?: number
   pkpPublicKey?: string
   pkpAddress?: string
   pkpTokenId?: string
@@ -53,6 +63,15 @@ export interface AuthResult {
  * Persisted auth from callback flow.
  */
 export interface PersistedAuth {
+  version?: number
+  provider?: string
+  walletAddress?: `0x${string}` | string
+  tempoCredentialId?: string
+  tempoPublicKey?: string
+  tempoRpId?: string
+  tempoKeyManagerUrl?: string
+  tempoFeePayerUrl?: string
+  tempoChainId?: number
   pkpAddress?: string
   pkpPublicKey?: string
   pkpTokenId?: string

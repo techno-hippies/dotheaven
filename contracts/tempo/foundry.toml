@@ -1,0 +1,11 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc = "0.8.25"
+optimizer = true
+optimizer_runs = 1
+via_ir = true
+
+[rpc_endpoints]
+tempo_moderato = "https://rpc.moderato.tempo.xyz"

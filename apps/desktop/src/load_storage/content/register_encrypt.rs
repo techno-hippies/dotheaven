@@ -1,5 +1,25 @@
 use super::*;
 
+fn should_retry_content_register_with_local(payload: &Value, action_source: &str) -> bool {
+    if !action_source.starts_with("cid-map:") || !action_source.contains("contentRegisterMegaethV1")
+    {
+        return false;
+    }
+    if payload
+        .get("success")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return false;
+    }
+    let Some(err) = payload.get("error").and_then(Value::as_str) else {
+        return false;
+    };
+    let lower = err.to_ascii_lowercase();
+    (lower.contains("[error]") && lower.contains("not valid json"))
+        || (lower.contains("unexpected token") && lower.contains("json"))
+}
+
 impl LoadStorageService {
     pub(super) fn register_content(
         &mut self,
@@ -14,6 +34,11 @@ impl LoadStorageService {
             .pkp_public_key
             .as_deref()
             .ok_or("Missing PKP public key in auth")?;
+        let user_public_key = user_public_key
+            .trim()
+            .strip_prefix("0x")
+            .or_else(|| user_public_key.trim().strip_prefix("0X"))
+            .unwrap_or(user_public_key.trim());
         let user_address = auth
             .pkp_address
             .as_deref()
@@ -73,33 +98,63 @@ impl LoadStorageService {
             "nonce": nonce,
         });
 
-        let (execute_result, action_source): (lit_rust_sdk::ExecuteJsResponse, String) =
-            match &action {
-                ResolvedAction::Ipfs { cid, source } => self
-                    .lit_mut()?
-                    .execute_js_with_auth_context(
-                        None,
-                        Some(cid.clone()),
-                        Some(params),
-                        &sponsor_auth_context,
-                    )
-                    .map(|res| (res, source.clone())),
-                ResolvedAction::Code { code, source } => self
-                    .lit_mut()?
-                    .execute_js_with_auth_context(
-                        Some(code.clone()),
-                        None,
-                        Some(params),
-                        &sponsor_auth_context,
-                    )
-                    .map(|res| (res, source.clone())),
-            }
-            .map_err(|e| format!("Content registration executeJs failed: {e}"))?;
+        let mut execute_register_action =
+            |resolved_action: &ResolvedAction| -> Result<(Value, String), String> {
+                let (execute_result, action_source): (lit_rust_sdk::ExecuteJsResponse, String) =
+                    match resolved_action {
+                        ResolvedAction::Ipfs { cid, source } => self
+                            .lit_mut()?
+                            .execute_js_with_auth_context(
+                                None,
+                                Some(cid.clone()),
+                                Some(params.clone()),
+                                &sponsor_auth_context,
+                            )
+                            .map(|res| (res, source.clone())),
+                        ResolvedAction::Code { code, source } => self
+                            .lit_mut()?
+                            .execute_js_with_auth_context(
+                                Some(code.clone()),
+                                None,
+                                Some(params.clone()),
+                                &sponsor_auth_context,
+                            )
+                            .map(|res| (res, source.clone())),
+                    }
+                    .map_err(|e| format!("Content registration executeJs failed: {e}"))?;
 
-        let mut payload = normalize_execute_response(execute_result.response)?;
-        if let Value::Object(obj) = &mut payload {
-            obj.entry("actionSource".to_string())
-                .or_insert(Value::String(action_source.clone()));
+                let mut payload = normalize_execute_response(execute_result.response)?;
+                if let Value::Object(obj) = &mut payload {
+                    obj.entry("actionSource".to_string())
+                        .or_insert(Value::String(action_source.clone()));
+                }
+                Ok((payload, action_source))
+            };
+
+        let (mut payload, mut action_source) = execute_register_action(&action)?;
+        let mut local_retry_error: Option<String> = None;
+        if should_retry_content_register_with_local(&payload, &action_source) {
+            match registry::resolve_local_action("contentRegisterMegaethV1") {
+                Ok(local_action) => {
+                    log::warn!(
+                        "[ContentRegister] CID action returned JSON parse error; retrying with local action: originalSource={} localSource={}",
+                        action_source,
+                        local_action.source(),
+                    );
+                    match execute_register_action(&local_action) {
+                        Ok((retry_payload, retry_source)) => {
+                            payload = retry_payload;
+                            action_source = retry_source;
+                        }
+                        Err(err) => {
+                            local_retry_error = Some(err);
+                        }
+                    }
+                }
+                Err(err) => {
+                    local_retry_error = Some(err);
+                }
+            }
         }
         let success = payload
             .get("success")
@@ -126,8 +181,11 @@ impl LoadStorageService {
                 .get("txHash")
                 .and_then(Value::as_str)
                 .unwrap_or("n/a");
+            let local_retry_suffix = local_retry_error
+                .map(|err| format!(", localRetryError={err}"))
+                .unwrap_or_default();
             return Err(format!(
-                "Content register failed: {msg} (version={version}, contentId={content_id}, txHash={tx_hash}, mirrorTxHash={mirror_tx}, actionSource={action_source})"
+                "Content register failed: {msg} (version={version}, contentId={content_id}, txHash={tx_hash}, mirrorTxHash={mirror_tx}, actionSource={action_source}{local_retry_suffix})"
             ));
         }
 

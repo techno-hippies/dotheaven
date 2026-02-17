@@ -131,10 +131,18 @@ impl LibraryView {
                 return;
             }
         };
-        let owner_address = auth.pkp_address.clone().unwrap_or_default().to_lowercase();
+        if let Err(err) = auth.require_lit_auth("Playlist sharing") {
+            self.playlist_share_modal_error = Some(err);
+            cx.notify();
+            return;
+        }
+        let owner_address = auth
+            .primary_wallet_address()
+            .map(|value| value.to_lowercase())
+            .unwrap_or_default();
         if owner_address.is_empty() {
             self.playlist_share_modal_error =
-                Some("PKP wallet is unavailable; sign in again.".to_string());
+                Some("Authenticated wallet is unavailable; sign in again.".to_string());
             cx.notify();
             return;
         }

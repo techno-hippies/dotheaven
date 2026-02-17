@@ -124,7 +124,7 @@ impl LibraryView {
             return;
         };
         let user_address = auth
-            .pkp_address
+            .primary_wallet_address()
             .as_deref()
             .map(str::to_string)
             .unwrap_or_else(|| "-".to_string());
@@ -163,8 +163,8 @@ impl LibraryView {
             match result {
                 Ok(ok) => {
                     log::info!(
-                        "[Scrobble] submitted: userOpHash={} sender={}",
-                        ok.user_op_hash,
+                        "[Scrobble] submitted: txHash={} sender={}",
+                        ok.tx_hash,
                         ok.sender
                     );
                     let _ = this.update(cx, |_this, cx| {
@@ -174,21 +174,22 @@ impl LibraryView {
                                 signal.bump();
                             },
                         );
-                        // One delayed bump helps with subgraph/indexing lag (covers, etc.) without
-                        // causing multiple UI refresh flickers.
-                        let delay_ms = 6_000_u64;
-                        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-                            smol::Timer::after(std::time::Duration::from_millis(delay_ms)).await;
-                            let _ = this.update(cx, |_this, cx| {
-                                log::info!("[Scrobble] refresh signal bump: delayed={}ms", delay_ms);
-                                cx.update_global::<crate::scrobble_refresh::ScrobbleRefreshSignal, _>(
-                                    |signal, _| {
-                                        signal.bump();
-                                    },
-                                );
-                            });
-                        })
-                        .detach();
+                        // Tempo confirmation can lag behind initial broadcast acceptance.
+                        // Schedule a few delayed bumps to catch post-broadcast confirmation.
+                        for delay_ms in [6_000_u64, 20_000_u64, 60_000_u64] {
+                            cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+                                smol::Timer::after(std::time::Duration::from_millis(delay_ms)).await;
+                                let _ = this.update(cx, |_this, cx| {
+                                    log::info!("[Scrobble] refresh signal bump: delayed={}ms", delay_ms);
+                                    cx.update_global::<crate::scrobble_refresh::ScrobbleRefreshSignal, _>(
+                                        |signal, _| {
+                                            signal.bump();
+                                        },
+                                    );
+                                });
+                            })
+                            .detach();
+                        }
                     });
                 }
                 Err(err) => {

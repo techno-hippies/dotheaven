@@ -5,18 +5,27 @@
  * 1. Callback flow - when ?callback=... param exists, handles auth and POSTs result back to localhost
  * 2. Web flow redirect - when no callback, redirects to main app (auth handled by AuthContext)
  *
- * Shows passkey sign-in/register + a single "Connect Wallet" button that auto-detects new vs returning.
+ * Shows Tempo passkey sign-in/register options.
  */
 
 import { Component, createSignal, onMount } from 'solid-js'
 import { AuthCard, type AuthStatus } from '../components/shell'
-import type { PKPInfo, AuthData } from '../lib/lit'
+import type { TempoAuthResult } from '../lib/tempo/auth'
+
+const TEMPO_SCROBBLE_SESSION_TTL_SEC = 7 * 24 * 60 * 60
+
+type TempoScrobbleSessionPayload = {
+  tempoSessionPrivateKey: `0x${string}`
+  tempoSessionAddress: `0x${string}`
+  tempoSessionExpiresAt: number
+  tempoSessionKeyAuthorization: `0x${string}`
+}
 
 export const AuthPage: Component = () => {
   const [status, setStatus] = createSignal<AuthStatus>('idle')
   const [error, setError] = createSignal<string | null>(null)
   const [authMode, setAuthMode] = createSignal<'signin' | 'register'>('signin')
-  const [authMethod, setAuthMethod] = createSignal<'passkey' | 'eoa'>('passkey')
+  const [authMethod, setAuthMethod] = createSignal<'passkey'>('passkey')
 
   // Parse auth query params (supports both hash and regular routing)
   const getAuthParams = () => {
@@ -30,9 +39,67 @@ export const AuthPage: Component = () => {
   const callbackUrl = getCallbackUrl()
   const isCallbackFlow = !!callbackUrl
   const callbackTransport = (authParams.get('transport') || '').toLowerCase()
+  const callbackState = authParams.get('state') || undefined
+  const tempoKeyManagerUrl =
+    authParams.get('tempoKeyManagerUrl') ||
+    import.meta.env.VITE_TEMPO_KEY_MANAGER_URL ||
+    'https://keys.tempo.xyz'
+  const tempoFeePayerUrl =
+    authParams.get('tempoFeePayerUrl') ||
+    import.meta.env.VITE_TEMPO_FEE_PAYER_URL ||
+    'https://sponsor.moderato.tempo.xyz'
+  const tempoChainIdRaw =
+    authParams.get('tempoChainId') ||
+    import.meta.env.VITE_TEMPO_CHAIN_ID ||
+    '42431'
+  const parsedTempoChainId = Number.parseInt(tempoChainIdRaw, 10)
+  const tempoChainId = Number.isFinite(parsedTempoChainId) ? parsedTempoChainId : 42431
+  const tempoRpId =
+    authParams.get('tempoRpId') ||
+    import.meta.env.VITE_TEMPO_RP_ID ||
+    window.location.hostname
   const initialMode = authParams.get('mode')
 
-  console.log('[AuthPage] callbackUrl:', callbackUrl, 'isCallbackFlow:', isCallbackFlow, 'transport:', callbackTransport)
+  const buildTempoScrobbleSession = async (
+    result: TempoAuthResult
+  ): Promise<TempoScrobbleSessionPayload> => {
+    if (!result.tempoCredentialId || !result.tempoPublicKey) {
+      throw new Error('Tempo credential data missing; cannot provision scrobble session key.')
+    }
+
+    const [viemTempo, viem] = await Promise.all([import('viem/tempo'), import('viem')])
+
+    const rootAccount = viemTempo.Account.fromWebAuthnP256(
+      {
+        id: result.tempoCredentialId,
+        publicKey: result.tempoPublicKey as `0x${string}`,
+      },
+      { rpId: result.tempoRpId }
+    )
+
+    const sessionPrivateKey = viemTempo.Secp256k1.randomPrivateKey() as `0x${string}`
+    const sessionAccount = viemTempo.Account.fromSecp256k1(sessionPrivateKey)
+    const sessionExpiresAt = Math.floor(Date.now() / 1000) + TEMPO_SCROBBLE_SESSION_TTL_SEC
+
+    const keyAuthorization = await rootAccount.signKeyAuthorization(
+      {
+        accessKeyAddress: sessionAccount.address,
+        keyType: sessionAccount.keyType,
+      },
+      { expiry: sessionExpiresAt }
+    )
+    const keyAuthorizationTuple = viemTempo.Account.z_KeyAuthorization.toTuple(keyAuthorization)
+    const keyAuthorizationRlp = viem.toRlp(keyAuthorizationTuple as any) as `0x${string}`
+
+    return {
+      tempoSessionPrivateKey: sessionPrivateKey,
+      tempoSessionAddress: sessionAccount.address,
+      tempoSessionExpiresAt: sessionExpiresAt,
+      tempoSessionKeyAuthorization: keyAuthorizationRlp,
+    }
+  }
+
+  console.log('[AuthPage] callback flow:', isCallbackFlow, 'transport:', callbackTransport)
 
   // Send auth result to callback transport:
   // - POST (desktop callback server)
@@ -73,66 +140,49 @@ export const AuthPage: Component = () => {
     }
   }
 
-  const handleAuthSuccess = async (
-    pkpInfo: PKPInfo,
-    authData: AuthData,
-    isNewUser: boolean,
-    eoaAddress?: `0x${string}`
-  ) => {
-    console.log('[AuthPage] handleAuthSuccess:', pkpInfo.ethAddress, 'isNewUser:', isNewUser)
-    console.log('[AuthPage] authData keys:', Object.keys(authData))
-    console.log('[AuthPage] authData full:', authData)
+  const handleTempoAuthSuccess = async (result: TempoAuthResult, isNewUser: boolean) => {
+    const scrobbleSession = await buildTempoScrobbleSession(result)
+
     const callbackPayload: Record<string, unknown> = {
-      pkpPublicKey: pkpInfo.publicKey,
-      pkpAddress: pkpInfo.ethAddress,
-      pkpTokenId: pkpInfo.tokenId,
-      authMethodType: authData.authMethodType,
-      authMethodId: authData.authMethodId,
-      accessToken: authData.accessToken,
+      version: 2,
+      provider: 'tempo-passkey',
+      walletAddress: result.walletAddress,
+      state: callbackState,
+      tempoCredentialId: result.tempoCredentialId,
+      tempoPublicKey: result.tempoPublicKey,
+      tempoRpId: result.tempoRpId,
+      tempoKeyManagerUrl: result.tempoKeyManagerUrl,
+      tempoFeePayerUrl: result.tempoFeePayerUrl,
+      tempoChainId: result.tempoChainId,
+      tempoSessionPrivateKey: scrobbleSession.tempoSessionPrivateKey,
+      tempoSessionAddress: scrobbleSession.tempoSessionAddress,
+      tempoSessionExpiresAt: scrobbleSession.tempoSessionExpiresAt,
+      tempoSessionKeyAuthorization: scrobbleSession.tempoSessionKeyAuthorization,
       isNewUser,
-      eoaAddress,
-    }
-
-    const includePreGeneratedDelegation = callbackTransport !== 'redirect'
-
-    if (includePreGeneratedDelegation) {
-      try {
-        // Pre-generate delegation auth materials while accessToken challenge is fresh.
-        // Native GPUI can later restore from these without needing a fresh WebAuthn challenge.
-        const { createPKPAuthContext } = await import('../lib/lit')
-        const authContext = await createPKPAuthContext(pkpInfo, authData)
-        if (authContext?.sessionKeyPair) {
-          callbackPayload.litSessionKeyPair = authContext.sessionKeyPair
-        }
-        if (typeof authContext?.authNeededCallback === 'function') {
-          const delegationAuthSig = await authContext.authNeededCallback()
-          if (delegationAuthSig) {
-            callbackPayload.litDelegationAuthSig = delegationAuthSig
-          }
-        }
-        console.log('[AuthPage] Prepared pre-generated Lit delegation auth material for callback')
-      } catch (e) {
-        console.warn('[AuthPage] Failed to pre-generate Lit delegation auth material; falling back to raw authData only:', e)
-      }
     }
 
     const sent = await sendCallback(callbackPayload)
-
     if (sent) {
       setStatus('success')
-      console.log('[AuthPage] SUCCESS - callback sent, page will NOT close (debug mode)')
-      // Temporarily disabled for debugging - uncomment when done:
-      // setTimeout(() => window.close(), 5000)
-    } else {
-      setError('Failed to send result to app')
-      setStatus('error')
+      return
     }
+    setError('Failed to send result to app')
+    setStatus('error')
   }
 
-  const handleAuthError = async (err: Error) => {
+  const handleAuthError = async (err: Error, provider: 'tempo-passkey') => {
     setError(err.message || 'Authentication failed')
     setStatus('error')
-    await sendCallback({ error: err.message || 'Authentication failed' })
+    await sendCallback({
+      version: 2,
+      provider,
+      state: callbackState,
+      tempoRpId,
+      tempoKeyManagerUrl,
+      tempoFeePayerUrl,
+      tempoChainId,
+      error: err.message || 'Authentication failed',
+    })
   }
 
   // Guard against double-calls
@@ -147,14 +197,18 @@ export const AuthPage: Component = () => {
     setError(null)
 
     try {
-      console.log('[AuthPage] Starting WebAuthn authenticate...')
-      const { authenticateWithWebAuthn } = await import('../lib/lit')
-      const result = await authenticateWithWebAuthn()
-      console.log('[AuthPage] WebAuthn result:', result.pkpInfo.ethAddress)
-      await handleAuthSuccess(result.pkpInfo, result.authData, false)
+      const { authenticateWithTempoPasskey } = await import('../lib/tempo/auth')
+      const result = await authenticateWithTempoPasskey({
+        mode: 'signin',
+        chainId: tempoChainId,
+        feePayerUrl: tempoFeePayerUrl,
+        keyManagerUrl: tempoKeyManagerUrl,
+        rpId: tempoRpId,
+      })
+      await handleTempoAuthSuccess(result, false)
     } catch (e: unknown) {
       console.error('[AuthPage] Sign in failed:', e)
-      await handleAuthError(e as Error)
+      await handleAuthError(e as Error, 'tempo-passkey')
     } finally {
       inFlight = false
     }
@@ -169,67 +223,25 @@ export const AuthPage: Component = () => {
     setError(null)
 
     try {
-      const { registerWithWebAuthn } = await import('../lib/lit')
-      const result = await registerWithWebAuthn()
-      await handleAuthSuccess(result.pkpInfo, result.authData, true)
+      const { authenticateWithTempoPasskey } = await import('../lib/tempo/auth')
+      const result = await authenticateWithTempoPasskey({
+        mode: 'register',
+        chainId: tempoChainId,
+        feePayerUrl: tempoFeePayerUrl,
+        keyManagerUrl: tempoKeyManagerUrl,
+        rpId: tempoRpId,
+      })
+      await handleTempoAuthSuccess(result, true)
     } catch (e: unknown) {
       console.error('[Auth] Registration failed:', e)
-      await handleAuthError(e as Error)
-    } finally {
-      inFlight = false
-    }
-  }
-
-  // Single "Connect Wallet" flow: try sign-in first, auto-register if no PKP found
-  const performConnectWallet = async () => {
-    if (inFlight) return
-    inFlight = true
-    setAuthMode('signin')
-    setAuthMethod('eoa')
-    setStatus('authenticating')
-    setError(null)
-
-    try {
-      const { authenticateWithEOA } = await import('../lib/lit')
-      const result = await authenticateWithEOA()
-      await handleAuthSuccess(result.pkpInfo, result.authData, false, result.eoaAddress)
-    } catch (e: unknown) {
-      const err = e as Error
-      const message = err?.message || String(e)
-      const shouldAutoRegister =
-        message.includes('No PKP found') ||
-        message.includes('missing required personal-sign scope') ||
-        message.includes('NodeAuthSigScopeTooLimited') ||
-        message.includes('required scope [2]') ||
-        message.includes('pkp is not authorized')
-
-      // Auto-register when wallet has no PKP yet or only legacy / under-scoped PKPs.
-      if (shouldAutoRegister) {
-        console.log('[Auth] Wallet needs PKP migration/registration, auto-registering...')
-        setAuthMode('register')
-        try {
-          const { registerWithEOA } = await import('../lib/lit')
-          const result = await registerWithEOA()
-          await handleAuthSuccess(result.pkpInfo, result.authData, true, result.eoaAddress)
-        } catch (regErr: unknown) {
-          console.error('[Auth] EOA registration failed:', regErr)
-          await handleAuthError(regErr as Error)
-        }
-      } else {
-        console.error('[Auth] EOA sign in failed:', e)
-        await handleAuthError(err)
-      }
+      await handleAuthError(e as Error, 'tempo-passkey')
     } finally {
       inFlight = false
     }
   }
 
   const handleRetry = () => {
-    if (authMethod() === 'eoa') {
-      performConnectWallet()
-    } else {
-      authMode() === 'register' ? performRegister() : performSignIn()
-    }
+    authMode() === 'register' ? performRegister() : performSignIn()
   }
 
   // Redirect to main app if this is not a callback flow.
@@ -248,8 +260,9 @@ export const AuthPage: Component = () => {
       console.log('[AuthPage] Auto-starting sign-in flow')
       queueMicrotask(() => performSignIn())
     } else if (initialMode === 'connect-wallet') {
-      console.log('[AuthPage] Auto-starting wallet connect flow')
-      queueMicrotask(() => performConnectWallet())
+      // Legacy alias from older clients; keep it mapped to passkey sign-in.
+      console.log('[AuthPage] Auto-starting sign-in flow (legacy connect-wallet mode)')
+      queueMicrotask(() => performSignIn())
     }
   })
 
@@ -272,7 +285,6 @@ export const AuthPage: Component = () => {
         tagline="Karaoke to learn a language, make friends, and date."
         onSignIn={performSignIn}
         onRegister={performRegister}
-        onConnectWallet={performConnectWallet}
         onRetry={handleRetry}
         onBack={() => setStatus('idle')}
       />

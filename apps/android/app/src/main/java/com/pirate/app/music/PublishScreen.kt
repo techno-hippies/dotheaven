@@ -130,8 +130,8 @@ fun PublishScreen(
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
 
-  // Auto-fill artist with heaven name (e.g. "alice.heaven"), user can change it
-  val defaultArtist = heavenName?.let { "$it.heaven" } ?: ""
+  // Auto-fill artist with primary name (e.g. "alice.heaven" or "alice.pirate"), user can change it.
+  val defaultArtist = heavenName ?: ""
 
   var step by remember { mutableStateOf(PublishStep.SONG) }
   var formData by remember { mutableStateOf(SongPublishService.SongFormData(artist = defaultArtist)) }
@@ -162,6 +162,17 @@ fun PublishScreen(
   }
 
   fun doPublish() {
+    fun buildErrorSummary(error: Throwable): String {
+      val parts = ArrayList<String>(4)
+      var cur: Throwable? = error
+      while (cur != null && parts.size < 4) {
+        val msg = cur.message?.trim().orEmpty()
+        if (msg.isNotEmpty()) parts.add(msg)
+        cur = cur.cause
+      }
+      return parts.distinct().joinToString(" | ").ifBlank { "Unknown error" }
+    }
+
     if (!isAuthenticated || !authState.hasLitAuthCredentials() || pkpPublicKey == null || pkpEthAddress == null) {
       onShowMessage("Please sign in first")
       return
@@ -191,7 +202,7 @@ fun PublishScreen(
           errorMessage = "Session expired. Please sign in again."
           onShowMessage("Publish paused: session expired. Please sign in again.")
         } else {
-          errorMessage = e.message ?: "Unknown error"
+          errorMessage = buildErrorSummary(e)
         }
         step = PublishStep.ERROR
       }
@@ -671,16 +682,18 @@ private fun SuccessStep(
 
     // Show cover art + song info
     if (result != null) {
-      val coverUrl = "https://ipfs.filebase.io/ipfs/${result.coverCid}"
-      coil.compose.AsyncImage(
-        model = coverUrl,
-        contentDescription = "Cover Art",
-        modifier = Modifier
-          .size(120.dp)
-          .clip(RoundedCornerShape(12.dp)),
-        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-      )
-      Spacer(modifier = Modifier.height(12.dp))
+      val coverUrl = CoverRef.resolveCoverUrl(result.coverCid, width = 240, height = 240, format = "webp", quality = 85)
+      if (coverUrl != null) {
+        coil.compose.AsyncImage(
+          model = coverUrl,
+          contentDescription = "Cover Art",
+          modifier = Modifier
+            .size(120.dp)
+            .clip(RoundedCornerShape(12.dp)),
+          contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+      }
       if (formData != null) {
         Text(formData.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Text(formData.artist, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)

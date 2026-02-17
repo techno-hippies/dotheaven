@@ -12,11 +12,6 @@ impl ChatView {
         self.publish_status_progress("chat.connect", "Connecting to XMTP...", cx);
         cx.notify();
 
-        // Grab persisted auth for PKP signing (needed if XMTP identity isn't registered yet).
-        let persisted_auth = cx
-            .try_global::<crate::auth::AuthState>()
-            .and_then(|auth| auth.persisted.clone());
-
         // Connect on a background thread to avoid blocking the UI.
         let xmtp = self.xmtp.clone();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
@@ -26,26 +21,7 @@ impl ChatView {
                 let address = address.clone();
                 move || {
                     let mut service = lock_xmtp(&xmtp);
-                    service.connect(&address, |sig_text| {
-                        let persisted = persisted_auth.as_ref().ok_or(
-                            "No persisted auth — cannot sign XMTP identity. Please log in via the web app first.".to_string(),
-                        )?;
-
-                        log::info!("[Chat] Initializing LitWalletService for XMTP signing...");
-                        let mut lit = LitWalletService::new()
-                            .map_err(|e| format!("LitWalletService::new: {e}"))?;
-                        lit.initialize_from_auth(persisted)
-                            .map_err(|e| format!("LitWallet init: {e}"))?;
-
-                        let message = std::str::from_utf8(sig_text)
-                            .map_err(|e| format!("XMTP signature_text is not valid UTF-8: {e}"))?
-                            .to_string();
-                        log::info!(
-                            "[Chat] PKP personal signing XMTP identity text ({} bytes)",
-                            message.len()
-                        );
-                        lit.pkp_personal_sign(&message)
-                    })
+                    service.connect(&address)
                 }
             })
             .join()

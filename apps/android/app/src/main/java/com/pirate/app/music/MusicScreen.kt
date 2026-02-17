@@ -78,12 +78,14 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
-import com.pirate.app.lit.LitRust
+import com.pirate.app.tempo.ContentKeyManager
+import com.pirate.app.tempo.EciesContentCrypto
 import com.pirate.app.music.ui.AddToPlaylistSheet
 import com.pirate.app.music.ui.CreatePlaylistSheet
 import com.pirate.app.music.ui.TrackItemRow
 import com.pirate.app.music.ui.TrackMenuSheet
 import com.pirate.app.onboarding.OnboardingRpcHelpers
+import com.pirate.app.profile.TempoNameRecordsApi
 import com.pirate.app.player.PlayerController
 import com.pirate.app.theme.PiratePalette
 import com.pirate.app.ui.PirateMobileHeader
@@ -115,6 +117,7 @@ private val NEW_RELEASES = listOf(
   AlbumCardModel(title = "Pulse Drive", artist = "Hyper Flux"),
   AlbumCardModel(title = "Neon Rain", artist = "Drift Wave"),
 )
+private const val HOME_NEW_RELEASES_MAX = 12
 
 private val TOP_ARTISTS = listOf(
   "Luna Sky",
@@ -122,6 +125,26 @@ private val TOP_ARTISTS = listOf(
   "Ocean Skin",
   "Sunset Crew",
 )
+
+private fun mergedNewReleases(
+  recentPublished: List<AlbumCardModel>,
+): List<AlbumCardModel> {
+  if (recentPublished.isEmpty()) return NEW_RELEASES
+
+  val out = ArrayList<AlbumCardModel>(recentPublished.size + NEW_RELEASES.size)
+  val seen = LinkedHashSet<String>()
+
+  fun add(item: AlbumCardModel) {
+    val key = "${item.title.trim().lowercase()}|${item.artist.trim().lowercase()}"
+    if (key == "|") return
+    if (!seen.add(key)) return
+    out.add(item)
+  }
+
+  for (item in recentPublished) add(item)
+  for (item in NEW_RELEASES) add(item)
+  return out.take(HOME_NEW_RELEASES_MAX)
+}
 
 private const val IPFS_GATEWAY = "https://heaven.myfilebase.com/ipfs/"
 private const val TAG_SHARED = "MusicShared"
@@ -189,9 +212,6 @@ private fun saveSeenSharedItemIds(
 @Composable
 fun MusicScreen(
   player: PlayerController,
-  litNetwork: String,
-  litRpcUrl: String,
-  pkpPublicKey: String?,
   ownerEthAddress: String?,
   isAuthenticated: Boolean,
   onShowMessage: (String) -> Unit,
@@ -206,6 +226,7 @@ fun MusicScreen(
 
   var view by rememberSaveable { mutableStateOf(MusicView.Home) }
   var searchQuery by rememberSaveable { mutableStateOf("") }
+  var recentPublishedReleases by remember { mutableStateOf<List<AlbumCardModel>>(emptyList()) }
 
   val permission = if (Build.VERSION.SDK_INT >= 33) {
     Manifest.permission.READ_MEDIA_AUDIO
@@ -336,45 +357,47 @@ fun MusicScreen(
   }
 
   suspend fun decryptSharedAudioToCache(t: SharedCloudTrack): CachedSharedAudio = withContext(Dispatchers.IO) {
-    if (pkpPublicKey.isNullOrBlank()) {
-      throw IllegalStateException("Sign in to decrypt")
-    }
+    val contentKey = ContentKeyManager.load(context)
+      ?: throw IllegalStateException("No content encryption key — upload a track first to generate one")
 
+    val wrappedKey = ContentKeyManager.loadWrappedKey(context, t.contentId)
+      ?: throw IllegalStateException("No wrapped key for contentId ${t.contentId}")
+
+    // Fetch encrypted blob from Load gateway
+    val gatewayUrl = "${LoadTurboConfig.DEFAULT_GATEWAY_URL}/${t.pieceCid}"
+    val request = okhttp3.Request.Builder().url(gatewayUrl).get().build()
+    val client = okhttp3.OkHttpClient.Builder()
+      .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+      .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+      .build()
+    val response = client.newCall(request).execute()
+    if (!response.isSuccessful) throw RuntimeException("Fetch failed: ${response.code}")
+    val blob = response.body?.bytes() ?: throw RuntimeException("Empty response body")
+
+    // Parse blob: [iv (12 bytes)][aes ciphertext]
+    if (blob.size < 13) throw RuntimeException("Encrypted blob too small: ${blob.size} bytes")
+    val iv = blob.copyOfRange(0, 12)
+    val ciphertext = blob.copyOfRange(12, blob.size)
+
+    // ECIES decrypt wrapped AES key
+    val aesKey = EciesContentCrypto.eciesDecrypt(contentKey.privateKey, wrappedKey)
+
+    // AES-GCM decrypt file
+    val audio = EciesContentCrypto.decryptFile(aesKey, iv, ciphertext)
+    aesKey.fill(0)
+
+    // Write to cache
+    val dir = File(context.cacheDir, "heaven_cloud").also { it.mkdirs() }
     val safe = t.contentId.removePrefix("0x").trim().lowercase()
-    if (safe.isBlank()) {
-      throw IllegalStateException("Invalid contentId")
-    }
-
-    val dir = File(context.cacheDir, "heaven_cloud")
-    if (!dir.exists()) dir.mkdirs()
-
-    val params =
-      JSONObject()
-        .put("datasetOwner", t.datasetOwner)
-        .put("pieceCid", t.pieceCid)
-        .put("contentId", t.contentId)
-        .put("userPkpPublicKey", pkpPublicKey)
-        .put("contentDecryptCid", ContentCryptoConfig.DEFAULT_CONTENT_DECRYPT_V1_CID)
-        .put("algo", t.algo)
-        .put("network", "mainnet")
-
-    val result =
-      LitRust.fetchAndDecryptContent(
-        network = litNetwork,
-        rpcUrl = litRpcUrl,
-        paramsJson = params.toString(),
-      )
-
-    val realExt = mimeToExt(result.mimeType)
-    val outFile = File(dir, "content_${safe}.$realExt")
-    val audio = Base64.decode(result.audioBase64, Base64.DEFAULT)
-    outFile.writeBytes(audio)
+    val ext = if (t.title.contains(".")) t.title.substringAfterLast('.') else "mp3"
+    val cacheFile = File(dir, "content_${safe}.${ext}")
+    cacheFile.writeBytes(audio)
 
     CachedSharedAudio(
-      file = outFile,
-      uri = Uri.fromFile(outFile).toString(),
-      filename = outFile.name,
-      mimeType = result.mimeType,
+      file = cacheFile,
+      uri = Uri.fromFile(cacheFile).toString(),
+      filename = cacheFile.name,
+      mimeType = extToMime(ext),
     )
   }
 
@@ -410,7 +433,7 @@ fun MusicScreen(
           if (t.pieceCid.isBlank()) {
             throw IllegalStateException("missing pieceCid")
           }
-          if (!isAuthenticated || pkpPublicKey.isNullOrBlank()) {
+          if (!isAuthenticated) {
             throw IllegalStateException("Sign in to download")
           }
           decryptSharedAudioToCache(t)
@@ -688,7 +711,7 @@ fun MusicScreen(
         return
       }
 
-      if (!isAuthenticated || pkpPublicKey.isNullOrBlank()) {
+      if (!isAuthenticated) {
         onShowMessage("Sign in to play")
         return
       }
@@ -783,6 +806,16 @@ fun MusicScreen(
     loadShared(force = false)
   }
 
+  LaunchedEffect(view) {
+    if (view != MusicView.Home) return@LaunchedEffect
+    recentPublishedReleases =
+      withContext(Dispatchers.IO) {
+        RecentlyPublishedSongsStore
+          .load(context)
+          .map { AlbumCardModel(title = it.title, artist = it.artist) }
+      }
+  }
+
   LaunchedEffect(view, sharedSelectedPlaylist) {
     if (view != MusicView.SharedPlaylistDetail) return@LaunchedEffect
     val share = sharedSelectedPlaylist ?: return@LaunchedEffect
@@ -809,13 +842,18 @@ fun MusicScreen(
     for (owner in owners) {
       if (sharedOwnerLabels.containsKey(owner)) continue
       sharedOwnerLabels[owner] = shortAddr(owner)
-      val label =
-        runCatching { withContext(Dispatchers.IO) { OnboardingRpcHelpers.getPrimaryName(owner) } }
+      val handle =
+        runCatching {
+          withContext(Dispatchers.IO) {
+            TempoNameRecordsApi.getPrimaryName(owner)
+              ?: OnboardingRpcHelpers.getPrimaryName(owner)?.trim()?.takeIf { it.isNotBlank() }?.let { "$it.heaven" }
+          }
+        }
           .getOrNull()
           ?.trim()
           .orEmpty()
-      if (label.isNotBlank()) {
-        sharedOwnerLabels[owner] = "$label.heaven"
+      if (handle.isNotBlank()) {
+        sharedOwnerLabels[owner] = handle
       }
     }
   }
@@ -868,6 +906,7 @@ fun MusicScreen(
           sharedUnreadCount = sharedUnreadCount,
           playlistCount = displayPlaylists.size,
           playlists = displayPlaylists,
+          newReleases = mergedNewReleases(recentPublishedReleases),
           onNavigateLibrary = { view = MusicView.Library },
           onNavigateShared = { view = MusicView.Shared },
           onNavigatePlaylists = { view = MusicView.Playlists },
@@ -1182,7 +1221,7 @@ fun MusicScreen(
         onShowMessage("Upload already in progress")
         return@TrackMenuSheet
       }
-      if (!isAuthenticated || pkpPublicKey.isNullOrBlank() || ownerEthAddress.isNullOrBlank()) {
+      if (!isAuthenticated || ownerEthAddress.isNullOrBlank()) {
         onShowMessage("Sign in to upload")
         return@TrackMenuSheet
       }
@@ -1192,11 +1231,8 @@ fun MusicScreen(
         onShowMessage("Uploading...")
         val result =
           runCatching {
-            TrackUploadService.uploadAndRegisterEncrypted(
+            TrackUploadService.uploadEncrypted(
               context = context,
-              litNetwork = litNetwork,
-              litRpcUrl = litRpcUrl,
-              userPkpPublicKey = pkpPublicKey,
               ownerEthAddress = ownerEthAddress,
               track = t,
             )
@@ -1221,11 +1257,7 @@ fun MusicScreen(
           tracks = next
           MusicLibrary.saveCachedTracks(context, next)
 
-          if (ok.register.success) {
-            onShowMessage("Uploaded.")
-          } else {
-            onShowMessage("Uploaded, but on-chain register failed: ${ok.register.error ?: "unknown error"}")
-          }
+          onShowMessage("Uploaded.")
         }
       }
     },
@@ -1234,7 +1266,7 @@ fun MusicScreen(
         onShowMessage("Upload already in progress")
         return@TrackMenuSheet
       }
-      if (!isAuthenticated || pkpPublicKey.isNullOrBlank() || ownerEthAddress.isNullOrBlank()) {
+      if (!isAuthenticated || ownerEthAddress.isNullOrBlank()) {
         onShowMessage("Sign in to save forever")
         return@TrackMenuSheet
       }
@@ -1257,11 +1289,8 @@ fun MusicScreen(
         onShowMessage("Saving Forever...")
         val result =
           runCatching {
-            TrackUploadService.uploadAndRegisterEncrypted(
+            TrackUploadService.uploadEncrypted(
               context = context,
-              litNetwork = litNetwork,
-              litRpcUrl = litRpcUrl,
-              userPkpPublicKey = pkpPublicKey,
               ownerEthAddress = ownerEthAddress,
               track = t,
             )
@@ -1284,17 +1313,13 @@ fun MusicScreen(
                     algo = ok.algo,
                   )
 
-                if (ok.register.success) base.copy(savedForever = true) else base
+                base.copy(savedForever = true)
               }
             }
           tracks = next
           MusicLibrary.saveCachedTracks(context, next)
 
-          if (ok.register.success) {
-            onShowMessage("Upload complete and saved forever.")
-          } else {
-            onShowMessage("Upload complete, but on-chain register failed: ${ok.register.error ?: "unknown error"}")
-          }
+          onShowMessage("Upload complete and saved forever.")
         }
       }
     },
@@ -1307,35 +1332,9 @@ fun MusicScreen(
     onGoToArtist = { onShowMessage("Artist view coming soon") },
   )
 
-  CreatePlaylistSheet(
-    open = createPlaylistOpen,
-    isAuthenticated = isAuthenticated,
-    ownerEthAddress = ownerEthAddress,
-    pkpPublicKey = pkpPublicKey,
-    litNetwork = litNetwork,
-    litRpcUrl = litRpcUrl,
-    onClose = { createPlaylistOpen = false },
-    onShowMessage = onShowMessage,
-    onSuccess = { _, _ -> scope.launch { loadPlaylists() } },
-  )
-
-  AddToPlaylistSheet(
-    open = addToPlaylistOpen,
-    track = selectedTrack,
-    isAuthenticated = isAuthenticated,
-    ownerEthAddress = ownerEthAddress,
-    pkpPublicKey = pkpPublicKey,
-    litNetwork = litNetwork,
-    litRpcUrl = litRpcUrl,
-    onClose = { addToPlaylistOpen = false },
-    onShowMessage = onShowMessage,
-    onSuccess = { _, _ ->
-      scope.launch {
-        loadPlaylists()
-        view = MusicView.Playlists
-      }
-    },
-  )
+  // TODO: Playlist sheets need Tempo migration (currently still use PlaylistV1LitAction)
+  // CreatePlaylistSheet(...)
+  // AddToPlaylistSheet(...)
 }
 
 @Composable
@@ -1345,6 +1344,7 @@ private fun MusicHomeView(
   sharedUnreadCount: Int,
   playlistCount: Int,
   playlists: List<PlaylistDisplayItem>,
+  newReleases: List<AlbumCardModel>,
   onNavigateLibrary: () -> Unit,
   onNavigateShared: () -> Unit,
   onNavigatePlaylists: () -> Unit,
@@ -1416,7 +1416,7 @@ private fun MusicHomeView(
         contentPadding = PaddingValues(horizontal = 20.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
       ) {
-        items(NEW_RELEASES) { item ->
+        items(newReleases) { item ->
           AlbumCard(title = item.title, artist = item.artist)
         }
       }

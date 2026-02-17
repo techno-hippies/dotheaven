@@ -58,10 +58,7 @@ class ScarlettService(private val appContext: Context) {
    */
   suspend fun sendMessage(
     text: String,
-    wallet: String,
-    pkpPublicKey: String,
-    litNetwork: String,
-    litRpcUrl: String,
+    userAddress: String,
   ): Result<String> {
     if (text.isBlank()) return Result.failure(IllegalArgumentException("Empty message"))
 
@@ -77,13 +74,10 @@ class ScarlettService(private val appContext: Context) {
     _sending.value = true
 
     return try {
-      val token = getWorkerToken(
+      val auth = getWorkerAuthSession(
         appContext = appContext,
         workerUrl = CHAT_WORKER_URL,
-        wallet = wallet,
-        pkpPublicKey = pkpPublicKey,
-        litNetwork = litNetwork,
-        litRpcUrl = litRpcUrl,
+        userAddress = userAddress,
       )
 
       val history = _messages.value.takeLast(MAX_HISTORY).map { msg ->
@@ -94,7 +88,7 @@ class ScarlettService(private val appContext: Context) {
       val payload = JSONObject()
         .put("message", text.trim())
         .put("history", historyArray)
-        .put("activityWallet", wallet.lowercase())
+        .put("activityWallet", auth.wallet)
         .toString()
         .toRequestBody(JSON_MEDIA_TYPE)
 
@@ -102,7 +96,7 @@ class ScarlettService(private val appContext: Context) {
         .url("${CHAT_WORKER_URL}/chat/send")
         .post(payload)
         .header("Content-Type", "application/json")
-        .header("Authorization", "Bearer $token")
+        .header("Authorization", "Bearer ${auth.token}")
         .build()
 
       val responseText = withContext(Dispatchers.IO) {

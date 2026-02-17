@@ -69,7 +69,7 @@ object ProfileContractApi {
   private val languageLabels = LANGUAGE_OPTIONS.associate { it.code.lowercase() to it.label }
 
   val GENDER_OPTIONS = listOf(
-    ProfileEnumOption(0, "Unset"),
+    ProfileEnumOption(0, "Not specified"),
     ProfileEnumOption(1, "Woman"),
     ProfileEnumOption(2, "Man"),
     ProfileEnumOption(3, "Non-binary"),
@@ -79,13 +79,13 @@ object ProfileContractApi {
     ProfileEnumOption(7, "Other"),
   )
   val RELOCATE_OPTIONS = listOf(
-    ProfileEnumOption(0, "Unset"),
+    ProfileEnumOption(0, "Not specified"),
     ProfileEnumOption(1, "No"),
     ProfileEnumOption(2, "Maybe"),
     ProfileEnumOption(3, "Yes"),
   )
   val DEGREE_OPTIONS = listOf(
-    ProfileEnumOption(0, "Unset"),
+    ProfileEnumOption(0, "Not specified"),
     ProfileEnumOption(1, "No degree"),
     ProfileEnumOption(2, "High school"),
     ProfileEnumOption(3, "Associate"),
@@ -97,7 +97,7 @@ object ProfileContractApi {
     ProfileEnumOption(9, "Other"),
   )
   val FIELD_OPTIONS = listOf(
-    ProfileEnumOption(0, "Unset"),
+    ProfileEnumOption(0, "Not specified"),
     ProfileEnumOption(1, "Computer science"),
     ProfileEnumOption(2, "Engineering"),
     ProfileEnumOption(3, "Math / Stats"),
@@ -116,7 +116,7 @@ object ProfileContractApi {
     ProfileEnumOption(16, "Other"),
   )
   val PROFESSION_OPTIONS = listOf(
-    ProfileEnumOption(0, "Unset"),
+    ProfileEnumOption(0, "Not specified"),
     ProfileEnumOption(1, "Software engineer"),
     ProfileEnumOption(2, "Product"),
     ProfileEnumOption(3, "Design"),
@@ -129,7 +129,7 @@ object ProfileContractApi {
     ProfileEnumOption(10, "Other"),
   )
   val INDUSTRY_OPTIONS = listOf(
-    ProfileEnumOption(0, "Unset"),
+    ProfileEnumOption(0, "Not specified"),
     ProfileEnumOption(1, "Technology"),
     ProfileEnumOption(2, "Finance"),
     ProfileEnumOption(3, "Healthcare"),
@@ -142,7 +142,7 @@ object ProfileContractApi {
     ProfileEnumOption(10, "Other"),
   )
   val RELATIONSHIP_OPTIONS = listOf(
-    ProfileEnumOption(0, "Unset"),
+    ProfileEnumOption(0, "Not specified"),
     ProfileEnumOption(1, "Single"),
     ProfileEnumOption(2, "In a relationship"),
     ProfileEnumOption(3, "Married"),
@@ -152,7 +152,7 @@ object ProfileContractApi {
     ProfileEnumOption(7, "It's complicated"),
   )
   val SEXUALITY_OPTIONS = listOf(
-    ProfileEnumOption(0, "Unset"),
+    ProfileEnumOption(0, "Not specified"),
     ProfileEnumOption(1, "Straight"),
     ProfileEnumOption(2, "Gay"),
     ProfileEnumOption(3, "Lesbian"),
@@ -164,7 +164,7 @@ object ProfileContractApi {
     ProfileEnumOption(9, "Other"),
   )
   val ETHNICITY_OPTIONS = listOf(
-    ProfileEnumOption(0, "Unset"),
+    ProfileEnumOption(0, "Not specified"),
     ProfileEnumOption(1, "White"),
     ProfileEnumOption(2, "Black"),
     ProfileEnumOption(3, "East Asian"),
@@ -178,7 +178,7 @@ object ProfileContractApi {
     ProfileEnumOption(11, "Other"),
   )
   val DATING_STYLE_OPTIONS = listOf(
-    ProfileEnumOption(0, "Unset"),
+    ProfileEnumOption(0, "Not specified"),
     ProfileEnumOption(1, "Monogamous"),
     ProfileEnumOption(2, "Non-monogamous"),
     ProfileEnumOption(3, "Open relationship"),
@@ -186,39 +186,39 @@ object ProfileContractApi {
     ProfileEnumOption(5, "Other"),
   )
   val CHILDREN_OPTIONS = listOf(
-    ProfileEnumOption(0, "Unset"),
+    ProfileEnumOption(0, "Not specified"),
     ProfileEnumOption(1, "None"),
     ProfileEnumOption(2, "Has children"),
   )
   val WANTS_CHILDREN_OPTIONS = listOf(
-    ProfileEnumOption(0, "Unset"),
+    ProfileEnumOption(0, "Not specified"),
     ProfileEnumOption(1, "No"),
     ProfileEnumOption(2, "Yes"),
     ProfileEnumOption(3, "Open to it"),
     ProfileEnumOption(4, "Unsure"),
   )
   val DRINKING_OPTIONS = listOf(
-    ProfileEnumOption(0, "Unset"),
+    ProfileEnumOption(0, "Not specified"),
     ProfileEnumOption(1, "Never"),
     ProfileEnumOption(2, "Rarely"),
     ProfileEnumOption(3, "Socially"),
     ProfileEnumOption(4, "Often"),
   )
   val SMOKING_OPTIONS = listOf(
-    ProfileEnumOption(0, "Unset"),
+    ProfileEnumOption(0, "Not specified"),
     ProfileEnumOption(1, "No"),
     ProfileEnumOption(2, "Socially"),
     ProfileEnumOption(3, "Yes"),
     ProfileEnumOption(4, "Vape"),
   )
   val DRUGS_OPTIONS = listOf(
-    ProfileEnumOption(0, "Unset"),
+    ProfileEnumOption(0, "Not specified"),
     ProfileEnumOption(1, "Never"),
     ProfileEnumOption(2, "Sometimes"),
     ProfileEnumOption(3, "Often"),
   )
   val LOOKING_FOR_OPTIONS = listOf(
-    ProfileEnumOption(0, "Unset"),
+    ProfileEnumOption(0, "Not specified"),
     ProfileEnumOption(1, "Friendship"),
     ProfileEnumOption(2, "Casual"),
     ProfileEnumOption(3, "Serious"),
@@ -228,7 +228,7 @@ object ProfileContractApi {
     ProfileEnumOption(7, "Other"),
   )
   val RELIGION_OPTIONS = listOf(
-    ProfileEnumOption(0, "Unset"),
+    ProfileEnumOption(0, "Not specified"),
     ProfileEnumOption(1, "Agnostic"),
     ProfileEnumOption(2, "Atheist"),
     ProfileEnumOption(3, "Buddhist"),
@@ -241,14 +241,14 @@ object ProfileContractApi {
     ProfileEnumOption(10, "Other"),
   )
   val PETS_OPTIONS = listOf(
-    ProfileEnumOption(0, "Unset"),
+    ProfileEnumOption(0, "Not specified"),
     ProfileEnumOption(1, "No pets"),
     ProfileEnumOption(2, "Has pets"),
     ProfileEnumOption(3, "Wants pets"),
     ProfileEnumOption(4, "Allergic"),
   )
   val DIET_OPTIONS = listOf(
-    ProfileEnumOption(0, "Unset"),
+    ProfileEnumOption(0, "Not specified"),
     ProfileEnumOption(1, "Omnivore"),
     ProfileEnumOption(2, "Vegetarian"),
     ProfileEnumOption(3, "Vegan"),
@@ -398,7 +398,7 @@ object ProfileContractApi {
     3 -> "B1"
     2 -> "A2"
     1 -> "A1"
-    else -> "Unset"
+    else -> "Not specified"
   }
 
   fun selectedFriendsLabels(mask: Int): List<String> {

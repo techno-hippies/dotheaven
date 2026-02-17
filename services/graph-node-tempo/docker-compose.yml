@@ -1,0 +1,55 @@
+services:
+  rpc-shim:
+    image: oven/bun:1.2
+    restart: unless-stopped
+    environment:
+      TEMPO_RPC_URL: ${TEMPO_RPC_URL}
+      RPC_SHIM_PORT: "8547"
+    command: ["bun", "/app/rpc-shim.ts"]
+    volumes:
+      - ./rpc-shim.ts:/app/rpc-shim.ts:ro
+
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  ipfs:
+    image: ipfs/kubo:v0.26.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5001:5001"
+    volumes:
+      - ipfs-data:/data/ipfs
+
+  graph-node:
+    image: graphprotocol/graph-node:latest
+    restart: unless-stopped
+    depends_on:
+      - rpc-shim
+      - postgres
+      - ipfs
+    ports:
+      - "8000:8000"
+      - "127.0.0.1:8001:8001"
+      - "127.0.0.1:8020:8020"
+      - "127.0.0.1:8030:8030"
+      - "127.0.0.1:8040:8040"
+    environment:
+      postgres_host: postgres
+      postgres_user: ${POSTGRES_USER}
+      postgres_pass: ${POSTGRES_PASSWORD}
+      postgres_db: ${POSTGRES_DB}
+      ipfs: "ipfs:5001"
+      ethereum: "moderato:http://rpc-shim:8547"
+      GRAPH_LOG: info
+
+volumes:
+  postgres-data:
+  ipfs-data:

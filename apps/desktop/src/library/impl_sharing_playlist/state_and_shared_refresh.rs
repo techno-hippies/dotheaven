@@ -42,7 +42,7 @@ fn parse_i64_field(value: Option<&serde_json::Value>) -> Option<i64> {
 impl LibraryView {
     pub(in crate::library) fn refresh_uploaded_index_from_auth(&mut self) {
         let owner = auth::load_from_disk()
-            .and_then(|a| a.pkp_address)
+            .and_then(|a| a.primary_wallet_address().map(|value| value.to_string()))
             .unwrap_or_default()
             .to_lowercase();
 
@@ -122,7 +122,7 @@ impl LibraryView {
 
     pub(in crate::library) fn refresh_shared_records_for_auth(&mut self, cx: &mut Context<Self>) {
         let grantee = auth::load_from_disk()
-            .and_then(|a| a.pkp_address)
+            .and_then(|a| a.primary_wallet_address().map(|value| value.to_string()))
             .unwrap_or_default()
             .to_lowercase();
 

@@ -214,6 +214,7 @@ impl LoadStorageService {
         if let Some(err) = &self.init_error {
             return Err(format!("Lit runtime unavailable: {err}"));
         }
+        auth.require_lit_auth("Load storage operations")?;
         self.lit_mut()?.initialize_from_auth(auth)?;
         Ok(())
     }

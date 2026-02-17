@@ -2,36 +2,14 @@ import { type ReadyScrobble, MEGAETH_RPC as MEGAETH_RPC_DEFAULT, SCROBBLE_V4 as 
 import { createPublicClient, http, type Hex } from 'viem'
 import type { PKPAuthContext, PKPInfo } from './lit'
 import { getLitClient } from './lit/client'
-import { TRACK_COVER_V4_CID } from './lit/action-cids'
+import { TRACK_COVER_V5_CID } from './lit/action-cids'
 import { readCoverBase64 } from './cover-image'
+import { uploadCoverToArweave } from './arweave-upload'
 import { setCoverCidNative } from './local-music'
-import { computeTrackIdForScrobble, type ScrobbleTrack } from './aa-client'
+import { computeTrackIdFromMeta } from './track-id'
 import { isOnchainCoverRef } from './heaven/cover-ref'
 
-type EncryptedKey = {
-  ciphertext: string
-  dataToEncryptHash: string
-  accessControlConditions: unknown[]
-}
-
-/** Encrypted Filebase covers key — bound to the track-cover-v4 action CID (update after redeploy). */
-const FILEBASE_COVERS_ENCRYPTED_KEY: EncryptedKey | null = {
-  ciphertext: 'opMNhXZ61OJ8dRKs8zCYQOiK7f5UJlfJPNJaso/2Bky6bku1ixYnrVZYzKZOrzQ1byVbe5HsmVjGyN1OzGvNz+p6rKg/VGYjaKWZ1PB6rAaGAe98dPHRbh+ITU9Eg6FoolrHU064jiaZtG8mmeWI2WU1MsyYQOS5gKqy+7+Zy2VrjqFASSqB4B9gICarqGbGN8khHoFTjirgnZyetJRHz4Iq/K6b8dNriTgL2dSMq2TMKYsl9ghAJRo5iE1olkpLPmdsCteNREtGIiJGZ42ufECUqM9DArkBAg==',
-  dataToEncryptHash: '1fb52374f1a4ec4d9f1a263b1355cedecbe3ef9d52425f76c222f2f5d9993d4f',
-  accessControlConditions: [{
-    conditionType: 'evmBasic',
-    contractAddress: '',
-    standardContractType: '',
-    chain: 'ethereum',
-    method: '',
-    parameters: [':currentActionIpfsId'],
-    returnValueTest: { comparator: '=', value: TRACK_COVER_V4_CID },
-  }],
-}
-
-type CoverImage = { base64: string; contentType: string }
-
-const MEGAETH_RPC = import.meta.env.VITE_AA_RPC_URL ?? MEGAETH_RPC_DEFAULT
+const MEGAETH_RPC = import.meta.env.VITE_MEGAETH_RPC_URL ?? MEGAETH_RPC_DEFAULT
 const SCROBBLE_V4 = SCROBBLE_V4_ADDR
 
 const scrobbleAbi = [{
@@ -73,19 +51,17 @@ export async function submitTrackCoverViaLit(
   pkpInfo: PKPInfo,
   authContext: PKPAuthContext,
 ): Promise<void> {
-  if (!TRACK_COVER_V4_CID) return
+  if (!TRACK_COVER_V5_CID) return
 
   const coverCid = isOnchainCoverRef(scrobble.coverCid) ? scrobble.coverCid : null
-  const track: ScrobbleTrack = {
+  const trackId = computeTrackIdFromMeta({
     artist: scrobble.artist,
     title: scrobble.title,
     album: scrobble.album,
     mbid: scrobble.mbid,
     ipId: scrobble.ipId,
-    playedAtSec: scrobble.playedAtSec,
-    duration: scrobble.durationMs ? Math.round(scrobble.durationMs / 1000) : 0,
-  }
-  const trackId = computeTrackIdForScrobble(track)
+  })
+  if (!trackId) return
   const trackIdKey = trackId.toLowerCase()
 
   let resolvedCoverCid = coverCid
@@ -103,16 +79,24 @@ export async function submitTrackCoverViaLit(
     }
   }
 
-  let coverImage: CoverImage | null = null
-
-  if (!resolvedCoverCid && scrobble.coverPath) {
-    coverImage = await readCoverBase64(scrobble.coverPath)
+  // v5 write policy: new writes should use ar:// refs.
+  // If local ref is missing or non-ar://, try pre-uploading local cover bytes to Arweave.
+  if (!resolvedCoverCid?.startsWith('ar://') && scrobble.coverPath) {
+    const coverImage = await readCoverBase64(scrobble.coverPath)
+    if (coverImage) {
+      try {
+        const uploaded = await uploadCoverToArweave(coverImage)
+        resolvedCoverCid = uploaded.ref
+      } catch (err) {
+        console.warn('[Cover] Arweave pre-upload failed:', err)
+      }
+    }
   }
 
-  if (!resolvedCoverCid && !coverImage) return
-
-  if (coverImage && !FILEBASE_COVERS_ENCRYPTED_KEY) {
-    console.warn('[Cover] Missing encrypted Filebase key — skipping cover upload')
+  if (!resolvedCoverCid?.startsWith('ar://')) {
+    if (scrobble.coverPath || resolvedCoverCid) {
+      console.warn('[Cover] Missing ar:// cover ref for v5 write — skipping cover write')
+    }
     return
   }
 
@@ -121,8 +105,7 @@ export async function submitTrackCoverViaLit(
 
   const tracks = [{
     trackId,
-    ...(resolvedCoverCid ? { coverCid: resolvedCoverCid } : {}),
-    ...(coverImage ? { coverImage } : {}),
+    coverCid: resolvedCoverCid,
   }]
 
   const jsParams: Record<string, unknown> = {
@@ -132,13 +115,9 @@ export async function submitTrackCoverViaLit(
     nonce,
   }
 
-  if (coverImage && FILEBASE_COVERS_ENCRYPTED_KEY) {
-    jsParams.filebaseEncryptedKey = FILEBASE_COVERS_ENCRYPTED_KEY
-  }
-
   const litClient = await getLitClient()
   const result = await litClient.executeJs({
-    ipfsId: TRACK_COVER_V4_CID,
+    ipfsId: TRACK_COVER_V5_CID,
     authContext,
     jsParams,
   })
@@ -152,9 +131,11 @@ export async function submitTrackCoverViaLit(
     response?.coverCid ||
     (trackIdKey && response?.coverCids ? response.coverCids[trackIdKey] : undefined)
 
-  if (returnedCoverCid && isOnchainCoverRef(returnedCoverCid) && scrobble.filePath) {
+  const effectiveCoverCid = returnedCoverCid || resolvedCoverCid || undefined
+
+  if (effectiveCoverCid && isOnchainCoverRef(effectiveCoverCid) && scrobble.filePath) {
     try {
-      await setCoverCidNative(scrobble.filePath, returnedCoverCid)
+      await setCoverCidNative(scrobble.filePath, effectiveCoverCid)
     } catch {
       // Best-effort: local cache update failure shouldn't block scrobble
     }

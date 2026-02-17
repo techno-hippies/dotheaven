@@ -137,10 +137,11 @@ fun ProfileScreen(
   val tabs = ProfileTab.entries
   val appContext = LocalContext.current.applicationContext
   val scope = rememberCoroutineScope()
-  val canFollow = remember(viewerEthAddress, ethAddress) {
+  val canFollow = remember(viewerEthAddress, ethAddress, pkpPublicKey) {
     !viewerEthAddress.isNullOrBlank() &&
       !ethAddress.isNullOrBlank() &&
-      !viewerEthAddress.equals(ethAddress, ignoreCase = true)
+      !viewerEthAddress.equals(ethAddress, ignoreCase = true) &&
+      !pkpPublicKey.isNullOrBlank()
   }
   val isOwnProfile = remember(viewerEthAddress, ethAddress) {
     !viewerEthAddress.isNullOrBlank() &&
@@ -151,7 +152,10 @@ fun ProfileScreen(
   // Follow counts
   var followerCount by remember { mutableIntStateOf(0) }
   var followingCount by remember { mutableIntStateOf(0) }
-  var isFollowing by remember { mutableStateOf(false) }
+  var serverFollowing by remember { mutableStateOf(false) }
+  var optimisticFollowing by remember { mutableStateOf<Boolean?>(null) }
+  var pendingFollowTarget by remember { mutableStateOf<Boolean?>(null) }
+  var followStateLoaded by remember { mutableStateOf(false) }
   var followBusy by remember { mutableStateOf(false) }
   var followError by remember { mutableStateOf<String?>(null) }
 
@@ -170,13 +174,22 @@ fun ProfileScreen(
   var contractLoading by remember { mutableStateOf(true) }
   var contractError by remember { mutableStateOf<String?>(null) }
   var contractRetryKey by remember { mutableIntStateOf(0) }
+  var locationRecord by remember { mutableStateOf<String?>(null) }
+  var schoolRecord by remember { mutableStateOf<String?>(null) }
 
   // Settings sheet
   var showSettings by remember { mutableStateOf(false) }
 
-  val displayName = heavenName?.let { "$it.heaven" }
-    ?: contractProfile?.displayName?.takeIf { it.isNotBlank() }
-    ?: shortAddr(ethAddress)
+  val handleText = heavenName ?: shortAddr(ethAddress)
+  val profileName = contractProfile
+    ?.displayName
+    ?.trim()
+    ?.takeIf {
+      it.isNotBlank() &&
+        !it.equals(handleText, ignoreCase = true) &&
+        !it.equals(heavenName ?: "", ignoreCase = true)
+    }
+  val effectiveFollowing = optimisticFollowing ?: serverFollowing
 
   // Fetch follow counts
   LaunchedEffect(ethAddress) {
@@ -191,12 +204,21 @@ fun ProfileScreen(
   LaunchedEffect(viewerEthAddress, ethAddress) {
     followError = null
     if (!canFollow) {
-      isFollowing = false
+      serverFollowing = false
+      optimisticFollowing = null
+      pendingFollowTarget = null
+      followStateLoaded = true
       return@LaunchedEffect
     }
-    isFollowing = withContext(Dispatchers.IO) {
+    followStateLoaded = false
+    val remoteFollowing = withContext(Dispatchers.IO) {
       OnboardingRpcHelpers.getFollowState(viewerEthAddress!!, ethAddress!!)
     }
+    if (pendingFollowTarget == null) {
+      serverFollowing = remoteFollowing
+      optimisticFollowing = null
+    }
+    followStateLoaded = true
   }
 
   // Fetch scrobbles (retries when scrobbleRetryKey increments)
@@ -231,6 +253,24 @@ fun ProfileScreen(
       }
   }
 
+  // Fetch user-friendly name records (location/school) when a primary name exists.
+  LaunchedEffect(heavenName) {
+    if (heavenName.isNullOrBlank()) {
+      locationRecord = null
+      schoolRecord = null
+      return@LaunchedEffect
+    }
+    val node = TempoNameRecordsApi.computeNode(heavenName)
+    withContext(Dispatchers.IO) {
+      locationRecord =
+        TempoNameRecordsApi.getTextRecord(node, "heaven.location")
+          ?: OnboardingRpcHelpers.getTextRecord(node, "heaven.location")
+      schoolRecord =
+        TempoNameRecordsApi.getTextRecord(node, "heaven.school")
+          ?: OnboardingRpcHelpers.getTextRecord(node, "heaven.school")
+    }
+  }
+
   Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
     // Banner + top actions
     Box(modifier = Modifier.fillMaxWidth().height(100.dp)) {
@@ -253,7 +293,7 @@ fun ProfileScreen(
       }
       if (!isOwnProfile) {
         Text(
-          displayName,
+          handleText,
           modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 12.dp),
           style = MaterialTheme.typography.titleMedium,
           fontWeight = FontWeight.SemiBold,
@@ -285,7 +325,7 @@ fun ProfileScreen(
         ) {
           Box(contentAlignment = Alignment.Center) {
             Text(
-              (heavenName?.take(1) ?: "?").uppercase(),
+              (profileName?.take(1) ?: handleText.take(1)).uppercase(),
               style = MaterialTheme.typography.headlineMedium,
               fontWeight = FontWeight.Bold,
             )
@@ -305,15 +345,35 @@ fun ProfileScreen(
 
     Spacer(Modifier.height(10.dp))
 
-    Text(
-      displayName,
-      modifier = Modifier.padding(horizontal = 20.dp),
-      style = MaterialTheme.typography.titleLarge,
-      fontWeight = FontWeight.Bold,
-      color = MaterialTheme.colorScheme.onBackground,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-    )
+    if (profileName != null) {
+      Text(
+        profileName,
+        modifier = Modifier.padding(horizontal = 20.dp),
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onBackground,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+      Text(
+        handleText,
+        modifier = Modifier.padding(horizontal = 20.dp),
+        style = MaterialTheme.typography.bodyLarge,
+        color = PiratePalette.TextMuted,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+    } else {
+      Text(
+        handleText,
+        modifier = Modifier.padding(horizontal = 20.dp),
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onBackground,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+    }
 
     if (isOwnProfile && onEditProfile != null) {
       Spacer(Modifier.height(10.dp))
@@ -341,9 +401,13 @@ fun ProfileScreen(
               followError = "Missing follow auth context"
               return@Button
             }
+            if (!followStateLoaded) return@Button
+            val targetFollowing = !effectiveFollowing
             followBusy = true
             followError = null
-            val action = if (isFollowing) "unfollow" else "follow"
+            pendingFollowTarget = targetFollowing
+            optimisticFollowing = targetFollowing
+            val action = if (targetFollowing) "follow" else "unfollow"
             scope.launch {
               val result = FollowLitAction.toggleFollow(
                 appContext = appContext,
@@ -355,23 +419,43 @@ fun ProfileScreen(
                 litRpcUrl = litRpcUrl,
               )
               if (result.success) {
-                isFollowing = !isFollowing
-                val (followers, following) = OnboardingRpcHelpers.getFollowCounts(ethAddress!!)
-                followerCount = followers
-                followingCount = following
+                serverFollowing = targetFollowing
+                optimisticFollowing = null
+                pendingFollowTarget = null
+                followerCount = (followerCount + if (targetFollowing) 1 else -1).coerceAtLeast(0)
+                followBusy = false
+                runCatching {
+                  withContext(Dispatchers.IO) {
+                    OnboardingRpcHelpers.getFollowCounts(ethAddress)
+                  }
+                }.onSuccess { (followers, following) ->
+                  followerCount = followers
+                  followingCount = following
+                }
               } else {
                 followError = result.error ?: "Follow action failed"
+                optimisticFollowing = null
+                pendingFollowTarget = null
+                runCatching {
+                  withContext(Dispatchers.IO) {
+                    OnboardingRpcHelpers.getFollowState(viewer, ethAddress)
+                  }
+                }.onSuccess { remote ->
+                  serverFollowing = remote
+                }
+                followBusy = false
               }
-              followBusy = false
             }
           },
-          enabled = !followBusy,
+          enabled = !followBusy && followStateLoaded,
         ) {
           Text(
-            if (followBusy) {
-              if (isFollowing) "Unfollowing..." else "Following..."
-            } else {
-              if (isFollowing) "Following" else "Follow"
+            when {
+              !followStateLoaded -> "..."
+              followBusy && pendingFollowTarget == true -> "Following..."
+              followBusy && pendingFollowTarget == false -> "Unfollowing..."
+              effectiveFollowing -> "Following"
+              else -> "Follow"
             },
           )
         }
@@ -439,6 +523,8 @@ fun ProfileScreen(
         profile = contractProfile,
         loading = contractLoading,
         error = contractError,
+        locationLabel = locationRecord,
+        schoolLabel = schoolRecord,
         isOwnProfile = isOwnProfile,
         onEditProfile = onEditProfile,
       ) {
@@ -560,16 +646,8 @@ private fun ScrobblesPanel(
     scrobbles.isEmpty() -> CenteredStatus { Text("No scrobbles yet.", color = PiratePalette.TextMuted) }
     else -> {
       LazyColumn(modifier = Modifier.fillMaxSize()) {
-        item {
-          Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-            Text("#", modifier = Modifier.width(36.dp), color = PiratePalette.TextMuted, style = MaterialTheme.typography.labelLarge)
-            Text("TRACK", modifier = Modifier.weight(1f), color = PiratePalette.TextMuted, style = MaterialTheme.typography.labelLarge)
-            Text("PLAYED", modifier = Modifier.width(80.dp), color = PiratePalette.TextMuted, style = MaterialTheme.typography.labelLarge)
-          }
-          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        }
-        itemsIndexed(scrobbles, key = { i, s -> "${s.playedAtSec}:${s.trackId ?: i}" }) { index, scrobble ->
-          ScrobbleRowItem(index + 1, scrobble)
+        itemsIndexed(scrobbles, key = { i, s -> "${s.playedAtSec}:${s.trackId ?: i}" }) { _, scrobble ->
+          ScrobbleRowItem(scrobble)
         }
       }
     }
@@ -577,22 +655,20 @@ private fun ScrobblesPanel(
 }
 
 @Composable
-private fun ScrobbleRowItem(index: Int, scrobble: ScrobbleRow) {
+private fun ScrobbleRowItem(scrobble: ScrobbleRow) {
   Row(
-    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).height(72.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    Text("$index", modifier = Modifier.width(36.dp), color = PiratePalette.TextMuted, style = MaterialTheme.typography.bodyMedium)
-
     if (scrobble.coverCid != null) {
       AsyncImage(
         model = ProfileScrobbleApi.coverUrl(scrobble.coverCid),
         contentDescription = null,
-        modifier = Modifier.size(44.dp).clip(RoundedCornerShape(6.dp)),
+        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)),
         contentScale = ContentScale.Crop,
       )
     } else {
-      Surface(modifier = Modifier.size(44.dp), shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+      Surface(modifier = Modifier.size(48.dp), shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
         Box(contentAlignment = Alignment.Center) { Icon(Icons.Rounded.MusicNote, "Cover", modifier = Modifier.size(24.dp), tint = PiratePalette.TextMuted) }
       }
     }
@@ -601,10 +677,8 @@ private fun ScrobbleRowItem(index: Int, scrobble: ScrobbleRow) {
 
     Column(modifier = Modifier.weight(1f)) {
       Text(scrobble.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onBackground)
-      Text(scrobble.artist, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = PiratePalette.TextMuted)
+      Text("${scrobble.artist} · ${scrobble.playedAgo}", style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, color = PiratePalette.TextMuted)
     }
-
-    Text(scrobble.playedAgo, modifier = Modifier.width(80.dp), style = MaterialTheme.typography.bodyMedium, color = PiratePalette.TextMuted, maxLines = 1)
   }
 }
 
@@ -617,13 +691,6 @@ private fun PlaylistsPanel(playlists: List<OnChainPlaylist>, loading: Boolean) {
     playlists.isEmpty() -> CenteredStatus { Text("No playlists yet.", color = PiratePalette.TextMuted) }
     else -> {
       LazyColumn(modifier = Modifier.fillMaxSize()) {
-        item {
-          Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("PLAYLISTS", color = PiratePalette.TextMuted, style = MaterialTheme.typography.labelLarge)
-            Text("${playlists.size}", color = PiratePalette.TextMuted, style = MaterialTheme.typography.labelLarge)
-          }
-          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        }
         itemsIndexed(playlists, key = { _, p -> p.id }) { _, playlist ->
           PlaylistRowItem(playlist)
         }
@@ -648,7 +715,7 @@ private fun PlaylistRowItem(playlist: OnChainPlaylist) {
     Spacer(Modifier.width(12.dp))
     Column(modifier = Modifier.weight(1f)) {
       Text(playlist.name.ifBlank { "Untitled" }, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onBackground)
-      Text("${playlist.trackCount} track${if (playlist.trackCount != 1) "s" else ""}", style = MaterialTheme.typography.bodyMedium, color = PiratePalette.TextMuted)
+      Text("${playlist.trackCount} track${if (playlist.trackCount != 1) "s" else ""}", style = MaterialTheme.typography.bodyLarge, color = PiratePalette.TextMuted)
     }
   }
 }
@@ -660,6 +727,8 @@ private fun AboutPanel(
   profile: ContractProfileData?,
   loading: Boolean,
   error: String?,
+  locationLabel: String?,
+  schoolLabel: String?,
   isOwnProfile: Boolean,
   onEditProfile: (() -> Unit)?,
   onRetry: () -> Unit,
@@ -692,9 +761,11 @@ private fun AboutPanel(
 
   val identityRows = buildList<Pair<String, String>> {
     if (profile.displayName.isNotBlank()) add("Display Name" to profile.displayName)
-    if (profile.nationality.isNotBlank()) add("Nationality" to profile.nationality)
-    if (profile.nameHash.isNotBlank()) add("Name Hash" to profile.nameHash)
-    if (profile.photoUri.isNotBlank()) add("Photo URI" to profile.photoUri)
+    if (profile.nationality.isNotBlank()) {
+      val code = profile.nationality.trim().uppercase()
+      val country = runCatching { Locale.Builder().setRegion(code).build().displayCountry.trim() }.getOrDefault("")
+      add("Nationality" to if (country.isNotBlank()) country else code)
+    }
   }
 
   val basicsRows = buildList<Pair<String, String>> {
@@ -706,25 +777,31 @@ private fun AboutPanel(
       }
       add("Languages" to langs)
     }
-    val openTo = ProfileContractApi.selectedFriendsLabels(profile.friendsOpenToMask)
-    if (openTo.isNotEmpty()) add("Open To" to openTo.joinToString(", "))
   }
 
   val locationRows = buildList<Pair<String, String>> {
-    if (profile.locationCityId.isNotBlank()) add("Location City ID" to profile.locationCityId)
+    if (!locationLabel.isNullOrBlank()) {
+      add("Location" to locationLabel)
+    } else if (profile.locationCityId.isNotBlank()) {
+      add("Location" to "Set")
+    }
     if (ProfileContractApi.hasCoords(profile.locationLatE6, profile.locationLngE6)) {
       val lat = profile.locationLatE6.toDouble() / 1_000_000.0
       val lng = profile.locationLngE6.toDouble() / 1_000_000.0
       add("Coordinates" to String.format(Locale.US, "%.5f, %.5f", lat, lng))
     }
-    if (profile.schoolId.isNotBlank()) add("School ID" to profile.schoolId)
-    if (profile.hobbiesCommit.isNotBlank()) add("Hobbies IDs" to profile.hobbiesCommit)
-    if (profile.skillsCommit.isNotBlank()) add("Skills IDs" to profile.skillsCommit)
+    if (!schoolLabel.isNullOrBlank()) {
+      add("School" to schoolLabel)
+    } else if (profile.schoolId.isNotBlank()) {
+      add("School" to "Set")
+    }
   }
 
   val preferenceRows = buildList<Pair<String, String>> {
+    val openTo = ProfileContractApi.selectedFriendsLabels(profile.friendsOpenToMask)
+    if (openTo.isNotEmpty()) add("Open to dating" to openTo.joinToString(", "))
     ProfileContractApi.enumLabel(ProfileContractApi.GENDER_OPTIONS, profile.gender)?.let { add("Gender" to it) }
-    ProfileContractApi.enumLabel(ProfileContractApi.RELOCATE_OPTIONS, profile.relocate)?.let { add("Relocate" to it) }
+    ProfileContractApi.enumLabel(ProfileContractApi.RELOCATE_OPTIONS, profile.relocate)?.let { add("Willing to relocate" to it) }
     ProfileContractApi.enumLabel(ProfileContractApi.DEGREE_OPTIONS, profile.degree)?.let { add("Degree" to it) }
     ProfileContractApi.enumLabel(ProfileContractApi.FIELD_OPTIONS, profile.fieldBucket)?.let { add("Field" to it) }
     ProfileContractApi.enumLabel(ProfileContractApi.PROFESSION_OPTIONS, profile.profession)?.let { add("Profession" to it) }

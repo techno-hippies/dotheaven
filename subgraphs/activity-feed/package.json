@@ -5,10 +5,15 @@
   "scripts": {
     "codegen": "graph codegen",
     "build": "graph codegen && graph build",
+    "build:tempo": "graph codegen subgraph.tempo.yaml && graph build subgraph.tempo.yaml",
+    "build:tempo:local": "graph codegen subgraph.tempo.local.yaml && graph build subgraph.tempo.local.yaml",
     "deploy": "graph deploy activity-feed --node https://api.studio.thegraph.com/deploy/",
     "create-local": "graph create --node http://localhost:8020/ activity-feed",
     "remove-local": "graph remove --node http://localhost:8020/ activity-feed",
     "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 activity-feed",
+    "create:tempo:local": "graph create --node http://localhost:8020/ dotheaven/activity-feed-tempo",
+    "remove:tempo:local": "graph remove --node http://localhost:8020/ dotheaven/activity-feed-tempo",
+    "deploy:tempo:local": "graph deploy --version-label ${VERSION_LABEL:-local} --node http://localhost:8020/ --ipfs http://localhost:5001 dotheaven/activity-feed-tempo subgraph.tempo.local.yaml",
     "auth": "graph auth"
   },
   "keywords": ["the-graph", "megaeth", "scrobble", "music", "activity"],

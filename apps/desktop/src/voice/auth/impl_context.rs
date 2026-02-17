@@ -10,6 +10,7 @@ impl WorkerAuthContext {
     }
 
     fn from_persisted(persisted: PersistedAuth) -> Result<Self, String> {
+        persisted.require_lit_auth("Scarlett voice authentication")?;
         let wallet = persisted
             .pkp_address
             .clone()
@@ -24,6 +25,8 @@ impl WorkerAuthContext {
     }
 
     fn signer(&mut self) -> Result<&mut LitWalletService, String> {
+        self.persisted
+            .require_lit_auth("Scarlett voice authentication")?;
         if self.signer.is_none() {
             let mut lit = LitWalletService::new()?;
             let mut last_err = None;

@@ -1,0 +1,83 @@
+{
+  "network": {
+    "name": "Tempo Testnet (Moderato)",
+    "chainId": 42431,
+    "rpcUrl": "https://rpc.moderato.tempo.xyz",
+    "explorer": "https://explore.tempo.xyz"
+  },
+  "deployedAt": "2026-02-16T16:37:45Z",
+  "deployer": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+  "script": "script/DeployCore.s.sol",
+  "command": "forge script script/DeployCore.s.sol --rpc-url https://rpc.moderato.tempo.xyz --broadcast --slow --gas-estimate-multiplier 100",
+  "contracts": {
+    "registry": {
+      "address": "0x29e1a73fC364855F073995075785e3fC2a1b6edC",
+      "deployTx": "0x247fcc7b083716e54a580e0d4e0d112b9e7afa348d6ba9a77dd7351f21d7e48e",
+      "blockNumber": 5196663,
+      "gasUsed": 13031677
+    },
+    "records": {
+      "address": "0x6072C4337e57538AE896C03317f02d830A25bbe4",
+      "deployTx": "0xae48200efa4e308327b9a64847e94bb1c68947e694ec2204e5d4756918f7d3d0",
+      "blockNumber": 5196666,
+      "gasUsed": 11049101
+    },
+    "profileV2": {
+      "address": "0x6FDb2F5B13F8D7f365B4A75A2763d5C7270E8066",
+      "deployTx": "0xdc346d028ec91588ef7a2790743b7459f329caadc2926938cae1f814791884b0",
+      "blockNumber": 5196672,
+      "gasUsed": 7882615
+    }
+  },
+  "wiringTransactions": [
+    {
+      "name": "setRecords",
+      "txHash": "0x9cbb393fc9c3d3ce4ac9fbf9a23c54a39a7644da1ea337a0fa1f7d3afcc3b65c",
+      "blockNumber": 5196669,
+      "gasUsed": 277383
+    },
+    {
+      "name": "configureTld",
+      "txHash": "0xbe6519ae3533f48ad446982dfa3ace150179ae4ea19de90dca4fb3ce10224fcd",
+      "blockNumber": 5196676,
+      "gasUsed": 1037751
+    },
+    {
+      "name": "setReservedHashes",
+      "txHash": "0x7e858481cbd013ad790a4595a2d497018a1d0e63b2ef1c5ad7441961615e945b",
+      "blockNumber": 5196680,
+      "gasUsed": 3085682
+    }
+  ],
+  "config": {
+    "owner": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+    "treasury": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+    "heavenNode": "0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27",
+    "tld": {
+      "pricePerYear": 0,
+      "minLabelLength": 3,
+      "maxDurationSeconds": 31536000,
+      "registrationsOpen": true
+    }
+  },
+  "postDeployChecks": {
+    "registryRecordsAddressMatches": true,
+    "heavenNodeExists": true,
+    "heavenReservedHashForLabelHeaven": true,
+    "recordsRegistrarMatchesRegistry": true,
+    "recordsOwnerMatchesConfiguredOwner": true,
+    "recordsSponsor": "0x0000000000000000000000000000000000000000"
+  },
+  "smokeTest": {
+    "name": "register",
+    "label": "smoke1771259375",
+    "txHash": "0x7c7394c8baf63c09f267bc1fe35d884d257d042e397bbc54f7ba39838824bb44",
+    "blockNumber": 5196770,
+    "gasUsed": 1826698,
+    "status": true
+  },
+  "notes": [
+    "Moderato rejected txs above an effective per-tx cap (~16M gas) for this deployer with error -32003 gas limit too high.",
+    "Using --gas-estimate-multiplier 100 avoided oversized gas padding and allowed successful deployment."
+  ]
+}

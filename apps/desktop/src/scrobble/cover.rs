@@ -69,13 +69,13 @@ pub(super) fn submit_track_cover_via_lit(
         return Err("missing user PKP public key for cover action".to_string());
     };
 
-    let (kind, payload) = aa::derive_track_kind_and_payload(track)?;
-    let track_id = aa::compute_track_id(kind, payload);
-    let track_id_hex = aa::to_hex_h256(track_id).to_lowercase();
+    let (kind, payload) = super::derive_track_kind_and_payload(track)?;
+    let track_id = super::compute_track_id(kind, payload);
+    let track_id_hex = super::to_hex_h256(track_id).to_lowercase();
 
-    let rpc_url = aa::env_or("HEAVEN_AA_RPC_URL", "AA_RPC_URL")
-        .unwrap_or_else(|| DEFAULT_AA_RPC_URL.to_string());
-    let scrobble_v4 = aa::env_or("HEAVEN_AA_SCROBBLE_V4", "AA_SCROBBLE_V4")
+    let rpc_url = super::env_or("HEAVEN_RPC_URL", "MEGAETH_RPC_URL")
+        .unwrap_or_else(|| DEFAULT_RPC_URL.to_string());
+    let scrobble_v4 = super::env_or("HEAVEN_SCROBBLE_V4", "SCROBBLE_V4")
         .unwrap_or_else(|| DEFAULT_SCROBBLE_V4.to_string())
         .parse::<Address>()
         .map_err(|e| format!("Invalid ScrobbleV4 address: {e}"))?;
@@ -153,7 +153,7 @@ pub(super) fn submit_track_cover_via_lit(
 
     let cover_ref = format!("ar://{}", upload_id);
 
-    let timestamp = aa::now_epoch_millis().to_string();
+    let timestamp = super::now_epoch_millis().to_string();
     let nonce = format!(
         "{}-{}-{}",
         now_epoch_sec(),
@@ -240,7 +240,7 @@ fn submit_track_cover_v4_filebase(
         base64::Engine::encode(&base64::engine::general_purpose::STANDARD, cover_bytes);
     let content_type = cover_content_type(cover_path);
 
-    let timestamp = aa::now_epoch_millis().to_string();
+    let timestamp = super::now_epoch_millis().to_string();
     let nonce = format!(
         "{}-{}-{}",
         now_epoch_sec(),
@@ -262,7 +262,7 @@ fn submit_track_cover_v4_filebase(
     });
 
     if let Some(filebase_plaintext_key) =
-        aa::env_or("HEAVEN_FILEBASE_COVERS_KEY", "FILEBASE_COVERS_API_KEY")
+        super::env_or("HEAVEN_FILEBASE_COVERS_KEY", "FILEBASE_COVERS_API_KEY")
     {
         js_params["filebasePlaintextKey"] = serde_json::Value::String(filebase_plaintext_key);
     } else {
@@ -517,7 +517,7 @@ fn call_get_track_cover_value(
     track_id: B256,
 ) -> Result<Option<String>, String> {
     let data = getTrackCall { trackId: track_id }.abi_encode();
-    let out = aa::eth_call(rpc_url, scrobble_v4, &data)?;
+    let out = super::eth_call(rpc_url, scrobble_v4, &data)?;
     let decoded = getTrackCall::abi_decode_returns(&out)
         .map_err(|e| format!("getTrack decode failed: {e}"))?;
     let cover = decoded.coverCid.trim().to_string();

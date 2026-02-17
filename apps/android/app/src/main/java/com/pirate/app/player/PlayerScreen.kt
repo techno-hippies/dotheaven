@@ -56,9 +56,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun PlayerScreen(
   player: PlayerController,
-  litNetwork: String,
-  litRpcUrl: String,
-  pkpPublicKey: String?,
   ownerEthAddress: String?,
   isAuthenticated: Boolean,
   onClose: () -> Unit,
@@ -265,7 +262,7 @@ fun PlayerScreen(
         onShowMessage("Upload already in progress")
         return@TrackMenuSheet
       }
-      if (!isAuthenticated || pkpPublicKey.isNullOrBlank() || ownerEthAddress.isNullOrBlank()) {
+      if (!isAuthenticated || ownerEthAddress.isNullOrBlank()) {
         onShowMessage("Sign in to upload")
         return@TrackMenuSheet
       }
@@ -275,11 +272,8 @@ fun PlayerScreen(
         onShowMessage("Uploading...")
         val result =
           runCatching {
-            TrackUploadService.uploadAndRegisterEncrypted(
+            TrackUploadService.uploadEncrypted(
               context = context,
-              litNetwork = litNetwork,
-              litRpcUrl = litRpcUrl,
-              userPkpPublicKey = pkpPublicKey,
               ownerEthAddress = ownerEthAddress,
               track = t,
             )
@@ -305,11 +299,7 @@ fun PlayerScreen(
             else cached + updated
           MusicLibrary.saveCachedTracks(context, next)
 
-          if (ok.register.success) {
-            onShowMessage("Uploaded.")
-          } else {
-            onShowMessage("Uploaded, but on-chain register failed: ${ok.register.error ?: "unknown error"}")
-          }
+          onShowMessage("Uploaded.")
         }
       }
     },
@@ -318,7 +308,7 @@ fun PlayerScreen(
         onShowMessage("Upload already in progress")
         return@TrackMenuSheet
       }
-      if (!isAuthenticated || pkpPublicKey.isNullOrBlank() || ownerEthAddress.isNullOrBlank()) {
+      if (!isAuthenticated || ownerEthAddress.isNullOrBlank()) {
         onShowMessage("Sign in to save forever")
         return@TrackMenuSheet
       }
@@ -347,11 +337,8 @@ fun PlayerScreen(
         onShowMessage("Saving Forever...")
         val result =
           runCatching {
-            TrackUploadService.uploadAndRegisterEncrypted(
+            TrackUploadService.uploadEncrypted(
               context = context,
-              litNetwork = litNetwork,
-              litRpcUrl = litRpcUrl,
-              userPkpPublicKey = pkpPublicKey,
               ownerEthAddress = ownerEthAddress,
               track = t,
             )
@@ -370,7 +357,7 @@ fun PlayerScreen(
               algo = ok.algo,
             )
 
-          val updated = if (ok.register.success) base.copy(savedForever = true) else base
+          val updated = base.copy(savedForever = true)
 
           player.updateTrack(updated)
 
@@ -380,11 +367,7 @@ fun PlayerScreen(
             else cached + updated
           MusicLibrary.saveCachedTracks(context, next)
 
-          if (ok.register.success) {
-            onShowMessage("Upload complete and saved forever.")
-          } else {
-            onShowMessage("Upload complete, but on-chain register failed: ${ok.register.error ?: "unknown error"}")
-          }
+          onShowMessage("Upload complete and saved forever.")
         }
       }
     },
@@ -396,18 +379,8 @@ fun PlayerScreen(
     onGoToArtist = { onShowMessage("Artist view coming soon") },
   )
 
-  AddToPlaylistSheet(
-    open = addToPlaylistOpen,
-    track = track,
-    isAuthenticated = isAuthenticated,
-    ownerEthAddress = ownerEthAddress,
-    pkpPublicKey = pkpPublicKey,
-    litNetwork = litNetwork,
-    litRpcUrl = litRpcUrl,
-    onClose = { addToPlaylistOpen = false },
-    onShowMessage = onShowMessage,
-    onSuccess = { _, _ -> },
-  )
+  // TODO: AddToPlaylistSheet needs Tempo migration (currently uses PlaylistV1LitAction)
+  // AddToPlaylistSheet(...)
 }
 
 @Composable

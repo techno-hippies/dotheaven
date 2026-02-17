@@ -1,0 +1,45 @@
+{
+  "network": {
+    "name": "Tempo Testnet (Moderato)",
+    "chainId": 42431,
+    "rpcUrl": "https://rpc.moderato.tempo.xyz",
+    "explorer": "https://explore.tempo.xyz"
+  },
+  "deployedAt": "2026-02-16T17:05:18Z",
+  "deployer": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+  "sponsor": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+  "script": "script/DeployContentRegistry.s.sol",
+  "command": "forge script script/DeployContentRegistry.s.sol --rpc-url https://rpc.moderato.tempo.xyz --broadcast --slow --gas-estimate-multiplier 100",
+  "contract": {
+    "name": "ContentRegistry",
+    "address": "0x2A3beA895AE5bb4415c436155cbA15a97ACc2C77",
+    "deployTx": "0x93db136190e86ca2023a12750be196602cc8ff3b1297effe2e8327656f3f1f33",
+    "blockNumber": 5199678,
+    "gasUsed": 5157615,
+    "status": true
+  },
+  "postDeployChecks": {
+    "bytecodePresent": true,
+    "owner": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+    "sponsor": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB"
+  },
+  "smokeTest": {
+    "trackId": "0x4d7010fb1190ad0981003c27632cd4c6a63682afbb56d015c7158918e3875a80",
+    "contentId": "0xd695d2143282e20072e8990f291a98bae540409c10f1e1e9418fdc9ac718dbb3",
+    "registerContentForTx": "0x7582111741e0e5553838c9bce6677508ed222828cd394b240d525f4896a1bcf2",
+    "registerContentForGasUsed": 1039052,
+    "grantAccessForTx": "0xf3ac39a9669def1c5da446e395a553583da4d1e6573e2fc0ac93e8419b0dfd94",
+    "grantAccessForGasUsed": 283120,
+    "revokeAccessForTx": "0x22274dae0bf2338b5a82881ed54709d57b8964cd37abdd8926fa2f5896a60aba",
+    "revokeAccessForGasUsed": 31092,
+    "deactivateForTx": "0x39bbafb7b372e11bf7f978cbc0a1664642a541d8f7c5ed24f4ecc7710d88c521",
+    "deactivateForGasUsed": 33057,
+    "accessChecks": {
+      "ownerBeforeDeactivate": true,
+      "granteeBeforeGrant": false,
+      "granteeAfterGrant": true,
+      "granteeAfterRevoke": false,
+      "ownerAfterDeactivate": false
+    }
+  }
+}

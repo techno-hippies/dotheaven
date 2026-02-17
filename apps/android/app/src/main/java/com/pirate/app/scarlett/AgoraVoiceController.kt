@@ -53,6 +53,7 @@ class AgoraVoiceController(private val appContext: Context) {
 
   private var engine: RtcEngine? = null
   private var sessionId: String? = null
+  private var sessionBearerToken: String? = null
   private var timerJob: Job? = null
   private var botSilenceJob: Job? = null
 
@@ -106,10 +107,7 @@ class AgoraVoiceController(private val appContext: Context) {
   }
 
   fun startCall(
-    wallet: String,
-    pkpPublicKey: String,
-    litNetwork: String,
-    litRpcUrl: String,
+    userAddress: String,
   ) {
     if (_state.value == VoiceCallState.Connecting || _state.value == VoiceCallState.Connected) return
 
@@ -118,28 +116,27 @@ class AgoraVoiceController(private val appContext: Context) {
     _durationSeconds.value = 0
     _isMuted.value = false
     _isBotSpeaking.value = false
+    sessionBearerToken = null
 
     scope.launch {
       try {
-        // 1. Get JWT
-        val token = getWorkerToken(
+        // 1. Build authenticated worker session.
+        val auth = getWorkerAuthSession(
           appContext = appContext,
           workerUrl = CHAT_WORKER_URL,
-          wallet = wallet,
-          pkpPublicKey = pkpPublicKey,
-          litNetwork = litNetwork,
-          litRpcUrl = litRpcUrl,
+          userAddress = userAddress,
         )
+        sessionBearerToken = auth.token
 
         // 2. POST /agent/start
         val startPayload = JSONObject()
-          .put("activityWallet", wallet.lowercase())
+          .put("activityWallet", auth.wallet)
           .toString()
           .toRequestBody(JSON_MT)
         val startReq = Request.Builder()
           .url("$CHAT_WORKER_URL/agent/start")
           .post(startPayload)
-          .header("Authorization", "Bearer $token")
+          .header("Authorization", "Bearer ${auth.token}")
           .build()
 
         val agentResp = withContext(Dispatchers.IO) {
@@ -197,26 +194,33 @@ class AgoraVoiceController(private val appContext: Context) {
 
   fun endCall() {
     val sid = sessionId
+    val bearerToken = sessionBearerToken
     cleanup()
     _state.value = VoiceCallState.Idle
 
-    if (sid != null) {
+    if (sid != null && bearerToken != null) {
       // Fire-and-forget stop agent
       scope.launch {
         try {
-          // We don't have auth params here, but the token should still be cached
-          // Just try to stop — if it fails, the server will time it out
           val stopReq = Request.Builder()
             .url("$CHAT_WORKER_URL/agent/$sid/stop")
             .post("{}".toRequestBody(JSON_MT))
+            .header("Authorization", "Bearer $bearerToken")
             .build()
           withContext(Dispatchers.IO) {
-            httpClient.newCall(stopReq).execute().close()
+            httpClient.newCall(stopReq).execute().use { resp ->
+              if (!resp.isSuccessful) {
+                val body = resp.body?.string().orEmpty()
+                Log.w(TAG, "Stop agent failed (${resp.code}): $body")
+              }
+            }
           }
         } catch (e: Exception) {
           Log.w(TAG, "Failed to stop agent session $sid", e)
         }
       }
+    } else if (sid != null) {
+      Log.w(TAG, "Missing bearer token for stop call; session=$sid")
     }
   }
 
@@ -243,6 +247,7 @@ class AgoraVoiceController(private val appContext: Context) {
     }
     engine = null
     sessionId = null
+    sessionBearerToken = null
     _isBotSpeaking.value = false
   }
 }

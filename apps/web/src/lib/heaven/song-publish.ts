@@ -2,22 +2,26 @@
  * Song Publish Service
  *
  * Orchestrates the full song publish pipeline:
- * 1. Convert form files to inline base64
- * 2. Build metadata JSONs
- * 3. SHA-256 hash all content + sign EIP-191 via PKP
- * 4. Call song-publish-v1 Lit Action (IPFS upload, lyrics alignment, translation)
- * 5. Sign EIP-712 typed data for Story registration via PKP
- * 6. Call story-register-sponsor-v1 Lit Action (mint NFT, register IP, attach license)
- * 7. Register on ContentRegistry (MegaETH) so subgraph indexes the song
- * 8. Auto-translate lyrics to Mandarin + English (best-effort, doesn't fail publish)
+ * 1. Read form files
+ * 2. Upload cover to Arweave (canonical `ar://...` ref)
+ * 3. Pre-upload audio stems to Filebase for Lit fetch
+ * 4. Build metadata JSONs
+ * 5. SHA-256 hash all content + sign EIP-191 via PKP
+ * 6. Call song-publish-v2 Lit Action (storage-agnostic params + lyrics alignment + translation)
+ * 7. Sign EIP-712 typed data for Story registration via PKP
+ * 8. Call story-register-sponsor-v1 Lit Action (mint NFT, register IP, attach license)
+ * 9. Register on ContentRegistry (MegaETH) so subgraph indexes the song
+ * 10. Write cover ref on-chain via track-cover-v5 (`ar://...`)
+ * 11. Auto-translate lyrics to Mandarin + English (best-effort, doesn't fail publish)
  */
 
 import { getLitClient } from '../lit/client'
-import { SONG_PUBLISH_CID, STORY_REGISTER_SPONSOR_CID, LYRICS_TRANSLATE_CID, CONTENT_REGISTER_MEGAETH_V1_CID } from '../lit/action-cids'
+import { SONG_PUBLISH_V2_CID, STORY_REGISTER_SPONSOR_CID, LYRICS_TRANSLATE_CID, CONTENT_REGISTER_MEGAETH_V1_CID, TRACK_COVER_V5_CID } from '../lit/action-cids'
 import { signMessageWithPKP } from '../lit/signer-pkp'
 import type { PKPInfo, PKPAuthContext } from '../lit/types'
 import type { SongFormData, LicenseType } from '@heaven/ui'
 import { computeTrackId } from '../filecoin-upload-service'
+import { uploadCoverToArweave } from '../arweave-upload'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -37,10 +41,10 @@ type EncryptedKey = {
   accessControlConditions: unknown[]
 }
 
-// ── Encrypted keys (bound to song-publish-v1 action CID) ──────────
+// ── Encrypted keys (bound to song-publish-v2 action CID) ──────────
 
 const FILEBASE_ENCRYPTED_KEY: EncryptedKey = {
-  ciphertext: 'rZKsuJAFr0bAmB0sB8Y47wMafboSsI48rUIG2KVfhW689ZxFTh2WbdplO64b574FSWw+KvKOB0xKA3jqNWARbeXUVvsZiAYSj737msRXDSBllUdZ5VvOmypIl0YpAXxFv+ZrvBI6jBIiakm20Uvl7wbKm3ic2YJyEkfSurFsAwC+DXvMfWVbnBXc4mNuzsjPTMS9nriUz6/y4q2xMHiquFi3qu6PeWCzIcjXjNOL2TCk0GECaqsC',
+  ciphertext: 'lnvxDJMtF1yqGN7cAj9ZKBdkoCgJ4JExWKiy7/u6O0ebNj4aagBJ9MAqulSHrJx7DrVne1L78etCAxYdH6KXERYdL6TZZc4TDAEbT0EAZRhleFyH7P1yO65ryGekd85Tj7tCytYN/zdg7OYd+eCr6+ouqBszY4M+RvjP9UerLyW9/TXdP1v670y/ov+hMLaI1P8pnixXbBqb5xoKmTZ9PxRymzC2XUhbLyjD/nDMHVIOBDVGLvQC',
   dataToEncryptHash: '23ab539bda3900163da16db23be0e6e6c6003d35bd1ac54aeaada176f8f1e0d4',
   accessControlConditions: [{
     conditionType: 'evmBasic',
@@ -49,12 +53,12 @@ const FILEBASE_ENCRYPTED_KEY: EncryptedKey = {
     chain: 'ethereum',
     method: '',
     parameters: [':currentActionIpfsId'],
-    returnValueTest: { comparator: '=', value: SONG_PUBLISH_CID },
+    returnValueTest: { comparator: '=', value: SONG_PUBLISH_V2_CID },
   }],
 }
 
 const ELEVENLABS_ENCRYPTED_KEY: EncryptedKey = {
-  ciphertext: 'kO4ArVoy+keulKjuvMzCoftMcDEAbze0RwCScxqZvk5rkJNBkV+UDu9a6ZT2aZ8al4mygNhhz1S0yjz2DMhKyu/a/kRrJwseyaRDGh6O7ec0P58orQ27bYCeEPNiZgQBsTOcjZlkcJP4SxKPaGzt/SY6P2nIQuz3lMgwhGQVtpnjT/ngzQI=',
+  ciphertext: 'uTJ6xvhguWO1H8NqauuOD0orVBeoBEXGu1NlGIPegSnmXz7LbLgNhthJRQdfk9936YuJtmTKw2epxfRSMLWbPOV2ZJyp7cKUfYMrKTLn32o02afacl81HhehuxfwMOId88KaS8wmFSsq6as80qOj4+tWzDBFxymcnGmSZ1vJSl3R/FmJ/AI=',
   dataToEncryptHash: '6d1863a0dd36fcff73e8d00eaec3f038d143e4bea663b57f8b9810d786b73f6c',
   accessControlConditions: [{
     conditionType: 'evmBasic',
@@ -63,12 +67,12 @@ const ELEVENLABS_ENCRYPTED_KEY: EncryptedKey = {
     chain: 'ethereum',
     method: '',
     parameters: [':currentActionIpfsId'],
-    returnValueTest: { comparator: '=', value: SONG_PUBLISH_CID },
+    returnValueTest: { comparator: '=', value: SONG_PUBLISH_V2_CID },
   }],
 }
 
 const OPENROUTER_ENCRYPTED_KEY: EncryptedKey = {
-  ciphertext: 'hJRS8qOvZLdsQv9Xy8MYAnYE15GQlRqh4bBdJdHiWcDApX5Gk501qNOc2wXw8Q9oXVIDQz4ggZPyzMoQS91Ux/jQUTk4ZHZ2l5Mp2+llzwhK8xf6Ix0FD8ZJnusBTPu+u7aNdpyzGbTnuJ1qSJFYRT8DskjVSDm+IVtd436+miqkmmbFDuIa7yoynXsCZSxBr6uGunn2/Ne4y50C',
+  ciphertext: 'qh5DyFLLEVx2NaFx1FHQKw+1HhqaaiM0l4wTJwhRsZfl7zl/xKjfTdOaVHxYkJJakDr1j1XbMCOxJHD5GH3o0u+KAngydXuY1NGkVKx5F19KCj92+OG1VXQG/io41UPLQfYnUxnvthial/7+czfEJI6XFtjesgn6/9IJACMA9kiBTaU71VhcbMgWFhjcyPF89f1PX8opr4sUDiwC',
   dataToEncryptHash: '2ca783d51c4bfd1a8b80e1c8aee5e94d3f17c3089f8bca45e48d40b3435ae092',
   accessControlConditions: [{
     conditionType: 'evmBasic',
@@ -77,7 +81,7 @@ const OPENROUTER_ENCRYPTED_KEY: EncryptedKey = {
     chain: 'ethereum',
     method: '',
     parameters: [':currentActionIpfsId'],
-    returnValueTest: { comparator: '=', value: SONG_PUBLISH_CID },
+    returnValueTest: { comparator: '=', value: SONG_PUBLISH_V2_CID },
   }],
 }
 
@@ -157,6 +161,14 @@ async function sha256Hex(data: Uint8Array): Promise<string> {
 
 async function sha256HexString(text: string): Promise<string> {
   return sha256Hex(new TextEncoder().encode(text))
+}
+
+function toBase64(data: Uint8Array): string {
+  let binary = ''
+  for (let i = 0; i < data.length; i++) {
+    binary += String.fromCharCode(data[i])
+  }
+  return btoa(binary)
 }
 
 function licenseToRevShare(license: LicenseType, revShare: number): number {
@@ -260,7 +272,7 @@ export async function publishSong(
   pkpInfo: PKPInfo,
   onProgress: (pct: number) => void,
 ): Promise<PublishResult> {
-  if (!SONG_PUBLISH_CID) throw new Error('SONG_PUBLISH_CID not set')
+  if (!SONG_PUBLISH_V2_CID) throw new Error('SONG_PUBLISH_V2_CID not set')
   if (!STORY_REGISTER_SPONSOR_CID) throw new Error('STORY_REGISTER_SPONSOR_CID not set')
 
   const userAddress = pkpInfo.ethAddress
@@ -290,13 +302,19 @@ export async function publishSong(
 
   onProgress(5)
 
-  // Pre-upload files to Filebase via presigned URLs from heaven-api
-  // Lit nodes fetch via URL instead of receiving inline base64 (avoids 413)
+  // Pre-upload cover to Arweave (canonical ref for new writes)
+  const coverUpload = await uploadCoverToArweave({
+    base64: toBase64(coverBytes),
+    contentType: formData.coverFile.type || 'image/jpeg',
+  })
+  const coverRef = coverUpload.ref
+
+  // Pre-upload audio stems to Filebase via heaven-api proxy.
+  // Lit nodes fetch via URL instead of receiving inline base64 (avoids 413).
   const uploadFiles: Array<{ slot: string; data: Uint8Array; contentType: string }> = [
     { slot: 'audio', data: audioBytes, contentType: formData.audioFile.type },
     { slot: 'vocals', data: vocalsBytes, contentType: formData.vocalsFile.type },
     { slot: 'instrumental', data: instrumentalBytes, contentType: formData.instrumentalFile.type },
-    { slot: 'cover', data: coverBytes, contentType: formData.coverFile.type },
   ]
   if (canvasBytes && formData.canvasFile) {
     uploadFiles.push({ slot: 'canvas', data: canvasBytes, contentType: formData.canvasFile.type })
@@ -307,7 +325,6 @@ export async function publishSong(
   const audioUrl = `${IPFS_GATEWAY}${cidMap.get('audio')}`
   const vocalsUrl = `${IPFS_GATEWAY}${cidMap.get('vocals')}`
   const instrumentalUrl = `${IPFS_GATEWAY}${cidMap.get('instrumental')}`
-  const coverUrl = `${IPFS_GATEWAY}${cidMap.get('cover')}`
   const canvasUrl = cidMap.has('canvas') ? `${IPFS_GATEWAY}${cidMap.get('canvas')}` : null
 
   onProgress(15)
@@ -368,19 +385,20 @@ export async function publishSong(
 
   onProgress(30)
 
-  // ── Step 5: Call song-publish-v1 Lit Action (30-65%) ─────────────
+  // ── Step 5: Call song-publish-v2 Lit Action (30-65%) ─────────────
   const litClient = await getLitClient()
 
   const publishResult = await litClient.executeJs({
-    ipfsId: SONG_PUBLISH_CID,
+    ipfsId: SONG_PUBLISH_V2_CID,
     authContext,
     jsParams: {
       userPkpPublicKey: pkpInfo.publicKey,
-      audioUrl,
-      coverUrl,
-      vocalsUrl,
-      instrumentalUrl,
-      canvasUrl: canvasUrl || undefined,
+      audioRef: audioUrl,
+      coverRef,
+      vocalsRef: vocalsUrl,
+      instrumentalRef: instrumentalUrl,
+      canvasRef: canvasUrl || undefined,
+      storageMode: 'filebase',
       songMetadataJson: songMetadata,
       ipaMetadataJson: ipaMetadata,
       nftMetadataJson: nftMetadata,
@@ -390,7 +408,7 @@ export async function publishSong(
       lyricsText,
       sourceLanguage: sourceLanguageName,
       targetLanguage,
-      filebaseEncryptedKey: FILEBASE_ENCRYPTED_KEY,
+      storageEncryptedKey: FILEBASE_ENCRYPTED_KEY,
       elevenlabsEncryptedKey: ELEVENLABS_ENCRYPTED_KEY,
       openrouterEncryptedKey: OPENROUTER_ENCRYPTED_KEY,
     },
@@ -457,17 +475,18 @@ export async function publishSong(
 
   onProgress(88)
 
+  const trackId = computeTrackId({
+    title: formData.title,
+    artist: formData.artist,
+    album: '',
+  })
+
   // ── Step 8: Register on ContentRegistry (MegaETH) for subgraph ────
   // Uses MegaETH-only Lit Action (skips Base mirror which isn't needed for published songs).
   // This creates a ContentRegistered event that the dotheaven-activity subgraph
   // indexes, making the song appear in the library across devices.
   if (CONTENT_REGISTER_MEGAETH_V1_CID) {
     try {
-      const trackId = computeTrackId({
-        title: formData.title,
-        artist: formData.artist,
-        album: '',
-      })
       const audioCid = publishResponse.audioCID
       console.log('[Publish] Registering on ContentRegistry (MegaETH):', { trackId, audioCid })
 
@@ -506,9 +525,36 @@ export async function publishSong(
     console.warn('[Publish] CONTENT_REGISTER_MEGAETH_V1_CID not set — skipping ContentRegistry registration')
   }
 
+  // ── Step 9: Set canonical on-chain cover ref via track-cover-v5 ─────
+  if (TRACK_COVER_V5_CID) {
+    try {
+      const coverTimestamp = Date.now().toString()
+      const coverNonce = crypto.randomUUID()
+      const coverResult = await litClient.executeJs({
+        ipfsId: TRACK_COVER_V5_CID,
+        authContext,
+        jsParams: {
+          userPkpPublicKey: pkpInfo.publicKey,
+          tracks: [{ trackId, coverCid: coverRef }],
+          timestamp: coverTimestamp,
+          nonce: coverNonce,
+        },
+      })
+
+      const coverResponse = JSON.parse(coverResult.response as string)
+      if (!coverResponse?.success) {
+        console.warn('[Publish] track-cover-v5 failed (non-fatal):', coverResponse?.error)
+      }
+    } catch (err) {
+      console.warn('[Publish] track-cover-v5 failed (non-fatal):', err)
+    }
+  } else {
+    console.warn('[Publish] TRACK_COVER_V5_CID not set — skipping cover ref write')
+  }
+
   onProgress(95)
 
-  // ── Step 9: Auto-translate lyrics (95-100%, best-effort) ──────────
+  // ── Step 10: Auto-translate lyrics (95-100%, best-effort) ─────────
   if (LYRICS_TRANSLATE_CID && lyricsText !== '(instrumental)') {
     const targetLangs = AUTO_TRANSLATE_LANGS.filter((l) => l !== formData.primaryLanguage)
 
@@ -553,7 +599,7 @@ export async function publishSong(
     tokenId: storyResponse.tokenId,
     audioCid: publishResponse.audioCID,
     instrumentalCid: publishResponse.instrumentalCID,
-    coverCid: publishResponse.coverCID,
+    coverCid: coverRef,
     canvasCid: publishResponse.canvasCID || undefined,
     licenseTermsIds: storyResponse.licenseTermsIds || [],
   }

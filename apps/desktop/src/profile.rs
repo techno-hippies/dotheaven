@@ -222,7 +222,7 @@ impl ProfileView {
 
     fn refresh_scrobbles_for_auth_inner(&mut self, force: bool, cx: &mut Context<Self>) {
         let user = auth::load_from_disk()
-            .and_then(|a| a.pkp_address)
+            .and_then(|a| a.primary_wallet_address().map(|value| value.to_string()))
             .unwrap_or_default()
             .to_ascii_lowercase();
 

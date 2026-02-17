@@ -99,12 +99,14 @@ impl SettingsView {
                         let persisted = auth::to_persisted(&auth_result);
                         match auth::save_to_disk(&persisted) {
                             Ok(()) => {
+                                let authed_address = persisted
+                                    .primary_wallet_address()
+                                    .unwrap_or("(unknown wallet address)")
+                                    .to_string();
                                 this.status = format!(
-                                    "Authenticated as {}",
-                                    persisted
-                                        .pkp_address
-                                        .clone()
-                                        .unwrap_or_else(|| "(unknown PKP address)".to_string())
+                                    "Authenticated as {} ({})",
+                                    authed_address,
+                                    persisted.provider_kind().as_str()
                                 );
                                 this.error = None;
                                 this.publish_status_success(
@@ -186,6 +188,16 @@ impl SettingsView {
                 return;
             }
         };
+        if let Err(err) = persisted.require_lit_auth("Lit context initialization") {
+            self.error = Some(err);
+            self.publish_status_info(
+                "settings.lit",
+                "Lit auth is unavailable for the current session.",
+                cx,
+            );
+            cx.notify();
+            return;
+        }
 
         self.busy = true;
         self.status = "Initializing Lit auth context (Rust SDK)...".into();

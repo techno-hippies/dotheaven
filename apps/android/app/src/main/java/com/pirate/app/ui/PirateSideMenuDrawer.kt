@@ -104,7 +104,7 @@ fun PirateSideMenuDrawer(
           }
           Column {
             Text(
-              heavenName?.let { "$it.heaven" } ?: shortAddr(ethAddress),
+              heavenName ?: shortAddr(ethAddress),
               fontWeight = FontWeight.Bold,
               style = MaterialTheme.typography.bodyLarge,
             )

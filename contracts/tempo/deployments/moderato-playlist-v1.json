@@ -1,0 +1,42 @@
+{
+  "network": {
+    "name": "Tempo Testnet (Moderato)",
+    "chainId": 42431,
+    "rpcUrl": "https://rpc.moderato.tempo.xyz",
+    "explorer": "https://explore.tempo.xyz"
+  },
+  "deployedAt": "2026-02-16T17:00:01Z",
+  "deployer": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+  "sponsor": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+  "script": "script/DeployPlaylistV1.s.sol",
+  "command": "forge script script/DeployPlaylistV1.s.sol --rpc-url https://rpc.moderato.tempo.xyz --broadcast --slow --gas-estimate-multiplier 100",
+  "contract": {
+    "name": "PlaylistV1",
+    "address": "0xB130B6F86C60680eb98740599484739335C6A525",
+    "deployTx": "0xef563f98f57af4bb46ed558d96435006868a0770ea91f1059d0f02f06a7ccea2",
+    "blockNumber": 5199026,
+    "gasUsed": 5434007,
+    "status": true
+  },
+  "postDeployChecks": {
+    "bytecodePresent": true,
+    "owner": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+    "sponsor": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB"
+  },
+  "smokeTest": {
+    "createPlaylistForTx": "0x7e4399f8be3553bd0762736a2f7e6f18f9f7c742a3060a38fd33f00f721e37bf",
+    "createPlaylistForGasUsed": 799853,
+    "setTracksTx": "0xb5d7ca56c10397e815a7f6e7a10ce3f7d502db99afc5f20e05c3a1a7b9adcf4e",
+    "setTracksGasUsed": 45336,
+    "updateMetaTx": "0x15955ecfbb5c34eb2066334fa7c7a4c86cabea0893576102c140ebe835672bae",
+    "updateMetaGasUsed": 40732,
+    "playlist": {
+      "playlistId": "0x25b7a4df56e83eb2d3bb54a8c4303777906b5b7ee6b49ebff3002688dc2dbd3d",
+      "owner": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+      "visibility": 1,
+      "exists": true,
+      "version": 3,
+      "trackCount": 2
+    }
+  }
+}

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -29,11 +30,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
+private const val MIN_LABEL_LENGTH = 3
+
 @Composable
 fun NameStep(
   submitting: Boolean,
   error: String?,
-  onContinue: (String) -> Unit,
+  selectedTld: String,
+  showPirateOption: Boolean,
+  onTldChange: (String) -> Unit,
+  onCheckAvailable: suspend (label: String, tld: String) -> Boolean,
+  onContinue: (label: String, tld: String) -> Unit,
 ) {
   var name by remember { mutableStateOf("") }
   var checking by remember { mutableStateOf(false) }
@@ -41,12 +48,12 @@ fun NameStep(
   var checkError by remember { mutableStateOf<String?>(null) }
 
   // Debounced availability check
-  LaunchedEffect(name) {
+  LaunchedEffect(name, selectedTld) {
     available = null
     checkError = null
     val sanitized = name.lowercase().filter { it.isLetterOrDigit() || it == '-' }
-    if (sanitized.length < 2) {
-      if (sanitized.isNotEmpty()) checkError = "Name must be at least 2 characters"
+    if (sanitized.length < MIN_LABEL_LENGTH) {
+      if (sanitized.isNotEmpty()) checkError = "Name must be at least $MIN_LABEL_LENGTH characters"
       return@LaunchedEffect
     }
     if (sanitized.length > 32) {
@@ -56,18 +63,18 @@ fun NameStep(
     checking = true
     delay(400)
     try {
-      val isAvailable = com.pirate.app.onboarding.OnboardingRpcHelpers.checkNameAvailable(sanitized)
+      val isAvailable = onCheckAvailable(sanitized, selectedTld)
       available = isAvailable
       if (!isAvailable) checkError = "Name is taken"
     } catch (e: Exception) {
-      checkError = "Could not check availability"
+      checkError = e.message ?: "Could not check availability"
     } finally {
       checking = false
     }
   }
 
   val sanitized = name.lowercase().filter { it.isLetterOrDigit() || it == '-' }
-  val canContinue = available == true && !submitting && sanitized.length >= 2
+  val canContinue = available == true && !submitting && sanitized.length >= MIN_LABEL_LENGTH
 
   Column(
     modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
@@ -87,12 +94,31 @@ fun NameStep(
     )
     Spacer(Modifier.height(32.dp))
 
+    if (showPirateOption) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+      ) {
+        FilterChip(
+          selected = selectedTld == "heaven",
+          onClick = { onTldChange("heaven") },
+          label = { Text(".heaven") },
+        )
+        FilterChip(
+          selected = selectedTld == "pirate",
+          onClick = { onTldChange("pirate") },
+          label = { Text(".pirate") },
+        )
+      }
+      Spacer(Modifier.height(14.dp))
+    }
+
     OutlinedTextField(
       value = name,
       onValueChange = { name = it.lowercase().filter { c -> c.isLetterOrDigit() || c == '-' } },
       modifier = Modifier.fillMaxWidth(),
       label = { Text("Username") },
-      suffix = { Text(".heaven", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+      suffix = { Text(".${selectedTld.lowercase()}", color = MaterialTheme.colorScheme.onSurfaceVariant) },
       singleLine = true,
       shape = RoundedCornerShape(50),
     )
@@ -126,7 +152,7 @@ fun NameStep(
     Spacer(Modifier.weight(1f))
 
     Button(
-      onClick = { onContinue(sanitized) },
+      onClick = { onContinue(sanitized, selectedTld) },
       enabled = canContinue,
       modifier = Modifier.fillMaxWidth().height(48.dp),
       shape = RoundedCornerShape(50),

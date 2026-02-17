@@ -11,6 +11,7 @@ fn test_cid_maps_load_both_networks() {
 fn test_action_cid_known_actions() {
     // These must be present in dev.json
     assert!(action_cid("naga-dev", "playlistV1").is_some());
+    assert!(action_cid("naga-dev", "contentRegisterMegaethV1").is_some());
     assert!(action_cid("naga-dev", "contentRegisterV1").is_some());
     assert!(action_cid("naga-dev", "contentAccessV1").is_some());
     assert!(action_cid("naga-dev", "trackCoverV4").is_some());
@@ -59,16 +60,27 @@ fn test_resolve_action_unknown_fails() {
 }
 
 #[test]
-fn test_content_register_falls_back_to_v1() {
-    // v2 has no CID on naga-test (empty string), should fall back to v1
-    let action =
-        resolve_content_register("naga-test").expect("should fall back to v1 on naga-test");
+fn test_content_register_prefers_megaeth_v1_when_available() {
+    let action = resolve_content_register("naga-dev")
+        .expect("should resolve content register action on naga-dev");
     assert!(action.is_ipfs());
     let source = action.source();
     assert!(
-        source.contains("contentRegisterV1"),
-        "should use v1, got {}",
+        source.contains("contentRegisterMegaethV1"),
+        "should prefer megaeth-v1 on naga-dev, got {}",
         source
+    );
+}
+
+#[test]
+fn test_content_register_requires_megaeth_v1() {
+    let err = resolve_content_register("naga-test")
+        .expect_err("should fail when megaeth-v1 is unavailable");
+    let lower = err.to_ascii_lowercase();
+    assert!(
+        lower.contains("contentregistermegaethv1 is required"),
+        "unexpected error: {}",
+        err
     );
 }
 

@@ -1,55 +1,61 @@
 package com.pirate.app.music
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import com.pirate.app.lit.LitAuthContextManager
 import com.pirate.app.lit.LitRust
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.math.BigInteger
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import java.util.UUID
+import org.bouncycastle.jcajce.provider.digest.Keccak
+import org.web3j.crypto.ECDSASignature
+import org.web3j.crypto.Keys
+import org.web3j.crypto.Sign
 
 /**
  * Song Publish Service — Kotlin port of song-publish.ts
  *
  * Orchestrates the full publish pipeline:
  * 1. Read files from URIs
- * 2. Pre-upload to Filebase via heaven-api proxy
+ * 2. Upload cover to Arweave via heaven-api proxy
+ * 3. Pre-upload audio/vocals/instrumental/canvas to Filebase via heaven-api proxy
  * 3. Build metadata JSONs
  * 4. SHA-256 hash all content + sign EIP-191 via PKP
- * 5. Call song-publish-v1 Lit Action (IPFS upload, lyrics alignment, translation)
+ * 5. Call song-publish-v2 Lit Action (storage-agnostic params + lyrics alignment + translation)
  * 6. Sign EIP-712 typed data for Story registration via PKP
  * 7. Call story-register-sponsor-v1 Lit Action (mint NFT, register IP, attach license)
  * 8. Register on ContentRegistry (MegaETH) for subgraph indexing
- * 9. Auto-translate lyrics (best-effort)
+ * 9. Write cover ref on-chain via track-cover-v5
+ * 10. Auto-translate lyrics (best-effort)
  */
 object SongPublishService {
 
   private const val TAG = "SongPublish"
   private const val IPFS_GATEWAY = "https://ipfs.filebase.io/ipfs/"
   private const val HEAVEN_API_URL = "https://heaven-api.deletion-backup782.workers.dev"
+  private const val ARWEAVE_GATEWAY = "https://arweave.net"
+  private const val MAX_ARWEAVE_COVER_BYTES = 100 * 1024
 
   // ── CID maps (mirrors action-cids.ts) ──────────────────────────
 
   private val CID_MAP = mapOf(
     "naga-dev" to mapOf(
-      "songPublish" to "QmcGA2ur8tGt5GDiQo6j21aY2Jc6aVGPvT6PyoqMBXKjXr",
+      "songPublishV2" to "QmYzNwWVJSAs2aMgdEBufzKftxzACJ7kxmQKSWqVJrseYT",
       "storyRegisterSponsor" to "QmZ38qG34PKnENxzV8eejbRwiqQf2aRFKuNKqJNTXvU43Q",
       "lyricsTranslate" to "QmViMXk72SZdjoWWuXP6kUsxB3BHzrK2ZN934YPFKmXBeV",
       "contentRegisterMegaethV1" to "QmRFuAAYCmri8kTCmJupF9AZWhYmvKnhNhVyqr5trRfZhS",
-    ),
-    "naga-test" to mapOf(
-      "songPublish" to "QmNUVHTrU4S823gp2JaP19hAZCCqpwdvzFrs35GiECuXAJ",
-      "storyRegisterSponsor" to "QmQi5mVzt4u6ViXZYkZYrmFu7oXFEJjx7Fzc6YUYyUcSEt",
-      "lyricsTranslate" to "QmUrbZY5MWrBFhfgoDLaxNwXchJgeB5vsRMMLMzRprvUu3",
-      "contentRegisterMegaethV1" to "",
+      "trackCoverV5" to "QmdoZnj6BsXASda2VUqN7M1zPDktoBQMkn2WvW1PsbRiUb",
     ),
   )
 
-  // ── Encrypted API keys (bound to song-publish-v1 action CID) ────
+  // ── Encrypted API keys (bound to song-publish-v1/v2 action CID) ────
 
   private fun actionBoundEncryptedKey(
     actionCid: String,
@@ -73,18 +79,15 @@ object SongPublishService {
   }
 
   private val songPublishFilebaseCiphertextByCid = mapOf(
-    CID_MAP.getValue("naga-dev").getValue("songPublish") to "tWWiSlN4hS1j5zT6xBLC61/D3tFVwo7IbMCx2omAdZHXNldU4xwVtr36fy5HozAY92GCU+jx8pmooLRKTolxt04JviE16IlIpVAR5XajqV5lIgYcmZ8ZLejkqDITO1GoF0juzkwL8u+TlD+kLnczUuCOKiizpRjiB/2dyLRFttfT5cUEOJSiWxyN/xl2t/KzKI0RGM1VXQje3s4Mp2cn9Vs5iiyVq0XzZ1unMmqZne4mBWstl3cC",
-    CID_MAP.getValue("naga-test").getValue("songPublish") to "rG/IQhwV9GxbF62qSXIby+c+MJO/jj9K5CJlSbFcJsiI9M6xL/2bSGL5qfGR5ODpX0XNBHN51u0VuA+iVXR/CW7KjS/jX2Af8t9FcOVS5Z1l9tjy5BJRJxfPzI+axSIqd9L8wntI/nWgt16eML2V0B6ltgzCgwTfztNofNZrgdVKifvpTB1gfsRNY6aFtmzdejOQIZ3PuRK8j7Vcx7jmp4Y5fDUb2jAsjpPHf3wWJ3CFVYlaA6EC",
+    CID_MAP.getValue("naga-dev").getValue("songPublishV2") to "lnvxDJMtF1yqGN7cAj9ZKBdkoCgJ4JExWKiy7/u6O0ebNj4aagBJ9MAqulSHrJx7DrVne1L78etCAxYdH6KXERYdL6TZZc4TDAEbT0EAZRhleFyH7P1yO65ryGekd85Tj7tCytYN/zdg7OYd+eCr6+ouqBszY4M+RvjP9UerLyW9/TXdP1v670y/ov+hMLaI1P8pnixXbBqb5xoKmTZ9PxRymzC2XUhbLyjD/nDMHVIOBDVGLvQC",
   )
 
   private val songPublishElevenlabsCiphertextByCid = mapOf(
-    CID_MAP.getValue("naga-dev").getValue("songPublish") to "kZPov5eAHRzrlnvndj1W3HXWRgTIhAjr5MKVB5sUeoW63HinMg4fZT7KLbPGC2KZX0NLkVHPDl59lV+hyUadxlrDuDaDnTkU4r5oR4X5C700uxSgli0vUXqFAdhm3jYKpf+1QuS9srFQp9R1zUKlQSj2dQy7ucJHZOXqK2cQ4xu/ytRcyAI=",
-    CID_MAP.getValue("naga-test").getValue("songPublish") to "sA9lX823Ag3z1aHKbXTwsj+aCVHUj2RbO5BXpe9+HGh+1IXoTtnJ1O6Rrxcwe3BXapMZCpI6O3HftHPpQWheMt3K66Zc7+05rL4WHZeK5/g0ALX+HZTV3fwUoJmkvYFjZ2eLF8+ADVxpqMSsXOB3p70FyfdaTa1XPiN1HG74GT5U/rf0WgI=",
+    CID_MAP.getValue("naga-dev").getValue("songPublishV2") to "uTJ6xvhguWO1H8NqauuOD0orVBeoBEXGu1NlGIPegSnmXz7LbLgNhthJRQdfk9936YuJtmTKw2epxfRSMLWbPOV2ZJyp7cKUfYMrKTLn32o02afacl81HhehuxfwMOId88KaS8wmFSsq6as80qOj4+tWzDBFxymcnGmSZ1vJSl3R/FmJ/AI=",
   )
 
   private val songPublishOpenrouterCiphertextByCid = mapOf(
-    CID_MAP.getValue("naga-dev").getValue("songPublish") to "iRVcOcNnPeejpfrZ8rmQeynHl0pj8xoVvJBo3nVPzKCEHXNB+MBp6tq6phUaM7kVTRX2iIY/upFkXrJrBhAhXcIfxB3ZkVRuiThFs9x+rlBKyxZkHhpCld8z+3+bVR7gxwoNunt9Bm5lz3pJLiRzx0t2D0rVij0jjpt90rUqHvfvqzduO1v75b3fpSv2YpJkSb+0tSmpv2VN1tIC",
-    CID_MAP.getValue("naga-test").getValue("songPublish") to "qpLLZkw3eBthek6QLNB0l5lb9EyZlHFd8RRnJyGWa365643ib6f1gDlV2pbleWsHVBCWF5HkoNwgFvK1pugxfkRKJydbp+Da+nPFFw5+8SpKGrie+4bKi4IHHjrgm7F6azdbJGlyphGDvUdIvvFapRi0YHeS9fd72Ekqv7fWJ7faQM67oOucjEFPRdyr44+xEGFfxVDAK60LT+sC",
+    CID_MAP.getValue("naga-dev").getValue("songPublishV2") to "qh5DyFLLEVx2NaFx1FHQKw+1HhqaaiM0l4wTJwhRsZfl7zl/xKjfTdOaVHxYkJJakDr1j1XbMCOxJHD5GH3o0u+KAngydXuY1NGkVKx5F19KCj92+OG1VXQG/io41UPLQfYnUxnvthial/7+czfEJI6XFtjesgn6/9IJACMA9kiBTaU71VhcbMgWFhjcyPF89f1PX8opr4sUDiwC",
   )
 
   private fun filebaseEncryptedKey(songPublishCid: String) = actionBoundEncryptedKey(
@@ -112,12 +115,10 @@ object SongPublishService {
 
   private val lyricsFilebaseCiphertextByCid = mapOf(
     CID_MAP.getValue("naga-dev").getValue("lyricsTranslate") to "tKYa+oVjx6F2Ja3rm4OWeinfcyENLf3dwSIIMEa7g/XQP/wnGE9nXGiR2JMuXGYpLx03kppJfMdbv25N+yRjORw8KDuKHAMXGZqFbXTmYMxls8tH1zpaHxLlcicKVxIXeReXvSOgJVZ9cELNSMDSByVBNM6ka70jPT6RdFbCrs9mUyQUb0XZaEyzmjTjZ/K2/Uqz7pwkxu+3iBHBnKLCDV8hoBQdXO9CLspRXCycy7LCPNSUpSMC",
-    CID_MAP.getValue("naga-test").getValue("lyricsTranslate") to "r4XJJo7YOcfxJUp87pmNEAgupBmqR8sqh5wmS2e1HQIbNCK/Yp0F0Lmblm3HXDtx1mYuhDuoV5PoBuXSNJ9lEb6GcS6aZtTqgHPr2oiCMnhlpEssFRuKRx05HU19Ar0gB1tFiqiIewcn+4FtkMWiy8HGJT7nCikKWd81cIToLV5Zr8RH1Ht1w0av1dse+fHm0CMjJdrKcyAKOW+u5ImOYmf2sImx4B+TyuTEdgbbZBqBdFPnWPQC",
   )
 
   private val lyricsOpenrouterCiphertextByCid = mapOf(
     CID_MAP.getValue("naga-dev").getValue("lyricsTranslate") to "o/7W0AEqLIdlO6GriIAs5iwxPJ/3JG2ctRysJKRZN0j67xW1kl23sD9fkTRCXr2FhnmFMfSoLB5r0cGD7hAEP3J7jCZIJa0k+xrWn7gjnORKqMpZl1G5LR+V9MV1UVSmrydFubnmnNWF3pBGkvUGDVl/RrYGgUJ0G9XOSYqHjxcFZ6VDcKw/ByOMOL/OmM8QDOVnV5Va6E+76EUC",
-    CID_MAP.getValue("naga-test").getValue("lyricsTranslate") to "qhama/oTfv8O8UjKIw2dIyNeEf5Kny47nrtwRUjC/C3VfFxBgSpNmcIqQA+Oys1X0unAqVZKBu1uELJB795xUmbjaRZ/8Uo4H9YM8kW9V4hKcso+oOaELyFt4fZCFlO4Zt2vsouIzJd3g2S1P9A7LaVvpb8u1geBWvSdqk5UmhTpxVduNoQgQv7JAnzqaqMgVLgCxsoISnR4UGwC",
   )
 
   private fun lyricsFilebaseEncryptedKey(lyricsTranslateCid: String) = actionBoundEncryptedKey(
@@ -184,6 +185,133 @@ object SongPublishService {
   }
 
   private fun sha256HexString(text: String): String = sha256Hex(text.toByteArray(Charsets.UTF_8))
+
+  private fun keccak256(data: ByteArray): ByteArray {
+    val digest = Keccak.Digest256()
+    return digest.digest(data)
+  }
+
+  private fun normalizeHexNoPrefix(value: String): String {
+    var cleaned = value.trim().trim('"').replace("\\", "")
+    if (cleaned.startsWith("0x") || cleaned.startsWith("0X")) {
+      cleaned = cleaned.substring(2)
+    }
+    cleaned = cleaned.lowercase()
+    if (cleaned.isEmpty()) return ""
+    if (!cleaned.all { it in '0'..'9' || it in 'a'..'f' }) {
+      throw IllegalStateException("Invalid hex string from Lit signature payload: '$value'")
+    }
+    return if (cleaned.length % 2 == 1) "0$cleaned" else cleaned
+  }
+
+  private fun hexToBytes(hex: String): ByteArray {
+    val clean = normalizeHexNoPrefix(hex)
+    if (clean.isEmpty()) return ByteArray(0)
+    val out = ByteArray(clean.length / 2)
+    for (i in out.indices) {
+      val hi = clean[2 * i].digitToInt(16)
+      val lo = clean[2 * i + 1].digitToInt(16)
+      out[i] = ((hi shl 4) or lo).toByte()
+    }
+    return out
+  }
+
+  private fun parseRecoveryId(sig: JSONObject): Int? {
+    val keys = listOf("recid", "recoveryId", "recovery_id", "v")
+    for (key in keys) {
+      if (!sig.has(key)) continue
+      val raw = sig.opt(key) ?: continue
+      val parsed = when (raw) {
+        is Number -> raw.toInt()
+        is String -> {
+          val txt = raw.trim().trim('"').replace("\\", "")
+          val noPrefix = txt.removePrefix("0x").removePrefix("0X")
+          noPrefix.toIntOrNull(16) ?: txt.toIntOrNull()
+        }
+        else -> null
+      } ?: continue
+      return when (parsed) {
+        0, 1 -> parsed
+        27, 28 -> parsed - 27
+        else -> null
+      }
+    }
+    return null
+  }
+
+  private fun extractLitSignature(sig: JSONObject): Triple<ByteArray, ByteArray, Int?> {
+    val hintedRecovery = parseRecoveryId(sig)
+
+    val signatureField = sig.optString("signature", "").trim()
+    if (signatureField.isNotBlank()) {
+      val sigHex = normalizeHexNoPrefix(signatureField)
+      if (sigHex.length >= 128) {
+        val r = hexToBytes(sigHex.substring(0, 64))
+        val s = hexToBytes(sigHex.substring(64, 128))
+        val sigV = if (sigHex.length >= 130) {
+          val vRaw = sigHex.substring(128, 130).toInt(16)
+          when (vRaw) {
+            0, 1 -> vRaw
+            27, 28 -> vRaw - 27
+            else -> null
+          }
+        } else {
+          null
+        }
+        return Triple(r, s, sigV ?: hintedRecovery)
+      }
+    }
+
+    val rHex = sig.optString("r", "").trim()
+    val sHex = sig.optString("s", "").trim()
+    if (rHex.isNotBlank() && sHex.isNotBlank()) {
+      val r = hexToBytes(normalizeHexNoPrefix(rHex).padStart(64, '0'))
+      val s = hexToBytes(normalizeHexNoPrefix(sHex).padStart(64, '0'))
+      return Triple(r, s, hintedRecovery)
+    }
+
+    throw IllegalStateException("Unsupported Lit signature shape: $sig")
+  }
+
+  private fun recoverVForDigest(
+    expectedAddress: String,
+    digest32: ByteArray,
+    r: ByteArray,
+    s: ByteArray,
+    hintedRecovery: Int?,
+  ): Int {
+    val expectedNo0x = expectedAddress.removePrefix("0x").lowercase()
+    val candidates = buildList {
+      if (hintedRecovery != null && hintedRecovery in 0..1) add(hintedRecovery)
+      addAll(listOf(0, 1).filterNot { it in this })
+    }
+
+    val ecdsaSig = ECDSASignature(BigInteger(1, r), BigInteger(1, s))
+    return candidates.firstOrNull { v ->
+      runCatching {
+        val pub = Sign.recoverFromSignature(v, ecdsaSig, digest32) ?: return@runCatching false
+        Keys.getAddress(pub).lowercase() == expectedNo0x
+      }.getOrDefault(false)
+    } ?: throw IllegalStateException("Could not recover signer for $expectedAddress")
+  }
+
+  private fun parseLitSignatureFromResult(result: JSONObject): JSONObject {
+    result.optJSONObject("signatures")?.optJSONObject("sig")?.let { return it }
+    val response = result.optString("response", "")
+    if (response.isNotBlank()) {
+      runCatching { JSONObject(response) }.getOrNull()?.let { return it }
+    }
+    throw IllegalStateException("No signature returned from PKP")
+  }
+
+  private fun deriveEthAddressFromPkpPublicKey(pkpPublicKey: String): String? {
+    val clean = pkpPublicKey.trim().removePrefix("0x").removePrefix("0X")
+    val withoutPrefix = if (clean.startsWith("04") && clean.length == 130) clean.drop(2) else clean
+    if (withoutPrefix.length != 128) return null
+    return runCatching {
+      "0x" + Keys.getAddress(BigInteger(withoutPrefix, 16)).lowercase()
+    }.getOrNull()
+  }
 
   private fun readUri(context: Context, uri: Uri): ByteArray {
     val stream = context.contentResolver.openInputStream(uri)
@@ -260,6 +388,131 @@ object SongPublishService {
     return result
   }
 
+  private data class ArweaveCoverUpload(
+    val id: String,
+    val ref: String,
+    val arweaveUrl: String,
+  )
+
+  private fun contentTypeToExt(contentType: String): String {
+    return when (contentType.lowercase()) {
+      "image/png" -> "png"
+      "image/webp" -> "webp"
+      "image/gif" -> "gif"
+      else -> "jpg"
+    }
+  }
+
+  private fun prepareCoverForArweave(
+    bytes: ByteArray,
+    contentType: String,
+  ): Pair<ByteArray, String> {
+    if (bytes.size <= MAX_ARWEAVE_COVER_BYTES && contentType.startsWith("image/")) {
+      return bytes to contentType
+    }
+
+    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+      ?: throw IllegalStateException("Could not decode cover image for Arweave upload")
+
+    val maxDims = intArrayOf(1024, 896, 768, 640, 512, 448, 384, 320, 256)
+    val qualities = intArrayOf(86, 80, 74, 68, 62, 56, 50, 44)
+
+    try {
+      for (maxDim in maxDims) {
+        val scale = minOf(1f, maxDim.toFloat() / maxOf(bitmap.width, bitmap.height).toFloat())
+        val targetW = maxOf(1, (bitmap.width * scale).toInt())
+        val targetH = maxOf(1, (bitmap.height * scale).toInt())
+
+        val scaled = if (targetW == bitmap.width && targetH == bitmap.height) {
+          bitmap
+        } else {
+          Bitmap.createScaledBitmap(bitmap, targetW, targetH, true)
+        }
+
+        try {
+          for (q in qualities) {
+            val baos = ByteArrayOutputStream()
+            if (!scaled.compress(Bitmap.CompressFormat.JPEG, q, baos)) continue
+            val out = baos.toByteArray()
+            if (out.size <= MAX_ARWEAVE_COVER_BYTES) {
+              return out to "image/jpeg"
+            }
+          }
+        } finally {
+          if (scaled !== bitmap) scaled.recycle()
+        }
+      }
+    } finally {
+      bitmap.recycle()
+    }
+
+    throw IllegalStateException("Unable to compress cover below $MAX_ARWEAVE_COVER_BYTES bytes for Arweave upload")
+  }
+
+  private fun uploadCoverToArweave(
+    coverBytes: ByteArray,
+    coverContentType: String,
+  ): ArweaveCoverUpload {
+    val (preparedBytes, preparedType) = prepareCoverForArweave(coverBytes, coverContentType)
+    val boundary = "----HeavenArweaveCover${System.currentTimeMillis()}"
+    val url = URL("$HEAVEN_API_URL/api/arweave/cover")
+    val conn = url.openConnection() as HttpURLConnection
+    conn.requestMethod = "POST"
+    conn.doOutput = true
+    conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+    conn.connectTimeout = 120_000
+    conn.readTimeout = 120_000
+
+    val ext = contentTypeToExt(preparedType)
+    val tags = """[{"key":"App-Name","value":"Heaven"},{"key":"Upload-Source","value":"android-song-publish"}]"""
+
+    conn.outputStream.use { out ->
+      out.write("--$boundary\r\n".toByteArray())
+      out.write("Content-Disposition: form-data; name=\"file\"; filename=\"cover.$ext\"\r\n".toByteArray())
+      out.write("Content-Type: $preparedType\r\n\r\n".toByteArray())
+      out.write(preparedBytes)
+      out.write("\r\n".toByteArray())
+
+      out.write("--$boundary\r\n".toByteArray())
+      out.write("Content-Disposition: form-data; name=\"contentType\"\r\n\r\n".toByteArray())
+      out.write(preparedType.toByteArray())
+      out.write("\r\n".toByteArray())
+
+      out.write("--$boundary\r\n".toByteArray())
+      out.write("Content-Disposition: form-data; name=\"tags\"\r\n\r\n".toByteArray())
+      out.write(tags.toByteArray())
+      out.write("\r\n".toByteArray())
+
+      out.write("--$boundary--\r\n".toByteArray())
+    }
+
+    val responseBody = if (conn.responseCode in 200..299) {
+      conn.inputStream.bufferedReader().readText()
+    } else {
+      conn.errorStream?.bufferedReader()?.readText() ?: "HTTP ${conn.responseCode}"
+    }
+
+    if (conn.responseCode !in 200..299) {
+      throw IllegalStateException("Arweave cover upload failed: $responseBody")
+    }
+
+    val json = JSONObject(responseBody)
+    val id = json.optString("id", "")
+    val ref = json.optString("ref", "")
+    val arweaveUrl = json.optString("arweaveUrl", "")
+      .ifBlank { if (id.isNotBlank()) "$ARWEAVE_GATEWAY/$id" else "" }
+
+    if (id.isBlank() || ref.isBlank() || !ref.startsWith("ar://")) {
+      throw IllegalStateException("Invalid Arweave cover upload response: $responseBody")
+    }
+
+    return ArweaveCoverUpload(
+      id = id,
+      ref = ref,
+      arweaveUrl = arweaveUrl,
+    )
+  }
+
   /**
    * Sign an EIP-191 message via PKP using a Lit Action.
    */
@@ -268,20 +521,16 @@ object SongPublishService {
     litNetwork: String,
     litRpcUrl: String,
     pkpPublicKey: String,
+    expectedAddress: String,
     message: String,
   ): String {
     val code = """
       (async () => {
-        const toSign = ethers.utils.arrayify(
-          ethers.utils.hashMessage(jsParams.message)
-        );
-        const sigShare = await Lit.Actions.signAndCombineEcdsa({
-          toSign: toSign,
+        await Lit.Actions.ethPersonalSignMessageEcdsa({
+          message: jsParams.message,
           publicKey: jsParams.publicKey,
           sigName: "sig",
         });
-        const sig = JSON.parse(sigShare);
-        Lit.Actions.setResponse({ response: JSON.stringify(sig) });
       })();
     """.trimIndent()
 
@@ -297,15 +546,19 @@ object SongPublishService {
       code = code,
       jsParamsJson = jsParams.toString(),
     )
-    val response = result.optString("response", "")
-    if (response.isBlank()) throw IllegalStateException("No signature response from PKP")
+    val sig = parseLitSignatureFromResult(result)
+    val (r, s, hintedRecovery) = extractLitSignature(sig)
 
-    val sig = JSONObject(response)
-    val r = sig.getString("r")
-    val s = sig.getString("s")
-    val recid = sig.optInt("recid", sig.optInt("recoveryId", 0))
-    val v = recid + 27
-    return "0x${r.removePrefix("0x")}${s.removePrefix("0x")}${"%02x".format(v)}"
+    val messageBytes = message.toByteArray(Charsets.UTF_8)
+    val prefix = "\u0019Ethereum Signed Message:\n${messageBytes.size}".toByteArray(Charsets.UTF_8)
+    val digest = keccak256(prefix + messageBytes)
+    val recoveredV = recoverVForDigest(expectedAddress, digest, r, s, hintedRecovery)
+
+    val sigBytes = ByteArray(65)
+    System.arraycopy(r, 0, sigBytes, 0, 32)
+    System.arraycopy(s, 0, sigBytes, 32, 32)
+    sigBytes[64] = (27 + recoveredV).toByte()
+    return "0x" + sigBytes.joinToString("") { "%02x".format(it) }
   }
 
   /**
@@ -316,6 +569,7 @@ object SongPublishService {
     litNetwork: String,
     litRpcUrl: String,
     pkpPublicKey: String,
+    expectedAddress: String,
     typedDataHashHex: String,
   ): String {
     val code = """
@@ -326,13 +580,11 @@ object SongPublishService {
           hashBytes.push(parseInt(hex.substr(i, 2), 16));
         }
         const toSign = new Uint8Array(hashBytes);
-        const sigShare = await Lit.Actions.signAndCombineEcdsa({
+        await Lit.Actions.signEcdsa({
           toSign: toSign,
           publicKey: jsParams.publicKey,
           sigName: "sig",
         });
-        const sig = JSON.parse(sigShare);
-        Lit.Actions.setResponse({ response: JSON.stringify(sig) });
       })();
     """.trimIndent()
 
@@ -348,15 +600,18 @@ object SongPublishService {
       code = code,
       jsParamsJson = jsParams.toString(),
     )
-    val response = result.optString("response", "")
-    if (response.isBlank()) throw IllegalStateException("No EIP-712 signature response from PKP")
+    val sig = parseLitSignatureFromResult(result)
+    val (r, s, hintedRecovery) = extractLitSignature(sig)
 
-    val sig = JSONObject(response)
-    val r = sig.getString("r")
-    val s = sig.getString("s")
-    val recid = sig.optInt("recid", sig.optInt("recoveryId", 0))
-    val v = recid + 27
-    return "0x${r.removePrefix("0x")}${s.removePrefix("0x")}${"%02x".format(v)}"
+    val digest = hexToBytes(typedDataHashHex)
+    if (digest.size != 32) throw IllegalStateException("typedDataHashHex must be 32 bytes")
+    val recoveredV = recoverVForDigest(expectedAddress, digest, r, s, hintedRecovery)
+
+    val sigBytes = ByteArray(65)
+    System.arraycopy(r, 0, sigBytes, 0, 32)
+    System.arraycopy(s, 0, sigBytes, 32, 32)
+    sigBytes[64] = (27 + recoveredV).toByte()
+    return "0x" + sigBytes.joinToString("") { "%02x".format(it) }
   }
 
   /**
@@ -441,7 +696,7 @@ object SongPublishService {
    *
    * @param context Android context for reading URIs
    * @param formData The form data with file URIs and metadata
-   * @param litNetwork Lit network (naga-dev or naga-test)
+   * @param litNetwork Lit network (must be naga-dev)
    * @param litRpcUrl Lit RPC URL
    * @param pkpPublicKey User's PKP public key
    * @param pkpEthAddress User's PKP Ethereum address
@@ -456,13 +711,24 @@ object SongPublishService {
     pkpEthAddress: String,
     onProgress: (Int) -> Unit,
   ): PublishResult {
-    val cids = CID_MAP[litNetwork] ?: throw IllegalStateException("Unknown Lit network: $litNetwork")
-    val songPublishCid = cids["songPublish"]
-      ?.takeIf { it.isNotBlank() } ?: throw IllegalStateException("SONG_PUBLISH_CID not set for $litNetwork")
+    if (litNetwork != "naga-dev") {
+      throw IllegalStateException("Unsupported Lit network: $litNetwork (this app is dev-only: naga-dev)")
+    }
+    val cids = CID_MAP.getValue("naga-dev")
+    val songPublishV2Cid = cids["songPublishV2"]
+      ?.takeIf { it.isNotBlank() } ?: throw IllegalStateException("SONG_PUBLISH_V2_CID not set for $litNetwork")
     val storyRegisterCid = cids["storyRegisterSponsor"]
       ?.takeIf { it.isNotBlank() } ?: throw IllegalStateException("STORY_REGISTER_SPONSOR_CID not set for $litNetwork")
     val lyricsTranslateCid = cids["lyricsTranslate"] ?: ""
     val contentRegisterCid = cids["contentRegisterMegaethV1"] ?: ""
+    val trackCoverV5Cid = cids["trackCoverV5"] ?: ""
+
+    val derivedAddress = deriveEthAddressFromPkpPublicKey(pkpPublicKey)
+    if (derivedAddress != null && derivedAddress != pkpEthAddress.lowercase()) {
+      throw IllegalStateException(
+        "PKP mismatch: public key resolves to $derivedAddress but provided pkpEthAddress is ${pkpEthAddress.lowercase()}",
+      )
+    }
 
     // ── Step 1: Read files (0-5%) ───────────────────────────────
     onProgress(2)
@@ -486,12 +752,14 @@ object SongPublishService {
 
     onProgress(5)
 
-    // ── Step 2: Pre-upload to Filebase (5-15%) ──────────────────
+    // ── Step 2: Upload cover to Arweave + pre-upload media (5-15%) ─
+    val arweaveCover = uploadCoverToArweave(coverBytes, coverMime)
+    val coverRef = arweaveCover.ref
+
     val uploadFiles = mutableListOf(
       Triple("audio", audioBytes, audioMime),
       Triple("vocals", vocalsBytes, vocalsMime),
       Triple("instrumental", instrumentalBytes, instrumentalMime),
-      Triple("cover", coverBytes, coverMime),
     )
     if (canvasBytes != null && canvasMime != null) {
       uploadFiles.add(Triple("canvas", canvasBytes, canvasMime))
@@ -502,7 +770,6 @@ object SongPublishService {
     val audioUrl = "$IPFS_GATEWAY${cidMap["audio"]}"
     val vocalsUrl = "$IPFS_GATEWAY${cidMap["vocals"]}"
     val instrumentalUrl = "$IPFS_GATEWAY${cidMap["instrumental"]}"
-    val coverUrl = "$IPFS_GATEWAY${cidMap["cover"]}"
     val canvasUrl = cidMap["canvas"]?.let { "$IPFS_GATEWAY$it" }
 
     onProgress(15)
@@ -564,21 +831,23 @@ object SongPublishService {
       litNetwork = litNetwork,
       litRpcUrl = litRpcUrl,
       pkpPublicKey = pkpPublicKey,
+      expectedAddress = pkpEthAddress,
       message = message,
     )
 
     onProgress(30)
 
-    // ── Step 6: Call song-publish-v1 Lit Action (30-65%) ─────────
-    android.util.Log.i(TAG, "Calling song-publish-v1 Lit Action (CID: $songPublishCid)")
+    // ── Step 6: Call song-publish-v2 Lit Action (30-65%) ─────────
+    android.util.Log.i(TAG, "Calling song-publish-v2 Lit Action (CID: $songPublishV2Cid)")
 
     val publishJsParams = JSONObject().apply {
       put("userPkpPublicKey", pkpPublicKey)
-      put("audioUrl", audioUrl)
-      put("coverUrl", coverUrl)
-      put("vocalsUrl", vocalsUrl)
-      put("instrumentalUrl", instrumentalUrl)
-      if (canvasUrl != null) put("canvasUrl", canvasUrl)
+      put("audioRef", audioUrl)
+      put("coverRef", coverRef)
+      put("vocalsRef", vocalsUrl)
+      put("instrumentalRef", instrumentalUrl)
+      if (canvasUrl != null) put("canvasRef", canvasUrl)
+      put("storageMode", "filebase")
       put("songMetadataJson", songMetadata)
       put("ipaMetadataJson", ipaMetadata)
       put("nftMetadataJson", nftMetadata)
@@ -588,23 +857,42 @@ object SongPublishService {
       put("lyricsText", lyricsText)
       put("sourceLanguage", sourceLanguageName)
       put("targetLanguage", targetLanguage)
-      put("filebaseEncryptedKey", filebaseEncryptedKey(songPublishCid))
-      put("elevenlabsEncryptedKey", elevenlabsEncryptedKey(songPublishCid))
-      put("openrouterEncryptedKey", openrouterEncryptedKey(songPublishCid))
+      put("storageEncryptedKey", filebaseEncryptedKey(songPublishV2Cid))
+      put("elevenlabsEncryptedKey", elevenlabsEncryptedKey(songPublishV2Cid))
+      put("openrouterEncryptedKey", openrouterEncryptedKey(songPublishV2Cid))
     }
 
-    val publishResult = executeJsResultWithAuthRecovery(
-      context = context,
-      network = litNetwork,
-      rpcUrl = litRpcUrl,
-      ipfsId = songPublishCid,
-      jsParamsJson = publishJsParams.toString(),
-    )
-    val publishResponseStr = publishResult.optString("response", "")
-    if (publishResponseStr.isBlank()) throw IllegalStateException("No response from song-publish-v1")
-    val publishResponse = JSONObject(publishResponseStr)
+    suspend fun executeSongPublishAction(): JSONObject {
+      val result = executeJsResultWithAuthRecovery(
+        context = context,
+        network = litNetwork,
+        rpcUrl = litRpcUrl,
+        ipfsId = songPublishV2Cid,
+        jsParamsJson = publishJsParams.toString(),
+      )
+      val responseStr = result.optString("response", "")
+      if (responseStr.isBlank()) throw IllegalStateException("No response from song-publish-v2")
+      return JSONObject(responseStr)
+    }
+
+    var publishResponse = executeSongPublishAction()
     if (!publishResponse.optBoolean("success", false)) {
-      throw IllegalStateException("Song publish failed: ${publishResponse.optString("error", "unknown")}")
+      val actionError = publishResponse.optString("error", "unknown")
+      val shouldRetryDecrypt = actionError.lowercase().contains("decrypt and combine")
+      if (shouldRetryDecrypt) {
+        android.util.Log.w(
+          TAG,
+          "song-publish-v2 decryptAndCombine failed; forcing auth context refresh and retrying once",
+        )
+        LitAuthContextManager.ensureFromSavedState(context, forceRefresh = true)
+        publishResponse = executeSongPublishAction()
+      }
+      if (!publishResponse.optBoolean("success", false)) {
+        throw IllegalStateException(
+          "Song publish failed: ${publishResponse.optString("error", "unknown")} " +
+            "(network=$litNetwork cid=$songPublishV2Cid)",
+        )
+      }
     }
 
     onProgress(65)
@@ -637,6 +925,7 @@ object SongPublishService {
       litNetwork = litNetwork,
       litRpcUrl = litRpcUrl,
       pkpPublicKey = pkpPublicKey,
+      expectedAddress = pkpEthAddress,
       typedDataHashHex = typedDataHash,
     )
 
@@ -674,17 +963,18 @@ object SongPublishService {
 
     onProgress(88)
 
+    val trackId = computeTrackId(
+      context = context,
+      litNetwork = litNetwork,
+      litRpcUrl = litRpcUrl,
+      title = formData.title,
+      artist = formData.artist,
+      album = "",
+    )
+
     // ── Step 9: Register on ContentRegistry MegaETH (88-95%) ────
     if (contentRegisterCid.isNotBlank()) {
       try {
-        val trackId = computeTrackId(
-          context = context,
-          litNetwork = litNetwork,
-          litRpcUrl = litRpcUrl,
-          title = formData.title,
-          artist = formData.artist,
-          album = "",
-        )
         val audioCid = publishResponse.getString("audioCID")
         android.util.Log.i(TAG, "Registering on ContentRegistry (MegaETH): trackId=$trackId audioCid=$audioCid")
 
@@ -721,9 +1011,43 @@ object SongPublishService {
       }
     }
 
+    // ── Step 10: Set on-chain cover via track-cover-v5 (non-fatal) ─
+    if (trackCoverV5Cid.isNotBlank()) {
+      try {
+        val coverTimestamp = System.currentTimeMillis().toString()
+        val coverNonce = UUID.randomUUID().toString()
+        val tracks = JSONArray().put(JSONObject().apply {
+          put("trackId", trackId)
+          put("coverCid", coverRef)
+        })
+        val coverJsParams = JSONObject().apply {
+          put("userPkpPublicKey", pkpPublicKey)
+          put("tracks", tracks)
+          put("timestamp", coverTimestamp)
+          put("nonce", coverNonce)
+        }
+
+        val coverResult = executeJsResultWithAuthRecovery(
+          context = context,
+          network = litNetwork,
+          rpcUrl = litRpcUrl,
+          ipfsId = trackCoverV5Cid,
+          jsParamsJson = coverJsParams.toString(),
+        )
+        val coverResponse = JSONObject(coverResult.optString("response", "{}"))
+        if (!coverResponse.optBoolean("success", false)) {
+          android.util.Log.w(TAG, "track-cover-v5 failed (non-fatal): ${coverResponse.optString("error")}")
+        }
+      } catch (e: Exception) {
+        android.util.Log.w(TAG, "track-cover-v5 failed (non-fatal): ${e.message}")
+      }
+    } else {
+      android.util.Log.w(TAG, "trackCoverV5 CID not set for $litNetwork; skipping cover write")
+    }
+
     onProgress(95)
 
-    // ── Step 10: Auto-translate lyrics (95-100%, best-effort) ────
+    // ── Step 11: Auto-translate lyrics (95-100%, best-effort) ────
     if (lyricsTranslateCid.isNotBlank() && lyricsText != "(instrumental)") {
       val targetLangs = AUTO_TRANSLATE_LANGS.filter { it != formData.primaryLanguage }
       if (targetLangs.isNotEmpty()) {
@@ -740,6 +1064,7 @@ object SongPublishService {
             litNetwork = litNetwork,
             litRpcUrl = litRpcUrl,
             pkpPublicKey = pkpPublicKey,
+            expectedAddress = pkpEthAddress,
             message = translateMessage,
           )
 
@@ -771,17 +1096,31 @@ object SongPublishService {
 
     onProgress(100)
 
-    return PublishResult(
+    val result = PublishResult(
       ipId = storyResponse.getString("ipId"),
       tokenId = storyResponse.getString("tokenId"),
       audioCid = publishResponse.getString("audioCID"),
       instrumentalCid = publishResponse.getString("instrumentalCID"),
-      coverCid = publishResponse.getString("coverCID"),
+      coverCid = coverRef,
       canvasCid = publishResponse.optString("canvasCID", "").ifBlank { null },
       licenseTermsIds = storyResponse.optJSONArray("licenseTermsIds")?.let { arr ->
         (0 until arr.length()).map { arr.getString(it) }
       } ?: emptyList(),
     )
+
+    runCatching {
+      RecentlyPublishedSongsStore.record(
+        context = context,
+        title = formData.title,
+        artist = formData.artist,
+        audioCid = result.audioCid,
+        coverCid = result.coverCid,
+      )
+    }.onFailure { err ->
+      android.util.Log.w(TAG, "Failed to cache recently published song", err)
+    }
+
+    return result
   }
 
   /**

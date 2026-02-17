@@ -1,21 +1,41 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {AccountBinding} from "./aa/AccountBinding.sol";
-
 /// @title ScrobbleV4 — Track Registry + Scrobble Events (AA-enabled)
-/// @notice Tracks are registered once (title/artist/album stored on-chain).
+/// @notice LEGACY: Deployed on MegaETH testnet. Source kept as reference.
+///         AA infrastructure (AccountBinding, HeavenAccountFactory) has been removed.
+///         ScrobbleV5 on Tempo will replace this with direct msg.sender auth.
+///
+///         Tracks are registered once (title/artist/album stored on-chain).
 ///         Scrobbles are cheap event-only references to a trackId.
 ///         trackId = keccak256(abi.encode(uint8(kind), payload))
 ///           kind 1 (MBID):  payload = bytes32(bytes16(mbid))  — low 16 bytes must be zero
 ///           kind 2 (ipId):  payload = bytes32(uint256(uint160(ipId))) — high 12 bytes must be zero
 ///           kind 3 (meta):  payload = keccak256(abi.encode(titleNorm, artistNorm, albumNorm))
 ///
-/// @dev Permission model (changed from V3):
-///      - User-facing functions (scrobble, registerAndScrobble): onlyAccountOf(user)
-///        Verifies msg.sender is the user's SimpleAccount via factory CREATE2 derivation.
-///      - Global track operations (registerTracksBatch, updateTrack, cover ops): onlyOperator
-///        Admin/maintenance only. NOT in the per-scrobble hot path.
+/// @dev Original permission model used onlyAccountOf(user) from AccountBinding,
+///      which verified msg.sender was the user's SimpleAccount via factory CREATE2.
+///      That AA infrastructure has been removed. The modifier is inlined here for
+///      source compatibility only.
+
+interface ISimpleAccountFactory {
+    function getAddress(address owner, uint256 salt) external view returns (address);
+}
+
+abstract contract AccountBinding {
+    ISimpleAccountFactory public immutable FACTORY;
+    uint256 public constant ACCOUNT_SALT = 0;
+
+    constructor(address factory_) {
+        FACTORY = ISimpleAccountFactory(factory_);
+    }
+
+    modifier onlyAccountOf(address user) {
+        require(msg.sender == FACTORY.getAddress(user, ACCOUNT_SALT), "not user account");
+        _;
+    }
+}
+
 contract ScrobbleV4 is AccountBinding {
     // ── Auth ─────────────────────────────────────────────────────────────
 

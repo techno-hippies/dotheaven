@@ -28,13 +28,15 @@ fun AuthScreen(
   Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     Card(modifier = Modifier.fillMaxWidth()) {
       Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        val signedIn = state.hasLitAuthCredentials()
+        val signedIn = state.hasAnyCredentials()
         Text(if (signedIn) "Signed in" else "Not signed in")
         if (signedIn) {
-          val addr = state.pkpEthAddress
+          val addr = state.activeAddress()
           val tokenId = state.pkpTokenId
           val pkp = state.pkpPublicKey
+          val tempoCred = state.tempoCredentialId
           if (!addr.isNullOrBlank()) Text("Address: ${addr.take(10)}…")
+          if (!tempoCred.isNullOrBlank()) Text("Tempo cred: ${tempoCred.take(12)}…")
           if (!tokenId.isNullOrBlank()) Text("Token: ${tokenId.take(10)}…")
           if (!pkp.isNullOrBlank()) Text("PKP: ${pkp.take(18)}…")
         }
@@ -89,7 +91,7 @@ fun AuthScreen(
         HorizontalDivider()
 
         Button(
-          enabled = !state.busy && state.hasLitAuthContextParams(),
+          enabled = !state.busy && state.hasAnyCredentials(),
           onClick = onLogout,
         ) { Text("Log Out") }
       }

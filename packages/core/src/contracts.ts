@@ -10,23 +10,9 @@
 export const MEGAETH_CHAIN_ID = 6343
 export const MEGAETH_RPC = 'https://carrot.megaeth.com/rpc'
 
-// ── Core Contracts ─────────────────────────────────────────────────
-
-/** ERC-4337 EntryPoint v0.7 (canonical deployment) */
-export const ENTRYPOINT = '0x0000000071727De22E5E9d8BAf0edAc6f37da032'
-
-/** Heaven SimpleAccountFactory (deploys user accounts) */
-export const ACCOUNT_FACTORY = '0xB66BF4066F40b36Da0da34916799a069CBc79408'
-
-/** Heaven SimpleAccount implementation */
-export const ACCOUNT_IMPLEMENTATION = '0xA17Fd81A1fFEC9f5694343dd4BFe29847B0eb9E7'
-
-/** VerifyingPaymaster (sponsors gas for approved ops) */
-export const PAYMASTER = '0xEb3C4c145AE16d7cC044657D1632ef08d6B2D5d9'
-
 // ── Scrobble Contracts ─────────────────────────────────────────────
 
-/** ScrobbleV4 — AA-enabled, stores duration, cover CID */
+/** ScrobbleV4 — Legacy AA-enabled (MegaETH). Will be replaced by ScrobbleV5 on Tempo. */
 export const SCROBBLE_V4 = '0xBcD4EbBb964182ffC5EA03FF70761770a326Ccf1'
 
 /** ScrobbleV3 — Legacy sponsor-gated (still used by playlists Lit Action) */

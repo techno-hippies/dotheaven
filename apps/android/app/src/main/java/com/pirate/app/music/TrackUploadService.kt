@@ -2,11 +2,10 @@ package com.pirate.app.music
 
 import android.content.Context
 import android.net.Uri
-import com.pirate.app.lit.LitRust
+import com.pirate.app.tempo.ContentKeyManager
+import com.pirate.app.tempo.EciesContentCrypto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 
 data class UploadAndRegisterResult(
@@ -16,106 +15,68 @@ data class UploadAndRegisterResult(
   val gatewayUrl: String?,
   val datasetOwner: String,
   val algo: Int,
-  val register: ContentRegisterResult,
 )
 
 object TrackUploadService {
-  suspend fun uploadAndRegisterEncrypted(
+
+  /**
+   * Encrypt a local track with ECIES + AES-256-GCM, upload to Load network.
+   *
+   * Uses the persistent content encryption keypair (ContentKeyManager) to wrap
+   * the AES key. The wrapped key is auto-persisted per contentId for later decrypt.
+   *
+   * @param ownerEthAddress  Tempo account address (for contentId derivation)
+   * @param track  local music track to upload
+   */
+  suspend fun uploadEncrypted(
     context: Context,
-    litNetwork: String,
-    litRpcUrl: String,
-    userPkpPublicKey: String,
     ownerEthAddress: String,
     track: MusicTrack,
-    uploadUrl: String = LoadTurboConfig.DEFAULT_UPLOAD_URL,
-    uploadToken: String = LoadTurboConfig.DEFAULT_UPLOAD_TOKEN,
-    gatewayUrlFallback: String = LoadTurboConfig.DEFAULT_GATEWAY_URL,
   ): UploadAndRegisterResult = withContext(Dispatchers.IO) {
+    val contentKey = ContentKeyManager.getOrCreate(context)
     val trackId = TrackIds.computeMetaTrackId(track.title, track.artist, track.album).lowercase()
     val computedContentId = ContentIds.computeContentId(trackId, ownerEthAddress).lowercase()
 
+    // Read raw audio
     val uri = Uri.parse(track.uri)
-    val filename = "${buildFilenameHint(track)}.enc"
     val payload = readAllBytesFromContentUri(context, uri)
 
-    val tags = JSONArray()
-      .put(JSONObject().put("name", "App-Name").put("value", "Heaven"))
-      .put(JSONObject().put("name", "Upload-Source").put("value", "heaven-android"))
-      .put(JSONObject().put("name", "Track-Id").put("value", trackId))
-      .put(JSONObject().put("name", "Content-Id").put("value", computedContentId))
-      .put(JSONObject().put("name", "Owner").put("value", ownerEthAddress.lowercase()))
+    // AES-256-GCM encrypt the file
+    val encrypted = EciesContentCrypto.encryptFile(payload)
 
-    val upload = LitRust.loadEncryptUpload(
-      network = litNetwork,
-      rpcUrl = litRpcUrl,
-      uploadUrl = uploadUrl,
-      uploadToken = uploadToken,
-      gatewayUrlFallback = gatewayUrlFallback,
-      payload = payload,
-      contentId = computedContentId,
-      contentDecryptCid = ContentCryptoConfig.DEFAULT_CONTENT_DECRYPT_V1_CID,
-      filePath = filename,
-      contentType = "",
-      tagsJson = tags.toString(),
+    // ECIES-wrap the AES key to content encryption pubkey
+    val wrappedKey = EciesContentCrypto.eciesEncrypt(contentKey.publicKey, encrypted.rawKey)
+
+    // Build upload blob: [iv (12)] [aes ciphertext] (simple format — key stored separately)
+    val blob = encrypted.iv + encrypted.ciphertext
+
+    // Clear raw AES key from memory
+    encrypted.rawKey.fill(0)
+
+    // Upload to Load network
+    val filename = "${buildFilenameHint(track)}.enc"
+    val upload = LoadUploadApi.upload(
+      blob = blob,
+      filename = filename,
+      tags = listOf(
+        "App-Name" to "Heaven",
+        "Upload-Source" to "heaven-android",
+        "Track-Id" to trackId,
+        "Content-Id" to computedContentId,
+        "Owner" to ownerEthAddress.lowercase(),
+      ),
     )
 
-    // Register on-chain content metadata (best-effort). If it fails, keep the uploaded reference
-    // so the user can retry registration without re-uploading the file.
-    val register =
-      runCatching {
-        ContentRegisterLitAction.registerContent(
-          appContext = context,
-          litNetwork = litNetwork,
-          litRpcUrl = litRpcUrl,
-          userPkpPublicKey = userPkpPublicKey,
-          trackId = trackId,
-          pieceCid = upload.id,
-          datasetOwner = ownerEthAddress,
-          algo = ContentCryptoConfig.ALGO_AES_GCM_256,
-          title = track.title,
-          artist = track.artist,
-          album = track.album,
-        )
-      }.getOrElse { err ->
-        ContentRegisterResult(success = false, error = err.message ?: "content register failed")
-      }
+    // Persist wrapped key for later decrypt
+    ContentKeyManager.saveWrappedKey(context, computedContentId, wrappedKey)
 
-    val contentId = register.contentId?.lowercase() ?: computedContentId
     UploadAndRegisterResult(
       trackId = trackId,
-      contentId = contentId,
+      contentId = computedContentId,
       pieceCid = upload.id,
       gatewayUrl = upload.gatewayUrl,
       datasetOwner = ownerEthAddress.lowercase(),
       algo = ContentCryptoConfig.ALGO_AES_GCM_256,
-      register = register,
-    )
-  }
-
-  suspend fun registerExistingEncrypted(
-    context: Context,
-    litNetwork: String,
-    litRpcUrl: String,
-    userPkpPublicKey: String,
-    ownerEthAddress: String,
-    track: MusicTrack,
-  ): ContentRegisterResult = withContext(Dispatchers.IO) {
-    val trackId = TrackIds.computeMetaTrackId(track.title, track.artist, track.album).lowercase()
-    val pieceCid = track.pieceCid?.trim().orEmpty()
-    if (pieceCid.isEmpty()) return@withContext ContentRegisterResult(success = false, error = "missing pieceCid")
-
-    ContentRegisterLitAction.registerContent(
-      appContext = context,
-      litNetwork = litNetwork,
-      litRpcUrl = litRpcUrl,
-      userPkpPublicKey = userPkpPublicKey,
-      trackId = trackId,
-      pieceCid = pieceCid,
-      datasetOwner = ownerEthAddress,
-      algo = ContentCryptoConfig.ALGO_AES_GCM_256,
-      title = track.title,
-      artist = track.artist,
-      album = track.album,
     )
   }
 }

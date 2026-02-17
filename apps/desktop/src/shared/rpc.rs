@@ -3,7 +3,19 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 
-const HTTP_TIMEOUT_SECS: u64 = 20;
+const DEFAULT_HTTP_TIMEOUT_SECS: u64 = 20;
+
+fn http_timeout_secs() -> u64 {
+    std::env::var("HEAVEN_HTTP_TIMEOUT_SECS")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<u64>().ok())
+        .filter(|secs| *secs > 0)
+        .unwrap_or(DEFAULT_HTTP_TIMEOUT_SECS)
+}
+
+fn http_timeout() -> Duration {
+    Duration::from_secs(http_timeout_secs())
+}
 
 pub fn read_json_or_text(resp: &mut ureq::http::Response<ureq::Body>) -> Value {
     let text = resp
@@ -14,14 +26,15 @@ pub fn read_json_or_text(resp: &mut ureq::http::Response<ureq::Body>) -> Value {
 }
 
 pub fn http_get_json(url: &str) -> Result<Value, String> {
+    let timeout_secs = http_timeout_secs();
     let request = ureq::get(url)
         .config()
-        .timeout_global(Some(Duration::from_secs(HTTP_TIMEOUT_SECS)))
+        .timeout_global(Some(http_timeout()))
         .http_status_as_error(false)
         .build();
     let mut resp = request
         .call()
-        .map_err(|e| format!("HTTP GET failed ({url}): {e}"))?;
+        .map_err(|e| format!("HTTP GET failed ({url}, timeout={timeout_secs}s): {e}"))?;
     let status = resp.status().as_u16();
     let body = read_json_or_text(&mut resp);
     if status >= 400 {
@@ -31,15 +44,16 @@ pub fn http_get_json(url: &str) -> Result<Value, String> {
 }
 
 pub fn http_post_json(url: &str, payload: Value) -> Result<Value, String> {
+    let timeout_secs = http_timeout_secs();
     let request = ureq::post(url)
         .header("Content-Type", "application/json")
         .config()
-        .timeout_global(Some(Duration::from_secs(HTTP_TIMEOUT_SECS)))
+        .timeout_global(Some(http_timeout()))
         .http_status_as_error(false)
         .build();
     let mut resp = request
         .send_json(payload)
-        .map_err(|e| format!("HTTP POST failed ({url}): {e}"))?;
+        .map_err(|e| format!("HTTP POST failed ({url}, timeout={timeout_secs}s): {e}"))?;
     let status = resp.status().as_u16();
     let body = read_json_or_text(&mut resp);
     if status >= 400 {
@@ -49,14 +63,15 @@ pub fn http_post_json(url: &str, payload: Value) -> Result<Value, String> {
 }
 
 pub fn http_get_bytes(url: &str) -> Result<Vec<u8>, String> {
+    let timeout_secs = http_timeout_secs();
     let request = ureq::get(url)
         .config()
-        .timeout_global(Some(Duration::from_secs(HTTP_TIMEOUT_SECS)))
+        .timeout_global(Some(http_timeout()))
         .http_status_as_error(false)
         .build();
     let mut resp = request
         .call()
-        .map_err(|e| format!("HTTP GET failed ({url}): {e}"))?;
+        .map_err(|e| format!("HTTP GET failed ({url}, timeout={timeout_secs}s): {e}"))?;
     let status = resp.status().as_u16();
     if status >= 400 {
         let body = read_json_or_text(&mut resp);
@@ -76,16 +91,17 @@ pub fn http_get_bytes_range(url: &str, start: u64, end_inclusive: u64) -> Result
         return Err(format!("Invalid byte range: {start}..={end_inclusive}"));
     }
     let range = format!("bytes={start}-{end_inclusive}");
+    let timeout_secs = http_timeout_secs();
     let request = ureq::get(url)
         .header("Range", &range)
         .config()
-        .timeout_global(Some(Duration::from_secs(HTTP_TIMEOUT_SECS)))
+        .timeout_global(Some(http_timeout()))
         .http_status_as_error(false)
         .build();
 
     let mut resp = request
         .call()
-        .map_err(|e| format!("HTTP GET failed ({url}): {e}"))?;
+        .map_err(|e| format!("HTTP GET failed ({url}, timeout={timeout_secs}s): {e}"))?;
     let status = resp.status().as_u16();
     if status >= 400 {
         let body = read_json_or_text(&mut resp);
@@ -106,26 +122,34 @@ pub fn http_get_bytes_range(url: &str, start: u64, end_inclusive: u64) -> Result
 }
 
 pub fn rpc_json(rpc_url: &str, payload: Value) -> Result<Value, String> {
+    let timeout_secs = http_timeout_secs();
+    let method = payload
+        .get("method")
+        .and_then(|v| v.as_str())
+        .unwrap_or("<unknown>")
+        .to_string();
     let request = ureq::post(rpc_url)
         .header("content-type", "application/json")
         .config()
-        .timeout_global(Some(Duration::from_secs(HTTP_TIMEOUT_SECS)))
+        .timeout_global(Some(http_timeout()))
         .http_status_as_error(false)
         .build();
-    let mut resp = request
-        .send_json(payload)
-        .map_err(|e| format!("RPC request failed: {e}"))?;
+    let mut resp = request.send_json(payload).map_err(|e| {
+        format!("RPC request failed ({method} {rpc_url}, timeout={timeout_secs}s): {e}")
+    })?;
     let status = resp.status().as_u16();
     let body = read_json_or_text(&mut resp);
     if status >= 400 {
-        return Err(format!("RPC HTTP failure ({status}): {body}"));
+        return Err(format!(
+            "RPC HTTP failure ({method} {rpc_url}, status={status}): {body}"
+        ));
     }
     if let Some(err) = body.get("error") {
-        return Err(format!("RPC error: {err}"));
+        return Err(format!("RPC error ({method} {rpc_url}): {err}"));
     }
     body.get("result")
         .cloned()
-        .ok_or("RPC response missing result".to_string())
+        .ok_or_else(|| format!("RPC response missing result ({method} {rpc_url})"))
 }
 
 pub fn eth_call_address(rpc_url: &str, to: &str, data: &str) -> Result<String, String> {

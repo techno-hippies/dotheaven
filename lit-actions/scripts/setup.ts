@@ -65,6 +65,16 @@ const ACTIONS: Record<string, ActionDef> = {
       { name: 'openrouter_api_key', envVar: 'OPENROUTER_API_KEY' },
     ],
   },
+  songPublishV2: {
+    name: 'songPublishV2',
+    path: 'features/music/song-publish-v2.js',
+    displayName: 'Song Publish v2',
+    keys: [
+      { name: 'filebase_api_key', envVar: 'FILEBASE_SONGS_BUCKET_API_KEY' },
+      { name: 'elevenlabs_api_key', envVar: 'ELEVENLABS_API_KEY' },
+      { name: 'openrouter_api_key', envVar: 'OPENROUTER_API_KEY' },
+    ],
+  },
   avatarUpload: {
     name: 'avatarUpload',
     path: 'features/profile/avatar-upload-v1.js',

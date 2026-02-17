@@ -1,8 +1,8 @@
 /**
  * Lit Action CIDs — loaded per-network from embedded CID maps.
  *
- * To switch networks, set VITE_LIT_NETWORK=naga-dev or VITE_LIT_NETWORK=naga-test
- * in apps/web/.env (default: naga-dev).
+ * This app is dev-only. `naga-dev` is always used.
+ * If `VITE_LIT_NETWORK` is set to anything else, it is ignored with a warning.
  *
  * After redeploying an action via `bun scripts/setup.ts <action>`, update the
  * corresponding CID in the map below to match the new value in lit-actions/cids/*.json.
@@ -10,9 +10,13 @@
  * Individual CIDs can still be overridden via VITE_*_CID env vars.
  */
 
-const litNetwork = (import.meta.env.VITE_LIT_NETWORK || 'naga-test') as 'naga-dev' | 'naga-test'
+const requestedLitNetwork = (import.meta.env.VITE_LIT_NETWORK || 'naga-dev') as string
+if (requestedLitNetwork && requestedLitNetwork !== 'naga-dev') {
+  console.warn(`[lit/action-cids] VITE_LIT_NETWORK=${requestedLitNetwork} ignored; using naga-dev`)
+}
+const litNetwork: 'naga-dev' = 'naga-dev'
 
-/** CID maps mirroring lit-actions/cids/dev.json and lit-actions/cids/test.json */
+/** CID map mirroring lit-actions/cids/dev.json */
 const CID_MAP = {
   'naga-dev': {
     playlistV1:           'QmeajAFaBK9uk2YgE2jrxamMB3rhqRioyfLqXsmomyTkc5',
@@ -25,8 +29,9 @@ const CID_MAP = {
     contentAccessV1:      'QmXhzbZqvfg7b29eY3CzyV9ep4kvL9QxibKDYqBYAiQoDT',
     postRegisterV1:       'QmduQNBGLfEB1bkCFMXLjRcpBJ3wfcV675KMWWYQe5k477',
     trackCoverV4:         'QmcwLxoNyuV5KrJALfaAEBa4zspoxedEfPJba2Y3uhWYx7',
+    trackCoverV5:         'QmdoZnj6BsXASda2VUqN7M1zPDktoBQMkn2WvW1PsbRiUb',
     postTranslateV1:      'QmefcfyK57V6XQeHsH9oVCfukwMiLGC4KgZVniXFBAL6Sv',
-    songPublish:          'QmcGA2ur8tGt5GDiQo6j21aY2Jc6aVGPvT6PyoqMBXKjXr',
+    songPublishV2:        'QmYzNwWVJSAs2aMgdEBufzKftxzACJ7kxmQKSWqVJrseYT',
     lyricsTranslate:      'QmViMXk72SZdjoWWuXP6kUsxB3BHzrK2ZN934YPFKmXBeV',
     followV1:             'QmUxWxazesrDvsFF4gDk2mbT8L8dbHrWVQUKAnwRYm8yyU',
     likeV1:               'QmbXU6jxx2rH8ZopmEJQDTYce83LBEnsVxGhkTDD8hWcCX',
@@ -35,28 +40,6 @@ const CID_MAP = {
     storyRegisterSponsor: 'QmZ38qG34PKnENxzV8eejbRwiqQf2aRFKuNKqJNTXvU43Q',
     contentRegisterMegaethV1: 'QmRFuAAYCmri8kTCmJupF9AZWhYmvKnhNhVyqr5trRfZhS',
     contentDecryptV1:     'QmUmVkMxC57nAqUmJPZmoBKeBfiZS6ZR8qzYQJvWe4W12w',
-  },
-  'naga-test': {
-    playlistV1:           'QmUf2jSaquVXJZBaoq5WCjKZKJpW7zVZVWHKuGi68GYZqq',
-    heavenClaimName:      'QmXqTv35a4fV4szqEDwA6wWH4bZHgceemRniLaYTrEcU6z',
-    heavenSetProfile:     'QmY7iUpUwy4xqCGuWGdTSiYo8yBc8zuBRkAA2QXzuZkcWg',
-    heavenSetRecords:     'QmYdvepsZD3XGis7n3qCKEGHU559qeszxqD8DGgbXTPN2n',
-    avatarUpload:         'QmTWwoC5zX2pUuSExsra5RVzChE9nCYRAkVVgppjvc196A',
-    contentRegisterV1:    'QmdPHymWEbh4H8zBEhup9vWpCPwR5hTLK2Kb3H8hcjDga1',
-    contentRegisterV2:    '',
-    contentAccessV1:      'QmcgN7ed4ePaCfpkzcwxiTG6WkvfgkPmNK26FZW67kbdau',
-    postRegisterV1:       'Qma4SVQpBy2hnN9Hcf3ZpGzo9U5PGxJusDjpXrDnBKRc9z',
-    trackCoverV4:         'QmYhskK5XKmrREZBaGMpvzvTEYdaicUURjNLBhSV72U1Nm',
-    postTranslateV1:      'QmSiC1nV5hu248sipLjukDuH3sDAV31F6S3RqRLfrQmZa6',
-    songPublish:          'QmNUVHTrU4S823gp2JaP19hAZCCqpwdvzFrs35GiECuXAJ',
-    lyricsTranslate:      'QmUrbZY5MWrBFhfgoDLaxNwXchJgeB5vsRMMLMzRprvUu3',
-    followV1:             '',
-    likeV1:               '',
-    commentV1:            '',
-    flagV1:               '',
-    storyRegisterSponsor: 'QmQi5mVzt4u6ViXZYkZYrmFu7oXFEJjx7Fzc6YUYyUcSEt',
-    contentRegisterMegaethV1: '',
-    contentDecryptV1:     '',
   },
 } as const
 
@@ -98,11 +81,14 @@ export const POST_REGISTER_V1_CID = cid('VITE_POST_REGISTER_V1_CID', 'postRegist
 /** Track Cover v4 — upload cover art + set on ScrobbleV4 (operator-only) */
 export const TRACK_COVER_V4_CID = cid('VITE_TRACK_COVER_V4_CID', 'trackCoverV4')
 
+/** Track Cover v5 — set URI-safe cover refs (for example ar://...) on ScrobbleV4 (operator-only) */
+export const TRACK_COVER_V5_CID = cid('VITE_TRACK_COVER_V5_CID', 'trackCoverV5')
+
 /** Post Translate v1 — LLM translation → EngagementV2.translateFor() on MegaETH */
 export const POST_TRANSLATE_V1_CID = cid('VITE_POST_TRANSLATE_V1_CID', 'postTranslateV1')
 
-/** Song Publish v1 — upload audio/cover/instrumental/canvas to IPFS + lyrics alignment + translation */
-export const SONG_PUBLISH_CID = cid('VITE_SONG_PUBLISH_CID', 'songPublish')
+/** Song Publish v2 — storage-agnostic params + ref aliases for media inputs */
+export const SONG_PUBLISH_V2_CID = cid('VITE_SONG_PUBLISH_V2_CID', 'songPublishV2')
 
 /** Story Register Sponsor v1 — gasless Story Protocol IP registration (mint NFT + register IP + attach PIL license) */
 export const STORY_REGISTER_SPONSOR_CID = cid('VITE_STORY_REGISTER_SPONSOR_CID', 'storyRegisterSponsor')

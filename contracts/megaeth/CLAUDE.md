@@ -8,14 +8,14 @@ Primary Heaven protocol contracts on MegaETH, including:
 - profile
 - scrobbling
 - playlists/posts/engagement
-- account-abstraction support contracts
+- ScrobbleV4 (legacy, AA removed — source kept as reference)
 
 ## Core Contract Areas
 - Naming/records: `RegistryV1.sol`, `RecordsV1.sol`, `Resolver.sol`
 - Profile: `ProfileV2.sol`
 - Music/activity: `ScrobbleV4.sol`, `PlaylistV1.sol`, `LyricsEngagementV1.sol`
 - Social: `PostsV1.sol`, `EngagementV2.sol`, `FollowV1.sol`
-- AA stack: `src/aa/HeavenAccountFactory.sol`, `src/aa/HeavenPaymaster.sol`, `src/aa/AccountBinding.sol`
+- AA stack: REMOVED (was `src/aa/`). AccountBinding inlined in ScrobbleV4.sol for source compat.
 
 ## Local Workflow
 From `contracts/megaeth`:
@@ -55,7 +55,6 @@ forge verify-contract <ADDRESS> src/RegistryV1.sol:RegistryV1 \
 
 ## Files You Will Touch Most
 - `contracts/megaeth/src/`
-- `contracts/megaeth/src/aa/`
 - `contracts/megaeth/script/`
 - `contracts/megaeth/test/`
 - `contracts/megaeth/foundry.toml`

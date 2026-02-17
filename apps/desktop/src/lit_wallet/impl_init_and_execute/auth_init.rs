@@ -7,6 +7,7 @@ impl LitWalletService {
         persisted: &PersistedAuth,
     ) -> Result<LitInitStatus, String> {
         crate::auth::log_persisted_auth("LitWallet initialize_from_auth input", persisted);
+        persisted.require_lit_auth("Lit wallet initialization")?;
         let pkp_public_key = persisted
             .pkp_public_key
             .clone()

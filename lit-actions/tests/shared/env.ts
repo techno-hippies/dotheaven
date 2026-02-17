@@ -34,6 +34,7 @@ interface LitEnvConfig {
 
 interface CIDs {
   songPublish: string;
+  songPublishV2: string;
   lyricsTranslate: string;
   storyRegisterSponsor: string;
   avatarUpload: string;
@@ -83,6 +84,7 @@ if (!envConfig) {
 const cidPath = join(ROOT_DIR, envConfig.cidFile);
 let cids: CIDs = {
   songPublish: '',
+  songPublishV2: '',
   lyricsTranslate: '',
   storyRegisterSponsor: '',
   avatarUpload: '',

@@ -59,9 +59,6 @@ fun ScarlettChatBar(
   service: ScarlettService,
   isAuthenticated: Boolean,
   wallet: String?,
-  pkpPublicKey: String?,
-  litNetwork: String,
-  litRpcUrl: String,
   onShowMessage: (String) -> Unit,
 ) {
   val messages by service.messages.collectAsState()
@@ -83,13 +80,13 @@ fun ScarlettChatBar(
   fun doSend() {
     val text = inputText.trim()
     if (text.isBlank() || sending) return
-    if (!isAuthenticated || wallet == null || pkpPublicKey == null) {
+    if (!isAuthenticated || wallet == null) {
       onShowMessage("Sign in to chat with Scarlett")
       return
     }
     inputText = ""
     scope.launch {
-      val result = service.sendMessage(text, wallet, pkpPublicKey, litNetwork, litRpcUrl)
+      val result = service.sendMessage(text, wallet)
       result.onFailure { e ->
         onShowMessage("Scarlett: ${e.message ?: "Error"}")
       }

@@ -1,0 +1,53 @@
+{
+  "network": {
+    "name": "Tempo Testnet (Moderato)",
+    "chainId": 42431,
+    "rpcUrl": "https://rpc.moderato.tempo.xyz",
+    "explorer": "https://explore.tempo.xyz"
+  },
+  "deployedAt": "2026-02-16T17:09:27Z",
+  "deployer": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+  "sponsor": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+  "playlistV1": "0xB130B6F86C60680eb98740599484739335C6A525",
+  "script": "script/DeployPlaylistShareV1.s.sol",
+  "command": "forge script script/DeployPlaylistShareV1.s.sol --rpc-url https://rpc.moderato.tempo.xyz --broadcast --slow --gas-estimate-multiplier 100",
+  "contract": {
+    "name": "PlaylistShareV1",
+    "address": "0xB66BF4066F40b36Da0da34916799a069CBc79408",
+    "deployTx": "0x35ececac570d59140983a939b260462988ad14c9399330da24b89510ea78dfec",
+    "blockNumber": 5200157,
+    "gasUsed": 3385635,
+    "status": true
+  },
+  "postDeployChecks": {
+    "bytecodePresent": true,
+    "owner": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+    "sponsor": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+    "playlistV1": "0xB130B6F86C60680eb98740599484739335C6A525"
+  },
+  "smokeTest": {
+    "playlistId": "0x053177c4bc3745c862d87821aa8a772dbae7897551cefff5c2d12e2a6b8c027a",
+    "playlistOwner": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+    "grantee": "0x1111111111111111111111111111111111111111",
+    "createPlaylistForTx": "0x4d41715f3d59c5b1bee39cdcfb158f35d5582abeff8dbef9618b46aacc5106db",
+    "createPlaylistForGasUsed": 799961,
+    "sharePlaylistForTx": "0x78e02224abc4d51bcf6574da65dcaaa62851ad475dad28a3bc6e6209c726659f",
+    "sharePlaylistForGasUsed": 795592,
+    "unsharePlaylistForTx": "0xe737c485f796fa4f8b14fb4ac391220f65385653829c26419d605953e27fd752",
+    "unsharePlaylistForGasUsed": 43386,
+    "snapshotAfterShare": {
+      "playlistVersion": 1,
+      "trackCount": 2,
+      "tracksHash": "0x734dbd10b7c3d01aea6957e52ecfbf01cda71130e8895a80541b5d31e884f62d",
+      "sharedAt": 1771261845,
+      "granted": true
+    },
+    "snapshotAfterUnshare": {
+      "playlistVersion": 0,
+      "trackCount": 0,
+      "tracksHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "sharedAt": 0,
+      "granted": false
+    }
+  }
+}

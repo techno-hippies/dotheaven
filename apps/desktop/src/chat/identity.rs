@@ -46,7 +46,7 @@ pub(super) fn resolve_recipient_identifier(input: &str) -> Result<String, String
 
 fn resolve_heaven_name_to_address(label: &str) -> Result<String, String> {
     let rpc_url =
-        non_empty_env("HEAVEN_AA_RPC_URL").unwrap_or_else(|| DEFAULT_MEGAETH_RPC_URL.to_string());
+        non_empty_env("HEAVEN_RPC_URL").unwrap_or_else(|| DEFAULT_MEGAETH_RPC_URL.to_string());
 
     let heaven_node_bytes =
         hex::decode(HEAVEN_NODE_HEX).map_err(|e| format!("Invalid HEAVEN_NODE constant: {e}"))?;

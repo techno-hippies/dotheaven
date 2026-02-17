@@ -24,6 +24,29 @@ JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew :app:compileDebugK
 JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew installDebug
 ```
 
+To point profile scrobble reads at a custom Tempo indexer:
+
+```bash
+JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew \
+  -PTEMPO_SCROBBLE_API=http://<your-host>:42069 \
+  installDebug
+```
+
+To point profile scrobble reads at a custom subgraph endpoint (self-hosted Graph Node or Goldsky):
+
+```bash
+JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew \
+  -PTEMPO_SCROBBLE_SUBGRAPH_URL=http://<your-host>:8000/subgraphs/name/dotheaven/activity-feed-tempo \
+  installDebug
+```
+
+For USB debugging against a local indexer on your dev machine, you can also use:
+
+```bash
+adb reverse tcp:42069 tcp:42069
+adb reverse tcp:8000 tcp:8000
+```
+
 ## Notes
 - This project is Kotlin-only for mobile right now (no React Native app in repo).
 - Contributor guardrails for agents live in `apps/android/AGENTS.md`.

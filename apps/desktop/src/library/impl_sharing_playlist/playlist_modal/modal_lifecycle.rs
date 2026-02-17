@@ -45,7 +45,10 @@ impl LibraryView {
                 return;
             }
         };
-        let owner = auth.pkp_address.clone().unwrap_or_default().to_lowercase();
+        let owner = auth
+            .primary_wallet_address()
+            .map(|value| value.to_lowercase())
+            .unwrap_or_default();
         if owner.is_empty() {
             self.playlist_modal_loading = false;
             self.playlist_modal_error = Some("Missing wallet address in auth session.".to_string());

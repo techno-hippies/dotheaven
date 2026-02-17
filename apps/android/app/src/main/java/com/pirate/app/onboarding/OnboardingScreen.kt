@@ -2,6 +2,7 @@ package com.pirate.app.onboarding
 
 import android.content.Context
 import android.util.Log
+import android.util.Base64
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -15,7 +16,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.Icon
@@ -24,6 +24,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +41,14 @@ import com.pirate.app.onboarding.steps.LanguagesStep
 import com.pirate.app.onboarding.steps.LocationStep
 import com.pirate.app.onboarding.steps.MusicStep
 import com.pirate.app.onboarding.steps.NameStep
+import com.pirate.app.profile.ProfileAvatarUploadApi
+import com.pirate.app.profile.TempoNameRecordsApi
+import com.pirate.app.profile.TempoNameRegistryApi
+import com.pirate.app.profile.TempoProfileContractApi
+import com.pirate.app.tempo.TempoAccountFactory
+import com.pirate.app.tempo.TempoPasskeyManager
+import com.pirate.app.tempo.TempoSessionKeyApi
+import com.pirate.app.tempo.SessionKeyManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -72,15 +81,15 @@ suspend fun checkOnboardingStatus(
 
   // Slow path: check on-chain
   try {
-    val name = OnboardingRpcHelpers.getPrimaryName(userAddress)
+    val name = TempoNameRecordsApi.getPrimaryName(userAddress) ?: OnboardingRpcHelpers.getPrimaryName(userAddress)
     if (name.isNullOrBlank()) return@withContext OnboardingStep.NAME
 
     val hasProfile = OnboardingRpcHelpers.hasProfile(userAddress)
     if (!hasProfile) return@withContext OnboardingStep.AGE
 
-    val node = OnboardingRpcHelpers.computeNode(name)
-    val hasAvatar = OnboardingRpcHelpers.hasAvatar(node)
-    if (!hasAvatar) return@withContext OnboardingStep.AVATAR
+    val node = TempoNameRecordsApi.computeNode(name)
+    val avatar = TempoNameRecordsApi.getTextRecord(node, "avatar") ?: OnboardingRpcHelpers.getTextRecord(node, "avatar")
+    if (avatar.isNullOrBlank()) return@withContext OnboardingStep.AVATAR
 
     // All checks passed — mark complete
     prefs.edit().putString(key, "complete").apply()
@@ -100,15 +109,32 @@ fun markOnboardingComplete(context: Context, userAddress: String) {
 
 @Composable
 fun OnboardingScreen(
-  pkpPublicKey: String,
+  activity: androidx.fragment.app.FragmentActivity?,
   pkpEthAddress: String,
-  litNetwork: String,
-  litRpcUrl: String,
+  tempoAddress: String?,
+  tempoCredentialId: String?,
+  tempoPubKeyX: String?,
+  tempoPubKeyY: String?,
+  tempoRpId: String = TempoPasskeyManager.DEFAULT_RP_ID,
   initialStep: OnboardingStep = OnboardingStep.NAME,
   onComplete: () -> Unit,
 ) {
   val scope = rememberCoroutineScope()
   val context = androidx.compose.ui.platform.LocalContext.current
+  val tempoAccount = remember(tempoAddress, tempoCredentialId, tempoPubKeyX, tempoPubKeyY, tempoRpId, pkpEthAddress) {
+    TempoAccountFactory
+      .fromSession(
+        tempoAddress = tempoAddress,
+        tempoCredentialId = tempoCredentialId,
+        tempoPubKeyX = tempoPubKeyX,
+        tempoPubKeyY = tempoPubKeyY,
+        tempoRpId = tempoRpId,
+      )
+      ?.takeIf { account ->
+        pkpEthAddress.isBlank() || account.address.equals(pkpEthAddress, ignoreCase = true)
+      }
+  }
+  val canUseTempoNameRegistration = tempoAccount != null && activity != null
 
   var step by remember { mutableStateOf(initialStep) }
   var submitting by remember { mutableStateOf(false) }
@@ -116,11 +142,66 @@ fun OnboardingScreen(
 
   // Collected data
   var claimedName by remember { mutableStateOf("") }
+  var claimedTld by remember { mutableStateOf("heaven") }
+  var selectedNameTld by remember { mutableStateOf("heaven") }
   var age by remember { mutableIntStateOf(0) }
   var gender by remember { mutableStateOf("") }
   var selectedLocation by remember { mutableStateOf<com.pirate.app.onboarding.steps.LocationResult?>(null) }
   var location by remember { mutableStateOf("") }
-  var languageEntries by remember { mutableStateOf<List<com.pirate.app.onboarding.steps.LanguageEntry>>(emptyList()) }
+  var onboardingSessionKey by remember(tempoAccount?.address) { mutableStateOf<SessionKeyManager.SessionKey?>(null) }
+  var sessionKeyAuthorizationFailed by remember(tempoAccount?.address) { mutableStateOf(false) }
+
+  LaunchedEffect(activity, tempoAccount?.address) {
+    val hostActivity = activity ?: run {
+      onboardingSessionKey = null
+      return@LaunchedEffect
+    }
+    val accountAddress = tempoAccount?.address ?: run {
+      onboardingSessionKey = null
+      return@LaunchedEffect
+    }
+
+    val loaded = SessionKeyManager.load(hostActivity)
+    if (SessionKeyManager.isValid(loaded, ownerAddress = accountAddress)) {
+      onboardingSessionKey = loaded
+      sessionKeyAuthorizationFailed = false
+    } else {
+      onboardingSessionKey = null
+      if (loaded != null) SessionKeyManager.clear(hostActivity)
+    }
+  }
+
+  suspend fun resolveSessionKeyForWrites(
+    hostActivity: androidx.fragment.app.FragmentActivity,
+    account: TempoPasskeyManager.PasskeyAccount,
+  ): SessionKeyManager.SessionKey? {
+    val active = onboardingSessionKey?.takeIf { SessionKeyManager.isValid(it, ownerAddress = account.address) }
+    if (active != null) return active
+    if (sessionKeyAuthorizationFailed) return null
+
+    val authResult =
+      TempoSessionKeyApi.authorizeSessionKey(
+        activity = hostActivity,
+        account = account,
+        rpId = account.rpId,
+      )
+    if (!authResult.success) {
+      sessionKeyAuthorizationFailed = true
+      Log.w(TAG, "Session key authorization failed; falling back to passkey per tx: ${authResult.error}")
+      return null
+    }
+
+    val sessionKey = authResult.sessionKey
+    if (sessionKey == null || !SessionKeyManager.isValid(sessionKey, ownerAddress = account.address)) {
+      sessionKeyAuthorizationFailed = true
+      Log.w(TAG, "Session key authorization returned no valid key; falling back to passkey per tx")
+      return null
+    }
+
+    onboardingSessionKey = sessionKey
+    sessionKeyAuthorizationFailed = false
+    return sessionKey
+  }
 
   val progress = step.index.toFloat() / step.total.toFloat()
 
@@ -178,26 +259,59 @@ fun OnboardingScreen(
         OnboardingStep.NAME -> NameStep(
           submitting = submitting,
           error = error,
-          onContinue = { label ->
+          selectedTld = selectedNameTld,
+          showPirateOption = canUseTempoNameRegistration,
+          onTldChange = { selectedNameTld = it },
+          onCheckAvailable = { label, tld ->
+            if (canUseTempoNameRegistration) {
+              TempoNameRegistryApi.checkNameAvailable(label = label, tld = tld)
+            } else {
+              false
+            }
+          },
+          onContinue = { label, tld ->
             scope.launch {
               submitting = true
               error = null
               try {
-                val result = withContext(Dispatchers.IO) {
-                  OnboardingLitActions.registerHeavenName(
-                    appContext = context,
-                    label = label,
-                    recipientAddress = pkpEthAddress,
-                    pkpPublicKey = pkpPublicKey,
-                    litNetwork = litNetwork,
-                    litRpcUrl = litRpcUrl,
-                  )
-                }
-                if (result.success) {
-                  claimedName = label
+                val normalizedTld = tld.trim().lowercase()
+                val registrationError =
+                  when {
+                    canUseTempoNameRegistration -> {
+                      val account = tempoAccount
+                        ?: return@launch
+                      val hostActivity = activity
+                        ?: return@launch
+                      val sessionKey =
+                        resolveSessionKeyForWrites(
+                          hostActivity = hostActivity,
+                          account = account,
+                        )
+                      val result =
+                        TempoNameRegistryApi.register(
+                          activity = hostActivity,
+                          account = account,
+                          label = label,
+                          tld = normalizedTld,
+                          rpId = account.rpId,
+                          sessionKey = sessionKey,
+                        )
+                      if (result.success) {
+                        claimedName = label
+                        claimedTld = result.tld ?: normalizedTld
+                        null
+                      } else {
+                        result.error ?: "Registration failed"
+                      }
+                    }
+                    tempoAccount != null -> "Missing activity for Tempo passkey signing."
+                    else -> "Tempo passkey account required for onboarding."
+                  }
+
+                if (registrationError == null) {
                   step = OnboardingStep.AGE
                 } else {
-                  error = result.error ?: "Registration failed"
+                  error = registrationError
                 }
               } catch (e: Exception) {
                 error = e.message ?: "Registration failed"
@@ -236,7 +350,6 @@ fun OnboardingScreen(
         OnboardingStep.LANGUAGES -> LanguagesStep(
           submitting = submitting,
           onContinue = { langs ->
-            languageEntries = langs
             // Now submit all profile data (age, gender, location, languages)
             scope.launch {
               submitting = true
@@ -267,35 +380,60 @@ fun OnboardingScreen(
                   profileInput.put("locationLngE6", (locationResult.lng * 1_000_000.0).roundToInt())
                 }
 
-                val result = withContext(Dispatchers.IO) {
-                  OnboardingLitActions.setProfile(
-                    appContext = context,
-                    userAddress = pkpEthAddress,
-                    profileInput = profileInput,
-                    pkpPublicKey = pkpPublicKey,
-                    litNetwork = litNetwork,
-                    litRpcUrl = litRpcUrl,
-                  )
-                }
-                if (!result.success) {
-                  Log.w(TAG, "setProfile failed: ${result.error}")
+                val profileError =
+                  when {
+                    tempoAccount != null && activity != null -> {
+                      val sessionKey =
+                        resolveSessionKeyForWrites(
+                          hostActivity = activity,
+                          account = tempoAccount,
+                        )
+                      val result =
+                        TempoProfileContractApi.upsertProfile(
+                          activity = activity,
+                          account = tempoAccount,
+                          profileInput = profileInput,
+                          rpId = tempoAccount.rpId,
+                          sessionKey = sessionKey,
+                        )
+                      if (result.success) null else result.error ?: "setProfile failed"
+                    }
+                    tempoAccount != null -> "Missing activity for Tempo passkey signing."
+                    else -> "Tempo passkey account required for onboarding."
+                  }
+                if (profileError != null) {
+                  Log.w(TAG, "setProfile failed: $profileError")
                   // Non-fatal for onboarding — proceed
                 }
 
                 // Also set location text record
                 if (claimedName.isNotBlank() && location.isNotBlank()) {
                   try {
-                    val node = OnboardingRpcHelpers.computeNode(claimedName)
-                    withContext(Dispatchers.IO) {
-                      OnboardingLitActions.setTextRecord(
-                        appContext = context,
-                        node = node,
-                        key = "heaven.location",
-                        value = location,
-                        pkpPublicKey = pkpPublicKey,
-                        litNetwork = litNetwork,
-                        litRpcUrl = litRpcUrl,
-                      )
+                    val node = TempoNameRecordsApi.computeNode("$claimedName.$claimedTld")
+                    when {
+                      tempoAccount != null && activity != null -> {
+                        val sessionKey =
+                          resolveSessionKeyForWrites(
+                            hostActivity = activity,
+                            account = tempoAccount,
+                          )
+                        val writeResult =
+                          TempoNameRecordsApi.setTextRecords(
+                            activity = activity,
+                            account = tempoAccount,
+                            node = node,
+                            keys = listOf("heaven.location"),
+                            values = listOf(location),
+                            rpId = tempoAccount.rpId,
+                            sessionKey = sessionKey,
+                          )
+                        if (!writeResult.success) {
+                          Log.w(TAG, "setTextRecord location failed: ${writeResult.error}")
+                        }
+                      }
+                      else -> {
+                        Log.w(TAG, "setTextRecord location skipped: missing Tempo passkey account")
+                      }
                     }
                   } catch (e: Exception) {
                     Log.w(TAG, "setTextRecord location failed: ${e.message}")
@@ -320,7 +458,7 @@ fun OnboardingScreen(
               error = null
               try {
                 if (selectedArtists.isNotEmpty() && claimedName.isNotBlank()) {
-                  val node = OnboardingRpcHelpers.computeNode(claimedName)
+                  val node = TempoNameRecordsApi.computeNode("$claimedName.$claimedTld")
                   val mbids = selectedArtists.map { it.mbid }.distinct()
                   val musicPayload = JSONObject()
                     .put("version", 1)
@@ -328,16 +466,30 @@ fun OnboardingScreen(
                     .put("updatedAt", System.currentTimeMillis() / 1000)
                     .put("artistMbids", org.json.JSONArray(mbids))
 
-                  withContext(Dispatchers.IO) {
-                    OnboardingLitActions.setTextRecords(
-                      appContext = context,
-                      node = node,
-                      keys = listOf("heaven.music.v1", "heaven.music.count"),
-                      values = listOf(musicPayload.toString(), mbids.size.toString()),
-                      pkpPublicKey = pkpPublicKey,
-                      litNetwork = litNetwork,
-                      litRpcUrl = litRpcUrl,
-                    )
+                  when {
+                    tempoAccount != null && activity != null -> {
+                      val sessionKey =
+                        resolveSessionKeyForWrites(
+                          hostActivity = activity,
+                          account = tempoAccount,
+                        )
+                      val writeResult =
+                        TempoNameRecordsApi.setTextRecords(
+                          activity = activity,
+                          account = tempoAccount,
+                          node = node,
+                          keys = listOf("heaven.music.v1", "heaven.music.count"),
+                          values = listOf(musicPayload.toString(), mbids.size.toString()),
+                          rpId = tempoAccount.rpId,
+                          sessionKey = sessionKey,
+                        )
+                      if (!writeResult.success) {
+                        Log.w(TAG, "Music save failed: ${writeResult.error}")
+                      }
+                    }
+                    else -> {
+                      Log.w(TAG, "Music save skipped: missing Tempo passkey account")
+                    }
                   }
                 }
                 step = OnboardingStep.AVATAR
@@ -355,41 +507,51 @@ fun OnboardingScreen(
         OnboardingStep.AVATAR -> AvatarStep(
           submitting = submitting,
           error = error,
-          onContinue = { base64, contentType ->
+          onContinue = { base64, _ ->
             scope.launch {
               submitting = true
               error = null
               try {
-                // Upload avatar
+                // Upload avatar via Heaven API proxy.
                 val uploadResult = withContext(Dispatchers.IO) {
-                  OnboardingLitActions.uploadAvatar(
-                    appContext = context,
-                    imageBase64 = base64,
-                    contentType = contentType,
-                    pkpPublicKey = pkpPublicKey,
-                    litNetwork = litNetwork,
-                    litRpcUrl = litRpcUrl,
-                  )
+                  val jpegBytes = Base64.decode(base64, Base64.DEFAULT)
+                  ProfileAvatarUploadApi.uploadAvatarJpeg(jpegBytes)
                 }
-                if (!uploadResult.success || uploadResult.avatarCID.isNullOrBlank()) {
+                if (!uploadResult.success || uploadResult.avatarCid.isNullOrBlank()) {
                   error = uploadResult.error ?: "Avatar upload failed"
                   return@launch
                 }
 
                 // Set avatar text record
                 if (claimedName.isNotBlank()) {
-                  val node = OnboardingRpcHelpers.computeNode(claimedName)
-                  val avatarURI = "ipfs://${uploadResult.avatarCID}"
-                  withContext(Dispatchers.IO) {
-                    OnboardingLitActions.setTextRecord(
-                      appContext = context,
-                      node = node,
-                      key = "avatar",
-                      value = avatarURI,
-                      pkpPublicKey = pkpPublicKey,
-                      litNetwork = litNetwork,
-                      litRpcUrl = litRpcUrl,
-                    )
+                  val node = TempoNameRecordsApi.computeNode("$claimedName.$claimedTld")
+                  val avatarURI = "ipfs://${uploadResult.avatarCid}"
+                  when {
+                    tempoAccount != null && activity != null -> {
+                      val sessionKey =
+                        resolveSessionKeyForWrites(
+                          hostActivity = activity,
+                          account = tempoAccount,
+                        )
+                      val writeResult =
+                        TempoNameRecordsApi.setTextRecords(
+                          activity = activity,
+                          account = tempoAccount,
+                          node = node,
+                          keys = listOf("avatar"),
+                          values = listOf(avatarURI),
+                          rpId = tempoAccount.rpId,
+                          sessionKey = sessionKey,
+                        )
+                      if (!writeResult.success) {
+                        error = writeResult.error ?: "Failed to set avatar record"
+                        return@launch
+                      }
+                    }
+                    else -> {
+                      error = "Tempo passkey account required for onboarding."
+                      return@launch
+                    }
                   }
                 }
 

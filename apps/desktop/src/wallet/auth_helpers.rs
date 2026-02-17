@@ -2,6 +2,9 @@ use super::*;
 
 pub(super) fn preferred_wallet_address(auth: Option<&auth::PersistedAuth>) -> Option<String> {
     let auth = auth?;
+    if let Some(addr) = auth.wallet_address.clone() {
+        return Some(addr);
+    }
     if auth.auth_method_type == Some(1) {
         auth.eoa_address
             .clone()

@@ -64,7 +64,7 @@ private fun abbreviateLocation(name: String?, state: String?, country: String?, 
 }
 
 /** Search Photon API for city-level locations */
-private suspend fun searchLocations(query: String): List<LocationResult> = withContext(Dispatchers.IO) {
+suspend fun searchLocations(query: String): List<LocationResult> = withContext(Dispatchers.IO) {
   try {
     val encoded = URLEncoder.encode(query, "UTF-8")
     val url = "https://photon.komoot.io/api/?q=$encoded&limit=6&lang=en"

@@ -1,0 +1,36 @@
+specVersion: 1.0.0
+indexerHints:
+  prune: auto
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: ScrobbleV4
+    network: moderato
+    source:
+      address: "0x0541443C41a6F923D518Ac23921778e2Ea102891"
+      abi: ScrobbleV4
+      startBlock: 5198164
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Track
+        - Scrobble
+        - UserVerification
+        - UserListeningStats
+        - UserArtistStats
+      abis:
+        - name: ScrobbleV4
+          file: ./abis/ScrobbleV4.json
+      eventHandlers:
+        - event: TrackRegistered(indexed bytes32,indexed uint8,bytes32,indexed bytes32,uint64,uint32)
+          handler: handleTrackRegisteredV4
+        - event: TrackCoverSet(indexed bytes32,string)
+          handler: handleTrackCoverSetV4
+        - event: Scrobbled(indexed address,indexed bytes32,uint64)
+          handler: handleScrobbledV4
+        - event: TrackUpdated(indexed bytes32,indexed bytes32)
+          handler: handleTrackUpdatedV4
+      file: ./src/scrobble-v4.ts
