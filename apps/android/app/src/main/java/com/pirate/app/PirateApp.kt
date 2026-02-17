@@ -59,32 +59,32 @@ import com.pirate.app.chat.XmtpChatService
 import com.pirate.app.community.CommunityScreen
 import com.pirate.app.lit.LitAuthContextManager
 import com.pirate.app.lit.LitRust
-import com.pirate.app.lit.WalletAuth
-import com.pirate.app.lit.NativePasskeyAuth
 import com.pirate.app.lit.PirateAuthConfig
+import com.pirate.app.lit.WalletAuth
 import com.pirate.app.music.MusicScreen
 import com.pirate.app.music.PublishScreen
 import com.pirate.app.player.PlayerController
 import com.pirate.app.profile.ProfileEditScreen
 import com.pirate.app.profile.ProfileScreen
+import com.pirate.app.profile.TempoNameRecordsApi
 import com.pirate.app.scarlett.AgoraVoiceController
 import com.pirate.app.scarlett.ScarlettCallScreen
 import com.pirate.app.scarlett.ScarlettService
 import com.pirate.app.scarlett.ScarlettVoiceBar
 import com.pirate.app.scarlett.VoiceCallState
+import com.pirate.app.scarlett.clearWorkerAuthCache
 import com.pirate.app.schedule.ScheduleScreen
 import com.pirate.app.scrobble.ScrobbleService
+import com.pirate.app.tempo.TempoPasskeyManager
 import com.pirate.app.ui.PirateMiniPlayer
 import com.pirate.app.ui.PirateSideMenuDrawer
 import com.pirate.app.ui.PirateTopBar
 import com.pirate.app.onboarding.OnboardingScreen
 import com.pirate.app.onboarding.OnboardingStep
 import com.pirate.app.onboarding.checkOnboardingStatus
-import com.pirate.app.util.Eth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 
 private sealed class PirateRoute(val route: String, val label: String) {
   data object Music : PirateRoute("music", "Music")
@@ -104,6 +104,21 @@ private sealed class PirateRoute(val route: String, val label: String) {
   data object Publish : PirateRoute("publish", "Publish Song")
 }
 
+private suspend fun resolveProfileIdentity(address: String): Pair<String?, String?> = withContext(Dispatchers.IO) {
+  val tempoName = TempoNameRecordsApi.getPrimaryName(address)
+  if (!tempoName.isNullOrBlank()) {
+    val node = TempoNameRecordsApi.computeNode(tempoName)
+    val avatar = TempoNameRecordsApi.getTextRecord(node, "avatar") ?: OnboardingRpcHelpers.getTextRecord(node, "avatar")
+    return@withContext tempoName to avatar
+  }
+
+  val legacyName = OnboardingRpcHelpers.getPrimaryName(address)
+  if (legacyName.isNullOrBlank()) return@withContext null to null
+  val node = OnboardingRpcHelpers.computeNode(legacyName)
+  val avatar = TempoNameRecordsApi.getTextRecord(node, "avatar") ?: OnboardingRpcHelpers.getTextRecord(node, "avatar")
+  return@withContext "$legacyName.heaven" to avatar
+}
+
 @Composable
 fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
   val appContext = LocalContext.current.applicationContext
@@ -112,7 +127,11 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
   val scope = rememberCoroutineScope()
   val snackbarHostState = remember { SnackbarHostState() }
   val drawerState = androidx.compose.material3.rememberDrawerState(initialValue = DrawerValue.Closed)
-  val player = remember { PlayerController(appContext) }
+  val player = remember {
+    PlayerController(appContext).also {
+      com.pirate.app.widget.WidgetActionReceiver.playerRef = it
+    }
+  }
   val chatService = remember { XmtpChatService(appContext) }
   val scarlettService = remember { ScarlettService(appContext) }
   val voiceController = remember { AgoraVoiceController(appContext) }
@@ -124,9 +143,11 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
     mutableStateOf(
       saved.copy(
         authServiceBaseUrl = PirateAuthConfig.DEFAULT_AUTH_SERVICE_BASE_URL,
-        passkeyRpId = PirateAuthConfig.DEFAULT_PASSKEY_RP_ID,
+        passkeyRpId = saved.tempoRpId.ifBlank { PirateAuthConfig.DEFAULT_PASSKEY_RP_ID },
         litNetwork = PirateAuthConfig.DEFAULT_LIT_NETWORK,
         litRpcUrl = PirateAuthConfig.DEFAULT_LIT_RPC_URL,
+        tempoRpId = saved.tempoRpId.ifBlank { TempoPasskeyManager.DEFAULT_RP_ID },
+        pkpEthAddress = saved.pkpEthAddress ?: saved.tempoAddress,
       ),
     )
   }
@@ -149,6 +170,10 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
           PirateAuthUiState.clear(appContext)
           authState = authState.copy(
             busy = false,
+            tempoAddress = null,
+            tempoCredentialId = null,
+            tempoPubKeyX = null,
+            tempoPubKeyY = null,
             pkpPublicKey = null,
             pkpEthAddress = null,
             pkpTokenId = null,
@@ -168,6 +193,7 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
   val scrobbleService =
     remember {
       ScrobbleService(
+        activity = activity,
         player = player,
         getAuthState = { authState },
         onShowMessage = { msg ->
@@ -191,25 +217,43 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
     }
   }
 
-  val isAuthenticated = authState.hasLitAuthCredentials()
+  val isAuthenticated = authState.hasAnyCredentials()
+  val activeAddress = authState.activeAddress()
 
   // Profile identity — hoisted so drawer + profile screen can share
   var heavenName by remember { mutableStateOf<String?>(null) }
   var avatarUri by remember { mutableStateOf<String?>(null) }
   var chatThreadOpen by remember { mutableStateOf(false) }
+  var xmtpBootstrapKey by remember { mutableStateOf<String?>(null) }
 
-  LaunchedEffect(authState.pkpEthAddress) {
-    val addr = authState.pkpEthAddress
+  LaunchedEffect(activeAddress) {
+    val addr = activeAddress
     if (addr.isNullOrBlank()) {
       heavenName = null; avatarUri = null; return@LaunchedEffect
     }
-    withContext(Dispatchers.IO) {
-      val name = OnboardingRpcHelpers.getPrimaryName(addr)
-      heavenName = name
-      if (name != null) {
-        val node = OnboardingRpcHelpers.computeNode(name)
-        avatarUri = OnboardingRpcHelpers.getTextRecord(node, "avatar")
-      }
+    val (name, avatar) = resolveProfileIdentity(addr)
+    heavenName = name
+    avatarUri = avatar
+  }
+
+  // Ensure each authenticated user gets an XMTP inbox as soon as possible,
+  // rather than waiting until they first open the chat screen.
+  LaunchedEffect(activeAddress) {
+    if (!isAuthenticated) {
+      xmtpBootstrapKey = null
+      return@LaunchedEffect
+    }
+    val address = activeAddress
+    if (address.isNullOrBlank()) return@LaunchedEffect
+
+    val key = address.lowercase()
+    if (chatService.connected.value || xmtpBootstrapKey == key) return@LaunchedEffect
+    xmtpBootstrapKey = key
+
+    runCatching {
+      chatService.connect(address)
+    }.onFailure { err ->
+      android.util.Log.w("PirateApp", "XMTP bootstrap failed: ${err.message}")
     }
   }
 
@@ -251,105 +295,63 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
   }
 
   suspend fun doRegister() {
-    authState = authState.copy(busy = true, output = "Registering passkey + minting PKP...")
+    authState = authState.copy(busy = true, output = "Creating Tempo passkey account...")
     val result = runCatching {
-      NativePasskeyAuth.registerAndMintPkp(
+      val rpId = authState.passkeyRpId.ifBlank { authState.tempoRpId }
+      TempoPasskeyManager.createAccount(
         activity = activity,
-        authServiceBaseUrl = authState.authServiceBaseUrl,
-        expectedRpId = authState.passkeyRpId,
-        username = "Heaven",
+        rpId = rpId,
         rpName = "Heaven",
-        scopes = listOf("sign-anything", "personal-sign"),
-        litNetwork = authState.litNetwork,
-        litRpcUrl = authState.litRpcUrl,
       )
     }
 
     result.onFailure { err ->
-      authState = authState.copy(busy = false, output = "register failed: ${err.message}")
+      authState = authState.copy(busy = false, output = "sign up failed: ${err.message}")
       snackbarHostState.showSnackbar("Sign up failed: ${err.message ?: "unknown error"}")
     }
 
-    result.onSuccess { reg ->
-      val pkp = reg.pkpInfo
-      val pkpPubkey =
-        pkp.optString("pubkey", pkp.optString("publicKey", "")).let { value ->
-          if (value.startsWith("0x") || value.startsWith("0X")) value else "0x$value"
-        }
-      val pkpEthAddress = pkp.optString("ethAddress", pkp.optString("eth_address", "")).ifBlank { null }
-      val pkpTokenId = pkp.optString("tokenId", pkp.optString("token_id", "")).ifBlank { null }
-      // Prefer deriving from pubkey when possible (some APIs may return a different address field).
-      val derivedEthAddress = Eth.deriveAddressFromUncompressedPublicKeyHex(pkpPubkey) ?: pkpEthAddress
-
-      authState =
+    result.onSuccess { account ->
+      chatService.disconnect()
+      clearWorkerAuthCache()
+      xmtpBootstrapKey = null
+      val nextState =
         authState.copy(
-          busy = true,
-          pkpPublicKey = pkpPubkey,
-          pkpEthAddress = derivedEthAddress,
-          pkpTokenId = pkpTokenId,
-          authMethodType = reg.authData.authMethodType,
-          authMethodId = reg.authData.authMethodId,
-          accessToken = reg.authData.accessToken,
-          output = "Creating Lit auth context...",
+          busy = false,
+          passkeyRpId = account.rpId,
+          tempoRpId = account.rpId,
+          tempoAddress = account.address,
+          tempoCredentialId = account.credentialId,
+          tempoPubKeyX = account.pubKey.xHex,
+          tempoPubKeyY = account.pubKey.yHex,
+          // Transitional alias while unported screens still read pkpEthAddress.
+          pkpEthAddress = account.address,
+          pkpPublicKey = null,
+          pkpTokenId = null,
+          authMethodType = null,
+          authMethodId = null,
+          accessToken = null,
+          output = "Tempo account ready: ${account.address.take(10)}...",
         )
+      authState = nextState
+      PirateAuthUiState.save(appContext, nextState)
+      snackbarHostState.showSnackbar("Signed up with passkey.")
 
-      val ctxResult = runCatching {
-        LitAuthContextManager.ensureFromState(authState, forceRefresh = true)
-      }
-
-      ctxResult.onFailure { err ->
-        authState =
-          authState.copy(
-            busy = false,
-            output = "Signed up, but Lit auth context failed: ${err.message}",
-          )
-        snackbarHostState.showSnackbar("Signed up, but Lit auth failed: ${err.message ?: "unknown error"}")
-      }
-
-      ctxResult.onSuccess {
-        authState =
-          authState.copy(
-            busy = false,
-            output = "OK. tokenId=${pkp.optString("tokenId", "(unknown)")} pkpPubkey=${pkpPubkey.take(18)} authMethodId=${reg.authData.authMethodId.take(18)}",
-          )
-        PirateAuthUiState.save(appContext, authState)
-        snackbarHostState.showSnackbar("Signed up.")
-
-        // Check if onboarding needed and navigate
-        val addr = derivedEthAddress ?: pkpEthAddress
-        if (addr != null) {
-          val step = checkOnboardingStatus(appContext, addr)
-          if (step != null) {
-            onboardingInitialStep = step
-            navController.navigate(PirateRoute.Onboarding.route) { launchSingleTop = true }
-          }
-        }
+      val step = runCatching { checkOnboardingStatus(appContext, account.address) }.getOrNull()
+      if (step != null) {
+        onboardingInitialStep = step
+        navController.navigate(PirateRoute.Onboarding.route) { launchSingleTop = true }
       }
     }
   }
 
   suspend fun doLogin() {
-    authState = authState.copy(busy = true, output = "Authenticating with passkey...")
+    authState = authState.copy(busy = true, output = "Authenticating with Tempo passkey...")
     val result = runCatching {
-      val auth = NativePasskeyAuth.authenticateWithPasskey(
+      val rpId = authState.passkeyRpId.ifBlank { authState.tempoRpId }
+      TempoPasskeyManager.login(
         activity = activity,
-        expectedRpId = authState.passkeyRpId,
+        rpId = rpId,
       )
-
-      val pkp = withContext(Dispatchers.IO) {
-        val raw = LitRust.viewPkpsByAuthDataRaw(
-          network = authState.litNetwork,
-          rpcUrl = authState.litRpcUrl,
-          authMethodType = auth.authMethodType,
-          authMethodId = auth.authMethodId,
-          limit = 1,
-          offset = 0,
-        )
-        val resultJson = LitRust.unwrapEnvelope(raw)
-        resultJson.getJSONArray("pkps").optJSONObject(0) ?: JSONObject()
-      }
-
-      Pair(auth, pkp)
     }
 
     result.onFailure { err ->
@@ -357,65 +359,43 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
       snackbarHostState.showSnackbar("Log in failed: ${err.message ?: "unknown error"}")
     }
 
-    result.onSuccess { (auth, pkp) ->
-      val pkpPubkey =
-        pkp.optString("pubkey", pkp.optString("publicKey", "")).let { value ->
-          if (value.startsWith("0x") || value.startsWith("0X")) value else "0x$value"
-        }
-      val pkpEthAddress = pkp.optString("ethAddress", pkp.optString("eth_address", "")).ifBlank { null }
-      val pkpTokenId = pkp.optString("tokenId", pkp.optString("token_id", "")).ifBlank { null }
-      // Prefer deriving from pubkey when possible (some APIs may return a different address field).
-      val derivedEthAddress = Eth.deriveAddressFromUncompressedPublicKeyHex(pkpPubkey) ?: pkpEthAddress
-
-      authState =
+    result.onSuccess { account ->
+      chatService.disconnect()
+      clearWorkerAuthCache()
+      xmtpBootstrapKey = null
+      val nextState =
         authState.copy(
-          busy = true,
-          pkpPublicKey = pkpPubkey,
-          pkpEthAddress = derivedEthAddress,
-          pkpTokenId = pkpTokenId,
-          authMethodType = auth.authMethodType,
-          authMethodId = auth.authMethodId,
-          accessToken = auth.accessToken,
-          output = "Creating Lit auth context...",
+          busy = false,
+          passkeyRpId = account.rpId,
+          tempoRpId = account.rpId,
+          tempoAddress = account.address,
+          tempoCredentialId = account.credentialId,
+          tempoPubKeyX = account.pubKey.xHex,
+          tempoPubKeyY = account.pubKey.yHex,
+          // Transitional alias while unported screens still read pkpEthAddress.
+          pkpEthAddress = account.address,
+          pkpPublicKey = null,
+          pkpTokenId = null,
+          authMethodType = null,
+          authMethodId = null,
+          accessToken = null,
+          output = "Logged in: ${account.address.take(10)}...",
         )
+      authState = nextState
+      PirateAuthUiState.save(appContext, nextState)
+      snackbarHostState.showSnackbar("Logged in with passkey.")
 
-      val ctxResult = runCatching {
-        LitAuthContextManager.ensureFromState(authState, forceRefresh = true)
-      }
-
-      ctxResult.onFailure { err ->
-        authState =
-          authState.copy(
-            busy = false,
-            output = "Logged in, but Lit auth context failed: ${err.message}",
-          )
-        snackbarHostState.showSnackbar("Logged in, but Lit auth failed: ${err.message ?: "unknown error"}")
-      }
-
-      ctxResult.onSuccess {
-        authState =
-          authState.copy(
-            busy = false,
-            output = "OK. tokenId=${pkp.optString("tokenId", "(unknown)")} pkpPubkey=${pkpPubkey.take(18)} authMethodId=${auth.authMethodId.take(18)}",
-          )
-        PirateAuthUiState.save(appContext, authState)
-        snackbarHostState.showSnackbar("Logged in.")
-
-        // Check if onboarding needed and navigate
-        val addr = derivedEthAddress ?: pkpEthAddress
-        if (addr != null) {
-          val step = checkOnboardingStatus(appContext, addr)
-          if (step != null) {
-            onboardingInitialStep = step
-            navController.navigate(PirateRoute.Onboarding.route) { launchSingleTop = true }
-          }
-        }
+      val step = runCatching { checkOnboardingStatus(appContext, account.address) }.getOrNull()
+      if (step != null) {
+        onboardingInitialStep = step
+        navController.navigate(PirateRoute.Onboarding.route) { launchSingleTop = true }
       }
     }
   }
 
   suspend fun doLogout() {
     chatService.disconnect()
+    clearWorkerAuthCache()
 
     runCatching {
       withContext(Dispatchers.IO) {
@@ -427,6 +407,10 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
     PirateAuthUiState.clear(appContext)
     authState =
       authState.copy(
+        tempoAddress = null,
+        tempoCredentialId = null,
+        tempoPubKeyX = null,
+        tempoPubKeyY = null,
         pkpPublicKey = null,
         pkpEthAddress = null,
         pkpTokenId = null,
@@ -457,11 +441,16 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
     }
 
     result.onSuccess { walletResult ->
+      clearWorkerAuthCache()
       val derivedEthAddress = com.pirate.app.util.Eth.deriveAddressFromUncompressedPublicKeyHex(walletResult.pkpPublicKey)
         ?: walletResult.pkpEthAddress
 
       authState = authState.copy(
         busy = true,
+        tempoAddress = null,
+        tempoCredentialId = null,
+        tempoPubKeyX = null,
+        tempoPubKeyY = null,
         pkpPublicKey = walletResult.pkpPublicKey,
         pkpEthAddress = derivedEthAddress,
         pkpTokenId = walletResult.pkpTokenId,
@@ -490,13 +479,6 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
         )
         PirateAuthUiState.save(appContext, authState)
         snackbarHostState.showSnackbar("Signed in via wallet.")
-
-        // Check if onboarding needed
-        val step = checkOnboardingStatus(appContext, derivedEthAddress)
-        if (step != null) {
-          onboardingInitialStep = step
-          navController.navigate(PirateRoute.Onboarding.route) { launchSingleTop = true }
-        }
       }
     }
   }
@@ -507,7 +489,7 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
       PirateSideMenuDrawer(
         isAuthenticated = isAuthenticated,
         busy = authState.busy,
-        ethAddress = authState.pkpEthAddress,
+        ethAddress = activeAddress,
         heavenName = heavenName,
         avatarUri = avatarUri,
         onNavigateProfile = {
@@ -630,6 +612,7 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
       },
     ) { innerPadding ->
       PirateNavHost(
+        activity = activity,
         innerPadding = innerPadding,
         navController = navController,
         authState = authState,
@@ -654,6 +637,21 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
             )
           }
         },
+        onRefreshProfileIdentity = {
+          scope.launch {
+            val currentAddress = authState.activeAddress()
+            if (currentAddress.isNullOrBlank()) {
+              heavenName = null
+              avatarUri = null
+              return@launch
+            }
+            runCatching {
+              val (name, avatar) = resolveProfileIdentity(currentAddress)
+              heavenName = name
+              avatarUri = avatar
+            }
+          }
+        },
         onChatThreadVisibilityChange = { chatThreadOpen = it },
         onboardingInitialStep = onboardingInitialStep,
       )
@@ -663,6 +661,7 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
 
 @Composable
 private fun PirateNavHost(
+  activity: androidx.fragment.app.FragmentActivity,
   innerPadding: PaddingValues,
   navController: androidx.navigation.NavHostController,
   authState: PirateAuthUiState,
@@ -679,10 +678,12 @@ private fun PirateNavHost(
   voiceController: AgoraVoiceController,
   onOpenDrawer: () -> Unit,
   onShowMessage: (String) -> Unit,
+  onRefreshProfileIdentity: () -> Unit,
   onChatThreadVisibilityChange: (Boolean) -> Unit,
   onboardingInitialStep: OnboardingStep = OnboardingStep.NAME,
 ) {
   val scope = rememberCoroutineScope()
+  val activeAddress = authState.activeAddress()
 
   NavHost(
     navController = navController,
@@ -695,13 +696,10 @@ private fun PirateNavHost(
     popExitTransition = { ExitTransition.None },
   ) {
     composable(PirateRoute.Music.route) {
-      val isAuthenticated = authState.hasLitAuthCredentials()
+      val isAuthenticated = authState.hasTempoCredentials()
       MusicScreen(
         player = player,
-        litNetwork = authState.litNetwork,
-        litRpcUrl = authState.litRpcUrl,
-        pkpPublicKey = authState.pkpPublicKey,
-        ownerEthAddress = authState.pkpEthAddress,
+        ownerEthAddress = authState.activeAddress(),
         isAuthenticated = isAuthenticated,
         onShowMessage = onShowMessage,
         onOpenPlayer = {
@@ -711,16 +709,13 @@ private fun PirateNavHost(
       )
     }
     composable(PirateRoute.Chat.route) {
-      val isAuthenticated = authState.hasLitAuthCredentials()
+      val isAuthenticated = authState.hasAnyCredentials()
       ChatScreen(
         chatService = chatService,
         scarlettService = scarlettService,
         voiceController = voiceController,
         isAuthenticated = isAuthenticated,
-        pkpEthAddress = authState.pkpEthAddress,
-        pkpPublicKey = authState.pkpPublicKey,
-        litNetwork = authState.litNetwork,
-        litRpcUrl = authState.litRpcUrl,
+        userAddress = activeAddress,
         onOpenDrawer = onOpenDrawer,
         onShowMessage = onShowMessage,
         onNavigateToCall = {
@@ -736,7 +731,7 @@ private fun PirateNavHost(
     }
     composable(PirateRoute.Rooms.route) {
       CommunityScreen(
-        viewerAddress = authState.pkpEthAddress,
+        viewerAddress = activeAddress,
         onMemberClick = { address ->
           navController.navigate(PirateRoute.PublicProfile.buildRoute(address)) {
             launchSingleTop = true
@@ -745,16 +740,16 @@ private fun PirateNavHost(
       )
     }
     composable(PirateRoute.Schedule.route) {
-      val isAuthenticated = authState.hasLitAuthCredentials()
+      val isAuthenticated = authState.hasAnyCredentials()
       ScheduleScreen(
         isAuthenticated = isAuthenticated,
         onOpenDrawer = onOpenDrawer,
       )
     }
     composable(PirateRoute.Profile.route) {
-      val isAuthenticated = authState.hasLitAuthCredentials()
+      val isAuthenticated = authState.hasAnyCredentials()
       ProfileScreen(
-        ethAddress = authState.pkpEthAddress,
+        ethAddress = activeAddress,
         heavenName = heavenName,
         avatarUri = avatarUri,
         isAuthenticated = isAuthenticated,
@@ -767,7 +762,7 @@ private fun PirateNavHost(
         onEditProfile = {
           navController.navigate(PirateRoute.EditProfile.route) { launchSingleTop = true }
         },
-        viewerEthAddress = authState.pkpEthAddress,
+        viewerEthAddress = activeAddress,
         pkpPublicKey = authState.pkpPublicKey,
         litNetwork = authState.litNetwork,
         litRpcUrl = authState.litRpcUrl,
@@ -777,7 +772,7 @@ private fun PirateNavHost(
       route = PirateRoute.PublicProfile.route,
       arguments = listOf(navArgument(PirateRoute.PublicProfile.ARG_ADDRESS) { type = NavType.StringType }),
     ) { backStackEntry ->
-      val isAuthenticated = authState.hasLitAuthCredentials()
+      val isAuthenticated = authState.hasAnyCredentials()
       val rawAddress = backStackEntry.arguments?.getString(PirateRoute.PublicProfile.ARG_ADDRESS).orEmpty()
       val targetAddress = remember(rawAddress) {
         val trimmed = rawAddress.trim()
@@ -795,14 +790,9 @@ private fun PirateNavHost(
         targetHeavenName = null
         targetAvatarUri = null
         if (targetAddress.isNullOrBlank()) return@LaunchedEffect
-        withContext(Dispatchers.IO) {
-          val name = OnboardingRpcHelpers.getPrimaryName(targetAddress)
-          targetHeavenName = name
-          if (!name.isNullOrBlank()) {
-            val node = OnboardingRpcHelpers.computeNode(name)
-            targetAvatarUri = OnboardingRpcHelpers.getTextRecord(node, "avatar")
-          }
-        }
+        val (name, avatar) = resolveProfileIdentity(targetAddress)
+        targetHeavenName = name
+        targetAvatarUri = avatar
       }
 
       ProfileScreen(
@@ -818,48 +808,55 @@ private fun PirateNavHost(
         onMessage = { address ->
           scope.launch {
             runCatching {
-              val selfAddress = authState.pkpEthAddress
-              val selfPubKey = authState.pkpPublicKey
-              if (selfAddress.isNullOrBlank() || selfPubKey.isNullOrBlank()) {
+              val selfAddress = activeAddress
+              if (selfAddress.isNullOrBlank()) {
                 throw IllegalStateException("Missing chat auth context")
               }
               if (!chatService.connected.value) {
-                chatService.connect(
-                  pkpEthAddress = selfAddress,
-                  pkpPublicKey = selfPubKey,
-                  litNetwork = authState.litNetwork,
-                  litRpcUrl = authState.litRpcUrl,
-                )
+                chatService.connect(selfAddress)
               }
               val dmId = chatService.newDm(address)
-                ?: throw IllegalStateException("Could not create DM")
               chatService.openConversation(dmId)
               navController.navigate(PirateRoute.Chat.route) { launchSingleTop = true }
             }.onFailure { err ->
-              onShowMessage("Message failed: ${err.message ?: "unknown error"}")
+              val message = err.message ?: "unknown error"
+              when {
+                message.contains("No XMTP inboxId", ignoreCase = true) ->
+                  onShowMessage("This user has not enabled messaging yet.")
+                message.contains("Missing chat auth context", ignoreCase = true) ->
+                  onShowMessage("Missing chat auth. Please sign in again.")
+                else -> onShowMessage("Message failed: $message")
+              }
             }
           }
         },
-        viewerEthAddress = authState.pkpEthAddress,
+        viewerEthAddress = activeAddress,
         pkpPublicKey = authState.pkpPublicKey,
         litNetwork = authState.litNetwork,
         litRpcUrl = authState.litRpcUrl,
       )
     }
     composable(PirateRoute.EditProfile.route) {
-      val address = authState.pkpEthAddress
-      if (address.isNullOrBlank()) {
+      val address = activeAddress
+      if (!authState.hasAnyCredentials() || address.isNullOrBlank()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
           Text("Sign in to edit your profile", color = Color(0xFFA3A3A3))
         }
       } else {
         ProfileEditScreen(
+          activity = activity,
           ethAddress = address,
+          tempoAddress = authState.tempoAddress,
+          tempoCredentialId = authState.tempoCredentialId,
+          tempoPubKeyX = authState.tempoPubKeyX,
+          tempoPubKeyY = authState.tempoPubKeyY,
+          tempoRpId = authState.tempoRpId.ifBlank { TempoPasskeyManager.DEFAULT_RP_ID },
           pkpPublicKey = authState.pkpPublicKey,
           litNetwork = authState.litNetwork,
           litRpcUrl = authState.litRpcUrl,
           onBack = { navController.popBackStack() },
           onSaved = {
+            onRefreshProfileIdentity()
             onShowMessage("Profile updated")
             navController.navigate(PirateRoute.Profile.route) {
               popUpTo(PirateRoute.Profile.route) { inclusive = true }
@@ -885,10 +882,13 @@ private fun PirateNavHost(
       },
     ) {
       OnboardingScreen(
-        pkpPublicKey = authState.pkpPublicKey ?: "",
+        activity = activity,
         pkpEthAddress = authState.pkpEthAddress ?: "",
-        litNetwork = authState.litNetwork,
-        litRpcUrl = authState.litRpcUrl,
+        tempoAddress = authState.tempoAddress,
+        tempoCredentialId = authState.tempoCredentialId,
+        tempoPubKeyX = authState.tempoPubKeyX,
+        tempoPubKeyY = authState.tempoPubKeyY,
+        tempoRpId = authState.tempoRpId.ifBlank { TempoPasskeyManager.DEFAULT_RP_ID },
         initialStep = onboardingInitialStep,
         onComplete = {
           navController.navigate(PirateRoute.Music.route) {
@@ -942,13 +942,10 @@ private fun PirateNavHost(
         )
       },
     ) {
-      val isAuthenticated = authState.hasLitAuthCredentials()
+      val isAuthenticated = authState.hasTempoCredentials()
       com.pirate.app.player.PlayerScreen(
         player = player,
-        litNetwork = authState.litNetwork,
-        litRpcUrl = authState.litRpcUrl,
-        pkpPublicKey = authState.pkpPublicKey,
-        ownerEthAddress = authState.pkpEthAddress,
+        ownerEthAddress = authState.activeAddress(),
         isAuthenticated = isAuthenticated,
         onClose = { navController.popBackStack() },
         onShowMessage = onShowMessage,

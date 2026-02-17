@@ -14,6 +14,18 @@ android {
     targetSdk = 36
     versionCode = 1
     versionName = "0.1.0"
+
+    val tempoScrobbleApi = (project.findProperty("TEMPO_SCROBBLE_API") as String?)
+      ?.replace("\"", "\\\"")
+      ?.trim()
+      ?: ""
+    buildConfigField("String", "TEMPO_SCROBBLE_API", "\"$tempoScrobbleApi\"")
+
+    val tempoScrobbleSubgraphUrl = (project.findProperty("TEMPO_SCROBBLE_SUBGRAPH_URL") as String?)
+      ?.replace("\"", "\\\"")
+      ?.trim()
+      ?: ""
+    buildConfigField("String", "TEMPO_SCROBBLE_SUBGRAPH_URL", "\"$tempoScrobbleSubgraphUrl\"")
   }
 
   buildFeatures {
@@ -85,6 +97,10 @@ dependencies {
 
   // Image loading (album art, covers)
   implementation("io.coil-kt:coil-compose:2.6.0")
+
+  // Glance (home-screen widget)
+  implementation("androidx.glance:glance-appwidget:1.1.1")
+  implementation("androidx.datastore:datastore-preferences:1.1.4")
 
   debugImplementation("androidx.compose.ui:ui-tooling")
 }

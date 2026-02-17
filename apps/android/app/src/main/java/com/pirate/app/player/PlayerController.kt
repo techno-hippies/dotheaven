@@ -1,10 +1,13 @@
 package com.pirate.app.player
 
 import android.content.Context
+import android.content.Intent
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.net.Uri
+import android.os.Build
 import com.pirate.app.music.MusicTrack
+import com.pirate.app.widget.NowPlayingWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -76,7 +79,6 @@ class PlayerController(private val context: Context) {
     val q = _queue.value
     if (q.isEmpty()) return
 
-    // If we're meaningfully into the song, restart instead of skipping back.
     if (_progress.value.positionSec >= 3f) {
       seekTo(0f)
       return
@@ -128,6 +130,8 @@ class PlayerController(private val context: Context) {
       if (playWhenReady) {
         runCatching { it.start() }
         _isPlaying.value = true
+        startPlaybackService()
+        syncWidgetState()
       }
       startProgressUpdates()
     }
@@ -138,6 +142,8 @@ class PlayerController(private val context: Context) {
       if (q2.isNotEmpty() && _queueIndex.value < q2.lastIndex) {
         _queueIndex.value = _queueIndex.value + 1
         loadAndPlay(index = _queueIndex.value, playWhenReady = true)
+      } else {
+        syncWidgetState()
       }
     }
 
@@ -169,6 +175,8 @@ class PlayerController(private val context: Context) {
     } catch (_: Throwable) {
       _isPlaying.value = false
     }
+    syncWidgetState()
+    updatePlaybackService()
   }
 
   fun stop() {
@@ -177,6 +185,8 @@ class PlayerController(private val context: Context) {
     _isPlaying.value = false
     _queue.value = emptyList()
     _queueIndex.value = 0
+    syncWidgetState()
+    stopPlaybackService()
   }
 
   fun release() {
@@ -213,6 +223,57 @@ class PlayerController(private val context: Context) {
     }
   }
 
+  // -- Widget: push state into Glance DataStore so provideContent sees fresh data --
+
+  private fun syncWidgetState() {
+    val track = _currentTrack.value
+    scope.launch(Dispatchers.IO) {
+      if (track == null) {
+        NowPlayingWidget.clearState(context)
+      } else {
+        NowPlayingWidget.pushState(
+          context = context,
+          title = track.title,
+          artist = track.artist,
+          artworkUri = track.artworkUri,
+          isPlaying = _isPlaying.value,
+        )
+      }
+    }
+  }
+
+  // -- Foreground PlaybackService (notification + MediaSession) --
+
+  private var serviceStarted = false
+
+  private fun startPlaybackService() {
+    PlaybackService.playerRef = this
+    val intent = Intent(context, PlaybackService::class.java)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      context.startForegroundService(intent)
+    } else {
+      context.startService(intent)
+    }
+    serviceStarted = true
+  }
+
+  private fun updatePlaybackService() {
+    if (!serviceStarted) return
+    val intent = Intent(context, PlaybackService::class.java).apply {
+      action = PlaybackService.ACTION_UPDATE
+    }
+    context.startService(intent)
+  }
+
+  private fun stopPlaybackService() {
+    if (!serviceStarted) return
+    val intent = Intent(context, PlaybackService::class.java).apply {
+      action = PlaybackService.ACTION_STOP
+    }
+    context.startService(intent)
+    serviceStarted = false
+  }
+
   private fun startProgressUpdates() {
     progressJob?.cancel()
     progressJob =
@@ -225,6 +286,7 @@ class PlayerController(private val context: Context) {
             positionSec = positionMs / 1000f,
             durationSec = durationMs / 1000f,
           )
+          updatePlaybackService()
           delay(250)
         }
       }
