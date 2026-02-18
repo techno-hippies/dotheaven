@@ -1,0 +1,26 @@
+specVersion: 1.0.0
+indexerHints:
+  prune: auto
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: ProfileV2
+    network: moderato
+    source:
+      address: "0x6FDb2F5B13F8D7f365B4A75A2763d5C7270E8066"
+      abi: ProfileV2
+      startBlock: 5198000
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Profile
+      abis:
+        - name: ProfileV2
+          file: ./abis/ProfileV2.json
+      eventHandlers:
+        - event: ProfileUpserted(indexed address,uint8)
+          handler: handleProfileUpserted
+      file: ./src/profile.ts

@@ -14,6 +14,7 @@ import androidx.credentials.exceptions.CreateCredentialException
 import androidx.credentials.exceptions.GetCredentialException
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.SecureRandom
@@ -30,6 +31,8 @@ object TempoPasskeyManager {
     const val DEFAULT_RP_ID = "dotheaven.org"
     const val DEFAULT_RP_NAME = "Heaven (Tempo)"
     private const val PREFS_NAME = "tempo_passkey"
+    private const val ACCOUNTS_JSON_KEY = "accounts_json"
+    private const val TAG = "TempoPasskeyManager"
 
     private fun prefs(activity: Activity): SharedPreferences =
         activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -51,6 +54,13 @@ object TempoPasskeyManager {
         val normalized = host.trim().lowercase()
         if (normalized.isEmpty()) throw IllegalArgumentException("Invalid rpId: $value")
         return normalized
+    }
+
+    private fun normalizeCredentialId(value: String): String {
+        return value.trim()
+            .replace('+', '-')
+            .replace('/', '_')
+            .trimEnd('=')
     }
 
     data class PasskeyAccount(
@@ -121,7 +131,7 @@ object TempoPasskeyManager {
         val regJson = JSONObject(result.registrationResponseJson)
         val response = regJson.getJSONObject("response")
         val attestationObjectB64 = response.getString("attestationObject")
-        val rawId = regJson.getString("rawId")
+        val rawId = normalizeCredentialId(regJson.getString("rawId"))
 
         val pubKey = P256Utils.extractP256KeyFromRegistration(attestationObjectB64)
         val address = P256Utils.deriveAddress(pubKey)
@@ -142,13 +152,7 @@ object TempoPasskeyManager {
         rpId: String = DEFAULT_RP_ID,
     ): PasskeyAccount {
         val normalizedRpId = normalizeRpId(rpId)
-        // First try loading saved account
-        val saved = loadAccount(activity)
-        if (saved != null && saved.rpId != normalizedRpId) {
-            throw IllegalStateException(
-                "Saved account is bound to ${saved.rpId}; requested rpId is $normalizedRpId",
-            )
-        }
+        val knownAccounts = loadAccounts(activity)
 
         val challenge = ByteArray(32).also { SecureRandom().nextBytes(it) }
         val options = JSONObject().apply {
@@ -183,48 +187,140 @@ object TempoPasskeyManager {
         }
 
         val authJson = JSONObject(result.authenticationResponseJson)
-        val rawId = authJson.getString("rawId")
+        val rawId = normalizeCredentialId(authJson.getString("rawId"))
 
-        // If we have a saved account matching this credential, use it
-        if (saved != null && saved.credentialId == rawId) {
-            return saved
+        val matched =
+            knownAccounts.firstOrNull {
+                it.rpId == normalizedRpId && normalizeCredentialId(it.credentialId) == rawId
+            }
+        if (matched != null) {
+            // Promote last-used account to active for legacy reads.
+            saveAccount(activity, matched)
+            return matched
         }
 
-        // If saved account has different credentialId or no saved account,
-        // we can't derive the address without the public key from registration.
-        // Check if we have ANY saved account (might be same key, different encoding)
-        if (saved != null) {
-            return saved
+        // Some providers can return a credential-id representation that differs
+        // from what was persisted during registration. Fallback to cryptographic
+        // verification against known public keys.
+        val response = authJson.getJSONObject("response")
+        val authenticatorData = P256Utils.base64UrlToBytes(response.getString("authenticatorData"))
+        val clientDataJSON = P256Utils.base64UrlToBytes(response.getString("clientDataJSON"))
+        val signatureDer = P256Utils.base64UrlToBytes(response.getString("signature"))
+        val signatureMatched =
+            knownAccounts.firstOrNull { account ->
+                account.rpId == normalizedRpId &&
+                    P256Utils.verifyAssertionSignature(
+                        pubKey = account.pubKey,
+                        authenticatorData = authenticatorData,
+                        clientDataJSON = clientDataJSON,
+                        signatureDer = signatureDer,
+                    )
+            }
+        if (signatureMatched != null) {
+            Log.w(
+                TAG,
+                "Resolved passkey via signature fallback; credentialId mismatch (rawId len=${rawId.length})",
+            )
+            val updated = signatureMatched.copy(credentialId = rawId)
+            saveAccount(activity, updated)
+            return updated
+        }
+
+        // We can only map a passkey assertion to a Heaven account when we already
+        // have that credential's public key stored from passkey registration.
+        if (knownAccounts.isNotEmpty()) {
+            throw IllegalStateException(
+                "Selected passkey is not registered in this app. Use 'Create Passkey' for this passkey first."
+            )
         }
 
         throw IllegalStateException(
-            "No saved account found. You must 'Create Passkey' first on this device to register the public key."
+            "No saved passkey account found. Use 'Create Passkey' first on this device."
         )
     }
 
-    /** Load saved account from SharedPreferences. */
+    /** Load active account from SharedPreferences. */
     fun loadAccount(activity: Activity): PasskeyAccount? {
+        return loadAccounts(activity).firstOrNull()
+    }
+
+    private fun loadAccounts(activity: Activity): List<PasskeyAccount> {
         val p = prefs(activity)
+        val parsed = runCatching {
+            val raw = p.getString(ACCOUNTS_JSON_KEY, null)?.trim().orEmpty()
+            if (raw.isEmpty()) return@runCatching emptyList()
+            val array = JSONArray(raw)
+            buildList {
+                for (index in 0 until array.length()) {
+                    val item = array.optJSONObject(index) ?: continue
+                    val xHex = item.optString("pub_key_x", "")
+                    val yHex = item.optString("pub_key_y", "")
+                    val address = item.optString("address", "")
+                    val credentialId = normalizeCredentialId(item.optString("credential_id", ""))
+                    val rpId = normalizeRpId(item.optString("rp_id", DEFAULT_RP_ID))
+                    if (xHex.isEmpty() || yHex.isEmpty() || address.isEmpty() || credentialId.isEmpty()) continue
+                    add(
+                        PasskeyAccount(
+                            pubKey = P256Utils.P256PublicKey(
+                                P256Utils.hexToBytes(xHex),
+                                P256Utils.hexToBytes(yHex),
+                            ),
+                            address = address,
+                            credentialId = credentialId,
+                            rpId = rpId,
+                        ),
+                    )
+                }
+            }
+        }.getOrDefault(emptyList())
+        if (parsed.isNotEmpty()) return parsed
+        return listOfNotNull(loadLegacyAccount(p))
+    }
+
+    private fun loadLegacyAccount(p: SharedPreferences): PasskeyAccount? {
         val xHex = p.getString("pub_key_x", null) ?: return null
         val yHex = p.getString("pub_key_y", null) ?: return null
         val address = p.getString("address", null) ?: return null
-        val credId = p.getString("credential_id", null) ?: return null
+        val credentialId = p.getString("credential_id", null) ?: return null
         val rpId = p.getString("rp_id", DEFAULT_RP_ID)?.trim()?.ifEmpty { DEFAULT_RP_ID } ?: DEFAULT_RP_ID
         return PasskeyAccount(
             pubKey = P256Utils.P256PublicKey(P256Utils.hexToBytes(xHex), P256Utils.hexToBytes(yHex)),
             address = address,
-            credentialId = credId,
-            rpId = rpId,
+            credentialId = normalizeCredentialId(credentialId),
+            rpId = normalizeRpId(rpId),
         )
     }
 
     private fun saveAccount(activity: Activity, account: PasskeyAccount) {
+        val normalizedAccount = account.copy(
+            credentialId = normalizeCredentialId(account.credentialId),
+            rpId = normalizeRpId(account.rpId),
+        )
+        val remainder = loadAccounts(activity).filterNot {
+            normalizeCredentialId(it.credentialId) == normalizedAccount.credentialId &&
+                normalizeRpId(it.rpId) == normalizedAccount.rpId
+        }
+        val allAccounts = listOf(normalizedAccount) + remainder
+        val serialized = JSONArray().apply {
+            allAccounts.forEach { item ->
+                put(
+                    JSONObject()
+                        .put("pub_key_x", item.pubKey.xHex)
+                        .put("pub_key_y", item.pubKey.yHex)
+                        .put("address", item.address)
+                        .put("credential_id", item.credentialId)
+                        .put("rp_id", item.rpId),
+                )
+            }
+        }
+
         prefs(activity).edit()
-            .putString("pub_key_x", account.pubKey.xHex)
-            .putString("pub_key_y", account.pubKey.yHex)
-            .putString("address", account.address)
-            .putString("credential_id", account.credentialId)
-            .putString("rp_id", account.rpId)
+            .putString(ACCOUNTS_JSON_KEY, serialized.toString())
+            .putString("pub_key_x", normalizedAccount.pubKey.xHex)
+            .putString("pub_key_y", normalizedAccount.pubKey.yHex)
+            .putString("address", normalizedAccount.address)
+            .putString("credential_id", normalizedAccount.credentialId)
+            .putString("rp_id", normalizedAccount.rpId)
             .apply()
     }
 
@@ -238,6 +334,15 @@ object TempoPasskeyManager {
         account: PasskeyAccount,
         rpId: String = DEFAULT_RP_ID,
     ): PasskeyAssertion {
+        val caller =
+            Throwable().stackTrace.firstOrNull { frame ->
+                !frame.className.contains("TempoPasskeyManager")
+            }
+        Log.w(
+            TAG,
+            "Passkey sign requested for ${account.address} via ${caller?.className}.${caller?.methodName}:${caller?.lineNumber}",
+        )
+
         val normalizedRpId = normalizeRpId(rpId)
         if (account.rpId != normalizedRpId) {
             throw IllegalStateException(

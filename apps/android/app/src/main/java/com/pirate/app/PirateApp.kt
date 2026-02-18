@@ -64,6 +64,7 @@ import com.pirate.app.lit.WalletAuth
 import com.pirate.app.music.MusicScreen
 import com.pirate.app.music.PublishScreen
 import com.pirate.app.player.PlayerController
+import com.pirate.app.profile.ProfileContractApi
 import com.pirate.app.profile.ProfileEditScreen
 import com.pirate.app.profile.ProfileScreen
 import com.pirate.app.profile.TempoNameRecordsApi
@@ -75,6 +76,7 @@ import com.pirate.app.scarlett.VoiceCallState
 import com.pirate.app.scarlett.clearWorkerAuthCache
 import com.pirate.app.schedule.ScheduleScreen
 import com.pirate.app.scrobble.ScrobbleService
+import com.pirate.app.tempo.TempoAccountFactory
 import com.pirate.app.tempo.TempoPasskeyManager
 import com.pirate.app.ui.PirateMiniPlayer
 import com.pirate.app.ui.PirateSideMenuDrawer
@@ -83,6 +85,7 @@ import com.pirate.app.onboarding.OnboardingScreen
 import com.pirate.app.onboarding.OnboardingStep
 import com.pirate.app.onboarding.checkOnboardingStatus
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -105,18 +108,53 @@ private sealed class PirateRoute(val route: String, val label: String) {
 }
 
 private suspend fun resolveProfileIdentity(address: String): Pair<String?, String?> = withContext(Dispatchers.IO) {
+  var contractAvatarLoaded = false
+  var contractAvatar: String? = null
+
+  suspend fun loadContractAvatar(): String? {
+    if (contractAvatarLoaded) return contractAvatar
+    contractAvatarLoaded = true
+    contractAvatar = runCatching {
+      ProfileContractApi.fetchProfile(address)?.photoUri?.trim()?.ifBlank { null }
+    }.getOrNull()
+    return contractAvatar
+  }
+
   val tempoName = TempoNameRecordsApi.getPrimaryName(address)
   if (!tempoName.isNullOrBlank()) {
     val node = TempoNameRecordsApi.computeNode(tempoName)
-    val avatar = TempoNameRecordsApi.getTextRecord(node, "avatar") ?: OnboardingRpcHelpers.getTextRecord(node, "avatar")
+    val avatar = TempoNameRecordsApi.getTextRecord(node, "avatar")
+      ?: OnboardingRpcHelpers.getTextRecord(node, "avatar")
+      ?: loadContractAvatar()
     return@withContext tempoName to avatar
   }
 
   val legacyName = OnboardingRpcHelpers.getPrimaryName(address)
-  if (legacyName.isNullOrBlank()) return@withContext null to null
+  if (legacyName.isNullOrBlank()) return@withContext null to loadContractAvatar()
   val node = OnboardingRpcHelpers.computeNode(legacyName)
-  val avatar = TempoNameRecordsApi.getTextRecord(node, "avatar") ?: OnboardingRpcHelpers.getTextRecord(node, "avatar")
+  val avatar = TempoNameRecordsApi.getTextRecord(node, "avatar")
+    ?: OnboardingRpcHelpers.getTextRecord(node, "avatar")
+    ?: loadContractAvatar()
   return@withContext "$legacyName.heaven" to avatar
+}
+
+private suspend fun resolveProfileIdentityWithRetry(
+  address: String,
+  attempts: Int = 6,
+  retryDelayMs: Long = 1_500,
+): Pair<String?, String?> {
+  val totalAttempts = attempts.coerceAtLeast(1)
+  var last: Pair<String?, String?> = null to null
+  repeat(totalAttempts) { attempt ->
+    last = resolveProfileIdentity(address)
+    val name = last.first
+    val avatar = last.second
+    if (!name.isNullOrBlank() || !avatar.isNullOrBlank() || attempt == totalAttempts - 1) {
+      return last
+    }
+    delay(retryDelayMs)
+  }
+  return last
 }
 
 @Composable
@@ -180,6 +218,7 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
             authMethodType = null,
             authMethodId = null,
             accessToken = null,
+            selfVerified = false,
             output = "Session expired. Please sign in again.",
           )
           snackbarHostState.showSnackbar("Session expired. Please sign in again.")
@@ -193,6 +232,7 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
   val scrobbleService =
     remember {
       ScrobbleService(
+        appContext = appContext,
         activity = activity,
         player = player,
         getAuthState = { authState },
@@ -231,7 +271,7 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
     if (addr.isNullOrBlank()) {
       heavenName = null; avatarUri = null; return@LaunchedEffect
     }
-    val (name, avatar) = resolveProfileIdentity(addr)
+    val (name, avatar) = resolveProfileIdentityWithRetry(addr, attempts = 2, retryDelayMs = 700)
     heavenName = name
     avatarUri = avatar
   }
@@ -314,6 +354,8 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
       chatService.disconnect()
       clearWorkerAuthCache()
       xmtpBootstrapKey = null
+      heavenName = null
+      avatarUri = null
       val nextState =
         authState.copy(
           busy = false,
@@ -325,6 +367,7 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
           tempoPubKeyY = account.pubKey.yHex,
           // Transitional alias while unported screens still read pkpEthAddress.
           pkpEthAddress = account.address,
+          selfVerified = false,
           pkpPublicKey = null,
           pkpTokenId = null,
           authMethodType = null,
@@ -356,13 +399,22 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
 
     result.onFailure { err ->
       authState = authState.copy(busy = false, output = "login failed: ${err.message}")
-      snackbarHostState.showSnackbar("Log in failed: ${err.message ?: "unknown error"}")
+      val reason = err.message ?: "unknown error"
+      val message =
+        if (reason.contains("not registered in this app", ignoreCase = true)) {
+          "Selected passkey is not registered on this device yet. Use Sign Up to register it."
+        } else {
+          "Log in failed: $reason"
+        }
+      snackbarHostState.showSnackbar(message)
     }
 
     result.onSuccess { account ->
       chatService.disconnect()
       clearWorkerAuthCache()
       xmtpBootstrapKey = null
+      heavenName = null
+      avatarUri = null
       val nextState =
         authState.copy(
           busy = false,
@@ -374,6 +426,7 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
           tempoPubKeyY = account.pubKey.yHex,
           // Transitional alias while unported screens still read pkpEthAddress.
           pkpEthAddress = account.address,
+          selfVerified = false,
           pkpPublicKey = null,
           pkpTokenId = null,
           authMethodType = null,
@@ -396,6 +449,9 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
   suspend fun doLogout() {
     chatService.disconnect()
     clearWorkerAuthCache()
+    xmtpBootstrapKey = null
+    heavenName = null
+    avatarUri = null
 
     runCatching {
       withContext(Dispatchers.IO) {
@@ -417,12 +473,22 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
         authMethodType = null,
         authMethodId = null,
         accessToken = null,
+        selfVerified = false,
         output = "Logged out.",
       )
     snackbarHostState.showSnackbar("Logged out.")
   }
 
   suspend fun doConnectWallet() {
+    val initResult = runCatching {
+      WalletConnectBootstrap.ensureInitialized(activity.application)
+    }
+    initResult.onFailure { err ->
+      authState = authState.copy(busy = false, output = "Wallet initialization failed: ${err.message}")
+      snackbarHostState.showSnackbar("Wallet connection unavailable: ${err.message ?: "init failed"}")
+      return
+    }
+
     // Show AppKit wallet modal as a dialog fragment
     val sheet = com.reown.appkit.ui.AppKitSheet()
     sheet.show(activity.supportFragmentManager, "appkit")
@@ -453,6 +519,7 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
         tempoPubKeyY = null,
         pkpPublicKey = walletResult.pkpPublicKey,
         pkpEthAddress = derivedEthAddress,
+        selfVerified = false,
         pkpTokenId = walletResult.pkpTokenId,
         authMethodType = walletResult.authMethodType,
         authMethodId = walletResult.authMethodId,
@@ -538,6 +605,12 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
             doLogin()
           }
         },
+        onSwitchAccount = {
+          scope.launch {
+            closeDrawer()
+            doLogin()
+          }
+        },
         onLogout = {
           scope.launch {
             closeDrawer()
@@ -618,7 +691,10 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
         authState = authState,
         heavenName = heavenName,
         avatarUri = avatarUri,
-        onAuthStateChange = { authState = it },
+        onAuthStateChange = { next ->
+          authState = next
+          PirateAuthUiState.save(appContext, next)
+        },
         onRegister = { scope.launch { doRegister() } },
         onLogin = { scope.launch { doLogin() } },
         onLogout = { scope.launch { doLogout() } },
@@ -646,7 +722,7 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
               return@launch
             }
             runCatching {
-              val (name, avatar) = resolveProfileIdentity(currentAddress)
+              val (name, avatar) = resolveProfileIdentityWithRetry(currentAddress)
               heavenName = name
               avatarUri = avatar
             }
@@ -684,6 +760,21 @@ private fun PirateNavHost(
 ) {
   val scope = rememberCoroutineScope()
   val activeAddress = authState.activeAddress()
+  val tempoAccount = remember(
+    authState.tempoAddress,
+    authState.tempoCredentialId,
+    authState.tempoPubKeyX,
+    authState.tempoPubKeyY,
+    authState.tempoRpId,
+  ) {
+    TempoAccountFactory.fromSession(
+      tempoAddress = authState.tempoAddress,
+      tempoCredentialId = authState.tempoCredentialId,
+      tempoPubKeyX = authState.tempoPubKeyX,
+      tempoPubKeyY = authState.tempoPubKeyY,
+      tempoRpId = authState.tempoRpId.ifBlank { TempoPasskeyManager.DEFAULT_RP_ID },
+    )
+  }
 
   NavHost(
     navController = navController,
@@ -706,6 +797,8 @@ private fun PirateNavHost(
           navController.navigate(PirateRoute.Player.route) { launchSingleTop = true }
         },
         onOpenDrawer = onOpenDrawer,
+        hostActivity = activity,
+        tempoAccount = tempoAccount,
       )
     }
     composable(PirateRoute.Chat.route) {
@@ -891,6 +984,7 @@ private fun PirateNavHost(
         tempoRpId = authState.tempoRpId.ifBlank { TempoPasskeyManager.DEFAULT_RP_ID },
         initialStep = onboardingInitialStep,
         onComplete = {
+          onRefreshProfileIdentity()
           navController.navigate(PirateRoute.Music.route) {
             popUpTo(PirateRoute.Onboarding.route) { inclusive = true }
             launchSingleTop = true
@@ -913,15 +1007,17 @@ private fun PirateNavHost(
         )
       },
     ) {
-      val isAuthenticated = authState.hasLitAuthCredentials()
+      val isAuthenticated = authState.hasAnyCredentials()
       PublishScreen(
-        litNetwork = authState.litNetwork,
-        litRpcUrl = authState.litRpcUrl,
         authState = authState,
-        pkpPublicKey = authState.pkpPublicKey,
-        pkpEthAddress = authState.pkpEthAddress,
+        pkpEthAddress = authState.activeAddress(),
         heavenName = heavenName,
         isAuthenticated = isAuthenticated,
+        onSelfVerifiedChange = { verified ->
+          if (authState.selfVerified != verified) {
+            onAuthStateChange(authState.copy(selfVerified = verified))
+          }
+        },
         onClose = { navController.popBackStack() },
         onShowMessage = onShowMessage,
       )
@@ -949,6 +1045,8 @@ private fun PirateNavHost(
         isAuthenticated = isAuthenticated,
         onClose = { navController.popBackStack() },
         onShowMessage = onShowMessage,
+        hostActivity = activity,
+        tempoAccount = tempoAccount,
       )
     }
     composable(

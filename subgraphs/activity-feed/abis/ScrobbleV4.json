@@ -3,43 +3,12 @@
     "type": "constructor",
     "inputs": [
       {
-        "name": "factory_",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
         "name": "operator_",
         "type": "address",
         "internalType": "address"
       }
     ],
     "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "ACCOUNT_SALT",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "FACTORY",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "contract IHeavenAccountFactory"
-      }
-    ],
-    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -149,6 +118,25 @@
   },
   {
     "type": "function",
+    "name": "getTrackLyrics",
+    "inputs": [
+      {
+        "name": "trackId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "isOperator",
     "inputs": [
       {
@@ -184,6 +172,42 @@
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "overwriteTrackCover",
+    "inputs": [
+      {
+        "name": "trackId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "coverRef",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "overwriteTrackLyrics",
+    "inputs": [
+      {
+        "name": "trackId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "lyricsRef",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -368,6 +392,71 @@
   },
   {
     "type": "function",
+    "name": "setTrackCoverFor",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "trackId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "coverRef",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setTrackLyricsFor",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "trackId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "lyricsRef",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "trackLyricsRefs",
+    "inputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "tracks",
     "inputs": [
       {
@@ -525,6 +614,25 @@
   },
   {
     "type": "event",
+    "name": "TrackCoverOverwritten",
+    "inputs": [
+      {
+        "name": "trackId",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "coverCid",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "TrackCoverSet",
     "inputs": [
       {
@@ -535,6 +643,44 @@
       },
       {
         "name": "coverCid",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TrackLyricsOverwritten",
+    "inputs": [
+      {
+        "name": "trackId",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "lyricsRef",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TrackLyricsSet",
+    "inputs": [
+      {
+        "name": "trackId",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "lyricsRef",
         "type": "string",
         "indexed": false,
         "internalType": "string"
@@ -606,7 +752,7 @@
   },
   {
     "type": "error",
-    "name": "NotUsersAccount",
+    "name": "NotUserSender",
     "inputs": []
   },
   {

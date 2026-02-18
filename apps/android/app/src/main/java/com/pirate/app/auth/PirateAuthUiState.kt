@@ -23,6 +23,7 @@ data class PirateAuthUiState(
   val authMethodType: Int? = null,
   val authMethodId: String? = null,
   val accessToken: String? = null,
+  val selfVerified: Boolean = false,
   val output: String = "Ready.",
   val busy: Boolean = false,
 ) {
@@ -85,6 +86,7 @@ data class PirateAuthUiState(
         .putInt("authMethodType", state.authMethodType ?: -1)
         .putString("authMethodId", state.authMethodId)
         .putString("accessToken", state.accessToken)
+        .putBoolean("selfVerified", state.selfVerified)
         .apply()
     }
 
@@ -104,6 +106,7 @@ data class PirateAuthUiState(
         authMethodType = if (amt >= 0) amt else null,
         authMethodId = prefs.getString("authMethodId", null),
         accessToken = prefs.getString("accessToken", null),
+        selfVerified = prefs.getBoolean("selfVerified", false),
       )
     }
 

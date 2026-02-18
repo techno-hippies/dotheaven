@@ -6,6 +6,7 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import com.pirate.app.music.MusicTrack
 import com.pirate.app.widget.NowPlayingWidget
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +28,8 @@ class PlayerController(private val context: Context) {
   )
 
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+  private val tag = "PiratePlayer"
+  private val mediaInfoNetworkBandwidth = 703
   private var mediaPlayer: MediaPlayer? = null
   private var progressJob: Job? = null
 
@@ -149,13 +152,31 @@ class PlayerController(private val context: Context) {
 
     player.setOnErrorListener { _, _, _ ->
       _isPlaying.value = false
+      Log.w(tag, "MediaPlayer onError for track=${track.id} uri=${track.uri}")
       true
     }
 
+    player.setOnInfoListener { _, what, extra ->
+      when (what) {
+        MediaPlayer.MEDIA_INFO_BUFFERING_START -> Log.d(tag, "buffering_start track=${track.id}")
+        MediaPlayer.MEDIA_INFO_BUFFERING_END -> Log.d(tag, "buffering_end track=${track.id}")
+        mediaInfoNetworkBandwidth -> Log.d(tag, "network_bandwidth track=${track.id} kbps=$extra")
+      }
+      false
+    }
+
     try {
-      player.setDataSource(context, Uri.parse(track.uri))
+      val parsed = Uri.parse(track.uri)
+      val scheme = parsed.scheme?.lowercase()
+      if (scheme == "http" || scheme == "https") {
+        // Avoid ContentResolver probe path for network URLs (it throws and adds latency).
+        player.setDataSource(track.uri)
+      } else {
+        player.setDataSource(context, parsed)
+      }
       player.prepareAsync()
-    } catch (_: Throwable) {
+    } catch (error: Throwable) {
+      Log.e(tag, "Failed to load track=${track.id} uri=${track.uri}", error)
       stopInternal(resetPosition = true)
       _currentTrack.value = null
       _isPlaying.value = false

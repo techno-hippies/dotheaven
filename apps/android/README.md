@@ -40,6 +40,14 @@ JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew \
   installDebug
 ```
 
+To point profile/community profile reads at a custom profiles subgraph endpoint (for Cloudflare tunnel or self-hosted Graph Node):
+
+```bash
+JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew \
+  -PTEMPO_PROFILES_SUBGRAPH_URL=http://<your-host>:8000/subgraphs/name/dotheaven/profiles-tempo \
+  installDebug
+```
+
 For USB debugging against a local indexer on your dev machine, you can also use:
 
 ```bash

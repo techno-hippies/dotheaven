@@ -199,6 +199,35 @@ contract ScrobbleV4Test is Test {
         sc.setTrackCover(trackId, "QmCid");
     }
 
+    function test_setTrackCoverFor_user() public {
+        bytes32 trackId = _registerMetaTrack("Song", "Artist", "Album", 200);
+
+        vm.prank(user);
+        sc.setTrackCoverFor(user, trackId, "ar://cover-ref");
+
+        (, , , , , , string memory coverCid, ) = sc.getTrack(trackId);
+        assertEq(coverCid, "ar://cover-ref");
+    }
+
+    function test_setTrackCoverFor_wrongSender_reverts() public {
+        bytes32 trackId = _registerMetaTrack("Song", "Artist", "Album", 200);
+
+        vm.prank(address(0xBAD));
+        vm.expectRevert(ScrobbleV4.NotUserSender.selector);
+        sc.setTrackCoverFor(user, trackId, "ar://cover-ref");
+    }
+
+    function test_setTrackCoverFor_coverAlreadySet_reverts() public {
+        bytes32 trackId = _registerMetaTrack("Song", "Artist", "Album", 200);
+
+        vm.prank(user);
+        sc.setTrackCoverFor(user, trackId, "ar://cover-ref");
+
+        vm.prank(user);
+        vm.expectRevert("cover already set");
+        sc.setTrackCoverFor(user, trackId, "ar://new-cover-ref");
+    }
+
     function test_setTrackCoverBatch() public {
         bytes32 t1 = _registerMetaTrack("Song1", "Artist1", "Album1", 100);
         bytes32 t2 = _registerMetaTrack("Song2", "Artist2", "Album2", 200);
@@ -215,6 +244,97 @@ contract ScrobbleV4Test is Test {
         (, , , , , , string memory c2, ) = sc.getTrack(t2);
         assertEq(c1, "QmCover1");
         assertEq(c2, "QmCover2");
+    }
+
+    function test_overwriteTrackCover_operator() public {
+        bytes32 trackId = _registerMetaTrack("Song", "Artist", "Album", 200);
+
+        vm.prank(user);
+        sc.setTrackCoverFor(user, trackId, "ar://old-cover");
+
+        vm.prank(operator);
+        sc.overwriteTrackCover(trackId, "ar://new-cover");
+
+        (, , , , , , string memory coverCid, ) = sc.getTrack(trackId);
+        assertEq(coverCid, "ar://new-cover");
+    }
+
+    function test_overwriteTrackCover_notOperator_reverts() public {
+        bytes32 trackId = _registerMetaTrack("Song", "Artist", "Album", 200);
+
+        vm.prank(user);
+        sc.setTrackCoverFor(user, trackId, "ar://old-cover");
+
+        vm.expectRevert(ScrobbleV4.Unauthorized.selector);
+        sc.overwriteTrackCover(trackId, "ar://new-cover");
+    }
+
+    function test_overwriteTrackCover_coverNotSet_reverts() public {
+        bytes32 trackId = _registerMetaTrack("Song", "Artist", "Album", 200);
+
+        vm.prank(operator);
+        vm.expectRevert("cover not set");
+        sc.overwriteTrackCover(trackId, "ar://new-cover");
+    }
+
+    // ── Track lyrics (user + operator moderation) ───────────────────────
+
+    function test_setTrackLyricsFor_user() public {
+        bytes32 trackId = _registerMetaTrack("Song", "Artist", "Album", 200);
+
+        vm.prank(user);
+        sc.setTrackLyricsFor(user, trackId, "ar://lyrics-ref");
+
+        assertEq(sc.getTrackLyrics(trackId), "ar://lyrics-ref");
+    }
+
+    function test_setTrackLyricsFor_wrongSender_reverts() public {
+        bytes32 trackId = _registerMetaTrack("Song", "Artist", "Album", 200);
+
+        vm.prank(address(0xBAD));
+        vm.expectRevert(ScrobbleV4.NotUserSender.selector);
+        sc.setTrackLyricsFor(user, trackId, "ar://lyrics-ref");
+    }
+
+    function test_setTrackLyricsFor_lyricsAlreadySet_reverts() public {
+        bytes32 trackId = _registerMetaTrack("Song", "Artist", "Album", 200);
+
+        vm.prank(user);
+        sc.setTrackLyricsFor(user, trackId, "ar://lyrics-ref");
+
+        vm.prank(user);
+        vm.expectRevert("lyrics already set");
+        sc.setTrackLyricsFor(user, trackId, "ar://new-lyrics-ref");
+    }
+
+    function test_overwriteTrackLyrics_operator() public {
+        bytes32 trackId = _registerMetaTrack("Song", "Artist", "Album", 200);
+
+        vm.prank(user);
+        sc.setTrackLyricsFor(user, trackId, "ar://old-lyrics");
+
+        vm.prank(operator);
+        sc.overwriteTrackLyrics(trackId, "ar://new-lyrics");
+
+        assertEq(sc.getTrackLyrics(trackId), "ar://new-lyrics");
+    }
+
+    function test_overwriteTrackLyrics_notOperator_reverts() public {
+        bytes32 trackId = _registerMetaTrack("Song", "Artist", "Album", 200);
+
+        vm.prank(user);
+        sc.setTrackLyricsFor(user, trackId, "ar://old-lyrics");
+
+        vm.expectRevert(ScrobbleV4.Unauthorized.selector);
+        sc.overwriteTrackLyrics(trackId, "ar://new-lyrics");
+    }
+
+    function test_overwriteTrackLyrics_lyricsNotSet_reverts() public {
+        bytes32 trackId = _registerMetaTrack("Song", "Artist", "Album", 200);
+
+        vm.prank(operator);
+        vm.expectRevert("lyrics not set");
+        sc.overwriteTrackLyrics(trackId, "ar://new-lyrics");
     }
 
     // ── Scrobble events emit user ───────────────────────────────────────

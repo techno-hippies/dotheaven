@@ -2,8 +2,13 @@ package com.pirate.app.music
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
+import androidx.fragment.app.FragmentActivity
+import com.pirate.app.profile.TempoNameRecordsApi
 import com.pirate.app.tempo.ContentKeyManager
 import com.pirate.app.tempo.EciesContentCrypto
+import com.pirate.app.tempo.SessionKeyManager
+import com.pirate.app.tempo.TempoPasskeyManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -18,7 +23,6 @@ data class UploadAndRegisterResult(
 )
 
 object TrackUploadService {
-
   /**
    * Encrypt a local track with ECIES + AES-256-GCM, upload to Load network.
    *
@@ -32,8 +36,17 @@ object TrackUploadService {
     context: Context,
     ownerEthAddress: String,
     track: MusicTrack,
+    hostActivity: FragmentActivity? = null,
+    tempoAccount: TempoPasskeyManager.PasskeyAccount? = null,
   ): UploadAndRegisterResult = withContext(Dispatchers.IO) {
     val contentKey = ContentKeyManager.getOrCreate(context)
+    publishContentPubKeyIfPossible(
+      context = context,
+      ownerEthAddress = ownerEthAddress,
+      contentPublicKey = contentKey.publicKey,
+      hostActivity = hostActivity,
+      tempoAccount = tempoAccount,
+    )
     val trackId = TrackIds.computeMetaTrackId(track.title, track.artist, track.album).lowercase()
     val computedContentId = ContentIds.computeContentId(trackId, ownerEthAddress).lowercase()
 
@@ -53,6 +66,10 @@ object TrackUploadService {
     // Clear raw AES key from memory
     encrypted.rawKey.fill(0)
 
+    val sessionKey = SessionKeyManager.load(context)?.takeIf {
+      SessionKeyManager.isValid(it, ownerAddress = ownerEthAddress)
+    } ?: throw IllegalStateException("Missing valid Tempo session key for upload. Please sign in again.")
+
     // Upload to Load network
     val filename = "${buildFilenameHint(track)}.enc"
     val upload = LoadUploadApi.upload(
@@ -65,6 +82,7 @@ object TrackUploadService {
         "Content-Id" to computedContentId,
         "Owner" to ownerEthAddress.lowercase(),
       ),
+      sessionKey = sessionKey,
     )
 
     // Persist wrapped key for later decrypt
@@ -78,6 +96,50 @@ object TrackUploadService {
       datasetOwner = ownerEthAddress.lowercase(),
       algo = ContentCryptoConfig.ALGO_AES_GCM_256,
     )
+  }
+}
+
+private suspend fun publishContentPubKeyIfPossible(
+  context: Context,
+  ownerEthAddress: String,
+  contentPublicKey: ByteArray,
+  hostActivity: FragmentActivity?,
+  tempoAccount: TempoPasskeyManager.PasskeyAccount?,
+) {
+  if (hostActivity == null || tempoAccount == null) return
+  if (!tempoAccount.address.equals(ownerEthAddress, ignoreCase = true)) {
+    Log.w(
+      "TrackUploadService",
+      "Skipping contentPubKey publish due to account mismatch (owner=$ownerEthAddress account=${tempoAccount.address})",
+    )
+    return
+  }
+
+  val primary = TempoNameRecordsApi.getPrimaryNameDetails(tempoAccount.address)
+  if (primary == null) {
+    Log.d("TrackUploadService", "Skipping contentPubKey publish: no primary name set for ${tempoAccount.address}")
+    return
+  }
+
+  val loadedSession = SessionKeyManager.load(context)?.takeIf {
+    SessionKeyManager.isValid(it, ownerAddress = tempoAccount.address) &&
+      it.keyAuthorization?.isNotEmpty() == true
+  }
+
+  val result = TempoNameRecordsApi.upsertContentPubKey(
+    activity = hostActivity,
+    account = tempoAccount,
+    publicKey = contentPublicKey,
+    rpId = tempoAccount.rpId,
+    sessionKey = loadedSession,
+  )
+  if (!result.success) {
+    Log.w(
+      "TrackUploadService",
+      "contentPubKey publish failed for ${primary.fullName}: ${result.error ?: "unknown error"}",
+    )
+  } else if (!result.txHash.isNullOrBlank()) {
+    Log.d("TrackUploadService", "contentPubKey published: tx=${result.txHash}")
   }
 }
 

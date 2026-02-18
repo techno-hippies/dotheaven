@@ -70,7 +70,7 @@ pub(in crate::library) fn render_shared_with_me_page(
                     div()
                         .text_sm()
                         .text_color(TEXT_MUTED())
-                        .child("Ask another wallet to share a track with your PKP address."),
+                        .child("Ask another wallet to share a track with your wallet address."),
                 )
                 .into_any_element()
         } else {

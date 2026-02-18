@@ -1071,6 +1071,23 @@ export class Track extends Entity {
     }
   }
 
+  get lyricsRef(): string | null {
+    let value = this.get("lyricsRef");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toString();
+    }
+  }
+
+  set lyricsRef(value: string | null) {
+    if (!value) {
+      this.unset("lyricsRef");
+    } else {
+      this.set("lyricsRef", Value.fromString(<string>value));
+    }
+  }
+
   get durationSec(): i32 {
     let value = this.get("durationSec");
     if (!value || value.kind == ValueKind.NULL) {

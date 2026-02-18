@@ -48,8 +48,10 @@ object TempoNameRecordsApi {
   private const val TLD_HEAVEN = "heaven"
   private const val TLD_PIRATE = "pirate"
   private const val ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
-  private const val GAS_LIMIT_SET_TEXT = 420_000L
-  private const val GAS_LIMIT_SET_RECORDS = 700_000L
+  private const val MIN_GAS_LIMIT_SET_TEXT = 420_000L
+  private const val MIN_GAS_LIMIT_SET_RECORDS = 700_000L
+  private const val GAS_LIMIT_BUFFER = 300_000L
+  const val CONTENT_PUBKEY_RECORD_KEY = "contentPubKey"
 
   private val jsonType = "application/json; charset=utf-8".toMediaType()
   private val client = OkHttpClient()
@@ -85,6 +87,22 @@ object TempoNameRecordsApi {
 
   suspend fun getPrimaryName(userAddress: String): String? = withContext(Dispatchers.IO) {
     getPrimaryNameDetails(userAddress)?.fullName
+  }
+
+  suspend fun resolveAddressForName(nameOrLabel: String): String? = withContext(Dispatchers.IO) {
+    val normalized = nameOrLabel.trim().lowercase().removePrefix("@")
+    if (normalized.isBlank()) return@withContext null
+
+    val node = runCatching { computeNode(normalized) }.getOrNull() ?: return@withContext null
+    val tokenId = node.removePrefix("0x").padStart(64, '0')
+    val data = "0x${functionSelector("ownerOf(uint256)")}$tokenId"
+    val result = runCatching { ethCall(REGISTRY_V1, data) }.getOrNull() ?: return@withContext null
+    val clean = result.removePrefix("0x").lowercase()
+    if (clean.length < 64) return@withContext null
+
+    val owner = "0x${clean.takeLast(40)}"
+    if (owner == ZERO_ADDRESS) return@withContext null
+    normalizeAddress(owner)
   }
 
   suspend fun getPrimaryNameDetails(userAddress: String): TempoPrimaryName? = withContext(Dispatchers.IO) {
@@ -144,6 +162,68 @@ object TempoNameRecordsApi {
     }
   }
 
+  suspend fun getContentPubKeyForAddress(userAddress: String): ByteArray? = withContext(Dispatchers.IO) {
+    val primary = getPrimaryNameDetails(userAddress) ?: return@withContext null
+    val node = computeNode(primary.fullName)
+    val raw = getTextRecord(node, CONTENT_PUBKEY_RECORD_KEY)
+    decodeContentPubKey(raw)
+  }
+
+  suspend fun getContentPubKeyForName(nameOrLabel: String): ByteArray? = withContext(Dispatchers.IO) {
+    val normalized = nameOrLabel.trim().lowercase().removePrefix("@")
+    if (normalized.isBlank()) return@withContext null
+    val node = runCatching { computeNode(normalized) }.getOrNull() ?: return@withContext null
+    val raw = getTextRecord(node, CONTENT_PUBKEY_RECORD_KEY)
+    decodeContentPubKey(raw)
+  }
+
+  suspend fun upsertContentPubKey(
+    activity: FragmentActivity,
+    account: TempoPasskeyManager.PasskeyAccount,
+    publicKey: ByteArray,
+    rpId: String = account.rpId,
+    sessionKey: SessionKeyManager.SessionKey? = null,
+  ): TempoRecordsWriteResult {
+    if (!isValidContentPubKey(publicKey)) {
+      return TempoRecordsWriteResult(success = false, error = "Invalid contentPubKey format (expected 65-byte uncompressed P256 key).")
+    }
+
+    val primary = getPrimaryNameDetails(account.address)
+      ?: return TempoRecordsWriteResult(success = false, error = "Primary name required to publish contentPubKey.")
+    val node = computeNode(primary.fullName)
+    val targetValue = encodeContentPubKey(publicKey)
+    val existing = decodeContentPubKey(getTextRecord(node, CONTENT_PUBKEY_RECORD_KEY))
+    if (existing != null && existing.contentEquals(publicKey)) {
+      return TempoRecordsWriteResult(success = true)
+    }
+
+    return setTextRecords(
+      activity = activity,
+      account = account,
+      node = node,
+      keys = listOf(CONTENT_PUBKEY_RECORD_KEY),
+      values = listOf(targetValue),
+      rpId = rpId,
+      sessionKey = sessionKey,
+    )
+  }
+
+  fun encodeContentPubKey(publicKey: ByteArray): String {
+    require(isValidContentPubKey(publicKey)) { "Invalid contentPubKey format (expected 65-byte uncompressed P256 key)." }
+    return "0x${bytesToHex(publicKey)}"
+  }
+
+  fun decodeContentPubKey(value: String?): ByteArray? {
+    val raw = value?.trim().orEmpty()
+    if (raw.isBlank()) return null
+    val normalized = raw.removePrefix("0x").removePrefix("0X")
+    if (normalized.length != 130) return null
+    if (!normalized.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }) return null
+    return runCatching { hexToBytes(normalized) }
+      .getOrNull()
+      ?.takeIf { isValidContentPubKey(it) }
+  }
+
   suspend fun setTextRecords(
     activity: FragmentActivity,
     account: TempoPasskeyManager.PasskeyAccount,
@@ -172,13 +252,23 @@ object TempoNameRecordsApi {
         if (keys.size == 1) encodeSetTextCall(normalizedNode, keys.first(), values.first())
         else encodeSetRecordsCall(normalizedNode, keys, values)
 
-      val tx =
+      val minimumGasLimit = if (keys.size == 1) MIN_GAS_LIMIT_SET_TEXT else MIN_GAS_LIMIT_SET_RECORDS
+      val gasLimit =
+        withContext(Dispatchers.IO) {
+          val estimated = estimateGas(from = account.address, to = RECORDS_V1, data = callData)
+          withBuffer(estimated = estimated, minimum = minimumGasLimit)
+        }
+
+      fun buildTx(
+        feeMode: TempoTransaction.FeeMode,
+        txFees: TempoClient.Eip1559Fees,
+      ): TempoTransaction.UnsignedTx =
         TempoTransaction.UnsignedTx(
           nonce = nonce,
-          maxPriorityFeePerGas = fees.maxPriorityFeePerGas,
-          maxFeePerGas = fees.maxFeePerGas,
-          feeMode = TempoTransaction.FeeMode.RELAY_SPONSORED,
-          gasLimit = if (keys.size == 1) GAS_LIMIT_SET_TEXT else GAS_LIMIT_SET_RECORDS,
+          maxPriorityFeePerGas = txFees.maxPriorityFeePerGas,
+          maxFeePerGas = txFees.maxFeePerGas,
+          feeMode = feeMode,
+          gasLimit = gasLimit,
           calls =
             listOf(
               TempoTransaction.Call(
@@ -189,9 +279,9 @@ object TempoNameRecordsApi {
             ),
         )
 
-      val sigHash = TempoTransaction.signatureHash(tx)
-      val signedTxHex =
-        if (sessionKey != null) {
+      suspend fun signTx(tx: TempoTransaction.UnsignedTx): String {
+        val sigHash = TempoTransaction.signatureHash(tx)
+        return if (sessionKey != null) {
           val keychainSig = SessionKeyManager.signWithSessionKey(
             sessionKey = sessionKey,
             userAddress = account.address,
@@ -208,12 +298,35 @@ object TempoNameRecordsApi {
             )
           TempoTransaction.encodeSignedWebAuthn(tx, assertion)
         }
-      val txHash = withContext(Dispatchers.IO) {
-        TempoClient.sendSponsoredRawTransaction(
-          signedTxHex = signedTxHex,
-          senderAddress = account.address,
-        )
       }
+
+      suspend fun submitWithFallback(): String {
+        val relayTx = buildTx(feeMode = TempoTransaction.FeeMode.RELAY_SPONSORED, txFees = fees)
+        val relaySignedTxHex = signTx(relayTx)
+        return runCatching {
+          withContext(Dispatchers.IO) {
+            TempoClient.sendSponsoredRawTransaction(
+              signedTxHex = relaySignedTxHex,
+              senderAddress = account.address,
+            )
+          }
+        }.getOrElse { relayErr ->
+          withContext(Dispatchers.IO) { runCatching { TempoClient.fundAddress(account.address) } }
+          val selfFees = withContext(Dispatchers.IO) { TempoClient.getSuggestedFees() }
+          val selfTx = buildTx(feeMode = TempoTransaction.FeeMode.SELF, txFees = selfFees)
+          val selfSignedTxHex = signTx(selfTx)
+          runCatching {
+            withContext(Dispatchers.IO) { TempoClient.sendRawTransaction(selfSignedTxHex) }
+          }.getOrElse { selfErr ->
+            throw IllegalStateException(
+              "Records submission failed: relay=${relayErr.message}; self=${selfErr.message}",
+              selfErr,
+            )
+          }
+        }
+      }
+
+      val txHash = submitWithFallback()
       TempoRecordsWriteResult(success = true, txHash = txHash)
     }.getOrElse { err ->
       TempoRecordsWriteResult(success = false, error = err.message ?: "Tempo records tx failed")
@@ -282,6 +395,52 @@ object TempoNameRecordsApi {
     }
   }
 
+  private fun estimateGas(
+    from: String,
+    to: String,
+    data: String,
+  ): Long {
+    val payload =
+      JSONObject()
+        .put("jsonrpc", "2.0")
+        .put("id", 1)
+        .put("method", "eth_estimateGas")
+        .put(
+          "params",
+          JSONArray().put(
+            JSONObject()
+              .put("from", from)
+              .put("to", to)
+              .put("data", data),
+          ),
+        )
+    val req =
+      Request.Builder()
+        .url(TempoClient.RPC_URL)
+        .post(payload.toString().toRequestBody(jsonType))
+        .build()
+    client.newCall(req).execute().use { response ->
+      if (!response.isSuccessful) throw IllegalStateException("Gas estimate failed: ${response.code}")
+      val body = JSONObject(response.body?.string().orEmpty())
+      val error = body.optJSONObject("error")
+      if (error != null) throw IllegalStateException(error.optString("message", error.toString()))
+      val result = body.optString("result", "0x0")
+      val value = result.removePrefix("0x").removePrefix("0X")
+      return value.toLongOrNull(16) ?: 0L
+    }
+  }
+
+  private fun withBuffer(
+    estimated: Long,
+    minimum: Long,
+  ): Long {
+    val buffered = saturatingAdd(estimated, GAS_LIMIT_BUFFER)
+    return if (buffered < minimum) minimum else buffered
+  }
+
+  private fun saturatingAdd(a: Long, b: Long): Long =
+    if (Long.MAX_VALUE - a < b) Long.MAX_VALUE else a + b
+
   private fun normalizeAddress(raw: String): String? {
     val value = raw.trim().lowercase()
     if (!value.startsWith("0x") || value.length != 42) return null
@@ -324,6 +483,10 @@ object TempoNameRecordsApi {
     return sb.toString()
   }
 
+  private fun isValidContentPubKey(publicKey: ByteArray): Boolean {
+    return publicKey.size == 65 && publicKey[0] == 0x04.toByte()
+  }
+
   private data class ParsedName(val label: String, val parentNode: String)
 
   private fun parseName(nameOrLabel: String): ParsedName {
@@ -344,5 +507,20 @@ object TempoNameRecordsApi {
 
     val fallbackLabel = parts.firstOrNull()?.trim().orEmpty().ifBlank { normalized }
     return ParsedName(label = fallbackLabel, parentNode = HEAVEN_NODE)
+  }
+
+  /** Debug helper: call RecordsV1.isAuthorized(node, addr) view function. */
+  fun isAuthorized(node: String, addr: String): Boolean {
+    val nodeHex = normalizeBytes32(node) ?: return false
+    val addrHex = normalizeAddress(addr)?.removePrefix("0x")?.padStart(64, '0') ?: return false
+    val selector = functionSelector("isAuthorized(bytes32,address)")
+    val data = "0x$selector$nodeHex$addrHex"
+    return try {
+      val result = ethCall(RECORDS_V1, data)
+      val hex = result.removePrefix("0x")
+      hex.endsWith("1")
+    } catch (_: Throwable) {
+      false
+    }
   }
 }

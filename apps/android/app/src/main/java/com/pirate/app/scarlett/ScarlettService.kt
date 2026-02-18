@@ -50,7 +50,8 @@ class ScarlettService(private val appContext: Context) {
     .build()
 
   init {
-    loadMessages()
+    // Avoid synchronous disk/JSON work during first composition.
+    scope.launch { loadMessages() }
   }
 
   /**
@@ -137,10 +138,10 @@ class ScarlettService(private val appContext: Context) {
 
   // --- Persistence ---
 
-  private fun loadMessages() {
+  private suspend fun loadMessages() = withContext(Dispatchers.IO) {
     try {
       val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-      val json = prefs.getString(KEY_MESSAGES, null) ?: return
+      val json = prefs.getString(KEY_MESSAGES, null) ?: return@withContext
       val arr = JSONArray(json)
       val list = mutableListOf<ScarlettMessage>()
       for (i in 0 until arr.length()) {

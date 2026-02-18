@@ -17,6 +17,8 @@ data class ReadyScrobble(
   val album: String?,
   val durationMs: Long?,
   val playedAtSec: Long,
+  val artworkUri: String? = null,
+  val artworkFallbackUri: String? = null,
 )
 
 data class TrackMetadata(
@@ -24,6 +26,8 @@ data class TrackMetadata(
   val title: String,
   val album: String? = null,
   val durationMs: Long? = null,
+  val artworkUri: String? = null,
+  val artworkFallbackUri: String? = null,
 )
 
 private data class SessionState(
@@ -33,6 +37,8 @@ private data class SessionState(
   var title: String? = null,
   var album: String? = null,
   var durationMs: Long? = null,
+  var artworkUri: String? = null,
+  var artworkFallbackUri: String? = null,
   var startedAtEpochSec: Long? = null,
   var accumulatedPlayMs: Long = 0L,
   var lastUpdateTimeMs: Long = 0L,
@@ -66,6 +72,8 @@ class ScrobbleEngine(
     state.title = metadata.title
     state.album = metadata.album
     state.durationMs = metadata.durationMs
+    state.artworkUri = metadata.artworkUri
+    state.artworkFallbackUri = metadata.artworkFallbackUri
 
     if (newTrackKey != null && state.isPlaying && state.startedAtEpochSec == null) {
       state.startedAtEpochSec = nowEpochSec()
@@ -118,6 +126,8 @@ class ScrobbleEngine(
             album = state.album,
             durationMs = state.durationMs,
             playedAtSec = startedAt,
+            artworkUri = state.artworkUri,
+            artworkFallbackUri = state.artworkFallbackUri,
           ),
         )
       }
@@ -143,6 +153,8 @@ class ScrobbleEngine(
     val title = state.title
     val album = state.album
     val durationMs = state.durationMs
+    val artworkUri = state.artworkUri
+    val artworkFallbackUri = state.artworkFallbackUri
     val startedAt = state.startedAtEpochSec
     val accumulated = state.accumulatedPlayMs
     val alreadyScrobbled = state.alreadyScrobbled
@@ -153,6 +165,8 @@ class ScrobbleEngine(
     state.title = null
     state.album = null
     state.durationMs = null
+    state.artworkUri = null
+    state.artworkFallbackUri = null
     state.startedAtEpochSec = null
     state.accumulatedPlayMs = 0L
     state.lastUpdateTimeMs = 0L
@@ -170,6 +184,8 @@ class ScrobbleEngine(
           album = album,
           durationMs = durationMs,
           playedAtSec = startedAt,
+          artworkUri = artworkUri,
+          artworkFallbackUri = artworkFallbackUri,
         ),
       )
     }

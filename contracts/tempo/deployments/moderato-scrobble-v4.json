@@ -5,17 +5,17 @@
     "rpcUrl": "https://rpc.moderato.tempo.xyz",
     "explorer": "https://explore.tempo.xyz"
   },
-  "deployedAt": "2026-02-16T16:46:54Z",
+  "deployedAt": "2026-02-17T14:40:48Z",
   "deployer": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
   "operator": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
   "script": "script/DeployScrobbleV4.s.sol",
-  "command": "forge script script/DeployScrobbleV4.s.sol --rpc-url https://rpc.moderato.tempo.xyz --broadcast --slow --gas-estimate-multiplier 100",
+  "command": "forge script script/DeployScrobbleV4.s.sol:DeployScrobbleV4Script --rpc-url tempo_moderato --broadcast",
   "contract": {
     "name": "ScrobbleV4",
-    "address": "0x0541443C41a6F923D518Ac23921778e2Ea102891",
-    "deployTx": "0x57a8c95f029f7a4427c6697c5dea615b16c37065ff016118dbd23c98e4177528",
-    "blockNumber": 5198164,
-    "gasUsed": 8767245,
+    "address": "0x07B8BdE8BaD74DC974F783AA71C7C51d6B37C363",
+    "deployTx": "0x4e2ede9385d877449f2f20c9f8de8b09bc2ca7d0bee9a7f76946657be9ec738f",
+    "blockNumber": 5311022,
+    "gasUsed": 10574378,
     "status": true
   },
   "postDeployChecks": {
@@ -24,19 +24,6 @@
     "operatorActive": true
   },
   "smokeTest": {
-    "registerTracksBatchTx": "0x839c7154ad15e4f9d065cf6f8403694c3c2a7aa09d6f21fe704d69f25e7fa999",
-    "registerTracksBatchGasUsed": 1300753,
-    "scrobbleBatchTx": "0x68a34fcd58d69147a9952ee8c92fcb115da93df166864ffe58df35e107aec334",
-    "scrobbleBatchGasUsed": 28160,
-    "track": {
-      "title": "Tempo Smoke",
-      "artist": "Heaven",
-      "album": "Moderato",
-      "kind": 3,
-      "payload": "0x11c322685f62301545ff3df6112198f5abd2e7a35764e20cb62f189736e9ff29",
-      "trackId": "0x10a290ee409d96522fe201743a2292061bb6b3d1dfb10dda5c9b76c2c033ce57",
-      "durationSec": 180,
-      "isRegistered": true
-    }
+    "status": "not-run"
   }
 }

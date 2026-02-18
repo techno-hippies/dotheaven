@@ -16,7 +16,9 @@ import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.AllInclusive
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.CloudUpload
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -39,6 +41,8 @@ fun TrackMenuSheet(
   onClose: () -> Unit,
   onUpload: ((MusicTrack) -> Unit)? = null,
   onSaveForever: ((MusicTrack) -> Unit)? = null,
+  onDownload: ((MusicTrack) -> Unit)? = null,
+  onShare: ((MusicTrack) -> Unit)? = null,
   onAddToPlaylist: ((MusicTrack) -> Unit)? = null,
   onAddToQueue: ((MusicTrack) -> Unit)? = null,
   onGoToAlbum: ((MusicTrack) -> Unit)? = null,
@@ -99,6 +103,28 @@ fun TrackMenuSheet(
           label = "Saved Forever",
           labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
           onClick = { onClose() },
+        )
+      }
+
+      if (onDownload != null && alreadyUploaded) {
+        MenuItemRow(
+          icon = { Icon(Icons.Rounded.Download, contentDescription = null) },
+          label = "Download",
+          onClick = {
+            onDownload(track)
+            onClose()
+          },
+        )
+      }
+
+      if (onShare != null && alreadyUploaded) {
+        MenuItemRow(
+          icon = { Icon(Icons.Rounded.Share, contentDescription = null) },
+          label = "Share",
+          onClick = {
+            onShare(track)
+            onClose()
+          },
         )
       }
 

@@ -65,6 +65,7 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import com.pirate.app.music.CoverRef
 import com.pirate.app.scarlett.AgoraVoiceController
 import com.pirate.app.scarlett.ScarlettMessage
 import com.pirate.app.scarlett.ScarlettService
@@ -82,7 +83,6 @@ private enum class ChatView { Conversations, Thread, Scarlett }
 private enum class ComposerTab { Dm, Group }
 
 private const val SCARLETT_INTRO = "Hey, I'm Scarlett. I will match you with other users who like your music and meet your preferences to make new friends or date!"
-private const val IPFS_GATEWAY = "https://heaven.myfilebase.com/ipfs/"
 
 private data class DmSuggestion(
   val title: String,
@@ -1414,12 +1414,13 @@ private fun looksLikeEthereumAddress(value: String): Boolean {
 }
 
 private fun resolveAvatarUrl(avatarUri: String?): String? {
-  if (avatarUri.isNullOrBlank()) return null
-  return if (avatarUri.startsWith("ipfs://")) {
-    IPFS_GATEWAY + avatarUri.removePrefix("ipfs://")
-  } else {
-    avatarUri
-  }
+  return CoverRef.resolveCoverUrl(
+    ref = avatarUri,
+    width = null,
+    height = null,
+    format = null,
+    quality = null,
+  )
 }
 
 private fun avatarInitial(displayName: String): String {

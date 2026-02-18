@@ -1,6 +1,8 @@
 package com.pirate.app.profile
 
+import com.pirate.app.BuildConfig
 import com.pirate.app.onboarding.OnboardingRpcHelpers
+import com.pirate.app.tempo.TempoClient
 import com.pirate.app.onboarding.steps.LANGUAGE_OPTIONS
 import java.math.BigInteger
 import kotlinx.coroutines.Dispatchers
@@ -9,6 +11,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 
 data class ProfileLanguageEntry(
@@ -59,7 +62,9 @@ data class ContractProfileData(
 )
 
 object ProfileContractApi {
-  private const val SUBGRAPH_PROFILES =
+  private const val DEFAULT_TEMPO_SUBGRAPH_PROFILES =
+    "https://graph.dotheaven.org/subgraphs/name/dotheaven/profiles-tempo"
+  private const val LEGACY_SUBGRAPH_PROFILES =
     "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-profiles/1.0.0/gn"
   const val ZERO_HASH =
     "0x0000000000000000000000000000000000000000000000000000000000000000"
@@ -262,6 +267,10 @@ object ProfileContractApi {
 
   suspend fun fetchProfile(address: String): ContractProfileData? = withContext(Dispatchers.IO) {
     val addr = normalizeAddress(address) ?: return@withContext null
+    runCatching { fetchProfileFromRpc(addr) }.getOrNull() ?: fetchProfileFromSubgraph(addr)
+  }
+
+  private fun fetchProfileFromSubgraph(addr: String): ContractProfileData? {
     val query = """
       {
         profile(id: "$addr") {
@@ -303,9 +312,9 @@ object ProfileContractApi {
       }
     """.trimIndent()
 
-    val json = postQuery(query)
-    val profile = json.optJSONObject("data")?.optJSONObject("profile") ?: return@withContext null
-    ContractProfileData(
+    val json = runCatching { postQuery(query) }.getOrNull() ?: return null
+    val profile = json.optJSONObject("data")?.optJSONObject("profile") ?: return null
+    return ContractProfileData(
       profileVersion = profile.optInt("profileVersion", 2),
       displayName = profile.optString("displayName", ""),
       nameHash = normalizeHash(profile.optString("nameHash", "")),
@@ -341,6 +350,14 @@ object ProfileContractApi {
       pets = profile.optInt("pets", 0),
       diet = profile.optInt("diet", 0),
     )
+  }
+
+  private fun fetchProfileFromRpc(addr: String): ContractProfileData? {
+    val addrWord = addr.removePrefix("0x").padStart(64, '0')
+    val selector = functionSelector("getProfile(address)")
+    val data = "0x$selector$addrWord"
+    val result = ethCall(TempoProfileContractApi.PROFILE_V2, data).removePrefix("0x")
+    return decodeProfileTuple(result)
   }
 
   fun buildProfileInput(data: ContractProfileData): JSONObject {
@@ -547,11 +564,167 @@ object ProfileContractApi {
   }
 
   private fun postQuery(query: String): JSONObject {
-    val body = JSONObject().put("query", query).toString().toRequestBody(jsonMediaType)
-    val request = Request.Builder().url(SUBGRAPH_PROFILES).post(body).build()
-    client.newCall(request).execute().use { response ->
-      if (!response.isSuccessful) throw IllegalStateException("Profiles query failed: HTTP ${response.code}")
-      return JSONObject(response.body?.string().orEmpty())
+    val bodyStr = JSONObject().put("query", query).toString()
+    for (url in profileSubgraphUrls()) {
+      try {
+        val body = bodyStr.toRequestBody(jsonMediaType)
+        val request = Request.Builder().url(url).post(body).build()
+        client.newCall(request).execute().use { response ->
+          if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
+          return JSONObject(response.body?.string().orEmpty())
+        }
+      } catch (_: Exception) {
+        continue
+      }
+    }
+    throw IllegalStateException("Profiles query failed: all subgraph endpoints unreachable")
+  }
+
+  private fun profileSubgraphUrls(): List<String> {
+    val fromBuildConfig = BuildConfig.TEMPO_PROFILES_SUBGRAPH_URL.trim().removeSuffix("/")
+    val urls = ArrayList<String>(3)
+    if (fromBuildConfig.isNotBlank()) urls.add(fromBuildConfig)
+    urls.add(DEFAULT_TEMPO_SUBGRAPH_PROFILES)
+    urls.add(LEGACY_SUBGRAPH_PROFILES)
+    return urls.distinct()
+  }
+
+  private fun decodeProfileTuple(hex: String): ContractProfileData? {
+    if (hex.length < 64) return null
+    val tupleOffsetBytes = hexWordToBigInt(wordAt(hex, 0)).toInt()
+    val tupleBase = tupleOffsetBytes * 2
+    val requiredHeadWords = 17
+    if (tupleBase < 0 || tupleBase + (requiredHeadWords * 64) > hex.length) return null
+
+    fun tupleWord(index: Int): String = hex.substring(tupleBase + (index * 64), tupleBase + ((index + 1) * 64))
+
+    val exists = hexWordToBigInt(tupleWord(1)) != BigInteger.ZERO
+    if (!exists) return null
+
+    val profileVersion = hexWordToBigInt(tupleWord(0)).toInt()
+    val age = hexWordToBigInt(tupleWord(2)).toInt()
+    val heightCm = hexWordToBigInt(tupleWord(3)).toInt()
+    val nationality = bytes2ToCode("0x${tupleWord(4).take(4)}") ?: ""
+    val friendsOpenToMask = hexWordToBigInt(tupleWord(5)).toInt()
+    val languagesPacked = hexWordToBigInt(tupleWord(6))
+    val locationCityId = normalizeHash("0x${tupleWord(7)}")
+    val locationLatE6 = decodeInt32Word(tupleWord(8))
+    val locationLngE6 = decodeInt32Word(tupleWord(9))
+    val schoolId = normalizeHash("0x${tupleWord(10)}")
+    val skillsCommit = unpackTagIds("0x${tupleWord(11)}").joinToString(",")
+    val hobbiesCommit = unpackTagIds("0x${tupleWord(12)}").joinToString(",")
+    val nameHash = normalizeHash("0x${tupleWord(13)}")
+    val packedEnums = hexWordToBigInt(tupleWord(14))
+
+    val displayNameOffset = hexWordToBigInt(tupleWord(15)).toInt()
+    val photoUriOffset = hexWordToBigInt(tupleWord(16)).toInt()
+    val displayName = decodeDynamicString(hex, tupleBase, displayNameOffset)
+    val photoUri = decodeDynamicString(hex, tupleBase, photoUriOffset)
+
+    fun enumAt(index: Int): Int = packedEnums.shiftRight(index * 8).and(BigInteger.valueOf(0xFF)).toInt()
+
+    return ContractProfileData(
+      profileVersion = profileVersion,
+      displayName = displayName,
+      nameHash = nameHash,
+      age = age,
+      heightCm = heightCm,
+      nationality = nationality,
+      languages = unpackLanguages(languagesPacked.toString(10)),
+      friendsOpenToMask = friendsOpenToMask,
+      locationCityId = locationCityId,
+      locationLatE6 = locationLatE6,
+      locationLngE6 = locationLngE6,
+      schoolId = schoolId,
+      skillsCommit = skillsCommit,
+      hobbiesCommit = hobbiesCommit,
+      photoUri = photoUri,
+      gender = enumAt(0),
+      relocate = enumAt(1),
+      degree = enumAt(2),
+      fieldBucket = enumAt(3),
+      profession = enumAt(4),
+      industry = enumAt(5),
+      relationshipStatus = enumAt(6),
+      sexuality = enumAt(7),
+      ethnicity = enumAt(8),
+      datingStyle = enumAt(9),
+      children = enumAt(10),
+      wantsChildren = enumAt(11),
+      drinking = enumAt(12),
+      smoking = enumAt(13),
+      drugs = enumAt(14),
+      lookingFor = enumAt(15),
+      religion = enumAt(16),
+      pets = enumAt(17),
+      diet = enumAt(18),
+    )
+  }
+
+  private fun decodeDynamicString(
+    hex: String,
+    tupleBase: Int,
+    offsetBytes: Int,
+  ): String {
+    if (offsetBytes < 0) return ""
+    val start = tupleBase + (offsetBytes * 2)
+    if (start + 64 > hex.length) return ""
+    val len = hexWordToBigInt(hex.substring(start, start + 64)).toInt()
+    if (len <= 0) return ""
+    val dataStart = start + 64
+    val dataEnd = dataStart + (len * 2)
+    if (dataEnd > hex.length) return ""
+    val raw = hex.substring(dataStart, dataEnd)
+    return String(OnboardingRpcHelpers.hexToBytes(raw), Charsets.UTF_8)
+  }
+
+  private fun decodeInt32Word(word: String): Int {
+    val low32 = hexWordToBigInt(word).and(BigInteger("ffffffff", 16)).toLong()
+    return if (low32 >= 0x80000000L) (low32 - 0x1_0000_0000L).toInt() else low32.toInt()
+  }
+
+  private fun wordAt(hex: String, index: Int): String {
+    val start = index * 64
+    val end = start + 64
+    if (start < 0 || end > hex.length) return "0".repeat(64)
+    return hex.substring(start, end)
+  }
+
+  private fun hexWordToBigInt(word: String): BigInteger {
+    if (word.isBlank()) return BigInteger.ZERO
+    return word.toBigIntegerOrNull(16) ?: BigInteger.ZERO
+  }
+
+  private fun functionSelector(sig: String): String {
+    val hash = OnboardingRpcHelpers.keccak256(sig.toByteArray(Charsets.UTF_8))
+    return OnboardingRpcHelpers.bytesToHex(hash.copyOfRange(0, 4))
+  }
+
+  private fun ethCall(to: String, data: String): String {
+    val payload =
+      JSONObject()
+        .put("jsonrpc", "2.0")
+        .put("id", 1)
+        .put("method", "eth_call")
+        .put(
+          "params",
+          JSONArray()
+            .put(JSONObject().put("to", to).put("data", data))
+            .put("latest"),
+        )
+
+    val req =
+      Request.Builder()
+        .url(TempoClient.RPC_URL)
+        .post(payload.toString().toRequestBody(jsonMediaType))
+        .build()
+
+    client.newCall(req).execute().use { response ->
+      if (!response.isSuccessful) throw IllegalStateException("RPC failed: ${response.code}")
+      val body = JSONObject(response.body?.string().orEmpty())
+      val error = body.optJSONObject("error")
+      if (error != null) throw IllegalStateException(error.optString("message", error.toString()))
+      return body.optString("result", "0x")
     }
   }
 }

@@ -22,6 +22,7 @@ import type { PKPInfo, PKPAuthContext } from '../lit/types'
 import type { SongFormData, LicenseType } from '@heaven/ui'
 import { computeTrackId } from '../filecoin-upload-service'
 import { uploadCoverToArweave } from '../arweave-upload'
+import { buildMusicRegisterBody } from './music-publish-api'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -451,17 +452,26 @@ export async function publishSong(
   onProgress(70)
 
   // ── Step 7: Call story-register-sponsor-v1 Lit Action (70-88%) ───
+  const storyRegisterBody = buildMusicRegisterBody({
+    recipient: userAddress,
+    ipMetadataURI,
+    ipMetadataHash,
+    nftMetadataURI,
+    nftMetadataHash: nftMetadataHashHex,
+    commercialRevShare: revShare,
+    defaultMintingFee: formData.mintingFee || '0',
+    selection: {
+      publishType: formData.publishType,
+      parentIpIds: formData.parentIpIds,
+      licenseTermsIds: formData.licenseTermsIds,
+    },
+  })
+
   const storyResult = await litClient.executeJs({
     ipfsId: STORY_REGISTER_SPONSOR_CID,
     authContext,
     jsParams: {
-      recipient: userAddress,
-      ipMetadataURI,
-      ipMetadataHash,
-      nftMetadataURI,
-      nftMetadataHash: nftMetadataHashHex,
-      commercialRevShare: revShare,
-      defaultMintingFee: formData.mintingFee || '0',
+      ...storyRegisterBody,
       signature: storySignature,
       timestamp: storyTimestamp,
       nonce: storyNonce,

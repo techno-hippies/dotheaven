@@ -1,5 +1,6 @@
 package com.pirate.app.player
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,9 +27,12 @@ import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -49,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.pirate.app.music.MusicLibrary
 import com.pirate.app.music.TrackUploadService
+import com.pirate.app.music.UploadedTrackActions
 import com.pirate.app.music.ui.AddToPlaylistSheet
 import com.pirate.app.music.ui.TrackMenuSheet
 import kotlinx.coroutines.launch
@@ -60,6 +65,8 @@ fun PlayerScreen(
   isAuthenticated: Boolean,
   onClose: () -> Unit,
   onShowMessage: (String) -> Unit,
+  hostActivity: androidx.fragment.app.FragmentActivity? = null,
+  tempoAccount: com.pirate.app.tempo.TempoPasskeyManager.PasskeyAccount? = null,
 ) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
@@ -77,6 +84,9 @@ fun PlayerScreen(
   var menuOpen by remember { mutableStateOf(false) }
   var addToPlaylistOpen by remember { mutableStateOf(false) }
   var uploadBusy by remember { mutableStateOf(false) }
+  var shareOpen by remember { mutableStateOf(false) }
+  var shareRecipientInput by remember { mutableStateOf("") }
+  var shareBusy by remember { mutableStateOf(false) }
 
   var artworkUri by remember(track.id) { mutableStateOf(track.artworkUri) }
   var artworkFailed by remember(track.id) { mutableStateOf(false) }
@@ -276,6 +286,8 @@ fun PlayerScreen(
               context = context,
               ownerEthAddress = ownerEthAddress,
               track = t,
+              hostActivity = hostActivity,
+              tempoAccount = tempoAccount,
             )
           }
         uploadBusy = false
@@ -341,6 +353,8 @@ fun PlayerScreen(
               context = context,
               ownerEthAddress = ownerEthAddress,
               track = t,
+              hostActivity = hostActivity,
+              tempoAccount = tempoAccount,
             )
           }
         uploadBusy = false
@@ -371,6 +385,31 @@ fun PlayerScreen(
         }
       }
     },
+    onDownload = { t ->
+      scope.launch {
+        val owner = ownerEthAddress?.trim()
+        val result =
+          UploadedTrackActions.downloadUploadedTrackToDevice(
+            context = context,
+            track = t,
+            ownerAddress = owner ?: t.datasetOwner,
+            granteeAddress = owner,
+          )
+        if (!result.success) {
+          onShowMessage("Download failed: ${result.error ?: "unknown error"}")
+          return@launch
+        }
+        onShowMessage(if (result.alreadyDownloaded) "Already downloaded" else "Downloaded to device")
+      }
+    },
+    onShare = { _ ->
+      if (!isAuthenticated || ownerEthAddress.isNullOrBlank()) {
+        onShowMessage("Sign in to share")
+        return@TrackMenuSheet
+      }
+      shareRecipientInput = ""
+      shareOpen = true
+    },
     onAddToPlaylist = {
       addToPlaylistOpen = true
     },
@@ -378,6 +417,70 @@ fun PlayerScreen(
     onGoToAlbum = { onShowMessage("Album view coming soon") },
     onGoToArtist = { onShowMessage("Artist view coming soon") },
   )
+
+  if (shareOpen) {
+    AlertDialog(
+      onDismissRequest = {
+        if (!shareBusy) {
+          shareOpen = false
+          shareRecipientInput = ""
+        }
+      },
+      title = { Text("Share Track") },
+      text = {
+        OutlinedTextField(
+          value = shareRecipientInput,
+          onValueChange = { if (!shareBusy) shareRecipientInput = it },
+          singleLine = true,
+          label = { Text("Recipient") },
+          placeholder = { Text("0x..., alice.heaven, bob.pirate") },
+          enabled = !shareBusy,
+          modifier = Modifier.fillMaxWidth(),
+        )
+      },
+      confirmButton = {
+        TextButton(
+          enabled = !shareBusy && shareRecipientInput.trim().isNotEmpty(),
+          onClick = {
+            val owner = ownerEthAddress
+            if (owner.isNullOrBlank()) {
+              onShowMessage("Missing share credentials")
+              return@TextButton
+            }
+            shareBusy = true
+            scope.launch {
+              val result =
+                UploadedTrackActions.shareUploadedTrack(
+                  context = context,
+                  track = track,
+                  recipient = shareRecipientInput,
+                  ownerAddress = owner,
+                )
+              shareBusy = false
+              if (!result.success) {
+                onShowMessage("Share failed: ${result.error ?: "unknown error"}")
+                return@launch
+              }
+              shareOpen = false
+              shareRecipientInput = ""
+              onShowMessage("Shared successfully")
+            }
+          },
+        ) {
+          Text(if (shareBusy) "Sharing..." else "Share")
+        }
+      },
+      dismissButton = {
+        TextButton(
+          enabled = !shareBusy,
+          onClick = {
+            shareOpen = false
+            shareRecipientInput = ""
+          },
+        ) { Text("Cancel") }
+      },
+    )
+  }
 
   // TODO: AddToPlaylistSheet needs Tempo migration (currently uses PlaylistV1LitAction)
   // AddToPlaylistSheet(...)

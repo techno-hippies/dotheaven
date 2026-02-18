@@ -21,13 +21,17 @@ const DEFAULT_ARWEAVE_GATEWAY = 'https://arweave.net'
 const DEFAULT_STORY_RPC_URL = 'https://aeneid.storyrpc.io'
 const DEFAULT_STORY_CHAIN_ID = 1315
 const DEFAULT_STORY_LICENSE_ATTACHMENT_WORKFLOWS = '0xcC2E862bCee5B6036Db0de6E06Ae87e524a79fd8'
+const DEFAULT_STORY_DERIVATIVE_WORKFLOWS = '0x9e2d496f72C547C2C535B167e06ED8729B374a4f'
 const DEFAULT_STORY_IP_ASSET_REGISTRY = '0x77319B4031e6eF1250907aa00018B8B1c67a244b'
 const DEFAULT_STORY_LICENSE_REGISTRY = '0x529a750E02d8E2f15649c13D69a465286a780e24'
 const DEFAULT_STORY_ROYALTY_POLICY_LAP = '0xBe54FB168b3c982b7AaE60dB6CF75Bd8447b390E'
 const DEFAULT_STORY_WIP_TOKEN = '0x1514000000000000000000000000000000000000'
 const DEFAULT_STORY_SPG_NFT_CONTRACT = '0xb1764abf89e6a151ea27824612145ef89ed70a73'
+const DEFAULT_STORY_PIL_LICENSE_TEMPLATE = '0x2E896b0b2Fdb7457499B56AAaA4AE55BCB4Cd316'
 const ERC721_TRANSFER_TOPIC = keccakId('Transfer(address,address,uint256)')
 const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB (Worker-safe ceiling for v1)
+const MAX_COVER_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+const MAX_LYRICS_BYTES = 256 * 1024 // 256KB
 const DAILY_UPLOAD_BYTES_LIMIT = 500 * 1024 * 1024 // 500MB per verified user/day
 const DAILY_PUBLISH_COUNT_LIMIT = 20
 
@@ -56,6 +60,16 @@ const STORY_LICENSE_ATTACHMENT_ABI = [
 
 const STORY_IP_ASSET_REGISTRY_ABI = [
   'function ipId(uint256 chainId, address tokenContract, uint256 tokenId) view returns (address)',
+]
+
+const STORY_DERIVATIVE_WORKFLOWS_ABI = [
+  `function mintAndRegisterIpAndMakeDerivative(
+    address spgNftContract,
+    (address[] parentIpIds, address licenseTemplate, uint256[] licenseTermsIds, bytes royaltyContext, uint256 maxMintingFee, uint32 maxRts, uint32 maxRevenueShare) derivData,
+    (string ipMetadataURI, bytes32 ipMetadataHash, string nftMetadataURI, bytes32 nftMetadataHash) ipMetadata,
+    address recipient,
+    bool allowDuplicates
+  ) external returns (address ipId, uint256 tokenId)`,
 ]
 
 const STORY_LICENSE_REGISTRY_ABI = [
@@ -87,6 +101,10 @@ function isLikelyAudioContentType(contentType: string): boolean {
   return contentType.startsWith('audio/')
 }
 
+function isLikelyImageContentType(contentType: string): boolean {
+  return contentType.startsWith('image/')
+}
+
 function extractUploadId(payload: unknown): string | null {
   if (!payload || typeof payload !== 'object') return null
   const candidate = (payload as Record<string, unknown>).id
@@ -97,6 +115,14 @@ function extractUploadId(payload: unknown): string | null {
     ?? ((payload as Record<string, unknown>).result as Record<string, unknown> | undefined)?.dataitemId
 
   return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : null
+}
+
+function dataitemIdFromArRef(ref: string | null | undefined): string | null {
+  if (!ref) return null
+  const trimmed = ref.trim()
+  if (!trimmed.startsWith('ar://')) return null
+  const id = trimmed.slice('ar://'.length).trim()
+  return id || null
 }
 
 function asOptionalString(value: string | File | null): string | null {
@@ -159,6 +185,10 @@ function isBytes32Hex(value: string): boolean {
   return /^0x[a-f0-9]{64}$/.test(value)
 }
 
+function isHexBytes(value: string): boolean {
+  return /^0x(?:[a-fA-F0-9]{2})*$/.test(value)
+}
+
 function asErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message
   return String(error)
@@ -169,12 +199,57 @@ async function sha256Hex(data: ArrayBuffer): Promise<string> {
   return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
+async function sha256HexBytes(data: Uint8Array): Promise<string> {
+  const copy = new Uint8Array(data.byteLength)
+  copy.set(data)
+  return sha256Hex(copy.buffer)
+}
+
 async function parseJsonResponse(res: Response): Promise<unknown> {
   const text = await res.text()
   try {
     return text ? JSON.parse(text) : null
   } catch {
     return { raw: text }
+  }
+}
+
+async function uploadToLoadStaging(params: {
+  apiKey: string
+  agentUrl: string
+  gatewayUrl: string
+  file: File
+  contentType: string
+  tags: Array<{ key: string; value: string }>
+}): Promise<{
+  dataitemId: string
+  gatewayUrl: string
+  payload: unknown
+}> {
+  const form = new FormData()
+  form.append('file', params.file, params.file.name || 'upload.bin')
+  form.append('content_type', params.contentType)
+  form.append('tags', JSON.stringify(params.tags))
+
+  const res = await fetch(`${params.agentUrl}/upload`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${params.apiKey}` },
+    body: form,
+  })
+  const payload = await parseJsonResponse(res)
+  if (!res.ok) {
+    throw new Error(`load_upload_failed:${res.status}:${JSON.stringify(payload)}`)
+  }
+
+  const id = extractUploadId(payload)
+  if (!id) {
+    throw new Error(`load_upload_missing_id:${JSON.stringify(payload)}`)
+  }
+
+  return {
+    dataitemId: id,
+    gatewayUrl: `${params.gatewayUrl}/resolve/${id}`,
+    payload,
   }
 }
 
@@ -190,6 +265,105 @@ function extractMintedTokenId(logs: Array<{ address: string; topics: readonly st
     return BigInt(log.topics[3]).toString()
   }
   return null
+}
+
+interface AnchoredJsonResult {
+  dataitemId: string
+  ref: string
+  ls3GatewayUrl: string
+  arweaveUrl: string
+  arweaveAvailable: boolean
+  payloadHash: string
+}
+
+function normalizeJsonPayload(value: unknown, fieldName: string): string {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) throw new Error(`${fieldName} must be a non-empty JSON string`)
+    try {
+      return JSON.stringify(JSON.parse(trimmed))
+    } catch {
+      throw new Error(`${fieldName} must be valid JSON`)
+    }
+  }
+  if (value === null || value === undefined) {
+    throw new Error(`${fieldName} is required`)
+  }
+  try {
+    return JSON.stringify(value)
+  } catch {
+    throw new Error(`${fieldName} must be JSON-serializable`)
+  }
+}
+
+async function uploadAndAnchorJson(
+  params: {
+    apiKey: string
+    agentUrl: string
+    gatewayUrl: string
+    jobId: string
+    metadataType: 'ip' | 'nft'
+    payloadJson: string
+  },
+): Promise<AnchoredJsonResult> {
+  const payloadBytes = new TextEncoder().encode(params.payloadJson)
+  const payloadHash = await sha256HexBytes(payloadBytes)
+  const tags = JSON.stringify([
+    { key: 'App-Name', value: 'Heaven' },
+    { key: 'Upload-Source', value: 'music-metadata' },
+    { key: 'Music-Job-Id', value: params.jobId },
+    { key: 'Music-Metadata-Type', value: params.metadataType },
+    { key: 'Content-Type', value: 'application/json' },
+  ])
+
+  const uploadForm = new FormData()
+  uploadForm.append(
+    'file',
+    new File([payloadBytes], `${params.metadataType}-metadata.json`, { type: 'application/json' }),
+  )
+  uploadForm.append('content_type', 'application/json')
+  uploadForm.append('tags', tags)
+
+  const uploadResp = await fetch(`${params.agentUrl}/upload`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${params.apiKey}` },
+    body: uploadForm,
+  })
+  const uploadPayload = await parseJsonResponse(uploadResp)
+  if (!uploadResp.ok) {
+    throw new Error(`load_upload_failed:${uploadResp.status}:${JSON.stringify(uploadPayload)}`)
+  }
+  const id = extractUploadId(uploadPayload)
+  if (!id) {
+    throw new Error(`load_upload_missing_id:${JSON.stringify(uploadPayload)}`)
+  }
+
+  const postResp = await fetch(`${params.agentUrl}/post/${encodeURIComponent(id)}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${params.apiKey}` },
+  })
+  const postPayload = await parseJsonResponse(postResp)
+  if (!postResp.ok) {
+    throw new Error(`load_post_failed:${postResp.status}:${JSON.stringify(postPayload)}`)
+  }
+
+  const arweaveUrl = `${DEFAULT_ARWEAVE_GATEWAY}/${id}`
+  let arweaveAvailable = false
+  try {
+    const head = await fetch(arweaveUrl, { method: 'HEAD' })
+    arweaveAvailable = head.ok
+  } catch {
+    arweaveAvailable = false
+  }
+
+  return {
+    dataitemId: id,
+    ref: `ar://${id}`,
+    ls3GatewayUrl: `${params.gatewayUrl}/resolve/${id}`,
+    arweaveUrl,
+    arweaveAvailable,
+    payloadHash: `0x${payloadHash}`,
+  }
 }
 
 interface StoryRegisterPayload {
@@ -211,12 +385,29 @@ interface StoryRegisterResult {
   licenseTermsIds: string[]
 }
 
+interface StoryRegisterDerivativePayload {
+  recipient: string
+  ipMetadataURI: string
+  ipMetadataHash: string
+  nftMetadataURI: string
+  nftMetadataHash: string
+  parentIpIds: string[]
+  licenseTermsIds: string[]
+  licenseTemplate: string
+  royaltyContext: string
+  maxMintingFee: string
+  maxRts: number
+  maxRevenueShare: number
+  allowDuplicates: boolean
+}
+
 interface StoryConfig {
   sponsorPk: string
   rpcUrl: string
   chainId: number
   spgNftContract: string
   workflows: string
+  derivativeWorkflows: string
   ipAssetRegistry: string
   licenseRegistry: string
   royaltyPolicyLap: string
@@ -306,6 +497,67 @@ async function registerStoryOriginal(
   }
 }
 
+async function registerStoryDerivative(
+  config: StoryConfig,
+  payload: StoryRegisterDerivativePayload,
+): Promise<StoryRegisterResult> {
+  const provider = new JsonRpcProvider(config.rpcUrl)
+  const signer = new Wallet(config.sponsorPk as `0x${string}`, provider)
+  const derivativeWorkflows = new Contract(config.derivativeWorkflows, STORY_DERIVATIVE_WORKFLOWS_ABI, signer)
+
+  const tx = await derivativeWorkflows.mintAndRegisterIpAndMakeDerivative(
+    config.spgNftContract,
+    {
+      parentIpIds: payload.parentIpIds,
+      licenseTemplate: payload.licenseTemplate,
+      licenseTermsIds: payload.licenseTermsIds.map((value) => BigInt(value)),
+      royaltyContext: payload.royaltyContext,
+      maxMintingFee: BigInt(payload.maxMintingFee),
+      maxRts: payload.maxRts,
+      maxRevenueShare: payload.maxRevenueShare,
+    },
+    {
+      ipMetadataURI: payload.ipMetadataURI,
+      ipMetadataHash: payload.ipMetadataHash,
+      nftMetadataURI: payload.nftMetadataURI,
+      nftMetadataHash: payload.nftMetadataHash,
+    },
+    payload.recipient,
+    payload.allowDuplicates,
+  )
+
+  const receipt = await tx.wait(1)
+  if (!receipt || receipt.status !== 1) {
+    throw new Error('Story derivative registration transaction reverted')
+  }
+
+  const tokenId = extractMintedTokenId(receipt.logs, config.spgNftContract)
+  if (!tokenId) {
+    throw new Error('Story derivative registration succeeded but minted tokenId was not found in logs')
+  }
+
+  const ipAssetRegistry = new Contract(config.ipAssetRegistry, STORY_IP_ASSET_REGISTRY_ABI, provider)
+  const rawIpId = await ipAssetRegistry.ipId(BigInt(config.chainId), config.spgNftContract, BigInt(tokenId))
+  const ipId = getAddress(String(rawIpId))
+
+  const licenseRegistry = new Contract(config.licenseRegistry, STORY_LICENSE_REGISTRY_ABI, provider)
+  const attachedCount = await licenseRegistry.getAttachedLicenseTermsCount(ipId)
+  const count = Number(attachedCount)
+  const licenseTermsIds: string[] = []
+  for (let i = 0; i < count; i++) {
+    const tuple = await licenseRegistry.getAttachedLicenseTerms(ipId, BigInt(i))
+    licenseTermsIds.push(BigInt(tuple[1]).toString())
+  }
+
+  return {
+    txHash: tx.hash,
+    blockNumber: receipt.blockNumber.toString(),
+    ipId,
+    tokenId,
+    licenseTermsIds,
+  }
+}
+
 function serializeJob(row: MusicPublishJobRow) {
   return {
     jobId: row.job_id,
@@ -322,6 +574,18 @@ function serializeJob(row: MusicPublishJobRow) {
       durationS: row.duration_s,
       stagedDataitemId: row.staged_dataitem_id,
       stagedGatewayUrl: row.staged_gateway_url,
+      cover: {
+        stagedDataitemId: row.cover_staged_dataitem_id,
+        stagedGatewayUrl: row.cover_staged_gateway_url,
+        contentType: row.cover_content_type,
+        fileSize: row.cover_file_size,
+      },
+      lyrics: {
+        stagedDataitemId: row.lyrics_staged_dataitem_id,
+        stagedGatewayUrl: row.lyrics_staged_gateway_url,
+        sha256: row.lyrics_sha256,
+        bytes: row.lyrics_bytes,
+      },
     },
     policy: {
       decision: row.policy_decision,
@@ -335,6 +599,20 @@ function serializeJob(row: MusicPublishJobRow) {
       ref: row.arweave_ref,
       arweaveUrl: row.arweave_url,
       arweaveAvailable: !!row.arweave_available,
+    },
+    metadata: {
+      status: row.metadata_status,
+      error: row.metadata_error,
+      ip: {
+        uri: row.ip_metadata_uri,
+        hash: row.ip_metadata_hash,
+        dataitemId: row.ip_metadata_dataitem_id || dataitemIdFromArRef(row.ip_metadata_uri),
+      },
+      nft: {
+        uri: row.nft_metadata_uri,
+        hash: row.nft_metadata_hash,
+        dataitemId: row.nft_metadata_dataitem_id || dataitemIdFromArRef(row.nft_metadata_uri),
+      },
     },
     registration: {
       storyTxHash: row.story_tx_hash,
@@ -561,6 +839,174 @@ app.post('/publish/start', async (c) => {
   })
 })
 
+app.post('/publish/:jobId/artifacts/stage', async (c) => {
+  const userPkp = c.get('userPkp')
+  const jobId = c.req.param('jobId')
+  const apiKey = c.env.LOAD_S3_AGENT_API_KEY
+  if (!apiKey) {
+    return c.json({ error: 'Music artifact upload not configured (LOAD_S3_AGENT_API_KEY)' }, 500)
+  }
+
+  const row = await c.env.DB.prepare(`
+    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
+  `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+  if (!row) {
+    return c.json({ error: 'Job not found' }, 404)
+  }
+
+  if (row.status === 'anchoring' || row.status === 'anchored' || row.status === 'registering' || row.status === 'registered') {
+    return c.json({ error: `Cannot stage artifacts from status ${row.status}`, job: serializeJob(row) }, 409)
+  }
+
+  const form = await c.req.formData()
+  const coverField = form.get('cover')
+  if (coverField !== null && !(coverField instanceof File)) {
+    return c.json({ error: 'cover must be a file when provided' }, 400)
+  }
+  const coverFile = coverField instanceof File ? coverField : null
+  const coverContentType = (asOptionalString(form.get('coverContentType')) || coverFile?.type || 'application/octet-stream').trim()
+
+  const lyricsRaw = asOptionalString(form.get('lyricsText'))
+  const lyricsText = lyricsRaw ?? ''
+  const lyricsProvided = lyricsRaw !== null && lyricsText.trim().length > 0
+
+  if (!coverFile && !lyricsProvided) {
+    return c.json({ error: 'At least one artifact is required (cover and/or lyricsText)' }, 400)
+  }
+
+  if (coverFile) {
+    if (!coverFile.size) {
+      return c.json({ error: 'Cover file is empty' }, 400)
+    }
+    if (coverFile.size > MAX_COVER_FILE_SIZE) {
+      return c.json({ error: `Cover file too large: ${coverFile.size} > ${MAX_COVER_FILE_SIZE}` }, 400)
+    }
+    if (!isLikelyImageContentType(coverContentType)) {
+      return c.json({ error: `Unsupported cover content type: ${coverContentType}` }, 400)
+    }
+  }
+
+  const lyricsBytes = lyricsProvided ? new TextEncoder().encode(lyricsText) : null
+  if (lyricsBytes && lyricsBytes.byteLength > MAX_LYRICS_BYTES) {
+    return c.json({ error: `lyricsText too large: ${lyricsBytes.byteLength} > ${MAX_LYRICS_BYTES}` }, 400)
+  }
+
+  const coverAlreadyStaged = !!row.cover_staged_dataitem_id && !!row.cover_staged_gateway_url
+  const lyricsAlreadyStaged = !!row.lyrics_staged_dataitem_id && !!row.lyrics_staged_gateway_url
+  if ((!coverFile || coverAlreadyStaged) && (!lyricsProvided || lyricsAlreadyStaged)) {
+    return c.json({ cached: true, job: serializeJob(row) })
+  }
+
+  const agentUrl = (c.env.LOAD_S3_AGENT_URL || DEFAULT_AGENT_URL).replace(/\/+$/, '')
+  const gatewayUrl = (c.env.LOAD_GATEWAY_URL || DEFAULT_GATEWAY_URL).replace(/\/+$/, '')
+
+  let coverUpload: Awaited<ReturnType<typeof uploadToLoadStaging>> | null = null
+  let lyricsUpload: Awaited<ReturnType<typeof uploadToLoadStaging>> | null = null
+  let lyricsSha256 = row.lyrics_sha256
+  let lyricsByteLength = row.lyrics_bytes
+
+  try {
+    if (coverFile && !coverAlreadyStaged) {
+      coverUpload = await uploadToLoadStaging({
+        apiKey,
+        agentUrl,
+        gatewayUrl,
+        file: coverFile,
+        contentType: coverContentType,
+        tags: [
+          { key: 'App-Name', value: 'Heaven' },
+          { key: 'Upload-Source', value: 'music-artifact-stage' },
+          { key: 'Music-Job-Id', value: jobId },
+          { key: 'Music-Artifact-Type', value: 'cover' },
+          { key: 'Content-Type', value: coverContentType },
+        ],
+      })
+    }
+
+    if (lyricsBytes && !lyricsAlreadyStaged) {
+      lyricsSha256 = `0x${await sha256HexBytes(lyricsBytes)}`
+      lyricsByteLength = lyricsBytes.byteLength
+      const lyricsFile = new File([lyricsBytes], 'lyrics.txt', { type: 'text/plain; charset=utf-8' })
+      lyricsUpload = await uploadToLoadStaging({
+        apiKey,
+        agentUrl,
+        gatewayUrl,
+        file: lyricsFile,
+        contentType: 'text/plain; charset=utf-8',
+        tags: [
+          { key: 'App-Name', value: 'Heaven' },
+          { key: 'Upload-Source', value: 'music-artifact-stage' },
+          { key: 'Music-Job-Id', value: jobId },
+          { key: 'Music-Artifact-Type', value: 'lyrics' },
+          { key: 'Content-Type', value: 'text/plain; charset=utf-8' },
+        ],
+      })
+    }
+  } catch (error) {
+    return c.json({
+      error: 'Artifact staging failed',
+      details: asErrorMessage(error),
+    }, 502)
+  }
+
+  const now = Math.floor(Date.now() / 1000)
+  await c.env.DB.prepare(`
+    UPDATE music_publish_jobs
+    SET cover_staged_dataitem_id = ?,
+        cover_staged_gateway_url = ?,
+        cover_content_type = ?,
+        cover_file_size = ?,
+        cover_staged_payload_json = ?,
+        lyrics_staged_dataitem_id = ?,
+        lyrics_staged_gateway_url = ?,
+        lyrics_sha256 = ?,
+        lyrics_bytes = ?,
+        lyrics_staged_payload_json = ?,
+        updated_at = ?
+    WHERE job_id = ? AND user_pkp = ?
+  `).bind(
+    coverUpload?.dataitemId ?? row.cover_staged_dataitem_id,
+    coverUpload?.gatewayUrl ?? row.cover_staged_gateway_url,
+    coverUpload ? coverContentType : row.cover_content_type,
+    coverUpload ? coverFile?.size ?? row.cover_file_size : row.cover_file_size,
+    coverUpload ? JSON.stringify(coverUpload.payload) : row.cover_staged_payload_json,
+    lyricsUpload?.dataitemId ?? row.lyrics_staged_dataitem_id,
+    lyricsUpload?.gatewayUrl ?? row.lyrics_staged_gateway_url,
+    lyricsSha256,
+    lyricsByteLength,
+    lyricsUpload ? JSON.stringify(lyricsUpload.payload) : row.lyrics_staged_payload_json,
+    now,
+    jobId,
+    userPkp,
+  ).run()
+
+  const updated = await c.env.DB.prepare(`
+    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
+  `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+  if (!updated) {
+    return c.json({ error: 'Failed to load artifact-staged job' }, 500)
+  }
+
+  return c.json({
+    cached: false,
+    artifacts: {
+      cover: {
+        uploaded: !!coverUpload,
+        stagedDataitemId: updated.cover_staged_dataitem_id,
+        stagedGatewayUrl: updated.cover_staged_gateway_url,
+      },
+      lyrics: {
+        uploaded: !!lyricsUpload,
+        stagedDataitemId: updated.lyrics_staged_dataitem_id,
+        stagedGatewayUrl: updated.lyrics_staged_gateway_url,
+        sha256: updated.lyrics_sha256,
+        bytes: updated.lyrics_bytes,
+      },
+    },
+    job: serializeJob(updated),
+  })
+})
+
 interface MusicPreflightRequest {
   jobId: string
   publishType?: MusicPublishType
@@ -709,6 +1155,16 @@ app.post('/preflight', async (c) => {
                 policyDecision = 'manual_review'
                 policyReasonCode = 'duplicate_hash_match'
                 policyReason = 'Existing track with matching audio hash found; manual review required'
+              } else if (
+                !row.cover_staged_dataitem_id
+                || !row.cover_staged_gateway_url
+                || !row.lyrics_staged_dataitem_id
+                || !row.lyrics_staged_gateway_url
+              ) {
+                status = 'manual_review'
+                policyDecision = 'manual_review'
+                policyReasonCode = 'missing_staged_artifacts'
+                policyReason = 'Missing staged cover/lyrics artifacts for original publish'
               } else if (!fingerprint) {
                 status = 'manual_review'
                 policyDecision = 'manual_review'
@@ -731,7 +1187,7 @@ app.post('/preflight', async (c) => {
     policyDecision = 'reject'
     policyReasonCode = 'parent_link_required'
     policyReason = 'Derivative/cover publish requires parentIpIds and licenseTermsIds'
-  } else if (parentIpIds.length !== licenseTermsIds.length) {
+  } else if ((publishType === 'derivative' || publishType === 'cover') && parentIpIds.length !== licenseTermsIds.length) {
     status = 'rejected'
     policyDecision = 'reject'
     policyReasonCode = 'parent_terms_mismatch'
@@ -937,6 +1393,202 @@ app.post('/publish/:jobId/anchor', async (c) => {
   return c.json({ job: serializeJob(updated) })
 })
 
+interface MusicMetadataAnchorBody {
+  ipMetadataJson?: unknown
+  nftMetadataJson?: unknown
+}
+
+function hasAnchoredMetadata(row: MusicPublishJobRow): boolean {
+  return (
+    row.metadata_status === 'anchored'
+    && !!row.ip_metadata_uri
+    && !!row.ip_metadata_hash
+    && !!row.nft_metadata_uri
+    && !!row.nft_metadata_hash
+  )
+}
+
+function metadataResponseFromRow(jobId: string, row: MusicPublishJobRow) {
+  const ipId = row.ip_metadata_dataitem_id || dataitemIdFromArRef(row.ip_metadata_uri)
+  const nftId = row.nft_metadata_dataitem_id || dataitemIdFromArRef(row.nft_metadata_uri)
+  return {
+    jobId,
+    ipMetadataURI: row.ip_metadata_uri,
+    ipMetadataHash: row.ip_metadata_hash,
+    ipMetadataDataitemId: ipId,
+    ipMetadataArweaveUrl: ipId ? `${DEFAULT_ARWEAVE_GATEWAY}/${ipId}` : null,
+    ipMetadataArweaveAvailable: !!ipId,
+    nftMetadataURI: row.nft_metadata_uri,
+    nftMetadataHash: row.nft_metadata_hash,
+    nftMetadataDataitemId: nftId,
+    nftMetadataArweaveUrl: nftId ? `${DEFAULT_ARWEAVE_GATEWAY}/${nftId}` : null,
+    nftMetadataArweaveAvailable: !!nftId,
+  }
+}
+
+app.post('/publish/:jobId/metadata', async (c) => {
+  const userPkp = c.get('userPkp')
+  const jobId = c.req.param('jobId')
+  const apiKey = c.env.LOAD_S3_AGENT_API_KEY
+  if (!apiKey) {
+    return c.json({ error: 'Music metadata anchor not configured (LOAD_S3_AGENT_API_KEY)' }, 500)
+  }
+
+  const row = await c.env.DB.prepare(`
+    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
+  `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+  if (!row) {
+    return c.json({ error: 'Job not found' }, 404)
+  }
+  if (row.status !== 'anchored' && row.status !== 'registering' && row.status !== 'registered') {
+    return c.json({ error: `Job must be anchored before metadata anchor (current=${row.status})`, job: serializeJob(row) }, 409)
+  }
+  if (hasAnchoredMetadata(row)) {
+    return c.json({
+      ...metadataResponseFromRow(jobId, row),
+      cached: true,
+      job: serializeJob(row),
+    })
+  }
+
+  let body: MusicMetadataAnchorBody
+  try {
+    body = await c.req.json<MusicMetadataAnchorBody>()
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400)
+  }
+
+  let ipMetadataJson: string
+  let nftMetadataJson: string
+  try {
+    ipMetadataJson = normalizeJsonPayload(body.ipMetadataJson, 'ipMetadataJson')
+    nftMetadataJson = normalizeJsonPayload(body.nftMetadataJson, 'nftMetadataJson')
+  } catch (error) {
+    return c.json({ error: asErrorMessage(error) }, 400)
+  }
+
+  const ipBytes = new TextEncoder().encode(ipMetadataJson)
+  const nftBytes = new TextEncoder().encode(nftMetadataJson)
+  const maxJsonBytes = 256 * 1024
+  if (ipBytes.byteLength > maxJsonBytes || nftBytes.byteLength > maxJsonBytes) {
+    return c.json({ error: `Metadata payload too large (max ${maxJsonBytes} bytes each)` }, 400)
+  }
+
+  const agentUrl = (c.env.LOAD_S3_AGENT_URL || DEFAULT_AGENT_URL).replace(/\/+$/, '')
+  const gatewayUrl = (c.env.LOAD_GATEWAY_URL || DEFAULT_GATEWAY_URL).replace(/\/+$/, '')
+  const lockNow = Math.floor(Date.now() / 1000)
+  const lock = await c.env.DB.prepare(`
+    UPDATE music_publish_jobs
+    SET metadata_status = 'anchoring',
+        metadata_error = NULL,
+        updated_at = ?
+    WHERE job_id = ? AND user_pkp = ?
+      AND (metadata_status IS NULL OR metadata_status IN ('none', 'failed'))
+      AND ip_metadata_uri IS NULL
+      AND nft_metadata_uri IS NULL
+  `).bind(lockNow, jobId, userPkp).run()
+  const lockChanges = Number(lock.meta?.changes ?? 0)
+  if (lockChanges !== 1) {
+    const latest = await c.env.DB.prepare(`
+      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
+    `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+    if (!latest) {
+      return c.json({ error: 'Job not found after metadata lock attempt' }, 404)
+    }
+    if (hasAnchoredMetadata(latest)) {
+      return c.json({
+        ...metadataResponseFromRow(jobId, latest),
+        cached: true,
+        job: serializeJob(latest),
+      })
+    }
+    if (latest.metadata_status === 'anchoring') {
+      return c.json({
+        error: 'Metadata anchor already in progress',
+        job: serializeJob(latest),
+      }, 409)
+    }
+    return c.json({
+      error: `Metadata anchor lock not acquired (status=${latest.metadata_status ?? 'unknown'})`,
+      job: serializeJob(latest),
+    }, 409)
+  }
+
+  try {
+    const [ipAnchor, nftAnchor] = await Promise.all([
+      uploadAndAnchorJson({
+        apiKey,
+        agentUrl,
+        gatewayUrl,
+        jobId,
+        metadataType: 'ip',
+        payloadJson: ipMetadataJson,
+      }),
+      uploadAndAnchorJson({
+        apiKey,
+        agentUrl,
+        gatewayUrl,
+        jobId,
+        metadataType: 'nft',
+        payloadJson: nftMetadataJson,
+      }),
+    ])
+    const doneNow = Math.floor(Date.now() / 1000)
+    await c.env.DB.prepare(`
+      UPDATE music_publish_jobs
+      SET metadata_status = 'anchored',
+          metadata_error = NULL,
+          ip_metadata_uri = ?,
+          ip_metadata_hash = ?,
+          ip_metadata_dataitem_id = ?,
+          nft_metadata_uri = ?,
+          nft_metadata_hash = ?,
+          nft_metadata_dataitem_id = ?,
+          updated_at = ?
+      WHERE job_id = ? AND user_pkp = ?
+    `).bind(
+      ipAnchor.ref,
+      ipAnchor.payloadHash,
+      ipAnchor.dataitemId,
+      nftAnchor.ref,
+      nftAnchor.payloadHash,
+      nftAnchor.dataitemId,
+      doneNow,
+      jobId,
+      userPkp,
+    ).run()
+
+    const updated = await c.env.DB.prepare(`
+      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
+    `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+    if (!updated) {
+      return c.json({ error: 'Failed to load metadata-anchored job' }, 500)
+    }
+    return c.json({
+      ...metadataResponseFromRow(jobId, updated),
+      cached: false,
+      job: serializeJob(updated),
+    })
+  } catch (error) {
+    const failNow = Math.floor(Date.now() / 1000)
+    await c.env.DB.prepare(`
+      UPDATE music_publish_jobs
+      SET metadata_status = 'failed',
+          metadata_error = ?,
+          updated_at = ?
+      WHERE job_id = ? AND user_pkp = ?
+    `).bind(asErrorMessage(error).slice(0, 2048), failNow, jobId, userPkp).run()
+    const latest = await c.env.DB.prepare(`
+      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
+    `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+    return c.json({
+      error: 'Music metadata anchor failed',
+      details: asErrorMessage(error).slice(0, 2048),
+      job: latest ? serializeJob(latest) : null,
+    }, 502)
+  }
+})
+
 interface StoryRegisterRequestBody {
   recipient?: string
   ipMetadataURI?: string
@@ -945,6 +1597,13 @@ interface StoryRegisterRequestBody {
   nftMetadataHash?: string
   commercialRevShare?: number
   defaultMintingFee?: string | number
+  parentIpIds?: string[]
+  licenseTermsIds?: Array<string | number>
+  licenseTemplate?: string
+  royaltyContext?: string
+  maxMintingFee?: string | number
+  maxRts?: number
+  maxRevenueShare?: number
   allowDuplicates?: boolean
 }
 
@@ -978,12 +1637,9 @@ app.post('/publish/:jobId/register', async (c) => {
     return c.json({ error: `Job must be anchored before register (current=${row.status})`, job: serializeJob(row) }, 409)
   }
 
-  if (row.publish_type !== 'original') {
-    return c.json({
-      error: `Story register currently supports only original publishType (current=${row.publish_type ?? 'unknown'})`,
-      code: 'story_derivative_not_implemented',
-      job: serializeJob(row),
-    }, 409)
+  const publishType = row.publish_type ?? 'original'
+  if (publishType !== 'original' && publishType !== 'derivative' && publishType !== 'cover') {
+    return c.json({ error: `Unsupported publishType for registration: ${publishType}`, job: serializeJob(row) }, 409)
   }
 
   let body: StoryRegisterRequestBody
@@ -998,16 +1654,16 @@ app.post('/publish/:jobId/register', async (c) => {
     return c.json({ error: 'recipient must be a valid 0x address when provided' }, 400)
   }
 
-  const ipMetadataURI = (body.ipMetadataURI || '').trim()
-  const nftMetadataURI = (body.nftMetadataURI || '').trim()
+  const ipMetadataURI = (body.ipMetadataURI || row.ip_metadata_uri || '').trim()
+  const nftMetadataURI = (body.nftMetadataURI || row.nft_metadata_uri || '').trim()
   if (!ipMetadataURI || !nftMetadataURI) {
-    return c.json({ error: 'ipMetadataURI and nftMetadataURI are required' }, 400)
+    return c.json({ error: 'ipMetadataURI and nftMetadataURI are required (body or persisted metadata)' }, 400)
   }
 
-  const ipMetadataHashRaw = (body.ipMetadataHash || '').trim().toLowerCase()
-  const nftMetadataHashRaw = (body.nftMetadataHash || '').trim().toLowerCase()
+  const ipMetadataHashRaw = (body.ipMetadataHash || row.ip_metadata_hash || '').trim().toLowerCase()
+  const nftMetadataHashRaw = (body.nftMetadataHash || row.nft_metadata_hash || '').trim().toLowerCase()
   if (!isBytes32Hex(ipMetadataHashRaw) || !isBytes32Hex(nftMetadataHashRaw)) {
-    return c.json({ error: 'ipMetadataHash and nftMetadataHash must be 0x-prefixed 32-byte hex values' }, 400)
+    return c.json({ error: 'ipMetadataHash and nftMetadataHash must be 0x-prefixed 32-byte hex values (body or persisted metadata)' }, 400)
   }
 
   const rawRevShare = body.commercialRevShare ?? 10
@@ -1021,6 +1677,64 @@ app.post('/publish/:jobId/register', async (c) => {
   if (!/^\d+$/.test(defaultMintingFee)) {
     return c.json({ error: 'defaultMintingFee must be a non-negative integer string' }, 400)
   }
+
+  let parentIpIds = parseJsonStringArray(row.parent_ip_ids_json) || []
+  if (body.parentIpIds !== undefined) {
+    if (!Array.isArray(body.parentIpIds) || !body.parentIpIds.every((value) => typeof value === 'string')) {
+      return c.json({ error: 'parentIpIds must be an array of strings' }, 400)
+    }
+    parentIpIds = body.parentIpIds.map((value) => value.trim())
+  }
+
+  let licenseTermsIds = parseJsonStringArray(row.license_terms_ids_json) || []
+  if (body.licenseTermsIds !== undefined) {
+    const parsed = parseLicenseTermsIds(body.licenseTermsIds)
+    if (!parsed) {
+      return c.json({ error: 'licenseTermsIds must be an array of positive integers (string or number)' }, 400)
+    }
+    licenseTermsIds = parsed
+  }
+
+  const licenseTemplateRaw = (
+    body.licenseTemplate
+    || c.env.STORY_PIL_LICENSE_TEMPLATE
+    || DEFAULT_STORY_PIL_LICENSE_TEMPLATE
+  ).trim()
+  const royaltyContext = (body.royaltyContext || '0x').trim()
+  const maxMintingFee = body.maxMintingFee === undefined
+    ? '0'
+    : String(body.maxMintingFee).trim()
+  const maxRts = body.maxRts === undefined ? 0 : Number(body.maxRts)
+  const maxRevenueShare = body.maxRevenueShare === undefined ? 0 : Number(body.maxRevenueShare)
+
+  if (publishType !== 'original') {
+    if (parentIpIds.length === 0 || licenseTermsIds.length === 0) {
+      return c.json({ error: 'Derivative/cover registration requires parentIpIds and licenseTermsIds' }, 400)
+    }
+    if (parentIpIds.length !== licenseTermsIds.length) {
+      return c.json({ error: 'parentIpIds and licenseTermsIds must have the same length' }, 400)
+    }
+    if (parentIpIds.some((value) => !isAddress(value))) {
+      return c.json({ error: 'parentIpIds must contain valid 0x-prefixed addresses' }, 400)
+    }
+    if (!isAddress(licenseTemplateRaw)) {
+      return c.json({ error: 'licenseTemplate must be a valid 0x-prefixed address' }, 400)
+    }
+    if (!isHexBytes(royaltyContext)) {
+      return c.json({ error: 'royaltyContext must be a 0x-prefixed hex byte string' }, 400)
+    }
+    if (!/^\d+$/.test(maxMintingFee)) {
+      return c.json({ error: 'maxMintingFee must be a non-negative integer string' }, 400)
+    }
+    if (!Number.isInteger(maxRts) || maxRts < 0 || maxRts > 4_294_967_295) {
+      return c.json({ error: 'maxRts must be an integer between 0 and 4294967295' }, 400)
+    }
+    if (!Number.isInteger(maxRevenueShare) || maxRevenueShare < 0 || maxRevenueShare > 4_294_967_295) {
+      return c.json({ error: 'maxRevenueShare must be an integer between 0 and 4294967295' }, 400)
+    }
+  }
+
+  const allowDuplicates = body.allowDuplicates !== false
 
   const storyChainIdRaw = c.env.STORY_CHAIN_ID
   const storyChainId = storyChainIdRaw ? Number(storyChainIdRaw) : DEFAULT_STORY_CHAIN_ID
@@ -1054,25 +1768,40 @@ app.post('/publish/:jobId/register', async (c) => {
     chainId: storyChainId,
     spgNftContract: c.env.STORY_SPG_NFT_CONTRACT || DEFAULT_STORY_SPG_NFT_CONTRACT,
     workflows: c.env.STORY_LICENSE_ATTACHMENT_WORKFLOWS || DEFAULT_STORY_LICENSE_ATTACHMENT_WORKFLOWS,
+    derivativeWorkflows: c.env.STORY_DERIVATIVE_WORKFLOWS || DEFAULT_STORY_DERIVATIVE_WORKFLOWS,
     ipAssetRegistry: c.env.STORY_IP_ASSET_REGISTRY || DEFAULT_STORY_IP_ASSET_REGISTRY,
     licenseRegistry: c.env.STORY_LICENSE_REGISTRY || DEFAULT_STORY_LICENSE_REGISTRY,
     royaltyPolicyLap: c.env.STORY_ROYALTY_POLICY_LAP || DEFAULT_STORY_ROYALTY_POLICY_LAP,
     wipToken: c.env.STORY_WIP_TOKEN || DEFAULT_STORY_WIP_TOKEN,
   }
 
-  const registerPayload: StoryRegisterPayload = {
-    recipient,
-    ipMetadataURI,
-    ipMetadataHash: ipMetadataHashRaw,
-    nftMetadataURI,
-    nftMetadataHash: nftMetadataHashRaw,
-    commercialRevShare: rawRevShare,
-    defaultMintingFee,
-    allowDuplicates: body.allowDuplicates !== false,
-  }
-
   try {
-    const registration = await registerStoryOriginal(config, registerPayload)
+    const registration = publishType === 'original'
+      ? await registerStoryOriginal(config, {
+        recipient,
+        ipMetadataURI,
+        ipMetadataHash: ipMetadataHashRaw,
+        nftMetadataURI,
+        nftMetadataHash: nftMetadataHashRaw,
+        commercialRevShare: rawRevShare,
+        defaultMintingFee,
+        allowDuplicates,
+      })
+      : await registerStoryDerivative(config, {
+        recipient,
+        ipMetadataURI,
+        ipMetadataHash: ipMetadataHashRaw,
+        nftMetadataURI,
+        nftMetadataHash: nftMetadataHashRaw,
+        parentIpIds: parentIpIds.map((value) => getAddress(value)),
+        licenseTermsIds,
+        licenseTemplate: getAddress(licenseTemplateRaw),
+        royaltyContext,
+        maxMintingFee,
+        maxRts,
+        maxRevenueShare,
+        allowDuplicates,
+      })
     const now = Math.floor(Date.now() / 1000)
     await c.env.DB.prepare(`
       UPDATE music_publish_jobs

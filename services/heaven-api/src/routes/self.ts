@@ -29,11 +29,39 @@ const app = new Hono<{ Bindings: Env }>()
 // ============================================================================
 
 const SESSION_EXPIRY_SECONDS = 10 * 60  // 10 minutes
-const SELF_UNIVERSAL_LINK_BASE = 'https://self.xyz/verify'
+const SELF_UNIVERSAL_LINK_BASE = 'https://redirect.self.xyz'
 
 // ============================================================================
 // Helpers
 // ============================================================================
+
+type SelfEndpointType = 'https' | 'staging_https'
+
+interface SelfAppPayload {
+  appName: string
+  logoBase64: string
+  endpointType: SelfEndpointType
+  endpoint: string
+  deeplinkCallback: string
+  header: string
+  scope: string
+  sessionId: string
+  userId: string
+  userIdType: 'hex'
+  devMode: boolean
+  disclosures: {
+    date_of_birth: boolean
+    nationality: boolean
+    minimumAge: number
+  }
+  version: number
+  chainID: 42220 | 11142220
+  userDefinedData: string
+}
+
+function isSelfMockMode(env: Env): boolean {
+  return env.SELF_MOCK_PASSPORT === 'true' || env.ENVIRONMENT === 'development'
+}
 
 function generateSessionId(): string {
   const bytes = new Uint8Array(16)
@@ -82,23 +110,103 @@ function buildSelfDeeplink(
   sessionId: string,
   endpoint: string,
   scope: string,
-  callbackUrl: string
+  callbackUrl: string,
+  userPkp: string,
+  mockMode: boolean
 ): string {
-  // Self.xyz expects these params in the universal link
-  // The exact format depends on Self SDK - this is a placeholder structure
-  const params = new URLSearchParams({
-    scope,
+  const selfApp: SelfAppPayload = {
+    appName: 'Heaven',
+    logoBase64: '',
+    endpointType: mockMode ? 'staging_https' : 'https',
     endpoint,
-    callback: callbackUrl,
-    session: sessionId,
-    // Request date_of_birth and nationality disclosures
-    disclosures: JSON.stringify({
-      date_of_birth: true,
+    deeplinkCallback: callbackUrl,
+    header: 'Verify with Self',
+    scope,
+    sessionId,
+    userId: userPkp,
+    userIdType: 'hex',
+    devMode: mockMode,
+    disclosures: {
+      date_of_birth: false,
       nationality: true,
-    }),
+      minimumAge: 18,
+    },
+    version: 2,
+    chainID: mockMode ? 11142220 : 42220,
+    userDefinedData: sessionId,
+  }
+
+  const params = new URLSearchParams({
+    selfApp: JSON.stringify(selfApp),
   })
 
   return `${SELF_UNIVERSAL_LINK_BASE}?${params.toString()}`
+}
+
+function hexToUtf8(hex: string): string | null {
+  if (!hex || hex.length % 2 !== 0 || !/^[a-f0-9]+$/i.test(hex)) return null
+  const bytes = new Uint8Array(hex.match(/.{1,2}/g)!.map((pair) => parseInt(pair, 16)))
+  try {
+    return new TextDecoder().decode(bytes).trim()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Extract session ID from Self userContextData.
+ * Accepts plain id, "sessionId:...", "session:...", and URL/query-style payloads.
+ */
+function extractSessionId(userContextData: string): string | null {
+  if (!userContextData) return null
+
+  let raw = userContextData.trim()
+  if (!raw) return null
+
+  // If context arrives URL-encoded, decode once.
+  try {
+    raw = decodeURIComponent(raw)
+  } catch {
+    // Keep original raw value when decode fails.
+  }
+
+  // If context is a URL, read session/sessionId from query params.
+  try {
+    const parsed = new URL(raw)
+    const querySession = parsed.searchParams.get('sessionId') || parsed.searchParams.get('session')
+    if (querySession && /^[a-f0-9]{16,64}$/i.test(querySession.trim())) {
+      return querySession.trim().toLowerCase()
+    }
+  } catch {
+    // Not a URL payload, continue with other parsers.
+  }
+
+  // For payloads like "sessionId:abc|dob:...|nat:..." only inspect first segment.
+  const firstSegment = raw.split('|')[0].trim()
+
+  const queryMatch = firstSegment.match(/(?:^|[?&])(sessionId|session)=([a-f0-9]{16,64})/i)
+  if (queryMatch) return queryMatch[2].toLowerCase()
+
+  const colonMatch = firstSegment.match(/^(sessionId|session)\s*:\s*([a-f0-9]{16,64})$/i)
+  if (colonMatch) return colonMatch[2].toLowerCase()
+
+  if (/^[a-f0-9]{16,64}$/i.test(firstSegment)) {
+    return firstSegment.toLowerCase()
+  }
+
+  // Self packs userContextData as solidityPacked(bytes32 chainId, bytes32 userId, bytes userDefinedData).
+  // If we receive packed hex, decode userDefinedData and try parsing a session id from it.
+  const compactHex = firstSegment.replace(/^0x/i, '')
+  if (/^[a-f0-9]+$/i.test(compactHex) && compactHex.length > 128) {
+    const userDefinedDataHex = compactHex.slice(128)
+    const decoded = hexToUtf8(userDefinedDataHex)
+    if (decoded) {
+      const nested = decoded.match(/([a-f0-9]{16,64})/i)
+      if (nested) return nested[1].toLowerCase()
+    }
+  }
+
+  return null
 }
 
 // ============================================================================
@@ -140,10 +248,11 @@ app.post('/session', async (c) => {
     const scope = c.env.SELF_SCOPE || 'heaven'
     const endpoint = c.env.SELF_ENDPOINT || 'https://heaven-api.deletion-backup782.workers.dev/api/self/verify'
     const callbackUrl = `heaven://self/callback?sessionId=${existingSession.session_id}`
+    const mockMode = isSelfMockMode(c.env)
 
     const response: SelfSessionResponse = {
       sessionId: existingSession.session_id,
-      deeplinkUrl: buildSelfDeeplink(existingSession.session_id, endpoint, scope, callbackUrl),
+      deeplinkUrl: buildSelfDeeplink(existingSession.session_id, endpoint, scope, callbackUrl, pkp, mockMode),
       expiresAt: existingSession.expires_at,
     }
     return c.json(response)
@@ -162,10 +271,11 @@ app.post('/session', async (c) => {
   const scope = c.env.SELF_SCOPE || 'heaven'
   const endpoint = c.env.SELF_ENDPOINT || 'https://heaven-api.deletion-backup782.workers.dev/api/self/verify'
   const callbackUrl = `heaven://self/callback?sessionId=${sessionId}`
+  const mockMode = isSelfMockMode(c.env)
 
   const response: SelfSessionResponse = {
     sessionId,
-    deeplinkUrl: buildSelfDeeplink(sessionId, endpoint, scope, callbackUrl),
+    deeplinkUrl: buildSelfDeeplink(sessionId, endpoint, scope, callbackUrl, pkp, mockMode),
     expiresAt,
   }
 
@@ -181,11 +291,7 @@ app.post('/verify', async (c) => {
   const body = await c.req.json<SelfVerifyRequest>()
 
   // Extract session ID from userContextData
-  // Format: "sessionId:abc123" or just the session ID
-  let sessionId = body.userContextData
-  if (sessionId.includes(':')) {
-    sessionId = sessionId.split(':')[1]
-  }
+  const sessionId = extractSessionId(body.userContextData)
 
   if (!sessionId) {
     const response: SelfVerifyResponse = {
@@ -244,7 +350,7 @@ app.post('/verify', async (c) => {
   // In production, use SelfBackendVerifier which handles this properly
 
   // For development/testing, check if mock mode is enabled
-  const isMockMode = c.env.SELF_MOCK_PASSPORT === 'true' || c.env.ENVIRONMENT === 'development'
+  const isMockMode = isSelfMockMode(c.env)
 
   let dateOfBirth: string | null = null
   let nationality: string | null = null

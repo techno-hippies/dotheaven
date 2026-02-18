@@ -47,8 +47,10 @@ fun NameStep(
   var available by remember { mutableStateOf<Boolean?>(null) }
   var checkError by remember { mutableStateOf<String?>(null) }
 
-  // Debounced availability check
-  LaunchedEffect(name, selectedTld) {
+  // Debounced availability check — skip when already submitting (avoids
+  // "coroutine escaped" when AnimatedContent transitions away mid-check)
+  LaunchedEffect(name, selectedTld, submitting) {
+    if (submitting) return@LaunchedEffect
     available = null
     checkError = null
     val sanitized = name.lowercase().filter { it.isLetterOrDigit() || it == '-' }

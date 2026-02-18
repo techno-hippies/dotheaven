@@ -51,6 +51,10 @@ dataSources:
           handler: handleTrackRegisteredV4
         - event: TrackCoverSet(indexed bytes32,string)
           handler: handleTrackCoverSetV4
+        - event: TrackLyricsSet(indexed bytes32,string)
+          handler: handleTrackLyricsSetV4
+        - event: TrackLyricsOverwritten(indexed bytes32,string)
+          handler: handleTrackLyricsOverwrittenV4
         - event: Scrobbled(indexed address,indexed bytes32,uint64)
           handler: handleScrobbledV4
         - event: TrackUpdated(indexed bytes32,indexed bytes32)

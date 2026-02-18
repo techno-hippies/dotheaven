@@ -1,5 +1,16 @@
 # Lyrics + Cover Art on Arweave: Migration Plan
 
+Date: 2026-02-17
+Status: In progress (active reference; Lit sections are historical)
+
+## Implementation Snapshot (2026-02-17)
+
+1. Android song submit flow is now backend-driven (`/api/music/publish/start` + `/api/music/preflight`), no Lit dependency in default Kotlin path.
+2. Android now stages original cover + lyrics through `POST /api/music/publish/:jobId/artifacts/stage` before preflight pass.
+3. Android currently stops at staged + policy-passed state (temporary submission), not immediate Arweave anchor/Story registration.
+4. Permanent anchor/finalize remains server-side and is currently treated as a gated follow-up action.
+5. Cover/lyrics in publish v1 are staged to Load first, then only anchored to Arweave during explicit finalize.
+
 ## Document Purpose
 Define a clear, phased plan to move song lyrics and cover art persistence from Filebase/IPFS-heavy flows to Arweave-first refs (`ar://...`), while preserving existing behavior and backward compatibility.
 
@@ -12,8 +23,10 @@ This plan covers:
 ## Context Summary (Current State)
 
 ## What is already implemented
-- `song-publish-v1` uploads song assets, metadata, alignment, and translation JSONs to Filebase.
-- `lyrics-translate-v1` uploads translation JSONs to Filebase, then emits on-chain events via `LyricsEngagementV1.translateLyricsFor`.
+- Backend music pipeline stages audio via `/api/music/publish/start`.
+- Backend music pipeline stages original cover + lyrics via `/api/music/publish/:jobId/artifacts/stage`.
+- Original preflight can force manual review if staged cover/lyrics are missing (`missing_staged_artifacts`).
+- Legacy Lit Actions (`song-publish-v1`, `lyrics-translate-v1`) remain in repo as historical paths but are no longer the default Android flow.
 - `ScrobbleV4` stores per-track `coverCid` (set-once semantics).
 - `ScrobbleV4.setTrackCover` enforces length only (`>0 && <=128`), not URI format, so `ar://...` is already valid.
 - `track-cover-v4` and `track-cover-v5` both perform on-chain pre-checks to reuse existing covers where present.
@@ -24,11 +37,11 @@ This plan covers:
 - `services/heaven-api/src/routes/arweave.ts` already exists and can be used as a web upload proxy.
 
 ## What is not implemented
-- No Arweave/Turbo upload path in `song-publish-v1` or `lyrics-translate-v1`.
+- Default Android publish path does not auto-anchor to Arweave yet (staged-first moderation model).
 - No canonical lyrics lookup by MBID today; lyrics translations are indexed by Story `ipId`.
 - Web track-cover path is still bound to `track-cover-v4` (Filebase upload flow).
 - Android has no standalone `track-cover-v5` submission flow yet.
-- Android publish flow is still Filebase-centric for song publish + lyrics translation.
+- Android default publish flow stages via `heaven-api` and currently does not auto-finalize to Arweave.
 - Several Android UI surfaces still build Filebase URL strings directly instead of resolving refs through `CoverRef`.
 
 ## Product/Protocol Goals
@@ -51,7 +64,7 @@ This plan covers:
 - Rewriting all historical data.
 - Removing Filebase support in one step.
 - Forcing contract redeploy before we validate query/index behavior.
-- Moving full audio blobs to Arweave via Lit actions in this phase.
+- Restoring or expanding Lit-action-based publish flows.
 
 ## Canonical Data Model
 
@@ -229,10 +242,9 @@ This plan covers:
 
 ## Android tasks
 1. Add standalone `track-cover-v5` integration path (currently missing).
-2. Move publish flow from Filebase-specific assumptions to resolver-based refs.
+2. Keep publish flow on backend music routes and add an explicit finalize UX later (anchor/register).
 3. Replace Filebase URL hardcoding in UI with `CoverRef.resolveCoverUrl`.
-4. Migrate `SongPublishService` to v2 params and ref handling.
-5. Preserve fallback support for old CIDs.
+4. Preserve fallback support for legacy refs where needed.
 
 ## Migration Phases
 

@@ -13,7 +13,8 @@
     "seed:remote": "bun run scripts/seed.ts && wrangler d1 execute heaven-api --remote --file=./scripts/seed.sql",
     "check": "tsc --noEmit",
     "test:photos": "bun run scripts/test-photos.ts",
-    "test:pipeline": "bun run scripts/test-pipeline.ts"
+    "test:pipeline": "bun run scripts/test-pipeline.ts",
+    "test:music": "bun run scripts/test-music-flow.ts"
   },
   "dependencies": {
     "ethers": "6.16.0",

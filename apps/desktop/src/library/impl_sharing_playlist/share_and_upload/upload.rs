@@ -129,7 +129,10 @@ impl LibraryView {
         let track_for_record = track;
         let track_meta = track_meta_input_from_row(&track_for_record);
         let path = track_for_record.file_path.clone();
-        let owner_address = auth.pkp_address.clone().unwrap_or_default().to_lowercase();
+        let owner_address = auth
+            .primary_wallet_address()
+            .map(|value| value.to_lowercase())
+            .unwrap_or_default();
 
         self.upload_busy = true;
         self.set_status_message(
@@ -250,9 +253,12 @@ impl LibraryView {
                 return;
             }
         };
-        let owner_address = auth.pkp_address.clone().unwrap_or_default().to_lowercase();
+        let owner_address = auth
+            .primary_wallet_address()
+            .map(|value| value.to_lowercase())
+            .unwrap_or_default();
         if owner_address.is_empty() {
-            self.set_status_message("PKP wallet is unavailable; sign in again.", cx);
+            self.set_status_message("Wallet address is unavailable; sign in again.", cx);
             return;
         }
 

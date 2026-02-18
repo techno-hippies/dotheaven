@@ -33,6 +33,15 @@ pub(crate) fn megaeth_rpc_url() -> String {
         .unwrap_or_else(|| DEFAULT_MEGAETH_RPC_URL.to_string())
 }
 
+pub(crate) fn tempo_rpc_url() -> String {
+    std::env::var("HEAVEN_TEMPO_RPC_URL")
+        .ok()
+        .or_else(|| std::env::var("TEMPO_RPC_URL").ok())
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| DEFAULT_TEMPO_RPC_URL.to_string())
+}
+
 pub(crate) fn subgraph_activity_url() -> String {
     std::env::var("HEAVEN_SUBGRAPH_ACTIVITY_URL")
         .ok()
@@ -139,6 +148,16 @@ pub(crate) fn load_gateway_url() -> String {
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| DEFAULT_LOAD_GATEWAY_URL.to_string())
+        .trim_end_matches('/')
+        .to_string()
+}
+
+pub(crate) fn load_agent_url() -> String {
+    std::env::var("HEAVEN_LOAD_AGENT_URL")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| DEFAULT_LOAD_AGENT_URL.to_string())
         .trim_end_matches('/')
         .to_string()
 }

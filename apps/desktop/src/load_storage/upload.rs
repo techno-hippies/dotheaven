@@ -1,4 +1,76 @@
 use super::*;
+use ethers::signers::{LocalWallet, Signer};
+use std::str::FromStr;
+
+fn load_tempo_session_wallet(auth: &PersistedAuth) -> Result<LocalWallet, String> {
+    let session_private_key = auth
+        .tempo_session_private_key
+        .as_deref()
+        .ok_or("Missing Tempo session private key in auth")?;
+    let session_wallet = LocalWallet::from_str(session_private_key).map_err(|e| {
+        format!("Invalid Tempo session private key in auth (cannot parse wallet): {e}")
+    })?;
+    if let Some(expires_at) = auth.tempo_session_expires_at {
+        let now = chrono::Utc::now().timestamp() as u64;
+        if now >= expires_at {
+            return Err(
+                "Tempo session key has expired. Sign in again to refresh the web auth session."
+                    .to_string(),
+            );
+        }
+    }
+    if let Some(session_address) = auth.tempo_session_address.as_deref() {
+        let expected = session_address
+            .trim()
+            .parse::<ethers::types::Address>()
+            .map_err(|e| format!("Invalid Tempo session address in auth: {e}"))?;
+        if session_wallet.address() != expected {
+            return Err(
+                "Tempo session private key does not match the callback session address."
+                    .to_string(),
+            );
+        }
+    }
+    Ok(session_wallet)
+}
+
+fn tempo_session_owner_pubkey_uncompressed(
+    session_wallet: &LocalWallet,
+) -> Result<Vec<u8>, String> {
+    let encoded = session_wallet
+        .signer()
+        .verifying_key()
+        .to_encoded_point(false);
+    let owner = encoded.as_bytes().to_vec();
+    if owner.len() != 65 || owner[0] != 0x04 {
+        return Err(format!(
+            "Invalid Tempo session public key encoding for ANS-104 owner ({} bytes).",
+            owner.len()
+        ));
+    }
+    Ok(owner)
+}
+
+fn sign_dataitem_with_tempo_session(
+    session_wallet: &LocalWallet,
+    signing_message: &[u8],
+) -> Result<Vec<u8>, String> {
+    let signing_hash = ethers::utils::hash_message(signing_message);
+    let mut signature = session_wallet
+        .sign_hash(signing_hash)
+        .map_err(|e| format!("Failed to sign ANS-104 payload with Tempo session key: {e}"))?
+        .to_vec();
+    if signature.len() != 65 {
+        return Err(format!(
+            "Invalid Tempo session signature length for ANS-104 dataitem: {}",
+            signature.len()
+        ));
+    }
+    if signature[64] < 27 {
+        signature[64] = signature[64].saturating_add(27);
+    }
+    Ok(signature)
+}
 
 impl LoadStorageService {
     pub(super) fn ensure_upload_ready(
@@ -36,6 +108,15 @@ impl LoadStorageService {
                     );
                 }
             };
+            if auth.provider_kind() == crate::auth::AuthProviderKind::TempoPasskey {
+                return (
+                    false,
+                    Some(
+                        "Turbo user-pays mode is not yet available for Tempo passkey sessions in GPUI. Disable HEAVEN_LOAD_USER_PAYS_ENABLED or use Lit/PKP auth."
+                            .to_string(),
+                    ),
+                );
+            }
             match self.fetch_turbo_balance(auth) {
                 Ok(balance_payload) => {
                     let parsed = extract_balance_hint(&balance_payload);
@@ -67,6 +148,12 @@ impl LoadStorageService {
         auth: &PersistedAuth,
         amount_hint: &str,
     ) -> Result<Value, String> {
+        if auth.provider_kind() == crate::auth::AuthProviderKind::TempoPasskey {
+            return Err(
+                "Turbo user-pays funding from GPUI is not yet available for Tempo passkey sessions."
+                    .to_string(),
+            );
+        }
         let user_address = auth
             .pkp_address
             .as_deref()
@@ -226,26 +313,35 @@ impl LoadStorageService {
             ans_tags.insert(0, Tag::new("Content-Type", infer_content_type(file_path)));
         }
 
-        let owner = parse_pkp_public_key(auth)?;
-
         let mut item = DataItem::new(None, None, ans_tags, payload.to_vec())
             .map_err(|e| format!("Failed to build dataitem payload: {e}"))?;
         item.signature_type = SignatureType::Ethereum;
-        item.owner = owner;
 
         let signing_message = item.signing_message();
-        let signature = self
-            .lit_mut()?
-            .pkp_sign_ethereum_message(&signing_message)
-            .map_err(|e| format!("Failed to PKP-sign dataitem: {e}"))?;
+        let (owner, signature) = if auth.provider_kind()
+            == crate::auth::AuthProviderKind::TempoPasskey
+        {
+            let session_wallet = load_tempo_session_wallet(auth)?;
+            let owner = tempo_session_owner_pubkey_uncompressed(&session_wallet)?;
+            let signature = sign_dataitem_with_tempo_session(&session_wallet, &signing_message)?;
+            (owner, signature)
+        } else {
+            let owner = parse_pkp_public_key(auth)?;
+            let signature = self
+                .lit_mut()?
+                .pkp_sign_ethereum_message(&signing_message)
+                .map_err(|e| format!("Failed to PKP-sign dataitem: {e}"))?;
+            (owner, signature)
+        };
 
         if signature.len() != 65 {
             return Err(format!(
-                "PKP returned invalid signature length for dataitem: {}",
+                "Invalid dataitem signature length: {}",
                 signature.len()
             ));
         }
 
+        item.owner = owner;
         item.signature = signature;
         item.to_bytes()
             .map_err(|e| format!("Failed to encode signed dataitem bytes: {e}"))

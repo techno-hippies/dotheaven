@@ -131,11 +131,6 @@ impl LibraryView {
                 return;
             }
         };
-        if let Err(err) = auth.require_lit_auth("Playlist sharing") {
-            self.playlist_share_modal_error = Some(err);
-            cx.notify();
-            return;
-        }
         let owner_address = auth
             .primary_wallet_address()
             .map(|value| value.to_lowercase())

@@ -43,6 +43,7 @@ rand = "0.8"
 sha2 = "0.10"
 bundles_rs = { git = "https://github.com/loadnetwork/bundles-rs.git", branch = "main" }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "bmp"] }
+p256 = { version = "0.13", features = ["ecdh"] }
 
 # Audio playback (ported from legacy desktop audio.rs)
 symphonia = { version = "0.5", features = ["mp3", "aac", "isomp4", "flac", "ogg", "vorbis", "pcm", "wav"] }

@@ -14,7 +14,7 @@ use format::{format_time_ago, sanitize_cover_ref, sanitize_string_field, short_t
 use super::model::ProfileScrobbleRow;
 
 const DEFAULT_TEMPO_RPC_URL: &str = "https://rpc.moderato.tempo.xyz";
-const DEFAULT_TEMPO_SCROBBLE_V4: &str = "0x0541443C41a6F923D518Ac23921778e2Ea102891";
+const DEFAULT_TEMPO_SCROBBLE_V4: &str = "0x07B8BdE8BaD74DC974F783AA71C7C51d6B37C363";
 const SCROBBLED_EVENT_SIGNATURE: &str = "Scrobbled(address,bytes32,uint64)";
 const DEFAULT_LOG_CHUNK_BLOCKS: u64 = 50_000;
 const DEFAULT_MAX_LOG_SCAN_BLOCKS: u64 = 1_000_000;

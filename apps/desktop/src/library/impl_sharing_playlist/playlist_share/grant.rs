@@ -47,7 +47,16 @@ pub(super) async fn grant_access_in_chunks(
 
         match grant_result {
             Ok(resp) => {
-                let tx_hash = resp.get("txHash").and_then(|v| v.as_str()).unwrap_or("n/a");
+                let tx_hash = resp
+                    .get("txHash")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| {
+                        resp.get("envelopeIds")
+                            .and_then(|v| v.as_array())
+                            .and_then(|arr| arr.first())
+                            .and_then(|v| v.as_str())
+                    })
+                    .unwrap_or("n/a");
                 let mirror_tx_hash = resp
                     .get("mirrorTxHash")
                     .and_then(|v| v.as_str())

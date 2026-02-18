@@ -112,10 +112,12 @@ export interface Env {
   STORY_CHAIN_ID?: string
   STORY_SPG_NFT_CONTRACT?: string
   STORY_LICENSE_ATTACHMENT_WORKFLOWS?: string
+  STORY_DERIVATIVE_WORKFLOWS?: string
   STORY_IP_ASSET_REGISTRY?: string
   STORY_LICENSE_REGISTRY?: string
   STORY_ROYALTY_POLICY_LAP?: string
   STORY_WIP_TOKEN?: string
+  STORY_PIL_LICENSE_TEMPLATE?: string
 
   // R2 buckets for photo pipeline
   R2_RAW: R2Bucket      // Temporary upload storage
@@ -510,6 +512,16 @@ export interface MusicPublishJobRow {
   staged_dataitem_id: string | null
   staged_gateway_url: string | null
   staged_payload_json: string | null
+  cover_staged_dataitem_id: string | null
+  cover_staged_gateway_url: string | null
+  cover_content_type: string | null
+  cover_file_size: number | null
+  cover_staged_payload_json: string | null
+  lyrics_staged_dataitem_id: string | null
+  lyrics_staged_gateway_url: string | null
+  lyrics_sha256: string | null
+  lyrics_bytes: number | null
+  lyrics_staged_payload_json: string | null
   policy_decision: 'pending' | 'pass' | 'reject' | 'manual_review'
   policy_reason_code: string | null
   policy_reason: string | null
@@ -520,6 +532,14 @@ export interface MusicPublishJobRow {
   arweave_url: string | null
   arweave_available: number
   anchor_payload_json: string | null
+  metadata_status: 'none' | 'anchoring' | 'anchored' | 'failed'
+  metadata_error: string | null
+  ip_metadata_uri: string | null
+  ip_metadata_hash: string | null
+  ip_metadata_dataitem_id: string | null
+  nft_metadata_uri: string | null
+  nft_metadata_hash: string | null
+  nft_metadata_dataitem_id: string | null
   story_tx_hash: string | null
   story_ip_id: string | null
   story_token_id: string | null

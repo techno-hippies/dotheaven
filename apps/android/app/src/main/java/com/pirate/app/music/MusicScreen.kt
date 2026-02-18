@@ -44,6 +44,7 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -54,6 +55,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -103,35 +105,17 @@ private enum class MusicView { Home, Library, Shared, SharedPlaylistDetail, Play
 private data class AlbumCardModel(
   val title: String,
   val artist: String,
+  val audioRef: String? = null,
+  val coverRef: String? = null,
 )
 
-private val TRENDING = listOf(
-  AlbumCardModel(title = "Midnight Dreams", artist = "Luna Sky"),
-  AlbumCardModel(title = "Electric Hearts", artist = "Neon Pulse"),
-  AlbumCardModel(title = "Summer Waves", artist = "Golden Ray"),
-  AlbumCardModel(title = "Starlight", artist = "Cosmos"),
-)
-
-private val NEW_RELEASES = listOf(
-  AlbumCardModel(title = "Electric Bloom", artist = "Galaxy Ray"),
-  AlbumCardModel(title = "Pulse Drive", artist = "Hyper Flux"),
-  AlbumCardModel(title = "Neon Rain", artist = "Drift Wave"),
-)
 private const val HOME_NEW_RELEASES_MAX = 12
-
-private val TOP_ARTISTS = listOf(
-  "Luna Sky",
-  "Neon Pulse",
-  "Ocean Skin",
-  "Sunset Crew",
-)
 
 private fun mergedNewReleases(
   recentPublished: List<AlbumCardModel>,
 ): List<AlbumCardModel> {
-  if (recentPublished.isEmpty()) return NEW_RELEASES
-
-  val out = ArrayList<AlbumCardModel>(recentPublished.size + NEW_RELEASES.size)
+  if (recentPublished.isEmpty()) return emptyList()
+  val out = ArrayList<AlbumCardModel>(recentPublished.size)
   val seen = LinkedHashSet<String>()
 
   fun add(item: AlbumCardModel) {
@@ -142,15 +126,45 @@ private fun mergedNewReleases(
   }
 
   for (item in recentPublished) add(item)
-  for (item in NEW_RELEASES) add(item)
   return out.take(HOME_NEW_RELEASES_MAX)
 }
 
-private const val IPFS_GATEWAY = "https://heaven.myfilebase.com/ipfs/"
 private const val TAG_SHARED = "MusicShared"
 private const val SHARED_REFRESH_TTL_MS = 120_000L
 private const val SHARED_SEEN_PREFS = "pirate_music_shared_seen"
 private const val SHARED_SEEN_KEY_PREFIX = "seen_v1_"
+
+private fun resolveReleaseAudioUrl(ref: String?): String? {
+  val raw = ref?.trim().orEmpty()
+  if (raw.isBlank()) return null
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw
+  if (raw.startsWith("ar://")) {
+    val id = raw.removePrefix("ar://").trim()
+    if (id.isBlank()) return null
+    return "https://arweave.net/$id"
+  }
+  if (raw.startsWith("ls3://")) {
+    val id = raw.removePrefix("ls3://").trim()
+    if (id.isBlank()) return null
+    return "${LoadTurboConfig.DEFAULT_GATEWAY_URL.trimEnd('/')}/resolve/$id"
+  }
+  if (raw.startsWith("load-s3://")) {
+    val id = raw.removePrefix("load-s3://").trim()
+    if (id.isBlank()) return null
+    return "${LoadTurboConfig.DEFAULT_GATEWAY_URL.trimEnd('/')}/resolve/$id"
+  }
+  return "${LoadTurboConfig.DEFAULT_GATEWAY_URL.trimEnd('/')}/resolve/$raw"
+}
+
+private fun resolveReleaseCoverUrl(ref: String?): String? {
+  val fromRef = CoverRef.resolveCoverUrl(ref, width = 140, height = 140, format = "webp", quality = 80)
+  if (!fromRef.isNullOrBlank()) return fromRef
+  val raw = ref?.trim().orEmpty()
+  if (raw.startsWith("content://")) return raw
+  if (raw.startsWith("file://")) return raw
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw
+  return null
+}
 
 private data class CachedSharedAudio(
   val file: File,
@@ -217,6 +231,8 @@ fun MusicScreen(
   onShowMessage: (String) -> Unit,
   onOpenPlayer: () -> Unit,
   onOpenDrawer: () -> Unit,
+  hostActivity: androidx.fragment.app.FragmentActivity? = null,
+  tempoAccount: com.pirate.app.tempo.TempoPasskeyManager.PasskeyAccount? = null,
 ) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
@@ -274,6 +290,9 @@ fun MusicScreen(
 
   var addToPlaylistOpen by remember { mutableStateOf(false) }
   var createPlaylistOpen by remember { mutableStateOf(false) }
+  var shareTrack by remember { mutableStateOf<MusicTrack?>(null) }
+  var shareRecipientInput by rememberSaveable { mutableStateOf("") }
+  var shareBusy by remember { mutableStateOf(false) }
 
   var uploadBusy by remember { mutableStateOf(false) }
 
@@ -357,22 +376,35 @@ fun MusicScreen(
   }
 
   suspend fun decryptSharedAudioToCache(t: SharedCloudTrack): CachedSharedAudio = withContext(Dispatchers.IO) {
+    if (t.algo != ContentCryptoConfig.ALGO_AES_GCM_256) {
+      throw IllegalStateException("Legacy/plaintext shared track is not supported. Ask owner to re-upload encrypted.")
+    }
+    val grantee = ownerEthAddress?.trim()?.lowercase().orEmpty()
+    if (grantee.isBlank()) {
+      throw IllegalStateException("Missing active wallet for shared-track decrypt.")
+    }
+
     val contentKey = ContentKeyManager.load(context)
       ?: throw IllegalStateException("No content encryption key — upload a track first to generate one")
 
-    val wrappedKey = ContentKeyManager.loadWrappedKey(context, t.contentId)
-      ?: throw IllegalStateException("No wrapped key for contentId ${t.contentId}")
+    var wrappedKey = ContentKeyManager.loadWrappedKey(context, t.contentId)
+    if (wrappedKey == null) {
+      UploadedTrackActions.ensureWrappedKeyFromLs3(
+        context = context,
+        contentId = t.contentId,
+        ownerAddress = t.owner,
+        granteeAddress = grantee,
+      )
+      wrappedKey = ContentKeyManager.loadWrappedKey(context, t.contentId)
+    }
+    val resolvedWrappedKey =
+      wrappedKey
+        ?: throw IllegalStateException(
+          "Missing encrypted key for this shared track. It may not be shared to this wallet yet.",
+        )
 
     // Fetch encrypted blob from Load gateway
-    val gatewayUrl = "${LoadTurboConfig.DEFAULT_GATEWAY_URL}/${t.pieceCid}"
-    val request = okhttp3.Request.Builder().url(gatewayUrl).get().build()
-    val client = okhttp3.OkHttpClient.Builder()
-      .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-      .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
-      .build()
-    val response = client.newCall(request).execute()
-    if (!response.isSuccessful) throw RuntimeException("Fetch failed: ${response.code}")
-    val blob = response.body?.bytes() ?: throw RuntimeException("Empty response body")
+    val blob = UploadedTrackActions.fetchResolvePayload(t.pieceCid)
 
     // Parse blob: [iv (12 bytes)][aes ciphertext]
     if (blob.size < 13) throw RuntimeException("Encrypted blob too small: ${blob.size} bytes")
@@ -380,7 +412,7 @@ fun MusicScreen(
     val ciphertext = blob.copyOfRange(12, blob.size)
 
     // ECIES decrypt wrapped AES key
-    val aesKey = EciesContentCrypto.eciesDecrypt(contentKey.privateKey, wrappedKey)
+    val aesKey = EciesContentCrypto.eciesDecrypt(contentKey.privateKey, resolvedWrappedKey)
 
     // AES-GCM decrypt file
     val audio = EciesContentCrypto.decryptFile(aesKey, iv, ciphertext)
@@ -812,7 +844,14 @@ fun MusicScreen(
       withContext(Dispatchers.IO) {
         RecentlyPublishedSongsStore
           .load(context)
-          .map { AlbumCardModel(title = it.title, artist = it.artist) }
+          .map {
+            AlbumCardModel(
+              title = it.title,
+              artist = it.artist,
+              audioRef = it.audioCid,
+              coverRef = it.coverCid,
+            )
+          }
       }
   }
 
@@ -915,6 +954,28 @@ fun MusicScreen(
             selectedPlaylistId = pl.id
             view = MusicView.PlaylistDetail
             scope.launch { loadPlaylistDetail(pl) }
+          },
+          onPlayRelease = { release ->
+            val audioUrl = resolveReleaseAudioUrl(release.audioRef)
+            if (audioUrl.isNullOrBlank()) {
+              onShowMessage("This release is not playable yet")
+              return@MusicHomeView
+            }
+            val coverUrl = resolveReleaseCoverUrl(release.coverRef)
+            val track =
+              MusicTrack(
+                id = "release:${release.audioRef ?: "${release.title}-${release.artist}"}",
+                title = release.title,
+                artist = release.artist,
+                album = "",
+                durationSec = 0,
+                uri = audioUrl,
+                filename = "${release.title}.mp3",
+                artworkUri = coverUrl,
+                artworkFallbackUri = release.coverRef,
+              )
+            player.playTrack(track, listOf(track))
+            onOpenPlayer()
           },
         )
       }
@@ -1235,6 +1296,8 @@ fun MusicScreen(
               context = context,
               ownerEthAddress = ownerEthAddress,
               track = t,
+              hostActivity = hostActivity,
+              tempoAccount = tempoAccount,
             )
           }
         uploadBusy = false
@@ -1293,6 +1356,8 @@ fun MusicScreen(
               context = context,
               ownerEthAddress = ownerEthAddress,
               track = t,
+              hostActivity = hostActivity,
+              tempoAccount = tempoAccount,
             )
           }
         uploadBusy = false
@@ -1323,6 +1388,39 @@ fun MusicScreen(
         }
       }
     },
+    onDownload = { t ->
+      scope.launch {
+        val owner = ownerEthAddress?.trim()
+        val result =
+          UploadedTrackActions.downloadUploadedTrackToDevice(
+            context = context,
+            track = t,
+            ownerAddress = owner ?: t.datasetOwner,
+            granteeAddress = owner,
+          )
+        if (!result.success) {
+          onShowMessage("Download failed: ${result.error ?: "unknown error"}")
+          return@launch
+        }
+        runScan(
+          context = context,
+          onShowMessage = onShowMessage,
+          silent = true,
+          setScanning = { scanning = it },
+          setTracks = { tracks = it },
+          setError = { error = it },
+        )
+        onShowMessage(if (result.alreadyDownloaded) "Already downloaded" else "Downloaded to device")
+      }
+    },
+    onShare = { t ->
+      if (!isAuthenticated || ownerEthAddress.isNullOrBlank()) {
+        onShowMessage("Sign in to share")
+        return@TrackMenuSheet
+      }
+      shareTrack = t
+      shareRecipientInput = ""
+    },
     onAddToPlaylist = { t ->
       selectedTrack = t
       addToPlaylistOpen = true
@@ -1335,6 +1433,78 @@ fun MusicScreen(
   // TODO: Playlist sheets need Tempo migration (currently still use PlaylistV1LitAction)
   // CreatePlaylistSheet(...)
   // AddToPlaylistSheet(...)
+
+  if (shareTrack != null) {
+    val activeTrack = shareTrack!!
+    AlertDialog(
+      onDismissRequest = {
+        if (!shareBusy) {
+          shareTrack = null
+          shareRecipientInput = ""
+        }
+      },
+      title = { Text("Share Track") },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          Text(
+            text = "Enter wallet address, .heaven, or .pirate name.",
+            style = MaterialTheme.typography.bodyMedium,
+          )
+          OutlinedTextField(
+            value = shareRecipientInput,
+            onValueChange = { if (!shareBusy) shareRecipientInput = it },
+            singleLine = true,
+            label = { Text("Recipient") },
+            placeholder = { Text("0x..., alice.heaven, bob.pirate") },
+            enabled = !shareBusy,
+            modifier = Modifier.fillMaxWidth(),
+          )
+        }
+      },
+      confirmButton = {
+        TextButton(
+          enabled = !shareBusy && shareRecipientInput.trim().isNotEmpty(),
+          onClick = {
+            val owner = ownerEthAddress
+            if (owner.isNullOrBlank()) {
+              onShowMessage("Missing share credentials")
+              return@TextButton
+            }
+            shareBusy = true
+            scope.launch {
+              val result =
+                UploadedTrackActions.shareUploadedTrack(
+                  context = context,
+                  track = activeTrack,
+                  recipient = shareRecipientInput,
+                  ownerAddress = owner,
+                )
+              shareBusy = false
+              if (!result.success) {
+                onShowMessage("Share failed: ${result.error ?: "unknown error"}")
+                return@launch
+              }
+              shareTrack = null
+              shareRecipientInput = ""
+              val target = result.recipientAddress?.let { shortAddr(it) } ?: "recipient"
+              onShowMessage("Shared with $target")
+            }
+          },
+        ) {
+          Text(if (shareBusy) "Sharing..." else "Share")
+        }
+      },
+      dismissButton = {
+        TextButton(
+          enabled = !shareBusy,
+          onClick = {
+            shareTrack = null
+            shareRecipientInput = ""
+          },
+        ) { Text("Cancel") }
+      },
+    )
+  }
 }
 
 @Composable
@@ -1349,6 +1519,7 @@ private fun MusicHomeView(
   onNavigateShared: () -> Unit,
   onNavigatePlaylists: () -> Unit,
   onOpenPlaylist: (PlaylistDisplayItem) -> Unit,
+  onPlayRelease: (AlbumCardModel) -> Unit,
 ) {
   val sharedCount = sharedPlaylistCount + sharedTrackCount
   val sharedSubtitle =
@@ -1397,43 +1568,26 @@ private fun MusicHomeView(
       }
     }
 
-    item {
-      SectionHeader(title = "Trending", action = "See all", onAction = { /* TODO */ })
-      LazyRow(
-        contentPadding = PaddingValues(horizontal = 20.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        items(TRENDING) { item ->
-          AlbumCard(title = item.title, artist = item.artist)
+    if (newReleases.isNotEmpty()) {
+      item {
+        SectionHeader(title = "New Releases", action = "See all", onAction = { /* TODO */ })
+        LazyRow(
+          contentPadding = PaddingValues(horizontal = 20.dp),
+          horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+          items(newReleases) { item ->
+            val releaseAudioUrl = resolveReleaseAudioUrl(item.audioRef)
+            AlbumCard(
+              title = item.title,
+              artist = item.artist,
+              imageUri = resolveReleaseCoverUrl(item.coverRef),
+              imageFallbackUri = item.coverRef,
+              onClick = if (!releaseAudioUrl.isNullOrBlank()) ({ onPlayRelease(item) }) else null,
+            )
+          }
         }
+        Spacer(modifier = Modifier.height(28.dp))
       }
-      Spacer(modifier = Modifier.height(28.dp))
-    }
-
-    item {
-      SectionHeader(title = "New Releases", action = "See all", onAction = { /* TODO */ })
-      LazyRow(
-        contentPadding = PaddingValues(horizontal = 20.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        items(newReleases) { item ->
-          AlbumCard(title = item.title, artist = item.artist)
-        }
-      }
-      Spacer(modifier = Modifier.height(28.dp))
-    }
-
-    item {
-      SectionHeader(title = "Top Artists", action = "See all", onAction = { /* TODO */ })
-      LazyRow(
-        contentPadding = PaddingValues(horizontal = 20.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        items(TOP_ARTISTS) { name ->
-          ArtistCircle(name = name)
-        }
-      }
-      Spacer(modifier = Modifier.height(28.dp))
     }
 
     if (playlists.isNotEmpty()) {
@@ -1553,18 +1707,41 @@ private fun AlbumCard(
   title: String,
   artist: String,
   imageUri: String? = null,
+  imageFallbackUri: String? = null,
+  onClick: (() -> Unit)? = null,
 ) {
-  Column(modifier = Modifier.width(140.dp)) {
+  var displayImageUri by remember(imageUri, imageFallbackUri) { mutableStateOf(imageUri) }
+
+  fun handleImageError() {
+    val fallback = imageFallbackUri?.trim().orEmpty()
+    if (fallback.isNotBlank() && fallback != displayImageUri) {
+      displayImageUri = fallback
+      return
+    }
+    displayImageUri = null
+  }
+
+  Column(
+    modifier =
+      Modifier
+        .width(140.dp)
+        .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+  ) {
     Surface(
       modifier = Modifier.size(140.dp),
       color = MaterialTheme.colorScheme.surfaceVariant,
       shape = MaterialTheme.shapes.large,
     ) {
       Box(contentAlignment = androidx.compose.ui.Alignment.Center) {
-        if (imageUri.isNullOrBlank()) {
-          Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = PiratePalette.TextMuted, modifier = Modifier.size(24.dp))
+        if (!displayImageUri.isNullOrBlank()) {
+          AsyncImage(
+            model = displayImageUri,
+            contentDescription = "Cover art",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+            onError = { handleImageError() },
+          )
         } else {
-          // Keeping this simple for now; covers will be wired when we have real artwork sources.
           Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = PiratePalette.TextMuted, modifier = Modifier.size(24.dp))
         }
       }
@@ -1582,34 +1759,6 @@ private fun AlbumCard(
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
       color = PiratePalette.TextMuted,
-    )
-  }
-}
-
-@Composable
-private fun ArtistCircle(
-  name: String,
-  imageUri: String? = null,
-) {
-  Column(
-    modifier = Modifier.width(84.dp),
-    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-  ) {
-    Surface(
-      modifier = Modifier.size(56.dp),
-      color = MaterialTheme.colorScheme.surfaceVariant,
-      shape = MaterialTheme.shapes.extraLarge,
-    ) {
-      Box(contentAlignment = androidx.compose.ui.Alignment.Center) {
-        Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = PiratePalette.TextMuted, modifier = Modifier.size(24.dp))
-      }
-    }
-    Spacer(modifier = Modifier.height(8.dp))
-    Text(
-      name,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-      color = MaterialTheme.colorScheme.onBackground,
     )
   }
 }

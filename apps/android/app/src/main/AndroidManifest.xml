@@ -36,6 +36,14 @@
         <category android:name="android.intent.category.BROWSABLE" />
         <data android:scheme="pirate-wc" android:host="request" />
       </intent-filter>
+
+      <!-- Self.xyz verification callback -->
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="heaven" android:host="self" />
+      </intent-filter>
     </activity>
 
     <!-- Media playback foreground service -->

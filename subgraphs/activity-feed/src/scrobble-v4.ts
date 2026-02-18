@@ -3,6 +3,8 @@ import {
   ScrobbleV4,
   TrackRegistered as TrackRegisteredEvent,
   TrackCoverSet as TrackCoverSetEvent,
+  TrackLyricsSet as TrackLyricsSetEvent,
+  TrackLyricsOverwritten as TrackLyricsOverwrittenEvent,
   Scrobbled as ScrobbledEvent,
   TrackUpdated as TrackUpdatedEvent,
 } from "../generated/ScrobbleV4/ScrobbleV4";
@@ -50,6 +52,26 @@ export function handleTrackCoverSetV4(event: TrackCoverSetEvent): void {
   let track = Track.load(id);
   if (track) {
     track.coverCid = event.params.coverCid;
+    track.save();
+  }
+}
+
+export function handleTrackLyricsSetV4(event: TrackLyricsSetEvent): void {
+  let id = event.params.trackId.toHexString();
+  let track = Track.load(id);
+  if (track) {
+    track.lyricsRef = event.params.lyricsRef;
+    track.save();
+  }
+}
+
+export function handleTrackLyricsOverwrittenV4(
+  event: TrackLyricsOverwrittenEvent,
+): void {
+  let id = event.params.trackId.toHexString();
+  let track = Track.load(id);
+  if (track) {
+    track.lyricsRef = event.params.lyricsRef;
     track.save();
   }
 }

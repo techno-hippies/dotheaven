@@ -49,6 +49,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -65,7 +66,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.pirate.app.auth.PirateAuthUiState
-import com.pirate.app.lit.LitAuthContextManager
+import com.pirate.app.identity.SelfVerificationGate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -117,13 +118,45 @@ private val LICENSE_OPTIONS = listOf(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PublishScreen(
-  litNetwork: String,
-  litRpcUrl: String,
   authState: PirateAuthUiState,
-  pkpPublicKey: String?,
   pkpEthAddress: String?,
   heavenName: String?,
   isAuthenticated: Boolean,
+  onSelfVerifiedChange: (Boolean) -> Unit = {},
+  onClose: () -> Unit,
+  onShowMessage: (String) -> Unit,
+) {
+  // Gate: require Self.xyz identity verification before showing publish form.
+  if (!isAuthenticated || pkpEthAddress == null) {
+    LaunchedEffect(Unit) {
+      onShowMessage("Please sign in first")
+      onClose()
+    }
+    Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+      Text("Redirecting…", style = MaterialTheme.typography.bodyLarge)
+    }
+    return
+  }
+
+  SelfVerificationGate(
+    pkpAddress = pkpEthAddress,
+    cachedVerified = authState.selfVerified,
+    onVerified = { onSelfVerifiedChange(true) },
+  ) {
+    PublishFormContent(
+      pkpEthAddress = pkpEthAddress,
+      heavenName = heavenName,
+      onClose = onClose,
+      onShowMessage = onShowMessage,
+    )
+  }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PublishFormContent(
+  pkpEthAddress: String,
+  heavenName: String?,
   onClose: () -> Unit,
   onShowMessage: (String) -> Unit,
 ) {
@@ -173,23 +206,15 @@ fun PublishScreen(
       return parts.distinct().joinToString(" | ").ifBlank { "Unknown error" }
     }
 
-    if (!isAuthenticated || !authState.hasLitAuthCredentials() || pkpPublicKey == null || pkpEthAddress == null) {
-      onShowMessage("Please sign in first")
-      return
-    }
     step = PublishStep.PUBLISHING
     progress = 0f
 
     scope.launch {
       try {
         val result = withContext(Dispatchers.IO) {
-          LitAuthContextManager.ensureFromState(authState)
           SongPublishService.publish(
             context = context,
             formData = formData,
-            litNetwork = litNetwork,
-            litRpcUrl = litRpcUrl,
-            pkpPublicKey = pkpPublicKey,
             pkpEthAddress = pkpEthAddress,
             onProgress = { pct -> progress = pct / 100f },
           )
@@ -198,12 +223,7 @@ fun PublishScreen(
         step = PublishStep.SUCCESS
       } catch (e: Exception) {
         android.util.Log.e("PublishScreen", "Publish failed", e)
-        if (LitAuthContextManager.isExpiredAuthChallengeError(e)) {
-          errorMessage = "Session expired. Please sign in again."
-          onShowMessage("Publish paused: session expired. Please sign in again.")
-        } else {
-          errorMessage = buildErrorSummary(e)
-        }
+        errorMessage = buildErrorSummary(e)
         step = PublishStep.ERROR
       }
     }
@@ -220,7 +240,7 @@ fun PublishScreen(
               PublishStep.DETAILS -> "Details"
               PublishStep.LICENSE -> "License & Publish"
               PublishStep.PUBLISHING -> "Publishing..."
-              PublishStep.SUCCESS -> "Published!"
+              PublishStep.SUCCESS -> "Song Published!"
               PublishStep.ERROR -> "Error"
             },
           )
@@ -390,17 +410,17 @@ private fun SongStep(
       onClick = onPickAudio,
     )
 
-    // Vocals stem picker (for lyrics alignment)
+    // Vocals stem picker (optional, reserved for future alignment pipeline)
     FilePickerButton(
-      label = "Vocals Stem (for lyrics alignment)",
+      label = "Vocals Stem (optional)",
       fileName = getFileName(formData.vocalsUri),
       icon = { Icon(Icons.Rounded.MusicNote, contentDescription = null, modifier = Modifier.size(24.dp)) },
       onClick = onPickVocals,
     )
 
-    // Instrumental track (for karaoke)
+    // Instrumental track (optional, reserved for future karaoke pipeline)
     FilePickerButton(
-      label = "Instrumental Track (for karaoke)",
+      label = "Instrumental Track (optional)",
       fileName = getFileName(formData.instrumentalUri),
       icon = { Icon(Icons.Rounded.MusicNote, contentDescription = null, modifier = Modifier.size(24.dp)) },
       onClick = onPickInstrumental,
@@ -414,8 +434,6 @@ private fun SongStep(
       enabled = formData.title.isNotBlank() &&
         formData.artist.isNotBlank() &&
         formData.audioUri != null &&
-        formData.vocalsUri != null &&
-        formData.instrumentalUri != null &&
         formData.coverUri != null,
     ) {
       Text("Next")
@@ -629,12 +647,10 @@ private fun LicenseStep(
 @Composable
 private fun PublishingStep(progress: Float) {
   val label = when {
-    progress < 0.15f -> "Generating audio fingerprint..."
-    progress < 0.40f -> "Uploading to IPFS..."
-    progress < 0.60f -> "Aligning lyrics..."
-    progress < 0.75f -> "Translating lyrics..."
-    progress < 0.90f -> "Registering IP on Story Protocol..."
-    else -> "Finalizing..."
+    progress < 0.15f -> "Preparing files..."
+    progress < 0.55f -> "Staging audio on Load..."
+    progress < 0.90f -> "Running upload policy checks..."
+    else -> "Finalizing publish..."
   }
 
   Column(
@@ -662,30 +678,29 @@ private fun SuccessStep(
   onDone: () -> Unit,
 ) {
   Column(
-    modifier = Modifier.fillMaxSize().padding(32.dp),
-    verticalArrangement = Arrangement.Center,
+    modifier = Modifier.fillMaxSize().padding(24.dp),
+    verticalArrangement = Arrangement.SpaceBetween,
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {
-    Box(
-      modifier = Modifier
-        .size(64.dp)
-        .clip(CircleShape)
-        .background(Color(0xFF4CAF50)),
-      contentAlignment = Alignment.Center,
-    ) {
-      Icon(Icons.Rounded.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
-    }
+    Spacer(modifier = Modifier.height(1.dp))
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+      Box(
+        modifier = Modifier
+          .size(64.dp)
+          .clip(CircleShape)
+          .background(Color(0xFF4CAF50)),
+        contentAlignment = Alignment.Center,
+      ) {
+        Icon(Icons.Rounded.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
+      }
 
-    Spacer(modifier = Modifier.height(16.dp))
-    Text("Published!", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-    Spacer(modifier = Modifier.height(24.dp))
+      Spacer(modifier = Modifier.height(16.dp))
+      Text("Song Published!", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+      Spacer(modifier = Modifier.height(20.dp))
 
-    // Show cover art + song info
-    if (result != null) {
-      val coverUrl = CoverRef.resolveCoverUrl(result.coverCid, width = 240, height = 240, format = "webp", quality = 85)
-      if (coverUrl != null) {
+      if (result != null && formData?.coverUri != null) {
         coil.compose.AsyncImage(
-          model = coverUrl,
+          model = formData.coverUri,
           contentDescription = "Cover Art",
           modifier = Modifier
             .size(120.dp)
@@ -698,23 +713,8 @@ private fun SuccessStep(
         Text(formData.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Text(formData.artist, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
-      Spacer(modifier = Modifier.height(16.dp))
-
-      Column(
-        modifier = Modifier
-          .fillMaxWidth()
-          .clip(RoundedCornerShape(8.dp))
-          .background(MaterialTheme.colorScheme.surfaceVariant)
-          .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-      ) {
-        MonoRow("IP ID", result.ipId)
-        MonoRow("Token ID", result.tokenId)
-        MonoRow("Audio CID", result.audioCid)
-      }
     }
 
-    Spacer(modifier = Modifier.height(32.dp))
     Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
       Text("Done")
     }

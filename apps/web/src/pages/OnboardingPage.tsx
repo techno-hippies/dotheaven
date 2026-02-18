@@ -30,11 +30,18 @@ import {
   checkNameAvailable,
   registerHeavenName,
   setProfile,
+  getTextRecord,
   setTextRecord,
   setTextRecords,
   uploadAvatar,
   computeNode,
 } from '../lib/heaven'
+import {
+  CONTENT_PUBKEY_RECORD_KEY,
+  getOrCreateContentPubKeyHex,
+  normalizeContentPubKeyHex,
+} from '../lib/heaven/content-key'
+import type { PKPAuthContext } from '../lib/lit/types'
 import { queryClient } from '../main'
 
 type OnboardingStep = 'name' | 'basics' | 'music' | 'avatar' | 'complete'
@@ -156,6 +163,31 @@ export const OnboardingPage: Component = () => {
 
   // ── Basics step handlers ───────────────────────────────────────
 
+  async function ensureContentPubKeyPublished(
+    name: string,
+    pkpPublicKey: string,
+    authContext: PKPAuthContext,
+  ): Promise<void> {
+    const node = computeNode(name)
+    const existing = normalizeContentPubKeyHex(
+      await getTextRecord(node, CONTENT_PUBKEY_RECORD_KEY).catch(() => ''),
+    )
+    if (existing) return
+
+    const target = await getOrCreateContentPubKeyHex()
+    const writeResult = await setTextRecord(node, CONTENT_PUBKEY_RECORD_KEY, target, pkpPublicKey, authContext)
+    if (!writeResult.success) {
+      throw new Error(writeResult.error || 'Failed to publish content encryption key')
+    }
+
+    const readback = normalizeContentPubKeyHex(await getTextRecord(node, CONTENT_PUBKEY_RECORD_KEY))
+    if (readback !== target) {
+      throw new Error('Failed to verify content encryption key publication')
+    }
+
+    queryClient.invalidateQueries({ queryKey: ['textRecord', node, CONTENT_PUBKEY_RECORD_KEY] })
+  }
+
   async function handleBasicsContinue(data: OnboardingBasicsData): Promise<boolean | void> {
     const pkp = auth.pkpInfo()
     const addr = address()
@@ -165,6 +197,12 @@ export const OnboardingPage: Component = () => {
     setBasicsError(null)
     try {
       const authContext = await auth.getAuthContext()
+      const name = claimedName()
+      if (!name) {
+        throw new Error('Missing claimed name. Please restart onboarding.')
+      }
+
+      await ensureContentPubKeyPublished(name, pkp.publicKey, authContext)
 
       // Build ProfileInput from basics data
       const profileInput: Record<string, any> = {}
@@ -180,7 +218,6 @@ export const OnboardingPage: Component = () => {
       console.log('[Onboarding] Profile saved:', profileResult.txHash)
 
       // Save location as a text record on RecordsV1 (if we have a name)
-      const name = claimedName()
       if (name && data.location) {
         const node = computeNode(name)
         const recordResult = await setTextRecord(

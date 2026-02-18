@@ -73,21 +73,21 @@ impl LibraryView {
                 return;
             }
         };
-        if let Err(err) = auth.require_lit_auth("Track sharing") {
-            self.share_modal_error = Some(err);
-            cx.notify();
-            return;
-        }
         let owner_address = auth
             .primary_wallet_address()
             .map(|value| value.to_lowercase())
             .unwrap_or_default();
+        if owner_address.is_empty() {
+            self.share_modal_error = Some("Missing wallet address in auth session.".to_string());
+            cx.notify();
+            return;
+        }
 
         self.share_modal_submitting = true;
         self.share_modal_error = None;
         self.set_status_message(
             format!(
-                "Granting access for \"{}\" to {}...",
+                "Sharing \"{}\" to {}...",
                 track.title,
                 abbreviate_for_status(&grantee_hex)
             ),
@@ -202,7 +202,11 @@ impl LibraryView {
                             );
                         }
 
-                        let tx_hash = resp.get("txHash").and_then(|v| v.as_str()).unwrap_or("n/a");
+                        let tx_hash = resp
+                            .get("txHash")
+                            .and_then(|v| v.as_str())
+                            .or_else(|| resp.get("envelopeId").and_then(|v| v.as_str()))
+                            .unwrap_or("n/a");
                         let mirror_tx_hash = resp
                             .get("mirrorTxHash")
                             .and_then(|v| v.as_str())

@@ -3,8 +3,8 @@ import { scrobbleV4Abi } from "./abis/scrobbleV4Abi";
 
 const DEFAULT_RPC_URL = "https://rpc.moderato.tempo.xyz";
 const DEFAULT_SCROBBLE_V4_ADDRESS =
-  "0x0541443C41a6F923D518Ac23921778e2Ea102891";
-const DEFAULT_SCROBBLE_V4_START_BLOCK = 5_198_164;
+  "0xEdb5bc72Cb9307167A02C191761cDD94dc3f68C1";
+const DEFAULT_SCROBBLE_V4_START_BLOCK = 5_308_481;
 
 const scrobbleV4StartBlock = Number.parseInt(
   process.env.SCROBBLE_V4_START_BLOCK ??

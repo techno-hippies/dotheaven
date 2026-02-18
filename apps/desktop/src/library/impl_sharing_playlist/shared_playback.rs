@@ -38,6 +38,8 @@ impl LibraryView {
                     &record_for_request.piece_cid,
                     Some(&record_for_request.gateway_url),
                     Some(&record_for_request.title),
+                    Some(&record_for_request.owner_address),
+                    Some(&record_for_request.grantee_address),
                 )
             })
             .await;
@@ -164,6 +166,8 @@ impl LibraryView {
                     &record_for_request.piece_cid,
                     Some(&record_for_request.gateway_url),
                     Some(&record_for_request.title),
+                    Some(&record_for_request.owner_address),
+                    Some(&record_for_request.grantee_address),
                 )?;
                 let local_path = payload
                     .get("localPath")

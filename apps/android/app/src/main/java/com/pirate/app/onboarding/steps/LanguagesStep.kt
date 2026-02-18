@@ -92,6 +92,14 @@ val PROFICIENCY_OPTIONS = listOf(
   ProficiencyOption(1, "A1 — Beginner"),
 )
 
+val LEARNING_PROFICIENCY_OPTIONS = listOf(
+  ProficiencyOption(5, "C1 — Advanced"),
+  ProficiencyOption(4, "B2 — Upper Intermediate"),
+  ProficiencyOption(3, "B1 — Intermediate"),
+  ProficiencyOption(2, "A2 — Elementary"),
+  ProficiencyOption(1, "A1 — Beginner"),
+)
+
 /**
  * Pack up to 8 LanguageEntry into a uint256 decimal string.
  * Layout: 8 x 32-bit slots from MSB.
@@ -119,59 +127,75 @@ fun LanguagesStep(
   submitting: Boolean,
   onContinue: (languages: List<LanguageEntry>) -> Unit,
 ) {
-  val languages = remember { mutableStateListOf<LanguageEntry>() }
-  val canContinue = languages.isNotEmpty() && !submitting
+  val nativeLanguages = remember { mutableStateListOf<LanguageEntry>() }
+  val learningLanguages = remember { mutableStateListOf<LanguageEntry>() }
+  val allUsedCodes = (nativeLanguages.map { it.code } + learningLanguages.map { it.code }).toSet()
+  val canContinue = nativeLanguages.isNotEmpty() && learningLanguages.isNotEmpty() && !submitting
 
   Column(
     modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
     horizontalAlignment = Alignment.Start,
   ) {
-    Text("What languages do you speak?", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+    Text("Languages", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
     Spacer(Modifier.height(8.dp))
     Text(
-      if (languages.isEmpty()) "Add at least one language" else "${languages.size} ${if (languages.size == 1) "language" else "languages"} added",
+      "Tell us what you speak natively and what you're learning",
       fontSize = 16.sp,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     Spacer(Modifier.height(24.dp))
 
-    // Existing language entries
-    languages.forEachIndexed { index, entry ->
-      val langLabel = LANGUAGE_OPTIONS.find { it.code == entry.code }?.label ?: entry.code
-      val profLabel = PROFICIENCY_OPTIONS.find { it.value == entry.proficiency }?.label ?: "?"
+    // --- Native language(s) section ---
+    Text("Native language(s)", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+    Spacer(Modifier.height(4.dp))
+    Text(
+      if (nativeLanguages.isEmpty()) "Add at least one" else "${nativeLanguages.size} added",
+      fontSize = 16.sp,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Spacer(Modifier.height(12.dp))
 
-      Row(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(vertical = 4.dp)
-          .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
-          .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-      ) {
-        Column(modifier = Modifier.weight(1f)) {
-          Text(langLabel, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onBackground)
-          Text(profLabel, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        IconButton(onClick = { languages.removeAt(index) }) {
-          Icon(Icons.Rounded.Close, contentDescription = "Remove", modifier = Modifier.size(20.dp))
-        }
-      }
+    nativeLanguages.forEachIndexed { index, entry ->
+      LanguageChip(entry, onRemove = { nativeLanguages.removeAt(index) })
     }
 
-    // Add language row
-    if (languages.size < MAX_LANGUAGES) {
-      Spacer(Modifier.height(12.dp))
+    if (nativeLanguages.size < 3) {
       AddLanguageRow(
-        usedCodes = languages.map { it.code }.toSet(),
-        onAdd = { entry -> languages.add(entry) },
+        usedCodes = allUsedCodes,
+        onAdd = { entry -> nativeLanguages.add(LanguageEntry(entry.code, 7)) },
+        languageOnly = true,
+      )
+    }
+
+    Spacer(Modifier.height(24.dp))
+
+    // --- Learning section ---
+    Text("Currently learning", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+    Spacer(Modifier.height(4.dp))
+    Text(
+      if (learningLanguages.isEmpty()) "Add at least one" else "${learningLanguages.size} added",
+      fontSize = 16.sp,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Spacer(Modifier.height(12.dp))
+
+    learningLanguages.forEachIndexed { index, entry ->
+      LanguageChip(entry, onRemove = { learningLanguages.removeAt(index) })
+    }
+
+    if ((nativeLanguages.size + learningLanguages.size) < MAX_LANGUAGES && learningLanguages.size < 5) {
+      AddLanguageRow(
+        usedCodes = allUsedCodes,
+        onAdd = { entry -> learningLanguages.add(entry) },
+        languageOnly = false,
+        proficiencyOptions = LEARNING_PROFICIENCY_OPTIONS,
       )
     }
 
     Spacer(Modifier.weight(1f))
 
     Button(
-      onClick = { onContinue(languages.toList()) },
+      onClick = { onContinue(nativeLanguages.toList() + learningLanguages.toList()) },
       enabled = canContinue,
       modifier = Modifier.fillMaxWidth().height(48.dp),
       shape = RoundedCornerShape(50),
@@ -187,11 +211,37 @@ fun LanguagesStep(
   }
 }
 
+@Composable
+private fun LanguageChip(entry: LanguageEntry, onRemove: () -> Unit) {
+  val langLabel = LANGUAGE_OPTIONS.find { it.code == entry.code }?.label ?: entry.code
+  val profLabel = PROFICIENCY_OPTIONS.find { it.value == entry.proficiency }?.label ?: "?"
+
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(vertical = 4.dp)
+      .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+      .padding(horizontal = 16.dp, vertical = 12.dp),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.SpaceBetween,
+  ) {
+    Column(modifier = Modifier.weight(1f)) {
+      Text(langLabel, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onBackground)
+      Text(profLabel, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    IconButton(onClick = onRemove) {
+      Icon(Icons.Rounded.Close, contentDescription = "Remove", modifier = Modifier.size(20.dp))
+    }
+  }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddLanguageRow(
   usedCodes: Set<String>,
   onAdd: (LanguageEntry) -> Unit,
+  languageOnly: Boolean = false,
+  proficiencyOptions: List<ProficiencyOption> = PROFICIENCY_OPTIONS,
 ) {
   var selectedLang by remember { mutableStateOf<LanguageOption?>(null) }
   var selectedProf by remember { mutableStateOf<ProficiencyOption?>(null) }
@@ -200,13 +250,18 @@ private fun AddLanguageRow(
 
   val availableLanguages = LANGUAGE_OPTIONS.filter { it.code !in usedCodes }
 
-  // Auto-add when both are selected
+  // Auto-add when language selected (native mode) or both selected (learning mode)
   LaunchedEffect(selectedLang, selectedProf) {
     val lang = selectedLang ?: return@LaunchedEffect
-    val prof = selectedProf ?: return@LaunchedEffect
-    onAdd(LanguageEntry(lang.code, prof.value))
-    selectedLang = null
-    selectedProf = null
+    if (languageOnly) {
+      onAdd(LanguageEntry(lang.code, 7))
+      selectedLang = null
+    } else {
+      val prof = selectedProf ?: return@LaunchedEffect
+      onAdd(LanguageEntry(lang.code, prof.value))
+      selectedLang = null
+      selectedProf = null
+    }
   }
 
   Column(modifier = Modifier.fillMaxWidth()) {
@@ -219,13 +274,13 @@ private fun AddLanguageRow(
       ExposedDropdownMenuBox(
         expanded = langExpanded,
         onExpandedChange = { langExpanded = it },
-        modifier = Modifier.weight(1f),
+        modifier = if (languageOnly) Modifier.fillMaxWidth() else Modifier.weight(1f),
       ) {
         OutlinedTextField(
           value = selectedLang?.label ?: "",
           onValueChange = {},
           readOnly = true,
-          label = { Text("Language") },
+          label = { Text(if (languageOnly) "Add native language" else "Language") },
           trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = langExpanded) },
           modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
           shape = RoundedCornerShape(16.dp),
@@ -247,34 +302,36 @@ private fun AddLanguageRow(
         }
       }
 
-      // Proficiency dropdown
-      ExposedDropdownMenuBox(
-        expanded = profExpanded,
-        onExpandedChange = { profExpanded = it },
-        modifier = Modifier.weight(1f),
-      ) {
-        OutlinedTextField(
-          value = selectedProf?.label ?: "",
-          onValueChange = {},
-          readOnly = true,
-          label = { Text("Level") },
-          trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = profExpanded) },
-          modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
-          shape = RoundedCornerShape(16.dp),
-          singleLine = true,
-        )
-        ExposedDropdownMenu(
+      // Proficiency dropdown (only shown for learning languages)
+      if (!languageOnly) {
+        ExposedDropdownMenuBox(
           expanded = profExpanded,
-          onDismissRequest = { profExpanded = false },
+          onExpandedChange = { profExpanded = it },
+          modifier = Modifier.weight(1f),
         ) {
-          PROFICIENCY_OPTIONS.forEach { option ->
-            DropdownMenuItem(
-              text = { Text(option.label) },
-              onClick = {
-                selectedProf = option
-                profExpanded = false
-              },
-            )
+          OutlinedTextField(
+            value = selectedProf?.label ?: "",
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Level") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = profExpanded) },
+            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            singleLine = true,
+          )
+          ExposedDropdownMenu(
+            expanded = profExpanded,
+            onDismissRequest = { profExpanded = false },
+          ) {
+            proficiencyOptions.forEach { option ->
+              DropdownMenuItem(
+                text = { Text(option.label) },
+                onClick = {
+                  selectedProf = option
+                  profExpanded = false
+                },
+              )
+            }
           }
         }
       }

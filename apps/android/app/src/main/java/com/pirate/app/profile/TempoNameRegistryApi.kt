@@ -29,11 +29,15 @@ data class TempoNameRegisterResult(
   val fullName: String? = null,
   val node: String? = null,
   val tokenId: String? = null,
+  val sessionKey: SessionKeyManager.SessionKey? = null,
   val error: String? = null,
 )
 
 object TempoNameRegistryApi {
-  private const val GAS_LIMIT_REGISTER = 650_000L
+  private const val GAS_LIMIT_REGISTER = 900_000L
+  private const val GAS_LIMIT_REGISTER_WITH_SESSION_BOOTSTRAP = 2_200_000L
+  private const val GAS_LIMIT_REGISTER_BUFFER = 300_000L
+  private const val GAS_LIMIT_REGISTER_MAX = 3_500_000L
   private const val MIN_DURATION_SECONDS = 365L * 24L * 60L * 60L
 
   private val jsonType = "application/json; charset=utf-8".toMediaType()
@@ -73,6 +77,8 @@ object TempoNameRegistryApi {
     durationSeconds: Long = MIN_DURATION_SECONDS,
     rpId: String = account.rpId,
     sessionKey: SessionKeyManager.SessionKey? = null,
+    bootstrapSessionKey: Boolean = false,
+    preferSelfPay: Boolean = false,
   ): TempoNameRegisterResult {
     val normalizedLabel = label.trim().lowercase()
     val normalizedTld = tld.trim().lowercase()
@@ -81,6 +87,12 @@ object TempoNameRegistryApi {
     }
     if (durationSeconds <= 0L) {
       return TempoNameRegisterResult(success = false, error = "Invalid registration duration.")
+    }
+    if (sessionKey != null && bootstrapSessionKey) {
+      return TempoNameRegisterResult(
+        success = false,
+        error = "Cannot bootstrap a new session key when an active session key is already provided.",
+      )
     }
     val parentNode = TempoNameRecordsApi.parentNodeForTld(normalizedTld)
       ?: return TempoNameRegisterResult(success = false, error = "Unsupported TLD: $normalizedTld")
@@ -109,13 +121,43 @@ object TempoNameRegistryApi {
       val fees = withContext(Dispatchers.IO) { TempoClient.getSuggestedFees() }
 
       val callData = encodeRegisterCall(parentNode = parentNode, label = normalizedLabel, durationSeconds = durationSeconds)
-      val tx =
+      val estimatedGasLimit = withContext(Dispatchers.IO) {
+        estimateGas(
+          from = account.address,
+          to = TempoNameRecordsApi.REGISTRY_V1,
+          valueWei = priceWei,
+          data = callData,
+        )
+      }
+      val minimumGasLimit = if (bootstrapSessionKey) GAS_LIMIT_REGISTER_WITH_SESSION_BOOTSTRAP else GAS_LIMIT_REGISTER
+      val gasLimit = withRegisterGasBuffer(estimated = estimatedGasLimit, minimum = minimumGasLimit)
+      val bootstrappedSessionKey =
+        if (bootstrapSessionKey) SessionKeyManager.generate(ownerAddress = account.address) else null
+      val signedKeyAuthorization =
+        if (bootstrappedSessionKey != null) {
+          val keyAuthDigest = SessionKeyManager.buildKeyAuthDigest(bootstrappedSessionKey)
+          val keyAuthAssertion =
+            TempoPasskeyManager.sign(
+              activity = activity,
+              challenge = keyAuthDigest,
+              account = account,
+              rpId = rpId,
+            )
+          SessionKeyManager.buildSignedKeyAuthorization(bootstrappedSessionKey, keyAuthAssertion)
+        } else {
+          null
+        }
+      fun buildTx(
+        feeMode: TempoTransaction.FeeMode,
+        txFees: TempoClient.Eip1559Fees,
+      ): TempoTransaction.UnsignedTx =
         TempoTransaction.UnsignedTx(
           nonce = nonce,
-          maxPriorityFeePerGas = fees.maxPriorityFeePerGas,
-          maxFeePerGas = fees.maxFeePerGas,
-          feeMode = TempoTransaction.FeeMode.RELAY_SPONSORED,
-          gasLimit = GAS_LIMIT_REGISTER,
+          maxPriorityFeePerGas = txFees.maxPriorityFeePerGas,
+          maxFeePerGas = txFees.maxFeePerGas,
+          feeMode = feeMode,
+          gasLimit = gasLimit,
+          keyAuthorization = signedKeyAuthorization,
           calls =
             listOf(
               TempoTransaction.Call(
@@ -126,9 +168,9 @@ object TempoNameRegistryApi {
             ),
         )
 
-      val sigHash = TempoTransaction.signatureHash(tx)
-      val signedTxHex =
-        if (sessionKey != null) {
+      suspend fun signTx(tx: TempoTransaction.UnsignedTx): String {
+        val sigHash = TempoTransaction.signatureHash(tx)
+        return if (sessionKey != null) {
           val keychainSig = SessionKeyManager.signWithSessionKey(
             sessionKey = sessionKey,
             userAddress = account.address,
@@ -145,12 +187,63 @@ object TempoNameRegistryApi {
             )
           TempoTransaction.encodeSignedWebAuthn(tx, assertion)
         }
-      val txHash = withContext(Dispatchers.IO) {
-        TempoClient.sendSponsoredRawTransaction(
-          signedTxHex = signedTxHex,
-          senderAddress = account.address,
-        )
       }
+
+      suspend fun submitWithFallback(): String {
+        suspend fun submitRelay(): String {
+          val relayTx = buildTx(feeMode = TempoTransaction.FeeMode.RELAY_SPONSORED, txFees = fees)
+          val relaySignedTxHex = signTx(relayTx)
+          return withContext(Dispatchers.IO) {
+            TempoClient.sendSponsoredRawTransaction(
+              signedTxHex = relaySignedTxHex,
+              senderAddress = account.address,
+            )
+          }
+        }
+
+        suspend fun submitSelf(): String {
+          withContext(Dispatchers.IO) { runCatching { TempoClient.fundAddress(account.address) } }
+          val selfFees = withContext(Dispatchers.IO) { TempoClient.getSuggestedFees() }
+          val selfTx = buildTx(feeMode = TempoTransaction.FeeMode.SELF, txFees = selfFees)
+          val selfSignedTxHex = signTx(selfTx)
+          return withContext(Dispatchers.IO) { TempoClient.sendRawTransaction(selfSignedTxHex) }
+        }
+
+        return if (preferSelfPay) {
+          runCatching { submitSelf() }.getOrElse { selfErr ->
+            runCatching { submitRelay() }.getOrElse { relayErr ->
+              throw IllegalStateException(
+                "Name registration submit failed: self=${selfErr.message}; relay=${relayErr.message}",
+                relayErr,
+              )
+            }
+          }
+        } else {
+          runCatching { submitRelay() }.getOrElse { relayErr ->
+            runCatching { submitSelf() }.getOrElse { selfErr ->
+              throw IllegalStateException(
+                "Name registration submit failed: relay=${relayErr.message}; self=${selfErr.message}",
+                selfErr,
+              )
+            }
+          }
+        }
+      }
+
+      val txHash = submitWithFallback()
+      val receipt = withContext(Dispatchers.IO) { TempoClient.waitForTransactionReceipt(txHash) }
+      if (!receipt.isSuccess) {
+        throw IllegalStateException("Name registration reverted on-chain: $txHash")
+      }
+
+      val persistedSessionKey =
+        if (bootstrappedSessionKey != null && signedKeyAuthorization != null) {
+          val authorized = bootstrappedSessionKey.copy(keyAuthorization = signedKeyAuthorization)
+          SessionKeyManager.save(activity, authorized)
+          authorized
+        } else {
+          null
+        }
 
       val fullName = "$normalizedLabel.$normalizedTld"
       val node = TempoNameRecordsApi.computeNode(fullName)
@@ -162,6 +255,7 @@ object TempoNameRegistryApi {
         fullName = fullName,
         node = node,
         tokenId = node,
+        sessionKey = persistedSessionKey,
       )
     }.getOrElse { err ->
       TempoNameRegisterResult(success = false, error = err.message ?: "Name registration failed.")
@@ -243,5 +337,53 @@ object TempoNameRegistryApi {
       if (error != null) throw IllegalStateException(error.optString("message", error.toString()))
       return body.optString("result", "0x")
     }
+  }
+
+  private fun estimateGas(
+    from: String,
+    to: String,
+    valueWei: BigInteger,
+    data: String,
+  ): Long {
+    val txObj =
+      JSONObject()
+        .put("from", from)
+        .put("to", to)
+        .put("value", "0x${valueWei.toString(16)}")
+        .put("data", data)
+    val payload =
+      JSONObject()
+        .put("jsonrpc", "2.0")
+        .put("id", 1)
+        .put("method", "eth_estimateGas")
+        .put("params", JSONArray().put(txObj).put("latest"))
+
+    val req =
+      Request.Builder()
+        .url(TempoClient.RPC_URL)
+        .post(payload.toString().toRequestBody(jsonType))
+        .build()
+
+    client.newCall(req).execute().use { response ->
+      if (!response.isSuccessful) throw IllegalStateException("RPC failed: ${response.code}")
+      val body = JSONObject(response.body?.string().orEmpty())
+      val error = body.optJSONObject("error")
+      if (error != null) throw IllegalStateException(error.optString("message", error.toString()))
+      val resultHex = body.optString("result", "").trim()
+      if (!resultHex.startsWith("0x")) {
+        throw IllegalStateException("RPC eth_estimateGas missing result")
+      }
+      val clean = resultHex.removePrefix("0x").ifBlank { "0" }
+      return clean.toLongOrNull(16)
+        ?: throw IllegalStateException("Invalid eth_estimateGas result: $resultHex")
+    }
+  }
+
+  private fun withRegisterGasBuffer(
+    estimated: Long,
+    minimum: Long,
+  ): Long {
+    val buffered = if (Long.MAX_VALUE - estimated < GAS_LIMIT_REGISTER_BUFFER) Long.MAX_VALUE else estimated + GAS_LIMIT_REGISTER_BUFFER
+    return maxOf(buffered, minimum).coerceAtMost(GAS_LIMIT_REGISTER_MAX)
   }
 }

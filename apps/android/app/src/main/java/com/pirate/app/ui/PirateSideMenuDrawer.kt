@@ -31,14 +31,16 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-
-private const val IPFS_GATEWAY = "https://heaven.myfilebase.com/ipfs/"
+import com.pirate.app.music.CoverRef
 
 private fun resolveAvatarUrl(avatarUri: String?): String? {
-  if (avatarUri.isNullOrBlank()) return null
-  return if (avatarUri.startsWith("ipfs://")) {
-    IPFS_GATEWAY + avatarUri.removePrefix("ipfs://")
-  } else avatarUri
+  return CoverRef.resolveCoverUrl(
+    ref = avatarUri,
+    width = null,
+    height = null,
+    format = null,
+    quality = null,
+  )
 }
 
 private fun shortAddr(addr: String): String {
@@ -61,6 +63,7 @@ fun PirateSideMenuDrawer(
   onNavigatePublish: () -> Unit,
   onSignUp: () -> Unit,
   onSignIn: () -> Unit,
+  onSwitchAccount: () -> Unit,
   onLogout: () -> Unit,
 ) {
   ModalDrawerSheet {
@@ -164,6 +167,13 @@ fun PirateSideMenuDrawer(
       Spacer(modifier = Modifier.weight(1f, fill = true))
 
       if (isAuthenticated) {
+        OutlinedButton(
+          modifier = Modifier.fillMaxWidth(),
+          onClick = onSwitchAccount,
+          enabled = !busy,
+        ) {
+          Text("Switch Account")
+        }
         OutlinedButton(
           modifier = Modifier.fillMaxWidth(),
           onClick = onLogout,

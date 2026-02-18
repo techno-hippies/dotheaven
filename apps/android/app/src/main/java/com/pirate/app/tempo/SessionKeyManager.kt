@@ -76,9 +76,7 @@ object SessionKeyManager {
      * Build the SignedKeyAuthorization bytes to include in a transaction's key_authorization field.
      *
      * Format: rlp([key_authorization, signature])
-     * where key_authorization = rlp([chain_id, key_type, key_id, expiry, limits?])
-     * where signature is the WebAuthn signature (type 0x02) over the digest,
-     * RLP-encoded as bytes.
+     * where key_authorization = rlp([chain_id, key_type, key_id, expiry, limits?]).
      */
     fun buildSignedKeyAuthorization(
         sessionKey: SessionKey,
@@ -94,12 +92,10 @@ object SessionKeyManager {
             assertion.pubKey.y
 
         val keyAuthorizationRlp = rlpEncodeList(buildKeyAuthorizationFields(sessionKey))
-
         val fields = listOf<Any>(
-            RawRlp(keyAuthorizationRlp),                        // nested key_authorization list
-            sigBytes,                                           // PrimitiveSignature bytes
+            RawRlp(keyAuthorizationRlp),
+            sigBytes,
         )
-
         return rlpEncodeList(fields)
     }
 

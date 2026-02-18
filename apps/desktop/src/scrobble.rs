@@ -11,7 +11,7 @@ mod tempo;
 const DEFAULT_TEMPO_RPC_URL: &str = "https://rpc.moderato.tempo.xyz";
 const DEFAULT_TEMPO_FEE_PAYER_URL: &str = "https://sponsor.moderato.tempo.xyz";
 const DEFAULT_TEMPO_CHAIN_ID: u64 = 42431;
-const DEFAULT_TEMPO_SCROBBLE_V4: &str = "0x0541443C41a6F923D518Ac23921778e2Ea102891";
+const DEFAULT_TEMPO_SCROBBLE_V4: &str = "0x07B8BdE8BaD74DC974F783AA71C7C51d6B37C363";
 
 #[derive(Debug, Clone)]
 pub struct TempoScrobbleSession {
@@ -43,6 +43,8 @@ pub struct SubmitScrobbleInput {
 pub struct SubmitScrobbleResult {
     pub tx_hash: String,
     pub sender: String,
+    pub track_id: String,
+    pub already_registered: bool,
 }
 
 impl ScrobbleService {
@@ -72,6 +74,73 @@ impl ScrobbleService {
         };
 
         tempo::submit_scrobble_tempo(&session, &input)
+    }
+
+    pub fn upload_track_cover_ref(
+        &mut self,
+        auth: &PersistedAuth,
+        cover_path: &str,
+    ) -> Result<String, String> {
+        let session = Self::tempo_session_from_auth(auth)?;
+        tempo::upload_cover_to_arweave(&session, cover_path)
+    }
+
+    pub fn upload_track_lyrics_ref(
+        &mut self,
+        auth: &PersistedAuth,
+        track_id: &str,
+        lyrics_payload: &str,
+    ) -> Result<String, String> {
+        let session = Self::tempo_session_from_auth(auth)?;
+        tempo::upload_lyrics_to_arweave(&session, track_id, lyrics_payload)
+    }
+
+    pub fn ensure_track_cover_synced(
+        &mut self,
+        auth: &PersistedAuth,
+        track_id: &str,
+        cover_ref: &str,
+    ) -> Result<String, String> {
+        let session = Self::tempo_session_from_auth(auth)?;
+        tempo::ensure_track_cover_tempo(&session, track_id, cover_ref)
+    }
+
+    pub fn supports_track_cover_sync(&mut self, auth: &PersistedAuth) -> Result<bool, String> {
+        let session = Self::tempo_session_from_auth(auth)?;
+        tempo::supports_track_cover_sync_tempo(&session)
+    }
+
+    pub fn ensure_track_lyrics_synced(
+        &mut self,
+        auth: &PersistedAuth,
+        track_id: &str,
+        lyrics_ref: &str,
+    ) -> Result<String, String> {
+        let session = Self::tempo_session_from_auth(auth)?;
+        tempo::ensure_track_lyrics_tempo(&session, track_id, lyrics_ref)
+    }
+
+    pub fn supports_track_lyrics_sync(&mut self, auth: &PersistedAuth) -> Result<bool, String> {
+        let session = Self::tempo_session_from_auth(auth)?;
+        tempo::supports_track_lyrics_sync_tempo(&session)
+    }
+
+    pub fn read_track_cover_ref(
+        &mut self,
+        auth: &PersistedAuth,
+        track_id: &str,
+    ) -> Result<Option<String>, String> {
+        let session = Self::tempo_session_from_auth(auth)?;
+        tempo::read_track_cover_ref_tempo(&session, track_id)
+    }
+
+    pub fn read_track_lyrics_ref(
+        &mut self,
+        auth: &PersistedAuth,
+        track_id: &str,
+    ) -> Result<Option<String>, String> {
+        let session = Self::tempo_session_from_auth(auth)?;
+        tempo::read_track_lyrics_ref_tempo(&session, track_id)
     }
 
     fn tempo_session_from_auth(auth: &PersistedAuth) -> Result<TempoScrobbleSession, String> {
@@ -127,6 +196,23 @@ impl ScrobbleService {
             session_key_authorization,
         })
     }
+}
+
+pub(crate) fn submit_tempo_contract_call(
+    auth: &PersistedAuth,
+    contract_address: &str,
+    call_data: Vec<u8>,
+    gas_limit_min: u64,
+    op_label: &str,
+) -> Result<String, String> {
+    let session = ScrobbleService::tempo_session_from_auth(auth)?;
+    tempo::submit_contract_call_tempo(
+        &session,
+        contract_address,
+        call_data,
+        gas_limit_min,
+        op_label,
+    )
 }
 
 pub fn now_epoch_sec() -> u64 {

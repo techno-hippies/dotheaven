@@ -25,6 +25,10 @@ export interface SongFormData {
   revShare: number
   mintingFee: string
   attestation: boolean
+  // Optional Story derivative linkage for backend register flow.
+  publishType?: 'original' | 'derivative' | 'cover'
+  parentIpIds?: string[]
+  licenseTermsIds?: string[]
 }
 
 export type LicenseType =

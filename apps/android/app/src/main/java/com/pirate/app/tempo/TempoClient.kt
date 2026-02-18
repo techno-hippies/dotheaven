@@ -205,6 +205,13 @@ object TempoClient {
         )
     }
 
+    suspend fun hasTransaction(txHash: String): Boolean {
+        val result = rpc("eth_getTransactionByHash", JSONArray().put(txHash))
+        val tx = result as? JSONObject ?: return false
+        val hash = tx.optString("hash", "").trim()
+        return hash.equals(txHash, ignoreCase = true)
+    }
+
     suspend fun getTransactionBySenderAndNonce(
         senderAddress: String,
         nonce: Long,

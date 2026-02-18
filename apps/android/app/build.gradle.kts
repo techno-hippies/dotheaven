@@ -26,6 +26,12 @@ android {
       ?.trim()
       ?: ""
     buildConfigField("String", "TEMPO_SCROBBLE_SUBGRAPH_URL", "\"$tempoScrobbleSubgraphUrl\"")
+
+    val tempoProfilesSubgraphUrl = (project.findProperty("TEMPO_PROFILES_SUBGRAPH_URL") as String?)
+      ?.replace("\"", "\\\"")
+      ?.trim()
+      ?: ""
+    buildConfigField("String", "TEMPO_PROFILES_SUBGRAPH_URL", "\"$tempoProfilesSubgraphUrl\"")
   }
 
   buildFeatures {

@@ -1,5 +1,6 @@
 package com.pirate.app.profile
 
+import android.util.Log
 import androidx.fragment.app.FragmentActivity
 import com.pirate.app.tempo.P256Utils
 import com.pirate.app.tempo.SessionKeyManager
@@ -9,6 +10,11 @@ import com.pirate.app.tempo.TempoTransaction
 import java.math.BigInteger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import org.web3j.abi.FunctionEncoder
 import org.web3j.abi.datatypes.DynamicStruct
@@ -21,6 +27,8 @@ import org.web3j.abi.datatypes.generated.Uint16
 import org.web3j.abi.datatypes.generated.Uint256
 import org.web3j.abi.datatypes.generated.Uint8
 
+private const val TAG = "TempoProfileContract"
+
 data class TempoProfileUpsertResult(
   val success: Boolean,
   val txHash: String? = null,
@@ -29,7 +37,11 @@ data class TempoProfileUpsertResult(
 
 object TempoProfileContractApi {
   const val PROFILE_V2 = "0x6FDb2F5B13F8D7f365B4A75A2763d5C7270E8066"
-  private const val GAS_LIMIT_UPSERT_PROFILE = 900_000L
+  private const val MIN_GAS_LIMIT_UPSERT_PROFILE = 1_600_000L
+  private const val GAS_LIMIT_BUFFER = 250_000L
+
+  private val jsonType = "application/json".toMediaType()
+  private val client = OkHttpClient()
 
   suspend fun upsertProfile(
     activity: FragmentActivity,
@@ -47,14 +59,24 @@ object TempoProfileContractApi {
       val nonce = withContext(Dispatchers.IO) { TempoClient.getNonce(account.address) }
       val fees = withContext(Dispatchers.IO) { TempoClient.getSuggestedFees() }
       val calldata = encodeUpsertProfileCall(profileInput)
+      val gasLimit = withContext(Dispatchers.IO) {
+        val estimated = estimateGas(from = account.address, to = PROFILE_V2, data = calldata)
+        withBuffer(estimated = estimated, minimum = MIN_GAS_LIMIT_UPSERT_PROFILE)
+      }
+      Log.d(TAG, "upsertProfile calldata (${calldata.length} chars): ${calldata.take(200)}...")
+      Log.d(TAG, "upsertProfile selector: ${calldata.take(10)}")
+      Log.d(TAG, "upsertProfile gasLimit=$gasLimit")
 
-      val tx =
+      fun buildTx(
+        feeMode: TempoTransaction.FeeMode,
+        txFees: TempoClient.Eip1559Fees,
+      ): TempoTransaction.UnsignedTx =
         TempoTransaction.UnsignedTx(
           nonce = nonce,
-          maxPriorityFeePerGas = fees.maxPriorityFeePerGas,
-          maxFeePerGas = fees.maxFeePerGas,
-          feeMode = TempoTransaction.FeeMode.RELAY_SPONSORED,
-          gasLimit = GAS_LIMIT_UPSERT_PROFILE,
+          maxPriorityFeePerGas = txFees.maxPriorityFeePerGas,
+          maxFeePerGas = txFees.maxFeePerGas,
+          feeMode = feeMode,
+          gasLimit = gasLimit,
           calls =
             listOf(
               TempoTransaction.Call(
@@ -65,9 +87,9 @@ object TempoProfileContractApi {
             ),
         )
 
-      val sigHash = TempoTransaction.signatureHash(tx)
-      val signedTxHex =
-        if (sessionKey != null) {
+      suspend fun signTx(tx: TempoTransaction.UnsignedTx): String {
+        val sigHash = TempoTransaction.signatureHash(tx)
+        return if (sessionKey != null) {
           val keychainSig = SessionKeyManager.signWithSessionKey(
             sessionKey = sessionKey,
             userAddress = account.address,
@@ -84,11 +106,41 @@ object TempoProfileContractApi {
             )
           TempoTransaction.encodeSignedWebAuthn(tx, assertion)
         }
-      val txHash = withContext(Dispatchers.IO) {
-        TempoClient.sendSponsoredRawTransaction(
-          signedTxHex = signedTxHex,
-          senderAddress = account.address,
-        )
+      }
+
+      suspend fun submitWithFallback(): String {
+        val relayTx = buildTx(feeMode = TempoTransaction.FeeMode.RELAY_SPONSORED, txFees = fees)
+        val relaySignedTxHex = signTx(relayTx)
+        return runCatching {
+          Log.d(TAG, "Sending sponsored profile TX (session=${sessionKey != null})...")
+          withContext(Dispatchers.IO) {
+            TempoClient.sendSponsoredRawTransaction(
+              signedTxHex = relaySignedTxHex,
+              senderAddress = account.address,
+            )
+          }
+        }.getOrElse { relayErr ->
+          Log.w(TAG, "Sponsored profile TX failed, retrying self-pay: ${relayErr.message}")
+          withContext(Dispatchers.IO) { runCatching { TempoClient.fundAddress(account.address) } }
+          val selfFees = withContext(Dispatchers.IO) { TempoClient.getSuggestedFees() }
+          val selfTx = buildTx(feeMode = TempoTransaction.FeeMode.SELF, txFees = selfFees)
+          val selfSignedTxHex = signTx(selfTx)
+          runCatching {
+            withContext(Dispatchers.IO) { TempoClient.sendRawTransaction(selfSignedTxHex) }
+          }.getOrElse { selfErr ->
+            throw IllegalStateException(
+              "Profile submission failed: relay=${relayErr.message}; self=${selfErr.message}",
+              selfErr,
+            )
+          }
+        }
+      }
+
+      val txHash = submitWithFallback()
+      Log.d(TAG, "TX sent: $txHash")
+      val receipt = withContext(Dispatchers.IO) { TempoClient.waitForTransactionReceipt(txHash) }
+      if (!receipt.isSuccess) {
+        throw IllegalStateException("Profile tx reverted on-chain: $txHash")
       }
       TempoProfileUpsertResult(success = true, txHash = txHash)
     }.getOrElse { err ->
@@ -173,5 +225,53 @@ object TempoProfileContractApi {
     require(clean.length <= size * 2) { "hex value exceeds ${size} bytes" }
     val padded = clean.padStart(size * 2, '0')
     return P256Utils.hexToBytes(padded)
+  }
+
+  private fun estimateGas(
+    from: String,
+    to: String,
+    data: String,
+  ): Long {
+    val payload =
+      JSONObject()
+        .put("jsonrpc", "2.0")
+        .put("id", 1)
+        .put("method", "eth_estimateGas")
+        .put(
+          "params",
+          JSONArray()
+            .put(
+              JSONObject()
+                .put("from", from)
+                .put("to", to)
+                .put("data", data),
+            ),
+        )
+
+    val req =
+      Request.Builder()
+        .url(TempoClient.RPC_URL)
+        .post(payload.toString().toRequestBody(jsonType))
+        .build()
+
+    client.newCall(req).execute().use { response ->
+      if (!response.isSuccessful) throw IllegalStateException("RPC failed: ${response.code}")
+      val body = JSONObject(response.body?.string().orEmpty())
+      val error = body.optJSONObject("error")
+      if (error != null) throw IllegalStateException(error.optString("message", error.toString()))
+      val hex = body.optString("result", "0x0").removePrefix("0x").ifBlank { "0" }
+      return hex.toLongOrNull(16) ?: 0L
+    }
+  }
+
+  private fun withBuffer(
+    estimated: Long,
+    minimum: Long,
+  ): Long {
+    if (estimated <= 0L) return minimum
+    val buffered =
+      if (estimated > Long.MAX_VALUE - GAS_LIMIT_BUFFER) Long.MAX_VALUE
+      else estimated + GAS_LIMIT_BUFFER
+    return maxOf(minimum, buffered)
   }
 }

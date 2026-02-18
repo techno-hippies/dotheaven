@@ -64,13 +64,11 @@ impl LoadStorageService {
     }
 
     pub fn health(&mut self) -> Result<Value, String> {
-        if let Some(err) = &self.init_error {
-            return Err(format!("Lit runtime unavailable: {err}"));
-        }
-
         Ok(json!({
             "ok": true,
             "component": "load-native",
+            "litRuntimeAvailable": self.init_error.is_none(),
+            "litRuntimeError": self.init_error.clone(),
             "litNetwork": lit_network_name(),
             "loadUploadMode": load_upload_mode_label(),
             "loadUploadUrl": load_turbo_upload_url(),
@@ -85,7 +83,6 @@ impl LoadStorageService {
     }
 
     pub fn storage_status(&mut self, auth: &PersistedAuth) -> Result<Value, String> {
-        self.ensure_lit_ready(auth)?;
         let user_pays = load_user_pays_enabled();
         let health = self.load_health_check();
         let free_limit = health
@@ -157,7 +154,6 @@ impl LoadStorageService {
         auth: &PersistedAuth,
         size_bytes: u64,
     ) -> Result<Value, String> {
-        self.ensure_lit_ready(auth)?;
         let ready = self.ensure_upload_ready(Some(auth), Some(size_bytes as usize));
         Ok(json!({
             "ready": ready.0,
@@ -174,7 +170,6 @@ impl LoadStorageService {
         auth: &PersistedAuth,
         amount_hint: &str,
     ) -> Result<Value, String> {
-        self.ensure_lit_ready(auth)?;
         if !load_user_pays_enabled() {
             return Ok(json!({
                 "ok": true,
@@ -186,15 +181,21 @@ impl LoadStorageService {
                 "turboFundingEnabled": false,
             }));
         }
+        if auth.provider_kind() == crate::auth::AuthProviderKind::TempoPasskey {
+            return Err(
+                "Turbo user-pays funding from GPUI is not yet available for Tempo passkey sessions."
+                    .to_string(),
+            );
+        }
+        self.ensure_lit_ready(auth)?;
 
         self.run_turbo_user_pays_funding(auth, amount_hint)
     }
 
     fn fetch_turbo_balance(&self, auth: &PersistedAuth) -> Result<Value, String> {
         let user_address = auth
-            .pkp_address
-            .as_deref()
-            .ok_or("Missing PKP address in auth")?;
+            .primary_wallet_address()
+            .ok_or("Missing wallet address in auth")?;
         let proxy_url = turbo_funding_proxy_url();
         let balance_url = format!("{proxy_url}/turbo/balance");
         http_post_json(

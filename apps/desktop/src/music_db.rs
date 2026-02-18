@@ -61,6 +61,27 @@ pub struct LyricsCacheRow {
 }
 
 #[derive(Debug, Clone)]
+pub struct TrackMediaStateRow {
+    pub track_id: String,
+    pub cover_local: Option<String>,
+    pub cover_ref: Option<String>,
+    pub cover_status: String,
+    pub cover_checked: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct TrackLyricsStateRow {
+    pub track_id: String,
+    pub lyrics_ref: Option<String>,
+    pub lyrics_status: String,
+    pub lyrics_checked: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone)]
 pub struct ScanProgress {
     pub done: usize,
     pub total: usize,
@@ -120,13 +141,34 @@ impl MusicDb {
                 lrclib_id            INTEGER,
                 source               TEXT NOT NULL,
                 fetched_at_epoch_sec INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS track_media_state (
+                track_id      TEXT PRIMARY KEY,
+                cover_local   TEXT,
+                cover_ref     TEXT,
+                cover_status  TEXT NOT NULL DEFAULT 'none',
+                cover_checked INTEGER,
+                created_at    INTEGER NOT NULL,
+                updated_at    INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS track_lyrics_state (
+                track_id      TEXT PRIMARY KEY,
+                lyrics_ref    TEXT,
+                lyrics_status TEXT NOT NULL DEFAULT 'none',
+                lyrics_checked INTEGER,
+                created_at    INTEGER NOT NULL,
+                updated_at    INTEGER NOT NULL
             );",
         )
         .map_err(|e| format!("Failed to create tables: {e}"))?;
 
         conn.execute_batch(
             "CREATE INDEX IF NOT EXISTS idx_lyrics_cache_signature
-                ON lyrics_cache(track_name, artist_name, album_name, duration_sec);",
+                ON lyrics_cache(track_name, artist_name, album_name, duration_sec);
+             CREATE INDEX IF NOT EXISTS idx_track_media_state_status
+                ON track_media_state(cover_status);
+             CREATE INDEX IF NOT EXISTS idx_track_lyrics_state_status
+                ON track_lyrics_state(lyrics_status);",
         )
         .map_err(|e| format!("Failed creating lyrics cache indexes: {e}"))?;
 

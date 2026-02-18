@@ -71,7 +71,8 @@ const GOLDSKY_BASE = 'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401
 export const SUBGRAPH_ACTIVITY = `${GOLDSKY_BASE}/dotheaven-activity/14.0.0/gn`
 
 /** Profiles subgraph — ProfileV2 events (denormalized enums) */
-export const SUBGRAPH_PROFILES = `${GOLDSKY_BASE}/dotheaven-profiles/1.0.0/gn`
+export const SUBGRAPH_PROFILES = 'https://graph.dotheaven.org/subgraphs/name/dotheaven/profiles-tempo'
+export const SUBGRAPH_PROFILES_FALLBACK = `${GOLDSKY_BASE}/dotheaven-profiles/1.0.0/gn`
 
 /** Playlists subgraph — PlaylistV1 events */
 export const SUBGRAPH_PLAYLISTS = `${GOLDSKY_BASE}/dotheaven-playlists/1.0.0/gn`

@@ -62,6 +62,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.pirate.app.music.CoverRef
 import com.pirate.app.music.OnChainPlaylist
 import com.pirate.app.music.OnChainPlaylistsApi
 import com.pirate.app.onboarding.OnboardingRpcHelpers
@@ -82,13 +83,14 @@ private enum class ProfileTab(val label: String) {
   About("About"),
 }
 
-private const val IPFS_GATEWAY = "https://heaven.myfilebase.com/ipfs/"
-
 private fun resolveAvatarUrl(avatarUri: String?): String? {
-  if (avatarUri.isNullOrBlank()) return null
-  return if (avatarUri.startsWith("ipfs://")) {
-    IPFS_GATEWAY + avatarUri.removePrefix("ipfs://")
-  } else avatarUri
+  return CoverRef.resolveCoverUrl(
+    ref = avatarUri,
+    width = null,
+    height = null,
+    format = null,
+    quality = null,
+  )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -189,6 +191,8 @@ fun ProfileScreen(
         !it.equals(handleText, ignoreCase = true) &&
         !it.equals(heavenName ?: "", ignoreCase = true)
     }
+  val effectiveAvatarRef = avatarUri?.trim()?.takeIf { it.isNotEmpty() }
+    ?: contractProfile?.photoUri?.trim()?.takeIf { it.isNotEmpty() }
   val effectiveFollowing = optimisticFollowing ?: serverFollowing
 
   // Fetch follow counts
@@ -309,7 +313,7 @@ fun ProfileScreen(
       modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 12.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
-      val avatarUrl = resolveAvatarUrl(avatarUri)
+      val avatarUrl = resolveAvatarUrl(effectiveAvatarRef)
       if (avatarUrl != null) {
         AsyncImage(
           model = avatarUrl,

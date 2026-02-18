@@ -5,8 +5,8 @@ Tempo Moderato scrobble indexer backed by [Ponder](https://ponder.sh), used as a
 ## Indexed Contract
 
 - `ScrobbleV4` on Tempo Moderato (`chainId 42431`)
-- Default address: `0x0541443C41a6F923D518Ac23921778e2Ea102891`
-- Default start block: `5198164`
+- Default address: `0xEdb5bc72Cb9307167A02C191761cDD94dc3f68C1`
+- Default start block: `5308481`
 
 ## Endpoints
 
@@ -71,8 +71,8 @@ fly volumes create ponder_data --region iad --size 20
 fly secrets set PONDER_RPC_URL_42431=https://tempo-moderato.g.alchemy.com/v2/<api-key>
 
 # Optional overrides
-# fly secrets set SCROBBLE_V4_ADDRESS=0x0541443C41a6F923D518Ac23921778e2Ea102891
-# fly secrets set SCROBBLE_V4_START_BLOCK=5198164
+# fly secrets set SCROBBLE_V4_ADDRESS=0xEdb5bc72Cb9307167A02C191761cDD94dc3f68C1
+# fly secrets set SCROBBLE_V4_START_BLOCK=5308481
 # fly secrets set DATABASE_SCHEMA=tempo_indexer
 
 fly deploy

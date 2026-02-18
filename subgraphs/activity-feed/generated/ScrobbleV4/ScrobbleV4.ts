@@ -76,6 +76,28 @@ export class Scrobbled__Params {
   }
 }
 
+export class TrackCoverOverwritten extends ethereum.Event {
+  get params(): TrackCoverOverwritten__Params {
+    return new TrackCoverOverwritten__Params(this);
+  }
+}
+
+export class TrackCoverOverwritten__Params {
+  _event: TrackCoverOverwritten;
+
+  constructor(event: TrackCoverOverwritten) {
+    this._event = event;
+  }
+
+  get trackId(): Bytes {
+    return this._event.parameters[0].value.toBytes();
+  }
+
+  get coverCid(): string {
+    return this._event.parameters[1].value.toString();
+  }
+}
+
 export class TrackCoverSet extends ethereum.Event {
   get params(): TrackCoverSet__Params {
     return new TrackCoverSet__Params(this);
@@ -94,6 +116,50 @@ export class TrackCoverSet__Params {
   }
 
   get coverCid(): string {
+    return this._event.parameters[1].value.toString();
+  }
+}
+
+export class TrackLyricsOverwritten extends ethereum.Event {
+  get params(): TrackLyricsOverwritten__Params {
+    return new TrackLyricsOverwritten__Params(this);
+  }
+}
+
+export class TrackLyricsOverwritten__Params {
+  _event: TrackLyricsOverwritten;
+
+  constructor(event: TrackLyricsOverwritten) {
+    this._event = event;
+  }
+
+  get trackId(): Bytes {
+    return this._event.parameters[0].value.toBytes();
+  }
+
+  get lyricsRef(): string {
+    return this._event.parameters[1].value.toString();
+  }
+}
+
+export class TrackLyricsSet extends ethereum.Event {
+  get params(): TrackLyricsSet__Params {
+    return new TrackLyricsSet__Params(this);
+  }
+}
+
+export class TrackLyricsSet__Params {
+  _event: TrackLyricsSet;
+
+  constructor(event: TrackLyricsSet) {
+    this._event = event;
+  }
+
+  get trackId(): Bytes {
+    return this._event.parameters[0].value.toBytes();
+  }
+
+  get lyricsRef(): string {
     return this._event.parameters[1].value.toString();
   }
 }
@@ -329,36 +395,6 @@ export class ScrobbleV4 extends ethereum.SmartContract {
     return new ScrobbleV4("ScrobbleV4", address);
   }
 
-  ACCOUNT_SALT(): BigInt {
-    let result = super.call("ACCOUNT_SALT", "ACCOUNT_SALT():(uint256)", []);
-
-    return result[0].toBigInt();
-  }
-
-  try_ACCOUNT_SALT(): ethereum.CallResult<BigInt> {
-    let result = super.tryCall("ACCOUNT_SALT", "ACCOUNT_SALT():(uint256)", []);
-    if (result.reverted) {
-      return new ethereum.CallResult();
-    }
-    let value = result.value;
-    return ethereum.CallResult.fromValue(value[0].toBigInt());
-  }
-
-  FACTORY(): Address {
-    let result = super.call("FACTORY", "FACTORY():(address)", []);
-
-    return result[0].toAddress();
-  }
-
-  try_FACTORY(): ethereum.CallResult<Address> {
-    let result = super.tryCall("FACTORY", "FACTORY():(address)", []);
-    if (result.reverted) {
-      return new ethereum.CallResult();
-    }
-    let value = result.value;
-    return ethereum.CallResult.fromValue(value[0].toAddress());
-  }
-
   MAX_CID(): BigInt {
     let result = super.call("MAX_CID", "MAX_CID():(uint256)", []);
 
@@ -472,6 +508,29 @@ export class ScrobbleV4 extends ethereum.SmartContract {
     );
   }
 
+  getTrackLyrics(trackId: Bytes): string {
+    let result = super.call(
+      "getTrackLyrics",
+      "getTrackLyrics(bytes32):(string)",
+      [ethereum.Value.fromFixedBytes(trackId)],
+    );
+
+    return result[0].toString();
+  }
+
+  try_getTrackLyrics(trackId: Bytes): ethereum.CallResult<string> {
+    let result = super.tryCall(
+      "getTrackLyrics",
+      "getTrackLyrics(bytes32):(string)",
+      [ethereum.Value.fromFixedBytes(trackId)],
+    );
+    if (result.reverted) {
+      return new ethereum.CallResult();
+    }
+    let value = result.value;
+    return ethereum.CallResult.fromValue(value[0].toString());
+  }
+
   isOperator(param0: Address): boolean {
     let result = super.call("isOperator", "isOperator(address):(bool)", [
       ethereum.Value.fromAddress(param0),
@@ -523,6 +582,29 @@ export class ScrobbleV4 extends ethereum.SmartContract {
     }
     let value = result.value;
     return ethereum.CallResult.fromValue(value[0].toAddress());
+  }
+
+  trackLyricsRefs(param0: Bytes): string {
+    let result = super.call(
+      "trackLyricsRefs",
+      "trackLyricsRefs(bytes32):(string)",
+      [ethereum.Value.fromFixedBytes(param0)],
+    );
+
+    return result[0].toString();
+  }
+
+  try_trackLyricsRefs(param0: Bytes): ethereum.CallResult<string> {
+    let result = super.tryCall(
+      "trackLyricsRefs",
+      "trackLyricsRefs(bytes32):(string)",
+      [ethereum.Value.fromFixedBytes(param0)],
+    );
+    if (result.reverted) {
+      return new ethereum.CallResult();
+    }
+    let value = result.value;
+    return ethereum.CallResult.fromValue(value[0].toString());
   }
 
   tracks(param0: Bytes): ScrobbleV4__tracksResult {
@@ -588,12 +670,8 @@ export class ConstructorCall__Inputs {
     this._call = call;
   }
 
-  get factory_(): Address {
-    return this._call.inputValues[0].value.toAddress();
-  }
-
   get operator_(): Address {
-    return this._call.inputValues[1].value.toAddress();
+    return this._call.inputValues[0].value.toAddress();
   }
 }
 
@@ -601,6 +679,74 @@ export class ConstructorCall__Outputs {
   _call: ConstructorCall;
 
   constructor(call: ConstructorCall) {
+    this._call = call;
+  }
+}
+
+export class OverwriteTrackCoverCall extends ethereum.Call {
+  get inputs(): OverwriteTrackCoverCall__Inputs {
+    return new OverwriteTrackCoverCall__Inputs(this);
+  }
+
+  get outputs(): OverwriteTrackCoverCall__Outputs {
+    return new OverwriteTrackCoverCall__Outputs(this);
+  }
+}
+
+export class OverwriteTrackCoverCall__Inputs {
+  _call: OverwriteTrackCoverCall;
+
+  constructor(call: OverwriteTrackCoverCall) {
+    this._call = call;
+  }
+
+  get trackId(): Bytes {
+    return this._call.inputValues[0].value.toBytes();
+  }
+
+  get coverRef(): string {
+    return this._call.inputValues[1].value.toString();
+  }
+}
+
+export class OverwriteTrackCoverCall__Outputs {
+  _call: OverwriteTrackCoverCall;
+
+  constructor(call: OverwriteTrackCoverCall) {
+    this._call = call;
+  }
+}
+
+export class OverwriteTrackLyricsCall extends ethereum.Call {
+  get inputs(): OverwriteTrackLyricsCall__Inputs {
+    return new OverwriteTrackLyricsCall__Inputs(this);
+  }
+
+  get outputs(): OverwriteTrackLyricsCall__Outputs {
+    return new OverwriteTrackLyricsCall__Outputs(this);
+  }
+}
+
+export class OverwriteTrackLyricsCall__Inputs {
+  _call: OverwriteTrackLyricsCall;
+
+  constructor(call: OverwriteTrackLyricsCall) {
+    this._call = call;
+  }
+
+  get trackId(): Bytes {
+    return this._call.inputValues[0].value.toBytes();
+  }
+
+  get lyricsRef(): string {
+    return this._call.inputValues[1].value.toString();
+  }
+}
+
+export class OverwriteTrackLyricsCall__Outputs {
+  _call: OverwriteTrackLyricsCall;
+
+  constructor(call: OverwriteTrackLyricsCall) {
     this._call = call;
   }
 }
@@ -853,6 +999,82 @@ export class SetTrackCoverBatchCall__Outputs {
   _call: SetTrackCoverBatchCall;
 
   constructor(call: SetTrackCoverBatchCall) {
+    this._call = call;
+  }
+}
+
+export class SetTrackCoverForCall extends ethereum.Call {
+  get inputs(): SetTrackCoverForCall__Inputs {
+    return new SetTrackCoverForCall__Inputs(this);
+  }
+
+  get outputs(): SetTrackCoverForCall__Outputs {
+    return new SetTrackCoverForCall__Outputs(this);
+  }
+}
+
+export class SetTrackCoverForCall__Inputs {
+  _call: SetTrackCoverForCall;
+
+  constructor(call: SetTrackCoverForCall) {
+    this._call = call;
+  }
+
+  get user(): Address {
+    return this._call.inputValues[0].value.toAddress();
+  }
+
+  get trackId(): Bytes {
+    return this._call.inputValues[1].value.toBytes();
+  }
+
+  get coverRef(): string {
+    return this._call.inputValues[2].value.toString();
+  }
+}
+
+export class SetTrackCoverForCall__Outputs {
+  _call: SetTrackCoverForCall;
+
+  constructor(call: SetTrackCoverForCall) {
+    this._call = call;
+  }
+}
+
+export class SetTrackLyricsForCall extends ethereum.Call {
+  get inputs(): SetTrackLyricsForCall__Inputs {
+    return new SetTrackLyricsForCall__Inputs(this);
+  }
+
+  get outputs(): SetTrackLyricsForCall__Outputs {
+    return new SetTrackLyricsForCall__Outputs(this);
+  }
+}
+
+export class SetTrackLyricsForCall__Inputs {
+  _call: SetTrackLyricsForCall;
+
+  constructor(call: SetTrackLyricsForCall) {
+    this._call = call;
+  }
+
+  get user(): Address {
+    return this._call.inputValues[0].value.toAddress();
+  }
+
+  get trackId(): Bytes {
+    return this._call.inputValues[1].value.toBytes();
+  }
+
+  get lyricsRef(): string {
+    return this._call.inputValues[2].value.toString();
+  }
+}
+
+export class SetTrackLyricsForCall__Outputs {
+  _call: SetTrackLyricsForCall;
+
+  constructor(call: SetTrackLyricsForCall) {
     this._call = call;
   }
 }

@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Base64
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -62,6 +63,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -70,12 +72,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.pirate.app.music.CoverRef
 import com.pirate.app.onboarding.OnboardingLitActions
 import com.pirate.app.onboarding.OnboardingRpcHelpers
 import com.pirate.app.onboarding.steps.LANGUAGE_OPTIONS
 import com.pirate.app.onboarding.steps.LocationResult
 import com.pirate.app.onboarding.steps.searchLocations
+import com.pirate.app.tempo.SessionKeyManager
 import com.pirate.app.tempo.TempoAccountFactory
+import com.pirate.app.tempo.TempoSessionKeyApi
 import com.pirate.app.theme.PiratePalette
 import java.io.ByteArrayOutputStream
 import java.util.Locale
@@ -83,7 +88,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private const val IPFS_GATEWAY = "https://heaven.myfilebase.com/ipfs/"
 private const val MAX_AVATAR_SIZE = 512
 private const val JPEG_QUALITY = 85
 private const val MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB
@@ -147,12 +151,13 @@ private fun countryLabel(code: String): String {
 }
 
 private fun resolveAvatarUrl(avatarUri: String?): String? {
-  if (avatarUri.isNullOrBlank()) return null
-  return if (avatarUri.startsWith("ipfs://")) {
-    IPFS_GATEWAY + avatarUri.removePrefix("ipfs://")
-  } else {
-    avatarUri
-  }
+  return CoverRef.resolveCoverUrl(
+    ref = avatarUri,
+    width = null,
+    height = null,
+    format = null,
+    quality = null,
+  )
 }
 
 private fun processAvatarImage(context: android.content.Context, uri: Uri): Pair<Bitmap, String> {
@@ -290,6 +295,8 @@ fun ProfileEditScreen(
   var schoolName by remember { mutableStateOf("") }
   var schoolDirty by remember { mutableStateOf(false) }
 
+  var sessionKey by remember { mutableStateOf<SessionKeyManager.SessionKey?>(null) }
+
   val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
     uri ?: return@rememberLauncherForActivityResult
     runCatching { processAvatarImage(appContext, uri) }
@@ -370,6 +377,16 @@ fun ProfileEditScreen(
 
         schoolName = ctx.schoolRecord?.trim().orEmpty()
         schoolDirty = false
+
+        // Load session key for silent signing
+        if (tempoAccount != null) {
+          val loaded = SessionKeyManager.load(activity)
+          if (SessionKeyManager.isValid(loaded, ownerAddress = tempoAccount.address) &&
+            loaded?.keyAuthorization?.isNotEmpty() == true
+          ) {
+            sessionKey = loaded
+          }
+        }
         loading = false
       }
       .onFailure { err ->
@@ -416,19 +433,46 @@ fun ProfileEditScreen(
           scope.launch {
             var working = draft
             var nextAvatarUri = avatarUri.orEmpty()
+            var activeSessionKey = sessionKey
 
             if (avatarDirty) {
               if (!avatarBase64.isNullOrBlank()) {
+                if (activeTempoAccount == null) {
+                  error = "Avatar upload requires Tempo passkey account."
+                  saving = false
+                  return@launch
+                }
+                if (activeSessionKey == null) {
+                  Log.d("ProfileEdit", "No session key for avatar upload, authorizing...")
+                  val authResult = TempoSessionKeyApi.authorizeSessionKey(
+                    activity = activity,
+                    account = activeTempoAccount,
+                    rpId = activeTempoAccount.rpId,
+                  )
+                  if (authResult.success && authResult.sessionKey != null) {
+                    activeSessionKey = authResult.sessionKey
+                    sessionKey = activeSessionKey
+                    Log.d("ProfileEdit", "Session key authorized for avatar upload")
+                  } else {
+                    error = authResult.error ?: "Session key authorization failed for avatar upload."
+                    saving = false
+                    return@launch
+                  }
+                }
+
                 val uploadResult = withContext(Dispatchers.IO) {
                   val jpegBytes = Base64.decode(avatarBase64, Base64.DEFAULT)
-                  ProfileAvatarUploadApi.uploadAvatarJpeg(jpegBytes)
+                  ProfileAvatarUploadApi.uploadAvatarJpeg(
+                    jpegBytes = jpegBytes,
+                    sessionKey = activeSessionKey!!,
+                  )
                 }
-                if (!uploadResult.success || uploadResult.avatarCid.isNullOrBlank()) {
+                if (!uploadResult.success || uploadResult.avatarRef.isNullOrBlank()) {
                   error = uploadResult.error ?: "Avatar upload failed"
                   saving = false
                   return@launch
                 }
-                nextAvatarUri = "ipfs://${uploadResult.avatarCid}"
+                nextAvatarUri = uploadResult.avatarRef
               }
               working = working.copy(photoUri = nextAvatarUri)
             } else if (!avatarUri.isNullOrBlank() && working.photoUri.isBlank()) {
@@ -461,6 +505,24 @@ fun ProfileEditScreen(
             }
 
             val payload = ProfileContractApi.buildProfileInput(working)
+
+            // Ensure session key for silent signing
+            if (activeTempoAccount != null && activeSessionKey == null) {
+              Log.d("ProfileEdit", "No session key, authorizing...")
+              val authResult = TempoSessionKeyApi.authorizeSessionKey(
+                activity = activity,
+                account = activeTempoAccount,
+                rpId = activeTempoAccount.rpId,
+              )
+              if (authResult.success && authResult.sessionKey != null) {
+                activeSessionKey = authResult.sessionKey
+                sessionKey = activeSessionKey
+                Log.d("ProfileEdit", "Session key authorized")
+              } else {
+                Log.w("ProfileEdit", "Session key auth failed: ${authResult.error}, falling back to passkey")
+              }
+            }
+
             val profileError =
               when {
                 activeTempoAccount != null -> {
@@ -470,6 +532,7 @@ fun ProfileEditScreen(
                       account = activeTempoAccount,
                       profileInput = payload,
                       rpId = activeTempoAccount.rpId,
+                      sessionKey = activeSessionKey,
                     )
                   if (result.success) null else result.error ?: "Profile update failed"
                 }
@@ -523,6 +586,7 @@ fun ProfileEditScreen(
                         keys = keys,
                         values = values,
                         rpId = activeTempoAccount.rpId,
+                        sessionKey = activeSessionKey,
                       )
                     }
                     !litPubKey.isNullOrBlank() -> {
@@ -1007,22 +1071,29 @@ private fun NumericField(
   )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BasicsEditorSheet(
   draft: ContractProfileData,
   onDraftChange: (ContractProfileData) -> Unit,
   onDone: () -> Unit,
 ) {
-  var nationalityExpanded by remember { mutableStateOf(false) }
   val selectedCountry = countryOptions.firstOrNull { it.code.equals(draft.nationality, ignoreCase = true) }
     ?: countryOptions.first()
+  var nationalityQuery by remember { mutableStateOf("") }
+  var nationalityFocused by remember { mutableStateOf(false) }
+  val filteredCountries = remember(nationalityQuery) {
+    val q = nationalityQuery.trim().lowercase()
+    if (q.isBlank()) {
+      countryOptions.take(20)
+    } else {
+      countryOptions.filter { it.label.lowercase().contains(q) }
+    }
+  }
 
   Column(
     modifier = Modifier
       .fillMaxWidth()
       .fillMaxHeight(0.9f)
-      .verticalScroll(rememberScrollState())
       .padding(horizontal = 20.dp, vertical = 10.dp),
     verticalArrangement = Arrangement.spacedBy(12.dp),
   ) {
@@ -1040,38 +1111,49 @@ private fun BasicsEditorSheet(
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
       Text("Nationality", style = MaterialTheme.typography.bodyMedium, color = PiratePalette.TextMuted)
-      ExposedDropdownMenuBox(
-        expanded = nationalityExpanded,
-        onExpandedChange = { nationalityExpanded = it },
-      ) {
-        OutlinedTextField(
-          value = selectedCountry.label,
-          onValueChange = {},
-          readOnly = true,
-          trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = nationalityExpanded) },
-          modifier = Modifier
-            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-            .fillMaxWidth(),
-          singleLine = true,
-        )
-        ExposedDropdownMenu(
-          expanded = nationalityExpanded,
-          onDismissRequest = { nationalityExpanded = false },
-          modifier = Modifier.heightIn(max = 320.dp),
-        ) {
+      OutlinedTextField(
+        value = if (nationalityFocused) nationalityQuery else selectedCountry.label,
+        onValueChange = { nationalityQuery = it },
+        modifier = Modifier
+          .fillMaxWidth()
+          .onFocusChanged { state ->
+            if (state.isFocused && !nationalityFocused) {
+              nationalityFocused = true
+              nationalityQuery = ""
+            } else if (!state.isFocused) {
+              nationalityFocused = false
+            }
+          },
+        singleLine = true,
+        placeholder = { Text("Search country...") },
+        trailingIcon = {
+          if (nationalityFocused && nationalityQuery.isNotBlank()) {
+            IconButton(onClick = { nationalityQuery = "" }) {
+              Icon(Icons.Rounded.Close, contentDescription = "Clear")
+            }
+          }
+        },
+      )
+      if (nationalityFocused && filteredCountries.isNotEmpty()) {
+        Surface(color = Color(0xFF262626), shape = RoundedCornerShape(12.dp)) {
           LazyColumn(
             modifier = Modifier
               .fillMaxWidth()
-              .heightIn(max = 320.dp),
+              .heightIn(max = 220.dp),
           ) {
-            items(countryOptions, key = { it.code }) { option ->
-              DropdownMenuItem(
-                text = { Text(option.label) },
-                onClick = {
-                  nationalityExpanded = false
-                  onDraftChange(draft.copy(nationality = option.code))
-                },
-              )
+            items(filteredCountries, key = { it.code }) { option ->
+              Row(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .clickable {
+                    onDraftChange(draft.copy(nationality = option.code))
+                    nationalityFocused = false
+                    nationalityQuery = ""
+                  }
+                  .padding(horizontal = 12.dp, vertical = 10.dp),
+              ) {
+                Text(option.label)
+              }
             }
           }
         }

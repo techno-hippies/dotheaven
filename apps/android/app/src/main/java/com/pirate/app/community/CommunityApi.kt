@@ -1,5 +1,6 @@
 package com.pirate.app.community
 
+import com.pirate.app.BuildConfig
 import com.pirate.app.onboarding.steps.LANGUAGE_OPTIONS
 import java.math.BigInteger
 import kotlin.math.abs
@@ -61,7 +62,9 @@ private data class BoundingBoxE6(
 )
 
 object CommunityApi {
-  private const val SUBGRAPH_PROFILES =
+  private const val DEFAULT_TEMPO_SUBGRAPH_PROFILES =
+    "https://graph.dotheaven.org/subgraphs/name/dotheaven/profiles-tempo"
+  private const val LEGACY_SUBGRAPH_PROFILES =
     "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-profiles/1.0.0/gn"
   private const val ZERO_HASH =
     "0x0000000000000000000000000000000000000000000000000000000000000000"
@@ -360,13 +363,28 @@ object CommunityApi {
   }
 
   private fun postQuery(query: String): JSONObject {
-    val body = JSONObject().put("query", query).toString().toRequestBody(jsonMediaType)
-    val req = Request.Builder().url(SUBGRAPH_PROFILES).post(body).build()
-    client.newCall(req).execute().use { res ->
-      if (!res.isSuccessful) {
-        throw IllegalStateException("Profiles query failed: ${res.code}")
+    val bodyStr = JSONObject().put("query", query).toString()
+    for (url in profileSubgraphUrls()) {
+      try {
+        val body = bodyStr.toRequestBody(jsonMediaType)
+        val req = Request.Builder().url(url).post(body).build()
+        client.newCall(req).execute().use { res ->
+          if (!res.isSuccessful) throw IllegalStateException("HTTP ${res.code}")
+          return JSONObject(res.body?.string().orEmpty())
+        }
+      } catch (_: Exception) {
+        continue
       }
-      return JSONObject(res.body?.string().orEmpty())
     }
+    throw IllegalStateException("Profiles query failed: all subgraph endpoints unreachable")
+  }
+
+  private fun profileSubgraphUrls(): List<String> {
+    val fromBuildConfig = BuildConfig.TEMPO_PROFILES_SUBGRAPH_URL.trim().removeSuffix("/")
+    val urls = ArrayList<String>(3)
+    if (fromBuildConfig.isNotBlank()) urls.add(fromBuildConfig)
+    urls.add(DEFAULT_TEMPO_SUBGRAPH_PROFILES)
+    urls.add(LEGACY_SUBGRAPH_PROFILES)
+    return urls.distinct()
   }
 }

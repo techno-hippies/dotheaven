@@ -12,7 +12,7 @@ data class TempoSessionAuthorizationResult(
 )
 
 object TempoSessionKeyApi {
-  private const val GAS_LIMIT_AUTHORIZE_SESSION_KEY = 650_000L
+  private const val GAS_LIMIT_AUTHORIZE_SESSION_KEY = 1_200_000L
 
   /**
    * Authorizes a new ephemeral session key for the passkey account.
@@ -45,9 +45,9 @@ object TempoSessionKeyApi {
         SessionKeyManager.buildSignedKeyAuthorization(sessionKey, keyAuthAssertion)
 
       val nonce = withContext(Dispatchers.IO) { TempoClient.getNonce(account.address) }
-      val fees = withContext(Dispatchers.IO) { TempoClient.getSuggestedFees() }
+      val initialFees = withContext(Dispatchers.IO) { TempoClient.getSuggestedFees() }
 
-      val tx =
+      fun buildTx(fees: TempoClient.Eip1559Fees): TempoTransaction.UnsignedTx =
         TempoTransaction.UnsignedTx(
           nonce = nonce,
           maxPriorityFeePerGas = fees.maxPriorityFeePerGas,
@@ -65,22 +65,30 @@ object TempoSessionKeyApi {
           keyAuthorization = signedKeyAuthorization,
         )
 
-      val txSigHash = TempoTransaction.signatureHash(tx)
-      val txAssertion =
-        TempoPasskeyManager.sign(
-          activity = activity,
-          challenge = txSigHash,
-          account = account,
-          rpId = rpId,
-        )
-
-      val signedTxHex = TempoTransaction.encodeSignedWebAuthn(tx, txAssertion)
-      val txHash = withContext(Dispatchers.IO) {
-        TempoClient.sendSponsoredRawTransaction(
-          signedTxHex = signedTxHex,
-          senderAddress = account.address,
-        )
+      suspend fun signTx(tx: TempoTransaction.UnsignedTx): String {
+        val txSigHash = TempoTransaction.signatureHash(tx)
+        val txAssertion =
+          TempoPasskeyManager.sign(
+            activity = activity,
+            challenge = txSigHash,
+            account = account,
+            rpId = rpId,
+          )
+        return TempoTransaction.encodeSignedWebAuthn(tx, txAssertion)
       }
+
+      suspend fun submitWithRelay(): String {
+        val relayTx = buildTx(fees = initialFees)
+        val relaySignedTxHex = signTx(relayTx)
+        return withContext(Dispatchers.IO) {
+          TempoClient.sendSponsoredRawTransaction(
+            signedTxHex = relaySignedTxHex,
+            senderAddress = account.address,
+          )
+        }
+      }
+
+      val txHash = submitWithRelay()
       val receipt = withContext(Dispatchers.IO) { TempoClient.waitForTransactionReceipt(txHash) }
       if (!receipt.isSuccess) {
         throw IllegalStateException("Session key authorization reverted on-chain: $txHash")

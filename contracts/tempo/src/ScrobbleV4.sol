@@ -79,6 +79,7 @@ contract ScrobbleV4 {
     }
 
     mapping(bytes32 => Track) public tracks;
+    mapping(bytes32 => string) public trackLyricsRefs;
 
     event TrackRegistered(
         bytes32 indexed trackId,
@@ -97,6 +98,21 @@ contract ScrobbleV4 {
     event TrackCoverSet(
         bytes32 indexed trackId,
         string coverCid
+    );
+
+    event TrackCoverOverwritten(
+        bytes32 indexed trackId,
+        string coverCid
+    );
+
+    event TrackLyricsSet(
+        bytes32 indexed trackId,
+        string lyricsRef
+    );
+
+    event TrackLyricsOverwritten(
+        bytes32 indexed trackId,
+        string lyricsRef
     );
 
     event Scrobbled(
@@ -228,6 +244,24 @@ contract ScrobbleV4 {
         emit TrackCoverSet(trackId, coverCid);
     }
 
+    /// @notice Set cover art reference for a track as the authenticated user.
+    ///         First-write wins; reverts if a cover is already set.
+    ///         msg.sender must equal `user`.
+    function setTrackCoverFor(
+        address user,
+        bytes32 trackId,
+        string calldata coverRef
+    ) external onlyUser(user) {
+        Track storage t = tracks[trackId];
+        require(t.exists, "not registered");
+        require(bytes(coverRef).length > 0, "empty ref");
+        require(bytes(coverRef).length <= MAX_CID, "ref too long");
+        require(bytes(t.coverCid).length == 0, "cover already set");
+
+        t.coverCid = coverRef;
+        emit TrackCoverSet(trackId, coverRef);
+    }
+
     /// @notice Batch set cover art CIDs. Idempotent: skips if already set.
     function setTrackCoverBatch(
         bytes32[] calldata trackIds,
@@ -245,6 +279,58 @@ contract ScrobbleV4 {
             }
             unchecked { ++i; }
         }
+    }
+
+    /// @notice Overwrite an existing cover reference for moderation/recovery.
+    function overwriteTrackCover(
+        bytes32 trackId,
+        string calldata coverRef
+    ) external onlyOperator {
+        Track storage t = tracks[trackId];
+        require(t.exists, "not registered");
+        require(bytes(coverRef).length > 0, "empty ref");
+        require(bytes(coverRef).length <= MAX_CID, "ref too long");
+        require(bytes(t.coverCid).length > 0, "cover not set");
+
+        t.coverCid = coverRef;
+        emit TrackCoverOverwritten(trackId, coverRef);
+    }
+
+    /// @notice Set lyrics reference for a track as the authenticated user.
+    ///         First-write wins; reverts if lyrics already set.
+    ///         msg.sender must equal `user`.
+    function setTrackLyricsFor(
+        address user,
+        bytes32 trackId,
+        string calldata lyricsRef
+    ) external onlyUser(user) {
+        Track storage t = tracks[trackId];
+        require(t.exists, "not registered");
+        require(bytes(lyricsRef).length > 0, "empty ref");
+        require(bytes(lyricsRef).length <= MAX_CID, "ref too long");
+        require(bytes(trackLyricsRefs[trackId]).length == 0, "lyrics already set");
+
+        trackLyricsRefs[trackId] = lyricsRef;
+        emit TrackLyricsSet(trackId, lyricsRef);
+    }
+
+    /// @notice Overwrite an existing lyrics reference for moderation/recovery.
+    function overwriteTrackLyrics(
+        bytes32 trackId,
+        string calldata lyricsRef
+    ) external onlyOperator {
+        Track storage t = tracks[trackId];
+        require(t.exists, "not registered");
+        require(bytes(lyricsRef).length > 0, "empty ref");
+        require(bytes(lyricsRef).length <= MAX_CID, "ref too long");
+        require(bytes(trackLyricsRefs[trackId]).length > 0, "lyrics not set");
+
+        trackLyricsRefs[trackId] = lyricsRef;
+        emit TrackLyricsOverwritten(trackId, lyricsRef);
+    }
+
+    function getTrackLyrics(bytes32 trackId) external view returns (string memory) {
+        return trackLyricsRefs[trackId];
     }
 
     // ── View helpers ─────────────────────────────────────────────────────

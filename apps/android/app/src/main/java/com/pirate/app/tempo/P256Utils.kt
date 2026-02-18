@@ -5,6 +5,13 @@ import com.upokecenter.cbor.CBORObject
 import org.bouncycastle.jcajce.provider.digest.Keccak
 import java.io.ByteArrayInputStream
 import java.math.BigInteger
+import java.security.AlgorithmParameters
+import java.security.KeyFactory
+import java.security.MessageDigest
+import java.security.Signature
+import java.security.spec.ECGenParameterSpec
+import java.security.spec.ECPoint
+import java.security.spec.ECPublicKeySpec
 
 object P256Utils {
 
@@ -95,6 +102,33 @@ object P256Utils {
         val r = padTo32(stripLeadingZeros(rRaw))
         val s = normalizeP256LowS(padTo32(stripLeadingZeros(sRaw)))
         return Pair(r, s)
+    }
+
+    /**
+     * Verify WebAuthn assertion signature:
+     * signature over authenticatorData || SHA-256(clientDataJSON), using ES256.
+     */
+    fun verifyAssertionSignature(
+        pubKey: P256PublicKey,
+        authenticatorData: ByteArray,
+        clientDataJSON: ByteArray,
+        signatureDer: ByteArray,
+    ): Boolean {
+        return runCatching {
+            val params = AlgorithmParameters.getInstance("EC")
+            params.init(ECGenParameterSpec("secp256r1"))
+            val ecParams = params.getParameterSpec(java.security.spec.ECParameterSpec::class.java)
+            val point = ECPoint(BigInteger(1, pubKey.x), BigInteger(1, pubKey.y))
+            val keySpec = ECPublicKeySpec(point, ecParams)
+            val publicKey = KeyFactory.getInstance("EC").generatePublic(keySpec)
+
+            val clientHash = MessageDigest.getInstance("SHA-256").digest(clientDataJSON)
+            val signedBytes = authenticatorData + clientHash
+            val verifier = Signature.getInstance("SHA256withECDSA")
+            verifier.initVerify(publicKey)
+            verifier.update(signedBytes)
+            verifier.verify(signatureDer)
+        }.getOrDefault(false)
     }
 
     private fun normalizeP256LowS(s: ByteArray): ByteArray {

@@ -44,6 +44,10 @@ object CoverRef {
     val raw = ref?.trim().orEmpty()
     if (raw.isEmpty()) return null
 
+    if (raw.startsWith("content://") || raw.startsWith("file://")) {
+      return raw
+    }
+
     if (raw.startsWith("ipfs://")) {
       val cid = raw.removePrefix("ipfs://").trim()
       if (cid.isEmpty()) return null
@@ -76,7 +80,11 @@ object CoverRef {
       return raw
     }
 
+    // Fallback: treat bare base64url-ish IDs as Load dataitem refs.
+    if (Regex("^[A-Za-z0-9_-]{32,}$").matches(raw)) {
+      return "$LOAD_LS3_GATEWAY/resolve/$raw"
+    }
+
     return null
   }
 }
-

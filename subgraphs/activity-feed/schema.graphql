@@ -96,6 +96,7 @@ type Track @entity(immutable: false) {
   payload: Bytes!              # raw derivation input
   metaHash: Bytes!             # keccak256(abi.encode(title, artist, album))
   coverCid: String             # IPFS CID for album art (set once via setTrackCover)
+  lyricsRef: String            # Arweave/IPFS ref for canonical lyrics payload
   durationSec: Int             # track duration in seconds (0 = unknown)
   scrobbleCountTotal: BigInt!  # pre-aggregated total scrobbles (all users)
   scrobbleCountVerified: BigInt! # pre-aggregated scrobbles from verified users at scrobble time

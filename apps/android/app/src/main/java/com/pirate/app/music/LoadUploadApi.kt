@@ -1,28 +1,15 @@
 package com.pirate.app.music
 
+import com.pirate.app.arweave.Ans104DataItem
+import com.pirate.app.tempo.SessionKeyManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.MultipartBody
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONArray
-import org.json.JSONObject
-import java.util.concurrent.TimeUnit
+import java.util.LinkedHashMap
 
 /**
- * Upload encrypted blobs to Load network via heaven-api proxy.
+ * Upload encrypted blobs to Load network directly via Turbo ANS-104 endpoint.
  */
 object LoadUploadApi {
-
-    private const val DEFAULT_API_URL = "https://api.dotheaven.com"
-
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(120, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .build()
 
     data class UploadResult(
         val id: String,         // piece CID / Load ID
@@ -35,49 +22,52 @@ object LoadUploadApi {
      * @param blob      encrypted file bytes
      * @param filename  hint for the stored filename
      * @param tags      optional key-value tags for the upload
-     * @param apiUrl    heaven-api base URL (defaults to prod)
+     * @param sessionKey active Tempo session key used to sign ANS-104 DataItem
      */
     suspend fun upload(
         blob: ByteArray,
         filename: String,
         tags: List<Pair<String, String>> = emptyList(),
-        apiUrl: String = DEFAULT_API_URL,
+        sessionKey: SessionKeyManager.SessionKey,
     ): UploadResult = withContext(Dispatchers.IO) {
-        val tagsJson = JSONArray().apply {
-            for ((k, v) in tags) put(JSONObject().put("key", k).put("value", v))
-        }.toString()
-
-        val body = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addFormDataPart(
-                "file", filename,
-                blob.toRequestBody("application/octet-stream".toMediaType()),
-            )
-            .addFormDataPart("contentType", "application/octet-stream")
-            .addFormDataPart("tags", tagsJson)
-            .build()
-
-        val request = Request.Builder()
-            .url("$apiUrl/api/load/upload")
-            .post(body)
-            .build()
-
-        val response = client.newCall(request).execute()
-        val text = response.body?.string().orEmpty()
-        val json = runCatching { JSONObject(text) }.getOrElse { JSONObject() }
-
-        if (!response.isSuccessful) {
-            throw RuntimeException(json.optString("error", "Load upload failed (${response.code})"))
+        if (blob.isEmpty()) {
+            throw IllegalStateException("Load upload payload is empty.")
         }
 
-        val id = json.optString("id", "").ifBlank {
-            throw RuntimeException("Load upload succeeded but returned no id")
+        val normalizedTags = LinkedHashMap<String, String>()
+        for ((rawName, rawValue) in tags) {
+            val name = rawName.trim()
+            val value = rawValue.trim()
+            if (name.isEmpty() || value.isEmpty()) continue
+            normalizedTags[name] = value
+        }
+        if (normalizedTags.keys.none { it.equals("Content-Type", ignoreCase = true) }) {
+            normalizedTags["Content-Type"] = "application/octet-stream"
+        }
+        if (normalizedTags.keys.none { it.equals("App-Name", ignoreCase = true) }) {
+            normalizedTags["App-Name"] = "Heaven"
+        }
+        if (normalizedTags.keys.none { it.equals("Upload-Source", ignoreCase = true) }) {
+            normalizedTags["Upload-Source"] = "heaven-android"
+        }
+        if (normalizedTags.keys.none { it.equals("File-Name", ignoreCase = true) }) {
+            normalizedTags["File-Name"] = filename
         }
 
-        val gatewayUrl = json.optString("gatewayUrl", "").ifBlank {
-            "${LoadTurboConfig.DEFAULT_GATEWAY_URL}/$id"
+        val signed = Ans104DataItem.buildAndSign(
+            payload = blob,
+            tags = normalizedTags.map { (name, value) ->
+                Ans104DataItem.Tag(name = name, value = value)
+            },
+            sessionKey = sessionKey,
+        )
+        val id = Ans104DataItem.uploadSignedDataItem(signed.bytes).trim()
+        if (id.isEmpty()) {
+            throw IllegalStateException("Load upload succeeded but returned no id")
         }
-
-        UploadResult(id = id, gatewayUrl = gatewayUrl)
+        UploadResult(
+            id = id,
+            gatewayUrl = "${LoadTurboConfig.DEFAULT_GATEWAY_URL}/resolve/$id",
+        )
     }
 }

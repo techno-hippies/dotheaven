@@ -78,12 +78,16 @@ export const LibraryPage: Component = () => {
     lyrics: '',
     coverFile: null,
     audioFile: null,
+    vocalsFile: null,
     instrumentalFile: null,
     canvasFile: null,
     license: 'non-commercial',
     revShare: 10,
     mintingFee: '0',
     attestation: false,
+    publishType: 'original',
+    parentIpIds: [],
+    licenseTermsIds: [],
   }
 
   const [publishStep, setPublishStep] = createSignal<PublishStep>('song')
