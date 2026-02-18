@@ -14,7 +14,8 @@
     "check": "tsc --noEmit",
     "test:photos": "bun run scripts/test-photos.ts",
     "test:pipeline": "bun run scripts/test-pipeline.ts",
-    "test:music": "bun run scripts/test-music-flow.ts"
+    "test:music": "bun run scripts/test-music-flow.ts",
+    "test:music:finalize": "bun test tests/music-finalize.test.ts"
   },
   "dependencies": {
     "ethers": "6.16.0",
