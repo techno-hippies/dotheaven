@@ -3,6 +3,7 @@ import { beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test'
 type MockChainState = {
   isRegistered: boolean
   contentActive: boolean
+  coverCid: string
   scrobbleWaitTimeout: boolean
   contentWaitTimeout: boolean
   calls: Array<{ fn: string; args: unknown[] }>
@@ -11,6 +12,7 @@ type MockChainState = {
 const chainState: MockChainState = {
   isRegistered: false,
   contentActive: false,
+  coverCid: '',
   scrobbleWaitTimeout: false,
   contentWaitTimeout: false,
   calls: [],
@@ -86,6 +88,24 @@ mock.module('ethers', () => {
           return { hash: '0x2222222222222222222222222222222222222222222222222222222222222222' }
         },
       }
+    }
+
+    async setTrackCoverBatch(...args: unknown[]): Promise<{ hash: string; wait: () => Promise<{ hash: string }> }> {
+      chainState.calls.push({ fn: 'setTrackCoverBatch', args })
+      const coverRefs = args[1] as string[] | undefined
+      const ref = (coverRefs?.[0] || '').trim()
+      if (ref.length > 0 && chainState.coverCid.length === 0) {
+        chainState.coverCid = ref
+      }
+      return {
+        hash: '0x3333333333333333333333333333333333333333333333333333333333333333',
+        wait: async () => ({ hash: '0x3333333333333333333333333333333333333333333333333333333333333333' }),
+      }
+    }
+
+    async getTrack(_trackId: string): Promise<[string, string, string, number, string, number, string, number]> {
+      chainState.calls.push({ fn: 'getTrack', args: [_trackId] })
+      return ['Song', 'Artist', '', 3, '0x', 0, chainState.coverCid, 0]
     }
   }
 
@@ -279,6 +299,7 @@ beforeAll(async () => {
 beforeEach(() => {
   chainState.isRegistered = false
   chainState.contentActive = false
+  chainState.coverCid = ''
   chainState.scrobbleWaitTimeout = false
   chainState.contentWaitTimeout = false
   chainState.calls = []
@@ -309,6 +330,7 @@ describe('POST /publish/:jobId/finalize', () => {
     expectStatus(result, 200)
     expect(((result.json.job as Record<string, unknown>).status)).toBe('registered')
     expect(chainState.calls.some((v) => v.fn === 'registerTracksBatch')).toBe(true)
+    expect(chainState.calls.some((v) => v.fn === 'setTrackCoverBatch')).toBe(true)
     expect(chainState.calls.some((v) => v.fn === 'registerContentFor')).toBe(true)
   })
 

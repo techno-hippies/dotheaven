@@ -95,6 +95,8 @@ const STORY_LICENSE_REGISTRY_ABI = [
 const TEMPO_SCROBBLE_V4_ABI = [
   'function isRegistered(bytes32 trackId) view returns (bool)',
   'function registerTracksBatch(uint8[] kinds, bytes32[] payloads, string[] titles, string[] artists, string[] albums, uint32[] durations)',
+  'function setTrackCoverBatch(bytes32[] trackIds, string[] coverCids)',
+  'function getTrack(bytes32 trackId) view returns (string title, string artist, string album, uint8 kind, bytes32 payload, uint64 registeredAt, string coverCid, uint32 durationSec)',
 ]
 
 const TEMPO_CONTENT_REGISTRY_ABI = [
@@ -268,6 +270,18 @@ function contentEntryActive(value: unknown): boolean {
     return Boolean((value as { active: unknown }).active)
   }
   return false
+}
+
+function extractTrackCover(value: unknown): string {
+  if (Array.isArray(value)) {
+    const cover = value[6]
+    return typeof cover === 'string' ? cover : ''
+  }
+  if (value && typeof value === 'object' && 'coverCid' in value) {
+    const cover = (value as { coverCid: unknown }).coverCid
+    return typeof cover === 'string' ? cover : ''
+  }
+  return ''
 }
 
 function utf8ByteLength(value: string): number {
@@ -1552,8 +1566,10 @@ app.post('/publish/:jobId/finalize', async (c) => {
 
     let trackRegistered = false
     let contentRegistered = false
+    let coverSet = false
     let scrobbleTxHash: string | null = null
     let contentTxHash: string | null = null
+    let coverTxHash: string | null = null
 
     const registered = await scrobbleContract.isRegistered(trackId) as boolean
     if (!registered) {
@@ -1572,6 +1588,26 @@ app.post('/publish/:jobId/finalize', async (c) => {
       } catch (error) {
         const retryRegistered = await scrobbleContract.isRegistered(trackId) as boolean
         if (!retryRegistered) throw error
+      }
+    }
+
+    // Best-effort cover write so New Releases/profile cards can render artwork.
+    // This should not block publish finalization if the cover write races or times out.
+    const stagedCoverId = (row.cover_staged_dataitem_id || '').trim()
+    const coverRef = stagedCoverId ? `ls3://${stagedCoverId}` : null
+    if (coverRef && coverRef.length <= 128) {
+      try {
+        const tx = await scrobbleContract.setTrackCoverBatch([trackId], [coverRef])
+        const receipt = await waitForTxReceiptWithTimeout(tx, tempoTxWaitTimeoutMs, 'track_cover_set')
+        coverTxHash = receipt.hash || tx.hash
+        coverSet = true
+      } catch {
+        try {
+          const trackState = await scrobbleContract.getTrack(trackId)
+          coverSet = extractTrackCover(trackState).trim().length > 0
+        } catch {
+          coverSet = false
+        }
       }
     }
 
@@ -1632,9 +1668,12 @@ app.post('/publish/:jobId/finalize', async (c) => {
         durationS,
         scrobbleTxHash,
         contentTxHash,
+        coverTxHash,
         tempoTxHash,
         trackRegistered,
         contentRegistered,
+        coverSet,
+        coverRef,
       },
     })
   } catch (error) {
