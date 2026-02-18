@@ -1406,7 +1406,7 @@ app.post('/publish/:jobId/finalize', async (c) => {
   const userPkp = c.get('userPkp')
   const jobId = c.req.param('jobId')
 
-  const sponsorPk = c.env.TEMPO_SPONSOR_PRIVATE_KEY || c.env.PRIVATE_KEY
+  const sponsorPk = c.env.TEMPO_SPONSOR_PRIVATE_KEY || c.env.STORY_SPONSOR_PRIVATE_KEY || c.env.PRIVATE_KEY
   if (!sponsorPk) {
     console.error('[Music/Finalize] Missing TEMPO_SPONSOR_PRIVATE_KEY (or PRIVATE_KEY fallback)')
     return c.json({ error: 'Tempo finalize is not configured' }, 500)
