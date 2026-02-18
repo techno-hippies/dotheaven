@@ -1,6 +1,15 @@
 import { Hono } from 'hono'
 import type { Context, Next } from 'hono'
-import { Contract, JsonRpcProvider, Wallet, ZeroAddress, getAddress, id as keccakId } from 'ethers'
+import {
+  AbiCoder,
+  Contract,
+  JsonRpcProvider,
+  Wallet,
+  ZeroAddress,
+  getAddress,
+  id as keccakId,
+  keccak256 as keccak256Hex,
+} from 'ethers'
 import type {
   Env,
   MusicPublishJobRow,
@@ -28,10 +37,16 @@ const DEFAULT_STORY_ROYALTY_POLICY_LAP = '0xBe54FB168b3c982b7AaE60dB6CF75Bd8447b
 const DEFAULT_STORY_WIP_TOKEN = '0x1514000000000000000000000000000000000000'
 const DEFAULT_STORY_SPG_NFT_CONTRACT = '0xb1764abf89e6a151ea27824612145ef89ed70a73'
 const DEFAULT_STORY_PIL_LICENSE_TEMPLATE = '0x2E896b0b2Fdb7457499B56AAaA4AE55BCB4Cd316'
+const DEFAULT_TEMPO_RPC_URL = 'https://rpc.moderato.tempo.xyz'
+const DEFAULT_TEMPO_CHAIN_ID = 42431
+const DEFAULT_TEMPO_SCROBBLE_V4 = '0x07B8BdE8BaD74DC974F783AA71C7C51d6B37C363'
+const DEFAULT_TEMPO_CONTENT_REGISTRY = '0x2A3beA895AE5bb4415c436155cbA15a97ACc2C77'
+const DEFAULT_TEMPO_TX_WAIT_TIMEOUT_MS = 45_000
 const ERC721_TRANSFER_TOPIC = keccakId('Transfer(address,address,uint256)')
 const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB (Worker-safe ceiling for v1)
 const MAX_COVER_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 const MAX_LYRICS_BYTES = 256 * 1024 // 256KB
+const MAX_UPLOAD_TAGS = 50
 const DAILY_UPLOAD_BYTES_LIMIT = 500 * 1024 * 1024 // 500MB per verified user/day
 const DAILY_PUBLISH_COUNT_LIMIT = 20
 
@@ -76,6 +91,18 @@ const STORY_LICENSE_REGISTRY_ABI = [
   'function getAttachedLicenseTermsCount(address ipId) view returns (uint256)',
   'function getAttachedLicenseTerms(address ipId, uint256 index) view returns (address, uint256)',
 ]
+
+const TEMPO_SCROBBLE_V4_ABI = [
+  'function isRegistered(bytes32 trackId) view returns (bool)',
+  'function registerTracksBatch(uint8[] kinds, bytes32[] payloads, string[] titles, string[] artists, string[] albums, uint32[] durations)',
+]
+
+const TEMPO_CONTENT_REGISTRY_ABI = [
+  'function registerContentFor(address contentOwner, bytes32 trackId, address datasetOwner, bytes pieceCid, uint8 algo) returns (bytes32 contentId)',
+  'function getContent(bytes32 contentId) view returns (address owner, address datasetOwner, bytes pieceCid, uint8 algo, uint64 createdAt, bool active)',
+]
+
+const ABI_CODER = AbiCoder.defaultAbiCoder()
 
 function normalizePkpAddress(address: string): string | null {
   const clean = address.toLowerCase().trim()
@@ -187,6 +214,81 @@ function isBytes32Hex(value: string): boolean {
 
 function isHexBytes(value: string): boolean {
   return /^0x(?:[a-fA-F0-9]{2})*$/.test(value)
+}
+
+function normalizeTrackComponent(value: string): string {
+  return value.toLowerCase().trim().replace(/\s+/g, ' ')
+}
+
+function computeMetaTrackId(title: string, artist: string, album: string): { trackId: string; payload: string } {
+  const payload = keccak256Hex(
+    ABI_CODER.encode(
+      ['string', 'string', 'string'],
+      [normalizeTrackComponent(title), normalizeTrackComponent(artist), normalizeTrackComponent(album)],
+    ),
+  )
+  const trackId = keccak256Hex(
+    ABI_CODER.encode(['uint8', 'bytes32'], [3, payload]),
+  )
+  return { trackId, payload }
+}
+
+function computeContentId(trackId: string, owner: string): string {
+  return keccak256Hex(ABI_CODER.encode(['bytes32', 'address'], [trackId, owner]))
+}
+
+function parsePieceCidBytes(value: string): Uint8Array {
+  const trimmed = value.trim()
+  if (!trimmed) throw new Error('pieceCid is required')
+  if (/^0x[0-9a-fA-F]*$/.test(trimmed)) {
+    const hex = trimmed.slice(2)
+    if (hex.length % 2 !== 0) throw new Error('pieceCid hex value must have even length')
+    const out = new Uint8Array(hex.length / 2)
+    for (let i = 0; i < out.length; i++) {
+      out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16)
+    }
+    return out
+  }
+  return new TextEncoder().encode(trimmed)
+}
+
+function parseDurationSeconds(raw: unknown, fallback: number | null): number {
+  const candidate = raw === undefined ? fallback : raw
+  if (candidate === null || candidate === undefined || candidate === '') return 0
+  const n = Number(candidate)
+  if (!Number.isInteger(n) || n < 0 || n > 4_294_967_295) {
+    throw new Error('durationS must be an integer between 0 and 4294967295')
+  }
+  return n
+}
+
+function contentEntryActive(value: unknown): boolean {
+  if (Array.isArray(value)) return Boolean(value[5])
+  if (value && typeof value === 'object' && 'active' in value) {
+    return Boolean((value as { active: unknown }).active)
+  }
+  return false
+}
+
+function utf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength
+}
+
+async function waitForTxReceiptWithTimeout<T extends { wait: () => Promise<unknown>; hash?: string }>(
+  tx: T,
+  timeoutMs: number,
+  label: string,
+): Promise<{ hash: string | undefined }> {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label}_tx_wait_timeout`)), timeoutMs)
+  })
+  try {
+    const receipt = await Promise.race([tx.wait(), timeout]) as { hash?: string } | null
+    return { hash: receipt?.hash || tx.hash }
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 }
 
 function asErrorMessage(error: unknown): string {
@@ -621,6 +723,7 @@ function serializeJob(row: MusicPublishJobRow) {
       storyLicenseTermsIds: parseJsonStringArray(row.story_license_terms_ids_json),
       storyBlockNumber: row.story_block_number,
       megaethTxHash: row.megaeth_tx_hash,
+      tempoTxHash: row.megaeth_tx_hash,
     },
     error: row.error_code || row.error_message
       ? { code: row.error_code, message: row.error_message }
@@ -765,6 +868,9 @@ app.post('/publish/start', async (c) => {
   try {
     const parsed = JSON.parse(tagsRaw)
     if (!Array.isArray(parsed)) throw new Error('tags must be an array')
+    if (parsed.length > MAX_UPLOAD_TAGS) {
+      return c.json({ error: `tags must contain at most ${MAX_UPLOAD_TAGS} entries` }, 400)
+    }
     tags = JSON.stringify(parsed)
   } catch {
     return c.json({ error: 'tags must be valid JSON array' }, 400)
@@ -1270,6 +1376,289 @@ app.get('/publish/:jobId', async (c) => {
   }
 
   return c.json({ job: serializeJob(row) })
+})
+
+interface TempoFinalizeRequestBody {
+  title?: string
+  artist?: string
+  album?: string
+  durationS?: number
+  pieceCid?: string
+  datasetOwner?: string
+  algo?: number
+}
+
+app.post('/publish/:jobId/finalize', async (c) => {
+  const userPkp = c.get('userPkp')
+  const jobId = c.req.param('jobId')
+
+  const sponsorPk = c.env.TEMPO_SPONSOR_PRIVATE_KEY || c.env.PRIVATE_KEY
+  if (!sponsorPk) {
+    console.error('[Music/Finalize] Missing TEMPO_SPONSOR_PRIVATE_KEY (or PRIVATE_KEY fallback)')
+    return c.json({ error: 'Tempo finalize is not configured' }, 500)
+  }
+  if (!/^0x[a-fA-F0-9]{64}$/.test(sponsorPk.trim())) {
+    console.error('[Music/Finalize] TEMPO_SPONSOR_PRIVATE_KEY has invalid format')
+    return c.json({ error: 'Tempo finalize is not configured' }, 500)
+  }
+
+  const operatorPk = (c.env.TEMPO_OPERATOR_PRIVATE_KEY || sponsorPk).trim()
+  if (!/^0x[a-fA-F0-9]{64}$/.test(operatorPk)) {
+    console.error('[Music/Finalize] TEMPO_OPERATOR_PRIVATE_KEY has invalid format')
+    return c.json({ error: 'Tempo finalize is not configured' }, 500)
+  }
+
+  const tempoChainIdRaw = c.env.TEMPO_CHAIN_ID
+  const tempoChainId = tempoChainIdRaw ? Number(tempoChainIdRaw) : DEFAULT_TEMPO_CHAIN_ID
+  if (!Number.isInteger(tempoChainId) || tempoChainId <= 0) {
+    return c.json({ error: `Invalid TEMPO_CHAIN_ID: ${tempoChainIdRaw}` }, 500)
+  }
+
+  const tempoRpcUrl = (c.env.TEMPO_RPC_URL || DEFAULT_TEMPO_RPC_URL).trim()
+  const scrobbleAddressRaw = (c.env.TEMPO_SCROBBLE_V4 || DEFAULT_TEMPO_SCROBBLE_V4).trim()
+  const contentRegistryAddressRaw = (c.env.TEMPO_CONTENT_REGISTRY || DEFAULT_TEMPO_CONTENT_REGISTRY).trim()
+  const tempoTxWaitTimeoutRaw = c.env.TEMPO_TX_WAIT_TIMEOUT_MS
+  const tempoTxWaitTimeoutMs = tempoTxWaitTimeoutRaw ? Number(tempoTxWaitTimeoutRaw) : DEFAULT_TEMPO_TX_WAIT_TIMEOUT_MS
+  if (!Number.isInteger(tempoTxWaitTimeoutMs) || tempoTxWaitTimeoutMs < 1_000 || tempoTxWaitTimeoutMs > 300_000) {
+    return c.json({ error: `Invalid TEMPO_TX_WAIT_TIMEOUT_MS: ${tempoTxWaitTimeoutRaw}` }, 500)
+  }
+
+  if (!isAddress(scrobbleAddressRaw)) {
+    return c.json({ error: `Invalid TEMPO_SCROBBLE_V4 address: ${scrobbleAddressRaw}` }, 500)
+  }
+  if (!isAddress(contentRegistryAddressRaw)) {
+    return c.json({ error: `Invalid TEMPO_CONTENT_REGISTRY address: ${contentRegistryAddressRaw}` }, 500)
+  }
+
+  const row = await c.env.DB.prepare(`
+    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
+  `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+
+  if (!row) {
+    return c.json({ error: 'Job not found' }, 404)
+  }
+
+  const hasTempoFinalizeEvidence = !!row.megaeth_tx_hash
+
+  if (row.status === 'registered' && hasTempoFinalizeEvidence) {
+    return c.json({
+      job: serializeJob(row),
+      registration: {
+        cached: true,
+        tempoTxHash: row.megaeth_tx_hash,
+      },
+    })
+  }
+  if (row.status === 'registering') {
+    return c.json({
+      error: 'Finalize already in progress',
+      job: serializeJob(row),
+    }, 409)
+  }
+  if (row.status !== 'policy_passed' && row.status !== 'anchored' && row.status !== 'registered') {
+    return c.json({ error: `Job must be policy_passed or anchored before finalize (current=${row.status})`, job: serializeJob(row) }, 409)
+  }
+
+  let body: TempoFinalizeRequestBody
+  try {
+    body = await c.req.json<TempoFinalizeRequestBody>()
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400)
+  }
+
+  const title = (body.title || '').trim()
+  const artist = (body.artist || '').trim()
+  const album = (body.album || '').trim()
+  if (!title) return c.json({ error: 'title is required' }, 400)
+  if (!artist) return c.json({ error: 'artist is required' }, 400)
+  if (utf8ByteLength(title) > 128) return c.json({ error: 'title exceeds 128-byte UTF-8 contract limit' }, 400)
+  if (utf8ByteLength(artist) > 128) return c.json({ error: 'artist exceeds 128-byte UTF-8 contract limit' }, 400)
+  if (utf8ByteLength(album) > 128) return c.json({ error: 'album exceeds 128-byte UTF-8 contract limit' }, 400)
+
+  let durationS: number
+  try {
+    durationS = parseDurationSeconds(body.durationS, row.duration_s)
+  } catch (error) {
+    return c.json({ error: asErrorMessage(error) }, 400)
+  }
+
+  const pieceCid = (body.pieceCid || row.staged_dataitem_id || '').trim()
+  if (!pieceCid) {
+    return c.json({ error: 'pieceCid is required (missing staged_dataitem_id)' }, 409)
+  }
+
+  let pieceCidBytes: Uint8Array
+  try {
+    pieceCidBytes = parsePieceCidBytes(pieceCid)
+  } catch (error) {
+    return c.json({ error: asErrorMessage(error) }, 400)
+  }
+  if (!pieceCidBytes.length) return c.json({ error: 'pieceCid is empty' }, 400)
+  if (pieceCidBytes.length > 128) return c.json({ error: 'pieceCid exceeds 128-byte on-chain limit' }, 400)
+
+  const datasetOwner = normalizePkpAddress((body.datasetOwner || userPkp).trim())
+  if (!datasetOwner) {
+    return c.json({ error: 'datasetOwner must be a valid 0x address when provided' }, 400)
+  }
+
+  const algo = body.algo === undefined ? 1 : Number(body.algo)
+  if (!Number.isInteger(algo) || algo <= 0 || algo > 255) {
+    return c.json({ error: 'algo must be an integer between 1 and 255' }, 400)
+  }
+
+  const previousStatus = row.status
+  const lockNow = Math.floor(Date.now() / 1000)
+  const lock = await c.env.DB.prepare(`
+    UPDATE music_publish_jobs
+    SET status = 'registering',
+        updated_at = ?
+    WHERE job_id = ? AND user_pkp = ? AND status IN ('policy_passed', 'anchored', 'registered')
+  `).bind(lockNow, jobId, userPkp).run()
+  const lockChanges = Number(lock.meta?.changes ?? 0)
+  if (lockChanges !== 1) {
+    const latest = await c.env.DB.prepare(`
+      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
+    `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+    if (!latest) {
+      return c.json({ error: 'Job not found after finalize lock attempt' }, 404)
+    }
+    if (latest.status === 'registered' && latest.megaeth_tx_hash) {
+      return c.json({
+        job: serializeJob(latest),
+        registration: {
+          cached: true,
+          tempoTxHash: latest.megaeth_tx_hash,
+        },
+      })
+    }
+    return c.json({
+      error: `Finalize lock not acquired (current=${latest.status})`,
+      job: serializeJob(latest),
+    }, 409)
+  }
+
+  const scrobbleAddress = getAddress(scrobbleAddressRaw)
+  const contentRegistryAddress = getAddress(contentRegistryAddressRaw)
+
+  try {
+    const provider = new JsonRpcProvider(tempoRpcUrl, tempoChainId)
+    const sponsorWallet = new Wallet(sponsorPk.trim(), provider)
+    const operatorWallet = new Wallet(operatorPk, provider)
+    const scrobbleContract = new Contract(scrobbleAddress, TEMPO_SCROBBLE_V4_ABI, operatorWallet)
+    const contentRegistryContract = new Contract(contentRegistryAddress, TEMPO_CONTENT_REGISTRY_ABI, sponsorWallet)
+
+    const { trackId, payload } = computeMetaTrackId(title, artist, album)
+    const contentId = computeContentId(trackId, userPkp)
+
+    let trackRegistered = false
+    let contentRegistered = false
+    let scrobbleTxHash: string | null = null
+    let contentTxHash: string | null = null
+
+    const registered = await scrobbleContract.isRegistered(trackId) as boolean
+    if (!registered) {
+      try {
+        const tx = await scrobbleContract.registerTracksBatch(
+          [3],
+          [payload],
+          [title],
+          [artist],
+          [album],
+          [durationS],
+        )
+        const receipt = await waitForTxReceiptWithTimeout(tx, tempoTxWaitTimeoutMs, 'scrobble_register')
+        scrobbleTxHash = receipt.hash || tx.hash
+        trackRegistered = true
+      } catch (error) {
+        const retryRegistered = await scrobbleContract.isRegistered(trackId) as boolean
+        if (!retryRegistered) throw error
+      }
+    }
+
+    const contentState = await contentRegistryContract.getContent(contentId)
+    if (!contentEntryActive(contentState)) {
+      try {
+        const tx = await contentRegistryContract.registerContentFor(
+          userPkp,
+          trackId,
+          datasetOwner,
+          pieceCidBytes,
+          algo,
+        )
+        const receipt = await waitForTxReceiptWithTimeout(tx, tempoTxWaitTimeoutMs, 'content_register')
+        contentTxHash = receipt.hash || tx.hash
+        contentRegistered = true
+      } catch (error) {
+        const retryState = await contentRegistryContract.getContent(contentId)
+        if (!contentEntryActive(retryState)) throw error
+      }
+    }
+
+    const now = Math.floor(Date.now() / 1000)
+    const tempoTxHash = contentTxHash || scrobbleTxHash || row.megaeth_tx_hash
+    await c.env.DB.prepare(`
+      UPDATE music_publish_jobs
+      SET status = 'registered',
+          megaeth_tx_hash = ?,
+          error_code = NULL,
+          error_message = NULL,
+          updated_at = ?
+      WHERE job_id = ? AND user_pkp = ?
+    `).bind(
+      tempoTxHash,
+      now,
+      jobId,
+      userPkp,
+    ).run()
+
+    const updated = await c.env.DB.prepare(`
+      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
+    `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+
+    if (!updated) {
+      return c.json({ error: 'Failed to load finalized job' }, 500)
+    }
+
+    return c.json({
+      job: serializeJob(updated),
+      registration: {
+        chainId: tempoChainId,
+        trackId,
+        trackPayload: payload,
+        contentId,
+        pieceCid,
+        datasetOwner,
+        algo,
+        durationS,
+        scrobbleTxHash,
+        contentTxHash,
+        tempoTxHash,
+        trackRegistered,
+        contentRegistered,
+      },
+    })
+  } catch (error) {
+    const now = Math.floor(Date.now() / 1000)
+    const message = asErrorMessage(error).slice(0, 1024)
+    await c.env.DB.prepare(`
+      UPDATE music_publish_jobs
+      SET status = ?,
+          error_code = 'tempo_finalize_failed',
+          error_message = ?,
+          updated_at = ?
+      WHERE job_id = ? AND user_pkp = ?
+    `).bind(previousStatus, message, now, jobId, userPkp).run()
+
+    const latest = await c.env.DB.prepare(`
+      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
+    `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+
+    return c.json({
+      error: 'Tempo finalize failed',
+      details: message,
+      job: latest ? serializeJob(latest) : null,
+    }, 502)
+  }
 })
 
 // Explicit anchor step: only after preflight passes.

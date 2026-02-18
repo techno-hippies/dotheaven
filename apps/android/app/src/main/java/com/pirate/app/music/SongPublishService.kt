@@ -16,7 +16,7 @@ import java.util.UUID
  * 1) Stage audio upload to Load
  * 2) Stage supporting artifacts to Load (cover + lyrics)
  * 3) Run preflight checks
- * 4) Stop at policy_passed (temporary/staged only)
+ * 4) Finalize on Tempo (ScrobbleV4 + ContentRegistry)
  */
 object SongPublishService {
 
@@ -218,6 +218,25 @@ object SongPublishService {
       out.write(body.toString().toByteArray(Charsets.UTF_8))
     }
     return readApiResponse(conn)
+  }
+
+  private fun finalizeMusicPublish(
+    jobId: String,
+    userPkp: String,
+    title: String,
+    artist: String,
+    album: String = "",
+  ): ApiResponse {
+    val body = JSONObject().apply {
+      put("title", title.trim())
+      put("artist", artist.trim())
+      put("album", album.trim())
+    }
+    return postJsonToMusicApi(
+      path = "/api/music/publish/$jobId/finalize",
+      userPkp = userPkp,
+      body = body,
+    )
   }
 
   private fun stageAudioForMusicPublish(
@@ -488,6 +507,29 @@ object SongPublishService {
       throw IllegalStateException("Artifact staging succeeded but staged cover URL is missing")
     }
 
+    onProgress(88)
+
+    val finalizeResponse = finalizeMusicPublish(
+      jobId = jobId,
+      userPkp = userPkp,
+      title = formData.title,
+      artist = formData.artist,
+      album = "",
+    )
+    if (finalizeResponse.status !in 200..299) {
+      if (finalizeResponse.status == 404) {
+        throw IllegalStateException(
+          "Finalize endpoint not found. Backend is outdated; deploy latest heaven-api.",
+        )
+      }
+      throw IllegalStateException(errorMessageFromApi("Tempo finalize", finalizeResponse))
+    }
+    val finalizeJob = requireJobObject("Tempo finalize", finalizeResponse)
+    val finalizedStatus = finalizeJob.optString("status", "").trim()
+    if (finalizedStatus != "registered") {
+      throw IllegalStateException("Tempo finalize did not complete (status=$finalizedStatus)")
+    }
+
     onProgress(100)
 
     val cachedCoverRef = cacheRecentCoverRef(
@@ -500,7 +542,7 @@ object SongPublishService {
 
     val result = PublishResult(
       jobId = jobId,
-      status = preflightStatus,
+      status = finalizedStatus,
       stagedAudioId = stagedAudioId,
       stagedAudioUrl = stagedAudioUrl,
       audioSha256 = audioSha256,

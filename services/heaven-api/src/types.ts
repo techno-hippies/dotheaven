@@ -119,6 +119,15 @@ export interface Env {
   STORY_WIP_TOKEN?: string
   STORY_PIL_LICENSE_TEMPLATE?: string
 
+  // Tempo relay wallet + contract config (music finalize registration)
+  TEMPO_RPC_URL?: string
+  TEMPO_CHAIN_ID?: string
+  TEMPO_SPONSOR_PRIVATE_KEY?: string
+  TEMPO_OPERATOR_PRIVATE_KEY?: string
+  TEMPO_SCROBBLE_V4?: string
+  TEMPO_CONTENT_REGISTRY?: string
+  TEMPO_TX_WAIT_TIMEOUT_MS?: string
+
   // R2 buckets for photo pipeline
   R2_RAW: R2Bucket      // Temporary upload storage
   R2_ORIG: R2Bucket     // Sanitized originals (EXIF stripped)
