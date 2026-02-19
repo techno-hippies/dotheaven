@@ -22,6 +22,53 @@ import { JOIN_WINDOW_BEFORE_MINUTES, ROOM_CAPACITY_BOOKED } from '../config'
 
 export const sessionRoutes = new Hono<{ Bindings: Env }>()
 
+type AttestationOutcomeStr = 'completed' | 'no-show-host' | 'no-show-guest'
+
+interface AttestationWindows {
+  noShowEarliest: number
+  noShowLatest: number
+  completedEarliest: number
+  completedLatest: number
+}
+
+export function getAttestationWindows(slot: {
+  startTime: number
+  durationMins: number
+  graceMins: number
+  minOverlapMins: number
+}): AttestationWindows {
+  const start = slot.startTime
+  const durationSeconds = slot.durationMins * 60
+  const end = start + durationSeconds
+  const graceEnd = start + slot.graceMins * 60
+
+  return {
+    // Matches SessionEscrowV1.sol:
+    // no-show attest in [start+grace, start+grace+duration]
+    noShowEarliest: graceEnd,
+    noShowLatest: graceEnd + durationSeconds,
+    // completed attest in [start+minOverlap, end+2h]
+    completedEarliest: start + slot.minOverlapMins * 60,
+    completedLatest: end + 2 * 60 * 60,
+  }
+}
+
+export function validateAttestationWindow(
+  outcome: AttestationOutcomeStr,
+  now: number,
+  windows: AttestationWindows,
+): { ok: true } | { ok: false; error: string } {
+  if (outcome === 'completed') {
+    if (now < windows.completedEarliest) return { ok: false, error: 'overlap_not_met' }
+    if (now > windows.completedLatest) return { ok: false, error: 'completed_too_late' }
+    return { ok: true }
+  }
+
+  if (now < windows.noShowEarliest) return { ok: false, error: 'grace_not_over' }
+  if (now > windows.noShowLatest) return { ok: false, error: 'no_show_too_late' }
+  return { ok: true }
+}
+
 /** Auth middleware for session endpoints (skip attest) */
 async function requireAuth(c: any, env: Env): Promise<string | null> {
   const auth = c.req.header('authorization')
@@ -276,21 +323,17 @@ sessionRoutes.post('/:id/attest', async (c) => {
     'SELECT joined_at_epoch, left_at_epoch FROM room_participants WHERE room_id = ? AND wallet = ?',
   ).bind(roomId, booking.guest.toLowerCase()).first<{ joined_at_epoch: number; left_at_epoch: number | null }>()
 
-  let outcomeStr: string | null = null
+  let outcomeStr: AttestationOutcomeStr | null = null
 
   if (forceOutcome) {
     if (!['completed', 'no-show-host', 'no-show-guest'].includes(forceOutcome)) {
       return c.json({ error: 'invalid force_outcome' }, 400)
     }
-    outcomeStr = forceOutcome
+    outcomeStr = forceOutcome as AttestationOutcomeStr
   } else {
     const now = Math.floor(Date.now() / 1000)
+    const windows = getAttestationWindows(slot)
     const endTime = slot.startTime + slot.durationMins * 60
-    const graceEnd = endTime + slot.graceMins * 60
-
-    if (now <= graceEnd) {
-      return c.json({ error: 'session still in progress or grace period' }, 400)
-    }
 
     if (hostP && guestP) {
       // Fix #7: Check minimum overlap threshold from slot
@@ -316,6 +359,11 @@ sessionRoutes.post('/:id/attest', async (c) => {
       outcomeStr = 'no-show-host'
     } else {
       outcomeStr = 'no-show-guest'
+    }
+
+    const timing = validateAttestationWindow(outcomeStr, now, windows)
+    if (!timing.ok) {
+      return c.json({ error: timing.error }, 400)
     }
   }
 
