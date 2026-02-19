@@ -89,8 +89,12 @@ export interface Env {
   FILEBASE_FOOD_SECRET_KEY?: string
   FILEBASE_FOOD_BUCKET?: string
 
-  // OpenRouter API key for AI analysis
+  // LLM API config for study-set generation (OpenAI-compatible: OpenRouter, DeepInfra, etc.)
   OPENROUTER_API_KEY?: string
+  // Optional: override chat completions URL (default: OpenRouter). e.g. https://api.deepinfra.com/v1/openai/chat/completions
+  LLM_API_BASE_URL?: string
+  // Optional model override for study-set generation
+  OPENROUTER_STUDY_MODEL?: string
 
   // DeepInfra API key for speech-to-text (Voxtral)
   DEEPINFRA_API_KEY?: string

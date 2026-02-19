@@ -1,0 +1,177 @@
+{
+  "source": {
+    "iswc": "T0112199333",
+    "geniusSongId": "110982",
+    "trackId": "debug:toxic-britney-spears",
+    "referentCount": 3
+  },
+  "summary": {
+    "total": 10,
+    "sayItBack": 4,
+    "translationMcq": 3,
+    "triviaMcq": 3,
+    "warnings": [],
+    "promptHash": "0x6bfcf76a806fecdda440aeb20e1e6f45a48904080f32a1743b2b984913b75292",
+    "model": "google/gemini-3-flash-preview"
+  },
+  "fullPack": {
+    "specVersion": "exercise-pack-v1",
+    "trackId": "debug:toxic-britney-spears",
+    "language": "zh",
+    "sourceRefs": {
+      "lyricsRef": null,
+      "geniusRef": "genius:110982"
+    },
+    "generator": {
+      "model": "google/gemini-3-flash-preview",
+      "promptHash": "0x6bfcf76a806fecdda440aeb20e1e6f45a48904080f32a1743b2b984913b75292",
+      "generatedAt": 1771485717
+    },
+    "questions": [
+      {
+        "id": "sib-001",
+        "type": "say_it_back",
+        "prompt": "Listen and repeat:",
+        "excerpt": "Baby, can't you see I'm callin'?",
+        "choices": [],
+        "correctIndex": 0,
+        "explanation": "Repeat clearly and match the rhythm and stress of the line.",
+        "difficulty": "medium"
+      },
+      {
+        "id": "sib-002",
+        "type": "say_it_back",
+        "prompt": "Listen and repeat:",
+        "excerpt": "A guy like you should wear a warnin'",
+        "choices": [],
+        "correctIndex": 0,
+        "explanation": "Repeat clearly and match the rhythm and stress of the line.",
+        "difficulty": "medium"
+      },
+      {
+        "id": "sib-003",
+        "type": "say_it_back",
+        "prompt": "Listen and repeat:",
+        "excerpt": "It's dangerous, I'm fallin'",
+        "choices": [],
+        "correctIndex": 0,
+        "explanation": "Repeat clearly and match the rhythm and stress of the line.",
+        "difficulty": "easy"
+      },
+      {
+        "id": "sib-004",
+        "type": "say_it_back",
+        "prompt": "Listen and repeat:",
+        "excerpt": "There's no escape, I can't wait",
+        "choices": [],
+        "correctIndex": 0,
+        "explanation": "Repeat clearly and match the rhythm and stress of the line.",
+        "difficulty": "medium"
+      },
+      {
+        "id": "tr-001",
+        "type": "translation_mcq",
+        "prompt": "Which lyric means: '像你这样的男人应该带个警告'?",
+        "excerpt": "A guy like you should wear a warnin'",
+        "choices": [
+          "Baby, can't you see I'm callin'?",
+          "A guy like you should wear a warnin'",
+          "It's dangerous, I'm fallin'",
+          "I'm addicted to you"
+        ],
+        "correctIndex": 1,
+        "explanation": "“A guy like you” 指“像你这样的男人”，“should wear a warnin'” 意为“应该佩戴警告（标志）”。",
+        "difficulty": "easy"
+      },
+      {
+        "id": "tr-002",
+        "type": "translation_mcq",
+        "prompt": "Which lyric means: '你有毒，我正渐渐沉沦'?",
+        "excerpt": "You're toxic, I'm slippin' under",
+        "choices": [
+          "Too high, can't come down",
+          "Losing my head, spinnin' 'round and 'round",
+          "I think I'm ready now",
+          "You're toxic, I'm slippin' under"
+        ],
+        "correctIndex": 3,
+        "explanation": "“Toxic” 意为“有毒的”，“slippin' under” 在这里意为“沉沦”或“失去控制”。",
+        "difficulty": "medium"
+      },
+      {
+        "id": "tr-003",
+        "type": "translation_mcq",
+        "prompt": "Which lyric means: '我对你上瘾了'?",
+        "excerpt": "I'm addicted to you",
+        "choices": [
+          "I'm addicted to you",
+          "And I love what you do",
+          "It's gettin' late to give you up",
+          "Slowly, it's takin' over me"
+        ],
+        "correctIndex": 0,
+        "explanation": "“Addicted to” 是一个常用短语，表示“对...上瘾”。",
+        "difficulty": "easy"
+      },
+      {
+        "id": "tv-001",
+        "type": "trivia_mcq",
+        "prompt": "这首歌最初是提供给哪位歌手的，但被对方拒绝了？",
+        "excerpt": "A guy like you should wear a warnin'",
+        "choices": [
+          "Madonna",
+          "Janet Jackson",
+          "Kylie Minogue",
+          "Christina Aguilera"
+        ],
+        "correctIndex": 2,
+        "explanation": "根据 Genius 注释，这首歌最初是写给凯莉·米洛（Kylie Minogue）的，但她拒绝了。",
+        "difficulty": "medium",
+        "source": "genius",
+        "sourceClassification": "accepted"
+      },
+      {
+        "id": "tv-002",
+        "type": "trivia_mcq",
+        "prompt": "制作人在这首歌中采样了哪部 1981 年电影的宝莱坞弦乐？",
+        "excerpt": "I took a sip from my devil's cup",
+        "choices": [
+          "Sholay",
+          "Kaalia",
+          "Don",
+          "Disco Dancer"
+        ],
+        "correctIndex": 1,
+        "explanation": "制作人 Bloodshy and Avant 采样了 1981 年印度电影《Kaalia》中的弦乐片段作为歌曲的钩子。",
+        "difficulty": "hard",
+        "source": "genius",
+        "sourceClassification": "verified"
+      },
+      {
+        "id": "tv-003",
+        "type": "trivia_mcq",
+        "prompt": "《Toxic》在 2004 年获得了哪项格莱美奖？",
+        "excerpt": "Too high, can't come down",
+        "choices": [
+          "Best Dance Recording",
+          "Best Pop Vocal Album",
+          "Song of the Year",
+          "Best Music Video"
+        ],
+        "correctIndex": 0,
+        "explanation": "这首歌在 2004 年赢得了格莱美“最佳舞曲录制”奖（Best Dance Recording）。",
+        "difficulty": "easy",
+        "source": "genius",
+        "sourceClassification": "verified"
+      }
+    ],
+    "compliance": {
+      "excerptPolicy": "max-one-line-per-question",
+      "attribution": {
+        "track": "Toxic",
+        "artist": "Britney Spears",
+        "geniusSongId": 110982
+      }
+    }
+  }
+}

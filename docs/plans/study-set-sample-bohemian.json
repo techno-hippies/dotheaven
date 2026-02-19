@@ -1,0 +1,144 @@
+{
+  "source": {
+    "iswc": "T0101545054",
+    "geniusSongId": "1063",
+    "trackId": "debug:bohemian-rhapsody",
+    "referentCount": 4
+  },
+  "summary": {
+    "total": 8,
+    "sayItBack": 5,
+    "translationMcq": 0,
+    "triviaMcq": 3,
+    "warnings": [
+      "translation_mcq skipped: learner language matches song language."
+    ],
+    "promptHash": "0xace0def998e38835f76023d8b3b5571ad0f89314162791b0ab2f5c1e968ad190",
+    "model": "google/gemini-3-flash-preview"
+  },
+  "fullPack": {
+    "specVersion": "exercise-pack-v1",
+    "trackId": "debug:bohemian-rhapsody",
+    "language": "en",
+    "sourceRefs": {
+      "lyricsRef": null,
+      "geniusRef": "genius:1063"
+    },
+    "generator": {
+      "model": "google/gemini-3-flash-preview",
+      "promptHash": "0xace0def998e38835f76023d8b3b5571ad0f89314162791b0ab2f5c1e968ad190",
+      "generatedAt": 1771485694
+    },
+    "questions": [
+      {
+        "id": "sib-001",
+        "type": "say_it_back",
+        "prompt": "Listen and repeat:",
+        "excerpt": "Is this the real life? Is this just fantasy?",
+        "choices": [],
+        "correctIndex": 0,
+        "explanation": "Repeat clearly and match the rhythm and stress of the line.",
+        "difficulty": "medium"
+      },
+      {
+        "id": "sib-002",
+        "type": "say_it_back",
+        "prompt": "Listen and repeat:",
+        "excerpt": "Caught in a landslide, no escape from reality",
+        "choices": [],
+        "correctIndex": 0,
+        "explanation": "Repeat clearly and match the rhythm and stress of the line.",
+        "difficulty": "medium"
+      },
+      {
+        "id": "sib-003",
+        "type": "say_it_back",
+        "prompt": "Listen and repeat:",
+        "excerpt": "Open your eyes, look up to the skies and see",
+        "choices": [],
+        "correctIndex": 0,
+        "explanation": "Repeat clearly and match the rhythm and stress of the line.",
+        "difficulty": "medium"
+      },
+      {
+        "id": "sib-004",
+        "type": "say_it_back",
+        "prompt": "Listen and repeat:",
+        "excerpt": "I'm just a poor boy, I need no sympathy",
+        "choices": [],
+        "correctIndex": 0,
+        "explanation": "Repeat clearly and match the rhythm and stress of the line.",
+        "difficulty": "medium"
+      },
+      {
+        "id": "sib-005",
+        "type": "say_it_back",
+        "prompt": "Listen and repeat:",
+        "excerpt": "Because I'm easy come, easy go, little high, little low",
+        "choices": [],
+        "correctIndex": 0,
+        "explanation": "Repeat clearly and match the rhythm and stress of the line.",
+        "difficulty": "medium"
+      },
+      {
+        "id": "tv-001",
+        "type": "trivia_mcq",
+        "prompt": "In which Welsh recording studio was the piano introduction for 'Bohemian Rhapsody' recorded in 1975?",
+        "excerpt": "Is this the real life? Is this just fantasy?",
+        "choices": [
+          "Abbey Road Studios",
+          "Rockfield Studios",
+          "Trident Studios",
+          "Olympic Studios"
+        ],
+        "correctIndex": 1,
+        "explanation": "The piano introduction for the song was recorded at Rockfield Studios in Monmouth, Wales, during the 1975 sessions.",
+        "difficulty": "medium",
+        "source": "genius",
+        "sourceClassification": "accepted"
+      },
+      {
+        "id": "tv-002",
+        "type": "trivia_mcq",
+        "prompt": "The operatic section of the song was famously labor-intensive, requiring how many vocal overdubs?",
+        "excerpt": "Bismillah, we will not let you go (Let him go)",
+        "choices": [
+          "180",
+          "40",
+          "120",
+          "250"
+        ],
+        "correctIndex": 0,
+        "explanation": "The complex operatic section of the song took three weeks to record and involved 180 separate vocal overdubs.",
+        "difficulty": "hard",
+        "source": "genius",
+        "sourceClassification": "verified"
+      },
+      {
+        "id": "tv-003",
+        "type": "trivia_mcq",
+        "prompt": "The character 'Scaramouche' mentioned in the lyrics is a stock character from which theatrical tradition?",
+        "excerpt": "Scaramouche, Scaramouche, will you do the Fandango?",
+        "choices": [
+          "Vaudeville",
+          "Kabuki",
+          "Grand Guignol",
+          "Commedia dell'arte"
+        ],
+        "correctIndex": 3,
+        "explanation": "Scaramouche is a boastful coward character originating from 17th-century Italian commedia dell'arte.",
+        "difficulty": "medium",
+        "source": "genius",
+        "sourceClassification": "verified"
+      }
+    ],
+    "compliance": {
+      "excerptPolicy": "max-one-line-per-question",
+      "attribution": {
+        "track": "Bohemian Rhapsody",
+        "artist": "Queen",
+        "geniusSongId": 1063
+      }
+    }
+  }
+}

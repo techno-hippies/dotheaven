@@ -26,6 +26,7 @@ import upload from './routes/upload'
 import load from './routes/load'
 import arweave from './routes/arweave'
 import music from './routes/music'
+import studySets from './routes/study-sets'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -54,6 +55,7 @@ app.route('/api/upload', upload)
 app.route('/api/load', load)
 app.route('/api/arweave', arweave)
 app.route('/api/music', music)
+app.route('/api/study-sets', studySets)
 
 // 404 fallback
 app.notFound((c) => c.json({ error: 'Not found' }, 404))
