@@ -1,0 +1,57 @@
+specVersion: 1.0.0
+indexerHints:
+  prune: auto
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: PlaylistV1
+    network: tempo-moderato
+    source:
+      address: "0xeF6a21324548155630670397DA68318E126510EF"
+      abi: PlaylistV1
+      startBlock: 5563823
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Playlist
+        - PlaylistTrack
+        - PlaylistTrackVersion
+      abis:
+        - name: PlaylistV1
+          file: ./abis/PlaylistV1.json
+      eventHandlers:
+        - event: PlaylistCreated(indexed bytes32,indexed address,uint32,uint8,uint32,bytes32,uint64,string,string)
+          handler: handlePlaylistCreated
+        - event: PlaylistTracksSet(indexed bytes32,uint32,uint32,bytes32,uint64,bytes32[])
+          handler: handlePlaylistTracksSet
+        - event: PlaylistMetaUpdated(indexed bytes32,uint32,uint8,uint64,string,string)
+          handler: handlePlaylistMetaUpdated
+        - event: PlaylistDeleted(indexed bytes32,uint32,uint64)
+          handler: handlePlaylistDeleted
+      file: ./src/playlist.ts
+
+  - kind: ethereum
+    name: PlaylistShareV1
+    network: tempo-moderato
+    source:
+      address: "0x1912cEa18eAFC17cd0f21F58fCF87E699Be512Aa"
+      abi: PlaylistShareV1
+      startBlock: 5567630
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - PlaylistShare
+      abis:
+        - name: PlaylistShareV1
+          file: ./abis/PlaylistShareV1.json
+      eventHandlers:
+        - event: PlaylistShared(indexed bytes32,indexed address,indexed address,uint32,uint32,bytes32,uint64)
+          handler: handlePlaylistShared
+        - event: PlaylistUnshared(indexed bytes32,indexed address,indexed address,uint32,uint32,bytes32,uint64)
+          handler: handlePlaylistUnshared
+      file: ./src/playlist_share.ts

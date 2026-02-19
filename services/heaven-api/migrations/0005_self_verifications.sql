@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS self_verifications (
   session_id TEXT PRIMARY KEY,
-  user_pkp TEXT NOT NULL,                  -- PKP address requesting verification
+  user_address TEXT NOT NULL,                  -- address requesting verification
   status TEXT NOT NULL DEFAULT 'pending'
     CHECK(status IN ('pending', 'verified', 'failed', 'expired')),
 
@@ -25,13 +25,13 @@ CREATE TABLE IF NOT EXISTS self_verifications (
   failure_reason TEXT                      -- If status = 'failed'
 );
 
-CREATE INDEX IF NOT EXISTS idx_self_verifications_user ON self_verifications(user_pkp);
+CREATE INDEX IF NOT EXISTS idx_self_verifications_user ON self_verifications(user_address);
 CREATE INDEX IF NOT EXISTS idx_self_verifications_status ON self_verifications(status) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS idx_self_verifications_expires ON self_verifications(expires_at);
 
 -- Store the latest successful verification per user (for quick lookups)
 CREATE TABLE IF NOT EXISTS user_identity (
-  user_pkp TEXT PRIMARY KEY,
+  user_address TEXT PRIMARY KEY,
   date_of_birth TEXT NOT NULL,             -- "1995-03-15"
   age_at_verification INTEGER NOT NULL,    -- Age when verified
   nationality TEXT NOT NULL,               -- ISO-3 code

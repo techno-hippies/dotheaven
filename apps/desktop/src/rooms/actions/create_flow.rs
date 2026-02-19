@@ -17,16 +17,17 @@ impl RoomsView {
         let live_raw = self.live_price_input_state.read(cx).value().to_string();
         let replay_raw = self.replay_price_input_state.read(cx).value().to_string();
 
-        let split_address = match auth::load_from_disk().and_then(|p| p.pkp_address) {
-            Some(wallet) => wallet.to_lowercase(),
-            None => {
-                self.modal_error = Some(
-                    "Sign in first so we can derive payout routing for this room.".to_string(),
-                );
-                cx.notify();
-                return;
-            }
-        };
+        let split_address =
+            match auth::load_from_disk().and_then(|p| p.wallet_address().map(str::to_string)) {
+                Some(wallet) => wallet.to_lowercase(),
+                None => {
+                    self.modal_error = Some(
+                        "Sign in first so we can derive payout routing for this room.".to_string(),
+                    );
+                    cx.notify();
+                    return;
+                }
+            };
 
         if !is_hex_address(&split_address) {
             self.modal_error =
@@ -118,7 +119,7 @@ impl RoomsView {
 
         let endpoints = VoiceEndpoints::default();
         let host_display = auth::load_from_disk()
-            .and_then(|p| p.pkp_address)
+            .and_then(|p| p.wallet_address().map(str::to_string))
             .map(|value| short_address(&value))
             .unwrap_or_else(|| "you".to_string());
         let guest_display = guest_wallet

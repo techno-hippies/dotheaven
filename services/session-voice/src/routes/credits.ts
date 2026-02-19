@@ -40,7 +40,7 @@ creditRoutes.get('/', async (c) => {
 creditRoutes.post('/verify-celo', async (c) => {
   const wallet = c.get('wallet') as string
 
-  // Query VerificationMirror on MegaETH
+  // Query verification mirror contract on the configured chain
   const verified = await isVerified(
     c.env.RPC_URL,
     c.env.VERIFICATION_MIRROR_ADDRESS,

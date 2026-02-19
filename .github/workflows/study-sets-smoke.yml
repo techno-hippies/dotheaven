@@ -1,0 +1,74 @@
+name: Study Sets Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base:
+        description: "Heaven API base URL"
+        required: true
+        default: "https://heaven-api.deletion-backup782.workers.dev"
+      test_user_address:
+        description: "User wallet address used for X-User-Address"
+        required: true
+      study_set_track_ids:
+        description: "Comma-separated track IDs (bytes32, exactly 3)"
+        required: true
+      study_set_language:
+        description: "Learner language code"
+        required: true
+        default: "es"
+      study_set_version:
+        description: "Study set version"
+        required: true
+        default: "1"
+      say_it_back_count:
+        description: "Requested say_it_back count"
+        required: true
+        default: "6"
+      translation_count:
+        description: "Requested translation_mcq count"
+        required: true
+        default: "4"
+      trivia_count:
+        description: "Requested trivia_mcq count"
+        required: true
+        default: "3"
+      smoke_allow_llm_undershoot:
+        description: "Allow translation/trivia count undershoot by 1 (1|true to enable)"
+        required: true
+        default: "1"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: study-sets-smoke-${{ github.ref }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.8"
+
+      - name: Install heaven-api dependencies
+        working-directory: services/heaven-api
+        run: bun install
+
+      - name: Run study-set smoke
+        working-directory: services/heaven-api
+        env:
+          API_BASE: ${{ inputs.api_base }}
+          TEST_USER_ADDRESS: ${{ inputs.test_user_address }}
+          STUDY_SET_TRACK_IDS: ${{ inputs.study_set_track_ids }}
+          STUDY_SET_LANGUAGE: ${{ inputs.study_set_language }}
+          STUDY_SET_VERSION: ${{ inputs.study_set_version }}
+          SAY_IT_BACK_COUNT: ${{ inputs.say_it_back_count }}
+          TRANSLATION_COUNT: ${{ inputs.translation_count }}
+          TRIVIA_COUNT: ${{ inputs.trivia_count }}
+          SMOKE_ALLOW_LLM_UNDERSHOOT: ${{ inputs.smoke_allow_llm_undershoot }}
+        run: bun run test:study-sets

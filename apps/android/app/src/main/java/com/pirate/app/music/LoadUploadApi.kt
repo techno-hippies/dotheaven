@@ -1,6 +1,8 @@
 package com.pirate.app.music
 
+import android.content.Context
 import com.pirate.app.arweave.Ans104DataItem
+import com.pirate.app.security.LocalSecp256k1Store
 import com.pirate.app.tempo.SessionKeyManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -25,6 +27,7 @@ object LoadUploadApi {
      * @param sessionKey active Tempo session key used to sign ANS-104 DataItem
      */
     suspend fun upload(
+        context: Context,
         blob: ByteArray,
         filename: String,
         tags: List<Pair<String, String>> = emptyList(),
@@ -54,12 +57,16 @@ object LoadUploadApi {
             normalizedTags["File-Name"] = filename
         }
 
+        val ownerAddress = sessionKey.ownerAddress
+            ?: throw IllegalStateException("Session key owner address is missing for Load upload.")
+        val identity = LocalSecp256k1Store.getOrCreateIdentity(context, ownerAddress)
+
         val signed = Ans104DataItem.buildAndSign(
             payload = blob,
             tags = normalizedTags.map { (name, value) ->
                 Ans104DataItem.Tag(name = name, value = value)
             },
-            sessionKey = sessionKey,
+            signingKeyPair = identity.keyPair,
         )
         val id = Ans104DataItem.uploadSignedDataItem(signed.bytes).trim()
         if (id.isEmpty()) {

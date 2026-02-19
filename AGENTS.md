@@ -24,7 +24,6 @@ Top-level agent guidance for this repository.
 - Area-specific docs:
   - `apps/README.md`
   - `packages/README.md`
-  - `contracts/README.md`
+  - `contracts/README.md` (active chain: Tempo)
   - `services/README.md`
   - `subgraphs/README.md`
-  - `lit-actions/README.md`

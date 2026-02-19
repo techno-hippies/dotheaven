@@ -16,6 +16,7 @@ import candidates from './routes/candidates'
 import likes from './routes/likes'
 import claim from './routes/claim'
 import names from './routes/names'
+import namesPolicy from './routes/names-policy'
 import scrobble from './routes/scrobble'
 import sleep from './routes/sleep'
 import photos from './routes/photos'
@@ -34,7 +35,7 @@ const app = new Hono<{ Bindings: Env }>()
 app.use('/*', cors({
   origin: ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:4173', 'https://heaven.computer', 'https://heaven.xyz'],
   allowMethods: ['GET', 'POST', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization', 'X-User-Pkp', 'X-Claim-Start-Secret', 'Idempotency-Key'],
+  allowHeaders: ['Content-Type', 'Authorization', 'X-User-Address', 'X-Claim-Start-Secret', 'Idempotency-Key', 'X-Device-Id'],
 }))
 
 // Health check
@@ -45,6 +46,7 @@ app.route('/api/candidates', candidates)
 app.route('/api/likes', likes)
 app.route('/api/claim', claim)
 app.route('/api/names', names)
+app.route('/api/names', namesPolicy)
 app.route('/api/scrobble', scrobble)
 app.route('/api/sleep', sleep)
 app.route('/api/photos', photos)

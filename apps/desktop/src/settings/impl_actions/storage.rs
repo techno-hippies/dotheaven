@@ -176,7 +176,7 @@ impl SettingsView {
         };
 
         self.busy = true;
-        self.status = "Running Base Sepolia PKP funding flow...".into();
+        self.status = "Running funding flow...".into();
         self.error = None;
         self.publish_status_progress("settings.storage", self.status.clone(), cx);
         cx.notify();

@@ -7,6 +7,18 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.util.Log
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
+import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import com.pirate.app.music.MusicTrack
 import com.pirate.app.widget.NowPlayingWidget
 import kotlinx.coroutines.CoroutineScope
@@ -19,6 +31,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.io.File
 import kotlin.math.absoluteValue
 
 class PlayerController(private val context: Context) {
@@ -31,7 +44,23 @@ class PlayerController(private val context: Context) {
   private val tag = "PiratePlayer"
   private val mediaInfoNetworkBandwidth = 703
   private var mediaPlayer: MediaPlayer? = null
+  private var exoPlayer: ExoPlayer? = null
   private var progressJob: Job? = null
+
+  private enum class PlaybackEngine {
+    MEDIA,
+    EXO,
+  }
+
+  private var activeEngine: PlaybackEngine? = null
+
+  companion object {
+    private const val EXO_CACHE_DIR = "exo_audio_cache"
+    private const val EXO_CACHE_MAX_BYTES = 64L * 1024 * 1024
+    private val cacheLock = Any()
+    @Volatile private var sharedExoCache: SimpleCache? = null
+    @Volatile private var sharedDbProvider: StandaloneDatabaseProvider? = null
+  }
 
   private val _currentTrack = MutableStateFlow<MusicTrack?>(null)
   val currentTrack: StateFlow<MusicTrack?> = _currentTrack.asStateFlow()
@@ -94,10 +123,14 @@ class PlayerController(private val context: Context) {
   }
 
   fun seekTo(positionSec: Float) {
-    val player = mediaPlayer ?: return
     val dur = _progress.value.durationSec
     val safe = positionSec.coerceIn(0f, if (dur > 0f) dur else positionSec.absoluteValue)
-    runCatching { player.seekTo((safe * 1000f).toInt()) }
+    val targetMs = (safe * 1000f).toLong().coerceAtLeast(0L)
+    when (activeEngine) {
+      PlaybackEngine.EXO -> runCatching { exoPlayer?.seekTo(targetMs) }
+      PlaybackEngine.MEDIA -> runCatching { mediaPlayer?.seekTo(targetMs.toInt()) }
+      null -> return
+    }
     _progress.value = _progress.value.copy(positionSec = safe)
   }
 
@@ -115,9 +148,19 @@ class PlayerController(private val context: Context) {
 
     _currentTrack.value = track
     _isPlaying.value = false
+    val parsed = Uri.parse(track.uri)
+    val scheme = parsed.scheme?.lowercase()
+    if (scheme == "http" || scheme == "https") {
+      loadAndPlayExo(track, playWhenReady)
+    } else {
+      loadAndPlayMedia(track, playWhenReady, parsed)
+    }
+  }
 
+  private fun loadAndPlayMedia(track: MusicTrack, playWhenReady: Boolean, parsedUri: Uri) {
     val player = MediaPlayer()
     mediaPlayer = player
+    activeEngine = PlaybackEngine.MEDIA
 
     player.setAudioAttributes(
       AudioAttributes.Builder()
@@ -166,17 +209,105 @@ class PlayerController(private val context: Context) {
     }
 
     try {
-      val parsed = Uri.parse(track.uri)
-      val scheme = parsed.scheme?.lowercase()
-      if (scheme == "http" || scheme == "https") {
-        // Avoid ContentResolver probe path for network URLs (it throws and adds latency).
-        player.setDataSource(track.uri)
-      } else {
-        player.setDataSource(context, parsed)
-      }
+      player.setDataSource(context, parsedUri)
       player.prepareAsync()
     } catch (error: Throwable) {
-      Log.e(tag, "Failed to load track=${track.id} uri=${track.uri}", error)
+      Log.e(tag, "Failed to load local track=${track.id} uri=${track.uri}", error)
+      stopInternal(resetPosition = true)
+      _currentTrack.value = null
+      _isPlaying.value = false
+    }
+  }
+
+  private fun loadAndPlayExo(track: MusicTrack, playWhenReady: Boolean) {
+    val loadControl = DefaultLoadControl.Builder()
+      .setBufferDurationsMs(
+        15_000, // min buffer before/while playback
+        60_000, // max buffer
+        1_500,  // buffer required for initial start
+        5_000,  // buffer required after rebuffer
+      )
+      .build()
+    val player = ExoPlayer.Builder(context)
+      .setLoadControl(loadControl)
+      .build()
+    exoPlayer = player
+    activeEngine = PlaybackEngine.EXO
+
+    var buffering = false
+    player.addListener(
+      object : Player.Listener {
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+          _isPlaying.value = isPlaying
+          if (isPlaying) {
+            startPlaybackService()
+          }
+          syncWidgetState()
+        }
+
+        override fun onPlaybackStateChanged(state: Int) {
+          when (state) {
+            Player.STATE_BUFFERING -> {
+              if (!buffering) {
+                buffering = true
+                Log.d(tag, "buffering_start track=${track.id}")
+              }
+            }
+            Player.STATE_READY -> {
+              val durationMs = player.duration.takeIf { it > 0 && it != C.TIME_UNSET } ?: 0L
+              _progress.value = _progress.value.copy(durationSec = durationMs / 1000f)
+              if (buffering) {
+                buffering = false
+                Log.d(tag, "buffering_end track=${track.id}")
+              }
+              startProgressUpdates()
+            }
+            Player.STATE_ENDED -> {
+              _isPlaying.value = false
+              val q2 = _queue.value
+              if (q2.isNotEmpty() && _queueIndex.value < q2.lastIndex) {
+                _queueIndex.value = _queueIndex.value + 1
+                loadAndPlay(index = _queueIndex.value, playWhenReady = true)
+              } else {
+                syncWidgetState()
+              }
+            }
+          }
+        }
+
+        override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+          _isPlaying.value = false
+          Log.e(tag, "ExoPlayer error track=${track.id} uri=${track.uri}", error)
+        }
+      },
+    )
+
+    try {
+      val upstreamFactory = DefaultDataSource.Factory(
+        context,
+        DefaultHttpDataSource.Factory()
+          .setAllowCrossProtocolRedirects(true)
+          .setConnectTimeoutMs(15_000)
+          .setReadTimeoutMs(30_000),
+      )
+
+      val mediaSource = runCatching {
+        val cache = getOrCreateExoCache(context)
+        val cacheFactory = CacheDataSource.Factory()
+          .setCache(cache)
+          .setUpstreamDataSourceFactory(upstreamFactory)
+          .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+        ProgressiveMediaSource.Factory(cacheFactory).createMediaSource(MediaItem.fromUri(track.uri))
+      }.getOrElse {
+        Log.w(tag, "Falling back to uncached Exo stream for ${track.id}: ${it.message}")
+        ProgressiveMediaSource.Factory(upstreamFactory).createMediaSource(MediaItem.fromUri(track.uri))
+      }
+
+      player.setMediaSource(mediaSource)
+      player.playWhenReady = playWhenReady
+      player.prepare()
+    } catch (error: Throwable) {
+      Log.e(tag, "Failed to load remote track=${track.id} uri=${track.uri}", error)
       stopInternal(resetPosition = true)
       _currentTrack.value = null
       _isPlaying.value = false
@@ -184,14 +315,25 @@ class PlayerController(private val context: Context) {
   }
 
   fun togglePlayPause() {
-    val player = mediaPlayer ?: return
     try {
-      if (player.isPlaying) {
-        player.pause()
-        _isPlaying.value = false
-      } else {
-        player.start()
-        _isPlaying.value = true
+      when (activeEngine) {
+        PlaybackEngine.EXO -> {
+          val player = exoPlayer ?: return
+          val next = !player.isPlaying
+          player.playWhenReady = next
+          _isPlaying.value = next
+        }
+        PlaybackEngine.MEDIA -> {
+          val player = mediaPlayer ?: return
+          if (player.isPlaying) {
+            player.pause()
+            _isPlaying.value = false
+          } else {
+            player.start()
+            _isPlaying.value = true
+          }
+        }
+        null -> return
       }
     } catch (_: Throwable) {
       _isPlaying.value = false
@@ -231,13 +373,21 @@ class PlayerController(private val context: Context) {
     progressJob?.cancel()
     progressJob = null
 
-    val player = mediaPlayer
+    val mp = mediaPlayer
     mediaPlayer = null
-    if (player != null) {
-      runCatching { player.stop() }
-      runCatching { player.reset() }
-      runCatching { player.release() }
+    if (mp != null) {
+      runCatching { mp.stop() }
+      runCatching { mp.reset() }
+      runCatching { mp.release() }
     }
+
+    val exo = exoPlayer
+    exoPlayer = null
+    if (exo != null) {
+      runCatching { exo.stop() }
+      runCatching { exo.release() }
+    }
+    activeEngine = null
 
     if (resetPosition) {
       _progress.value = PlayerProgress(positionSec = 0f, durationSec = 0f)
@@ -295,14 +445,40 @@ class PlayerController(private val context: Context) {
     serviceStarted = false
   }
 
+  private fun getOrCreateExoCache(context: Context): SimpleCache {
+    synchronized(cacheLock) {
+      sharedExoCache?.let { return it }
+      val dbProvider = sharedDbProvider ?: StandaloneDatabaseProvider(context.applicationContext).also {
+        sharedDbProvider = it
+      }
+      val cacheDir = File(context.cacheDir, EXO_CACHE_DIR).apply { mkdirs() }
+      return SimpleCache(cacheDir, LeastRecentlyUsedCacheEvictor(EXO_CACHE_MAX_BYTES), dbProvider).also {
+        sharedExoCache = it
+      }
+    }
+  }
+
   private fun startProgressUpdates() {
     progressJob?.cancel()
     progressJob =
       scope.launch {
         while (true) {
-          val player = mediaPlayer ?: break
-          val durationMs = runCatching { player.duration }.getOrDefault(0).coerceAtLeast(0)
-          val positionMs = runCatching { player.currentPosition }.getOrDefault(0).coerceAtLeast(0)
+          val (durationMs, positionMs) = when (activeEngine) {
+            PlaybackEngine.EXO -> {
+              val player = exoPlayer ?: break
+              val duration = runCatching { player.duration }.getOrDefault(C.TIME_UNSET)
+              val safeDuration = if (duration == C.TIME_UNSET || duration < 0L) 0L else duration
+              val safePosition = runCatching { player.currentPosition }.getOrDefault(0L).coerceAtLeast(0L)
+              safeDuration to safePosition
+            }
+            PlaybackEngine.MEDIA -> {
+              val player = mediaPlayer ?: break
+              val duration = runCatching { player.duration }.getOrDefault(0).coerceAtLeast(0).toLong()
+              val position = runCatching { player.currentPosition }.getOrDefault(0).coerceAtLeast(0).toLong()
+              duration to position
+            }
+            null -> break
+          }
           _progress.value = PlayerProgress(
             positionSec = positionMs / 1000f,
             durationSec = durationMs / 1000f,

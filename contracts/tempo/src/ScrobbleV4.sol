@@ -157,6 +157,35 @@ contract ScrobbleV4 {
         }
     }
 
+    /// @notice Register tracks for the authenticated user without emitting scrobbles.
+    ///         Idempotent per trackId: already-registered tracks are skipped.
+    ///         msg.sender must equal `user`.
+    function registerTracksForUser(
+        address user,
+        uint8[] calldata kinds,
+        bytes32[] calldata payloads,
+        string[] calldata titles,
+        string[] calldata artists,
+        string[] calldata albums,
+        uint32[] calldata durations
+    ) external onlyUser(user) {
+        uint256 len = kinds.length;
+        require(
+            len == payloads.length &&
+            len == titles.length &&
+            len == artists.length &&
+            len == albums.length &&
+            len == durations.length,
+            "length mismatch"
+        );
+        require(len <= MAX_TRACK_REG, "batch too large");
+
+        for (uint256 i; i < len; ) {
+            _registerOneIdempotent(kinds[i], payloads[i], titles[i], artists[i], albums[i], durations[i]);
+            unchecked { ++i; }
+        }
+    }
+
     // ── User-facing: register + scrobble (Tempo direct-user auth) ──────
 
     /// @notice Register (optional) + scrobble in one tx.
@@ -364,6 +393,18 @@ contract ScrobbleV4 {
         string calldata album,
         uint32 durationSec
     ) internal {
+        bool created = _registerOneIdempotent(kind, payload, title, artist, album, durationSec);
+        require(created, "already registered");
+    }
+
+    function _registerOneIdempotent(
+        uint8 kind,
+        bytes32 payload,
+        string calldata title,
+        string calldata artist,
+        string calldata album,
+        uint32 durationSec
+    ) internal returns (bool created) {
         require(kind >= 1 && kind <= 3, "invalid kind");
         require(payload != bytes32(0), "zero payload");
 
@@ -378,7 +419,9 @@ contract ScrobbleV4 {
         require(bytes(album).length <= MAX_STR, "album too long");
 
         bytes32 trackId = keccak256(abi.encode(kind, payload));
-        require(!tracks[trackId].exists, "already registered");
+        if (tracks[trackId].exists) {
+            return false;
+        }
 
         uint64 nowTs = uint64(block.timestamp);
         tracks[trackId] = Track({
@@ -395,6 +438,7 @@ contract ScrobbleV4 {
 
         bytes32 metaHash = keccak256(abi.encode(title, artist, album));
         emit TrackRegistered(trackId, kind, payload, metaHash, nowTs, durationSec);
+        return true;
     }
 
     function _scrobbleBatch(

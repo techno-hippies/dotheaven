@@ -1223,6 +1223,14 @@ private fun PirateNavHost(
         isAuthenticated = isAuthenticated,
         onClose = { navController.popBackStack() },
         onShowMessage = onShowMessage,
+        onOpenSongPage = { trackId, title, artist ->
+          navController.navigate(
+            PirateRoute.Song.buildRoute(trackId = trackId, title = title, artist = artist),
+          ) { launchSingleTop = true }
+        },
+        onOpenArtistPage = { artistName ->
+          navController.navigate(PirateRoute.Artist.buildRoute(artistName)) { launchSingleTop = true }
+        },
         hostActivity = activity,
         tempoAccount = tempoAccount,
       )

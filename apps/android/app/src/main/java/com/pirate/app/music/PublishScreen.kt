@@ -119,7 +119,7 @@ private val LICENSE_OPTIONS = listOf(
 @Composable
 fun PublishScreen(
   authState: PirateAuthUiState,
-  pkpEthAddress: String?,
+  ownerAddress: String?,
   heavenName: String?,
   isAuthenticated: Boolean,
   onSelfVerifiedChange: (Boolean) -> Unit = {},
@@ -127,7 +127,7 @@ fun PublishScreen(
   onShowMessage: (String) -> Unit,
 ) {
   // Gate: require Self.xyz identity verification before showing publish form.
-  if (!isAuthenticated || pkpEthAddress == null) {
+  if (!isAuthenticated || ownerAddress == null) {
     LaunchedEffect(Unit) {
       onShowMessage("Please sign in first")
       onClose()
@@ -139,12 +139,12 @@ fun PublishScreen(
   }
 
   SelfVerificationGate(
-    pkpAddress = pkpEthAddress,
+    pkpAddress = ownerAddress,
     cachedVerified = authState.selfVerified,
     onVerified = { onSelfVerifiedChange(true) },
   ) {
     PublishFormContent(
-      pkpEthAddress = pkpEthAddress,
+      ownerAddress = ownerAddress,
       heavenName = heavenName,
       onClose = onClose,
       onShowMessage = onShowMessage,
@@ -155,7 +155,7 @@ fun PublishScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PublishFormContent(
-  pkpEthAddress: String,
+  ownerAddress: String,
   heavenName: String?,
   onClose: () -> Unit,
   onShowMessage: (String) -> Unit,
@@ -215,7 +215,7 @@ private fun PublishFormContent(
           SongPublishService.publish(
             context = context,
             formData = formData,
-            pkpEthAddress = pkpEthAddress,
+            ownerAddress = ownerAddress,
             onProgress = { pct -> progress = pct / 100f },
           )
         }

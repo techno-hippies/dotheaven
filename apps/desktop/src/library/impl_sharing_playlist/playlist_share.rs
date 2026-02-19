@@ -132,7 +132,7 @@ impl LibraryView {
             }
         };
         let owner_address = auth
-            .primary_wallet_address()
+            .wallet_address()
             .map(|value| value.to_lowercase())
             .unwrap_or_default();
         if owner_address.is_empty() {

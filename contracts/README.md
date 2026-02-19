@@ -3,13 +3,13 @@
 Smart contracts for Heaven protocol surfaces.
 
 ## Directories
-- `megaeth/` — primary protocol contracts on MegaETH.
+- `tempo/` — protocol contracts on Tempo (Moderato testnet, chain 42431).
 - `celo/` — Self.xyz verification integration contracts.
-- `base/` — cross-chain/content-access related contracts.
+- `megaeth-legacy/` — old MegaETH contracts (no longer active).
 
 ## Tooling
 - Foundry-based workflows are used for Solidity development and scripts.
 
 ## Documentation
-- `contracts/megaeth/CLAUDE.md`
+- `contracts/tempo/CLAUDE.md`
 - `contracts/celo/CLAUDE.md`

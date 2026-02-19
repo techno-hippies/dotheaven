@@ -13,7 +13,7 @@ impl RoomsView {
         }
 
         let default_pay_to = auth::load_from_disk()
-            .and_then(|p| p.pkp_address)
+            .and_then(|p| p.wallet_address().map(str::to_string))
             .unwrap_or_default()
             .to_lowercase();
 

@@ -1,0 +1,36 @@
+{
+  "network": {
+    "name": "Tempo Testnet (Moderato)",
+    "chainId": 42431,
+    "rpcUrl": "https://rpc.moderato.tempo.xyz",
+    "explorer": "https://explore.tempo.xyz"
+  },
+  "deployedAt": "2026-02-19T16:15:23Z",
+  "deployer": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+  "script": "script/DeploySessionEscrowV1.s.sol",
+  "command": "cast send --rpc-url https://rpc.moderato.tempo.xyz --private-key $PRIVATE_KEY --gas-limit 16770000 --create <bytecode+args>",
+  "contract": {
+    "name": "SessionEscrowV1",
+    "address": "0xb1E233221FB25c65090A75cc60Df5164A2eA4B98",
+    "deployTx": "0x57c1ce1c36f4a8840ff335d7b058bf0694c85bc2c6a8733741f0e5811e1508c5",
+    "blockNumber": 5570647,
+    "gasUsed": 16511232,
+    "status": true
+  },
+  "config": {
+    "owner": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+    "oracle": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+    "treasury": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+    "paymentToken": "0x20C0000000000000000000000000000000000001",
+    "feeBps": 300,
+    "challengeWindowSeconds": 86400,
+    "challengeBondTokenUnits": "10000000",
+    "lateCancelPenaltyBps": 2000,
+    "noAttestBufferSeconds": 86400,
+    "disputeTimeoutSeconds": 604800
+  },
+  "notes": [
+    "Deployment used stripped revert strings and no metadata to fit Moderato per-tx gas ceiling.",
+    "Escrow is TIP-20 based (AlphaUSD, 6 decimals)."
+  ]
+}

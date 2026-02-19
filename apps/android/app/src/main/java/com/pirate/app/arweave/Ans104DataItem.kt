@@ -2,9 +2,7 @@ package com.pirate.app.arweave
 
 import android.util.Base64
 import com.pirate.app.music.LoadTurboConfig
-import com.pirate.app.tempo.SessionKeyManager
 import java.io.ByteArrayOutputStream
-import java.math.BigInteger
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.ByteBuffer
@@ -41,12 +39,12 @@ object Ans104DataItem {
   fun buildAndSign(
     payload: ByteArray,
     tags: List<Tag>,
-    sessionKey: SessionKeyManager.SessionKey,
+    signingKeyPair: ECKeyPair,
   ): BuildResult {
     require(payload.isNotEmpty()) { "ANS-104 payload is empty." }
     validateTags(tags)
 
-    val owner = buildOwnerPublicKey(sessionKey)
+    val owner = buildOwnerPublicKey(signingKeyPair)
     val tagBytes = encodeTagsAvro(tags)
     val signatureType = SIGNATURE_TYPE_ETHEREUM.toString().toByteArray(Charsets.UTF_8)
 
@@ -65,7 +63,7 @@ object Ans104DataItem {
       ),
     )
 
-    val signature = signEthereumPersonal(signingMessage, sessionKey.privateKey)
+    val signature = signEthereumPersonal(signingMessage, signingKeyPair)
     val id = base64UrlNoPad(sha256(signature))
 
     val out = ByteArrayOutputStream(
@@ -136,8 +134,9 @@ object Ans104DataItem {
     }
   }
 
-  private fun buildOwnerPublicKey(sessionKey: SessionKeyManager.SessionKey): ByteArray {
-    return byteArrayOf(0x04) + padTo32(sessionKey.publicKeyX) + padTo32(sessionKey.publicKeyY)
+  private fun buildOwnerPublicKey(signingKeyPair: ECKeyPair): ByteArray {
+    val pubNoPrefix = leftPadTo(signingKeyPair.publicKey.toByteArray().trimLeadingZero(), 64)
+    return byteArrayOf(0x04) + pubNoPrefix
   }
 
   private fun encodeTagsAvro(tags: List<Tag>): ByteArray {
@@ -183,11 +182,10 @@ object Ans104DataItem {
     }
   }
 
-  private fun signEthereumPersonal(message: ByteArray, privateKey: ByteArray): ByteArray {
+  private fun signEthereumPersonal(message: ByteArray, signingKeyPair: ECKeyPair): ByteArray {
     val prefix = "\u0019Ethereum Signed Message:\n${message.size}".toByteArray(Charsets.UTF_8)
     val digest = keccak256(prefix + message)
-    val keyPair = ECKeyPair.create(BigInteger(1, privateKey))
-    val sig = Sign.signMessage(digest, keyPair, false)
+    val sig = Sign.signMessage(digest, signingKeyPair, false)
 
     val sigBytes = ByteArray(65)
     System.arraycopy(sig.r, 0, sigBytes, 0, 32)
@@ -241,10 +239,18 @@ object Ans104DataItem {
     out.write(b)
   }
 
-  private fun padTo32(input: ByteArray): ByteArray {
-    if (input.size == 32) return input
-    if (input.size > 32) return input.copyOfRange(input.size - 32, input.size)
-    return ByteArray(32 - input.size) + input
+  private fun leftPadTo(input: ByteArray, size: Int): ByteArray {
+    if (input.size == size) return input
+    if (input.size > size) return input.copyOfRange(input.size - size, input.size)
+    return ByteArray(size - input.size) + input
+  }
+
+  private fun ByteArray.trimLeadingZero(): ByteArray {
+    var start = 0
+    while (start < this.lastIndex && this[start] == 0.toByte()) {
+      start += 1
+    }
+    return copyOfRange(start, size)
   }
 
   private fun keccak256(input: ByteArray): ByteArray {

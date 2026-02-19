@@ -15,6 +15,7 @@
     "test:photos": "bun run scripts/test-photos.ts",
     "test:pipeline": "bun run scripts/test-pipeline.ts",
     "test:music": "bun run scripts/test-music-flow.ts",
+    "test:study-sets": "bun run scripts/test-study-sets.ts",
     "test:music:finalize": "bun test tests/music-finalize.test.ts"
   },
   "dependencies": {

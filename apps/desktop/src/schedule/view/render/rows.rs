@@ -146,7 +146,7 @@ impl ScheduleView {
                         div()
                             .text_xs()
                             .text_color(theme.muted_foreground)
-                            .child(format!("Price: {} ETH", slot.price_eth)),
+                            .child(format!("Price: ${}", slot.price_usd)),
                     ),
             )
             .child(

@@ -1,6 +1,6 @@
 use gpui::SharedString;
 
-pub(crate) const SAMPLE_BASE_PRICE: &str = "0.025";
+pub(crate) const SAMPLE_BASE_PRICE: &str = "25.00";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ScheduleScreen {
@@ -35,9 +35,9 @@ pub(crate) struct BookingRow {
     pub(crate) status: BookingStatus,
     pub(crate) is_host: bool,
     pub(crate) tx_hash: SharedString,
-    pub(crate) price_eth: SharedString,
+    pub(crate) price_usd: SharedString,
     pub(crate) cancel_cutoff_mins: u32,
-    pub(crate) amount_eth: SharedString,
+    pub(crate) amount_usd: SharedString,
 }
 
 #[derive(Clone)]
@@ -48,5 +48,5 @@ pub(crate) struct SlotRow {
     pub(crate) duration_mins: u32,
     pub(crate) status: SlotStatus,
     pub(crate) guest_name: Option<SharedString>,
-    pub(crate) price_eth: SharedString,
+    pub(crate) price_usd: SharedString,
 }

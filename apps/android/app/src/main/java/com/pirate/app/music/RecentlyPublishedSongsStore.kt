@@ -2,6 +2,7 @@ package com.pirate.app.music
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -17,6 +18,7 @@ data class RecentlyPublishedSongEntry(
 )
 
 object RecentlyPublishedSongsStore {
+  private const val TAG = "RecentlyPublishedSongs"
   private const val CACHE_FILENAME = "pirate_recently_published_songs.json"
   private const val MAX_ENTRIES = 20
   private const val COVERS_DIR = "recent_release_covers"
@@ -190,6 +192,9 @@ object RecentlyPublishedSongsStore {
 
     val cacheFile = file(context)
     runCatching { cacheFile.writeText(arr.toString()) }
+      .onFailure { error ->
+        Log.w(TAG, "Failed writing recent publish cache: ${error.message}", error)
+      }
   }
 
   private fun isSameSong(

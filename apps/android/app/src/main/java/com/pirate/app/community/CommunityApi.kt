@@ -65,7 +65,7 @@ object CommunityApi {
   private const val DEFAULT_TEMPO_SUBGRAPH_PROFILES =
     "https://graph.dotheaven.org/subgraphs/name/dotheaven/profiles-tempo"
   private const val LEGACY_SUBGRAPH_PROFILES =
-    "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-profiles/1.0.0/gn"
+    "https://graph.dotheaven.org/subgraphs/name/dotheaven/profiles-tempo"
   private const val ZERO_HASH =
     "0x0000000000000000000000000000000000000000000000000000000000000000"
   private const val EARTH_RADIUS_KM = 6371.0088

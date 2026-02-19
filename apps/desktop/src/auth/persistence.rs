@@ -1,5 +1,4 @@
 use super::{short_hex, AuthResult, PersistedAuth, AUTH_FILE};
-use lit_rust_sdk::{auth_config_from_delegation_auth_sig, AuthSig as LitAuthSig, LitAbility};
 use std::path::PathBuf;
 
 fn app_data_dir() -> PathBuf {
@@ -30,57 +29,21 @@ pub fn load_from_disk() -> Option<PersistedAuth> {
     }
 
     let contents = std::fs::read_to_string(&path).ok()?;
-    let mut parsed: PersistedAuth = serde_json::from_str(&contents).ok()?;
-    if let Some(auth_sig) = parsed.lit_delegation_auth_sig.as_ref() {
-        if !delegation_has_lit_action_execution(auth_sig) {
-            log::warn!(
-                "[Auth] Persisted delegation is missing LitActionExecution ability; clearing cached delegation and forcing refresh on next Lit init"
-            );
-            parsed.lit_session_key_pair = None;
-            parsed.lit_delegation_auth_sig = None;
-        }
-    }
+    let parsed: PersistedAuth = serde_json::from_str(&contents).ok()?;
 
     log::debug!(
-        "[Auth] Loaded auth from disk: version={:?}, provider={:?}, wallet_address={:?}, tempo_credential_id={:?}, tempo_public_key={}, pkp_address={:?}, pkp_public_key={}, pkp_token_id={:?}, eoa_address={:?}, auth_method_type={:?}",
+        "[Auth] Loaded auth from disk: version={:?}, provider={:?}, wallet={:?}, tempo_credential_id={:?}, tempo_public_key={}",
         parsed.version,
         parsed.provider,
-        parsed.primary_wallet_address(),
+        parsed.wallet_address(),
         parsed.tempo_credential_id,
         parsed
             .tempo_public_key
             .as_deref()
             .map(short_hex)
             .unwrap_or_else(|| "-".to_string()),
-        parsed.pkp_address,
-        parsed
-            .pkp_public_key
-            .as_deref()
-            .map(short_hex)
-            .unwrap_or_else(|| "-".to_string()),
-        parsed.pkp_token_id,
-        parsed.eoa_address,
-        parsed.auth_method_type
     );
     Some(parsed)
-}
-
-pub fn delegation_has_lit_action_execution(auth_sig: &LitAuthSig) -> bool {
-    let config = match auth_config_from_delegation_auth_sig(auth_sig) {
-        Ok(cfg) => cfg,
-        Err(err) => {
-            log::warn!(
-                "[Auth] Failed to parse delegation capabilities from signed SIWE: {}",
-                err
-            );
-            return false;
-        }
-    };
-
-    config
-        .resources
-        .iter()
-        .any(|req| req.ability == LitAbility::LitActionExecution)
 }
 
 pub fn delete_from_disk() {
@@ -107,14 +70,6 @@ pub fn to_persisted(result: &AuthResult) -> PersistedAuth {
         tempo_session_address: result.tempo_session_address.clone(),
         tempo_session_expires_at: result.tempo_session_expires_at,
         tempo_session_key_authorization: result.tempo_session_key_authorization.clone(),
-        pkp_address: result.pkp_address.clone(),
-        pkp_public_key: result.pkp_public_key.clone(),
-        pkp_token_id: result.pkp_token_id.clone(),
-        auth_method_type: result.auth_method_type,
-        auth_method_id: result.auth_method_id.clone(),
         access_token: result.access_token.clone(),
-        eoa_address: result.eoa_address.clone(),
-        lit_session_key_pair: result.lit_session_key_pair.clone(),
-        lit_delegation_auth_sig: result.lit_delegation_auth_sig.clone(),
     }
 }

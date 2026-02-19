@@ -2,7 +2,8 @@ use super::FeedPost;
 use crate::shared::ipfs;
 use serde::Deserialize;
 
-const ACTIVITY_SUBGRAPH: &str = "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/14.0.0/gn";
+const ACTIVITY_SUBGRAPH: &str =
+    "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo";
 
 #[derive(Debug, Deserialize)]
 struct SubgraphResponse {

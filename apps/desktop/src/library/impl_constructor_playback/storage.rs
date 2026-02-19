@@ -66,7 +66,7 @@ impl LibraryView {
             return;
         }
         self.add_funds_busy = true;
-        self.set_status_message("Submitting Base Sepolia PKP funding tx...", cx);
+        self.set_status_message("Submitting funding tx...", cx);
 
         let storage = self.storage.clone();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {

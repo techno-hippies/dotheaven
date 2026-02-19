@@ -221,7 +221,7 @@ pub(crate) fn render_base_price_card(
                                     .text_sm()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(theme.muted_foreground)
-                                    .child("ETH"),
+                                    .child("aUSD"),
                             ),
                     )
                     .child(
@@ -287,7 +287,7 @@ pub(crate) fn render_base_price_card(
                                     .text_base()
                                     .font_weight(FontWeight::MEDIUM)
                                     .text_color(theme.muted_foreground)
-                                    .child("ETH"),
+                                    .child("aUSD"),
                             ),
                     ),
             )

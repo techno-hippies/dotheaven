@@ -40,7 +40,10 @@ import com.pirate.app.music.MusicTrack
 import com.pirate.app.music.OnChainPlaylist
 import com.pirate.app.music.OnChainPlaylistsApi
 import com.pirate.app.music.PlaylistDisplayItem
-import com.pirate.app.music.PlaylistV1LitAction
+import com.pirate.app.music.TempoPlaylistApi
+import com.pirate.app.music.TrackIds
+import com.pirate.app.tempo.SessionKeyManager
+import com.pirate.app.tempo.TempoPasskeyManager
 import kotlinx.coroutines.launch
 
 private const val IPFS_GATEWAY = "https://heaven.myfilebase.com/ipfs/"
@@ -52,9 +55,7 @@ fun AddToPlaylistSheet(
   track: MusicTrack?,
   isAuthenticated: Boolean,
   ownerEthAddress: String?,
-  pkpPublicKey: String?,
-  litNetwork: String,
-  litRpcUrl: String,
+  tempoAccount: TempoPasskeyManager.PasskeyAccount?,
   onClose: () -> Unit,
   onShowMessage: (String) -> Unit,
   onSuccess: (playlistId: String, playlistName: String) -> Unit,
@@ -129,9 +130,50 @@ fun AddToPlaylistSheet(
               val name = newName.trim()
               scope.launch {
                 mutating = true
-                val created = LocalPlaylistsStore.createLocalPlaylist(context, name, track.toLocalPlaylistTrack())
-                onShowMessage("Added to ${created.name}")
-                onSuccess(created.id, created.name)
+                val owner = ownerEthAddress?.trim()?.lowercase().orEmpty()
+                if (isAuthenticated && owner.isNotBlank() && tempoAccount != null) {
+                  val sessionKey =
+                    SessionKeyManager.load(context)?.takeIf {
+                      SessionKeyManager.isValid(it, ownerAddress = owner)
+                    }
+                  if (sessionKey == null) {
+                    onShowMessage("Session expired. Sign in again to create playlists.")
+                    mutating = false
+                    return@launch
+                  }
+
+                  val trackId =
+                    TrackIds.computeMetaTrackId(
+                      title = track.title,
+                      artist = track.artist,
+                      album = track.album.ifBlank { null },
+                    )
+                  val createResult =
+                    TempoPlaylistApi.createPlaylist(
+                      account = tempoAccount,
+                      sessionKey = sessionKey,
+                      name = name,
+                      coverCid = "",
+                      visibility = 0,
+                      trackIds = listOf(trackId),
+                    )
+                  if (!createResult.success) {
+                    onShowMessage("Create failed: ${createResult.error ?: "unknown error"}")
+                    mutating = false
+                    return@launch
+                  }
+
+                  val resolvedId = resolveCreatedPlaylistId(owner, name, createResult.playlistId)
+                  onShowMessage("Added to $name")
+                  onSuccess(
+                    resolvedId ?: "pending:${System.currentTimeMillis()}",
+                    name,
+                  )
+                } else {
+                  val created = LocalPlaylistsStore.createLocalPlaylist(context, name, track.toLocalPlaylistTrack())
+                  onShowMessage("Added to ${created.name}")
+                  onSuccess(created.id, created.name)
+                }
                 mutating = false
                 showCreate = false
                 newName = ""
@@ -175,40 +217,69 @@ fun AddToPlaylistSheet(
                   onShowMessage("Added to ${pl.name}")
                   onSuccess(pl.id, pl.name)
                 } else {
-                  if (!isAuthenticated || ownerEthAddress.isNullOrBlank() || pkpPublicKey.isNullOrBlank()) {
-                    onShowMessage("Sign in to use on-chain playlists")
+                  val owner = ownerEthAddress?.trim()?.lowercase().orEmpty()
+                  if (!isAuthenticated || owner.isBlank() || tempoAccount == null) {
+                    onShowMessage("Sign in with Tempo passkey to update on-chain playlists")
                     mutating = false
                     return@launch
                   }
 
-                  val result =
-                    runCatching {
-                      PlaylistV1LitAction.addTrackToPlaylist(
-                        appContext = context,
-                        litNetwork = litNetwork,
-                        litRpcUrl = litRpcUrl,
-                        userPkpPublicKey = pkpPublicKey,
-                        userEthAddress = ownerEthAddress,
-                        playlistId = pl.id,
-                        track = track,
-                      )
-                    }.getOrElse { err ->
-                      onShowMessage("On-chain add failed: ${err.message ?: "unknown error"}")
+                  val sessionKey =
+                    SessionKeyManager.load(context)?.takeIf {
+                      SessionKeyManager.isValid(it, ownerAddress = owner)
+                    }
+                  if (sessionKey == null) {
+                    onShowMessage("Session expired. Sign in again to update playlists.")
+                    mutating = false
+                    return@launch
+                  }
+
+                  val trackId =
+                    TrackIds.computeMetaTrackId(
+                      title = track.title,
+                      artist = track.artist,
+                      album = track.album.ifBlank { null },
+                    )
+
+                  val existingTrackIds = runCatching { OnChainPlaylistsApi.fetchPlaylistTrackIds(pl.id) }
+                    .getOrElse {
+                      onShowMessage("Could not load playlist tracks yet. Try again in a moment.")
                       mutating = false
                       return@launch
                     }
 
-                  if (!result.success) {
-                    onShowMessage("On-chain add failed: ${result.error ?: "unknown error"}")
+                  if (pl.trackCount > 0 && existingTrackIds.isEmpty()) {
+                    onShowMessage("Playlist tracks are still indexing. Try again shortly.")
                     mutating = false
                     return@launch
                   }
 
-                  if (result.txHash.isNullOrBlank()) {
+                  if (existingTrackIds.any { it.equals(trackId, ignoreCase = true) }) {
                     onShowMessage("Already in ${pl.name}")
-                  } else {
-                    onShowMessage("Added to ${pl.name}")
+                    onSuccess(pl.id, pl.name)
+                    mutating = false
+                    onClose()
+                    return@launch
                   }
+
+                  val nextTrackIds = ArrayList<String>(existingTrackIds.size + 1)
+                  nextTrackIds.addAll(existingTrackIds)
+                  nextTrackIds.add(trackId)
+
+                  val result =
+                    TempoPlaylistApi.setTracks(
+                      account = tempoAccount,
+                      sessionKey = sessionKey,
+                      playlistId = pl.id,
+                      trackIds = nextTrackIds,
+                    )
+                  if (!result.success) {
+                    onShowMessage("Add failed: ${result.error ?: "unknown error"}")
+                    mutating = false
+                    return@launch
+                  }
+
+                  onShowMessage("Added to ${pl.name}")
                   onSuccess(pl.id, pl.name)
                 }
                 showCreate = false
@@ -289,4 +360,28 @@ private fun MusicTrack.toLocalPlaylistTrack(): LocalPlaylistTrack {
     artworkUri = artworkUri,
     artworkFallbackUri = artworkFallbackUri,
   )
+}
+
+private suspend fun resolveCreatedPlaylistId(
+  ownerAddress: String,
+  playlistName: String,
+  immediateId: String?,
+): String? {
+  val direct = immediateId?.trim().orEmpty()
+  if (direct.startsWith("0x") && direct.length == 66) return direct.lowercase()
+
+  repeat(4) {
+    val candidates = runCatching { OnChainPlaylistsApi.fetchUserPlaylists(ownerAddress, maxEntries = 30) }.getOrNull()
+    val match =
+      candidates
+        ?.firstOrNull { playlist ->
+          playlist.name.trim().equals(playlistName.trim(), ignoreCase = true)
+        }
+        ?.id
+        ?.trim()
+    if (!match.isNullOrBlank()) return match.lowercase()
+    kotlinx.coroutines.delay(1_200L)
+  }
+
+  return null
 }

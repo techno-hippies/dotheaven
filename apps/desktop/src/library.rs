@@ -88,7 +88,8 @@ const ARTIST_COLUMN_WIDTH: f32 = 200.0;
 const ALBUM_COLUMN_WIDTH: f32 = 240.0;
 const DETAIL_ARTIST_COLUMN_WIDTH: f32 = 225.0;
 const DETAIL_ALBUM_COLUMN_WIDTH: f32 = 300.0;
-const DEFAULT_SUBGRAPH_ACTIVITY_URL: &str = "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/14.0.0/gn";
+const DEFAULT_SUBGRAPH_ACTIVITY_URL: &str =
+    "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo";
 const DEFAULT_RESOLVER_URL: &str =
     "https://heaven-resolver-production.deletion-backup782.workers.dev";
 // Subgraphs are eventually consistent. Keep deleted playlists hidden locally while the indexer

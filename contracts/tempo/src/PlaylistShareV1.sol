@@ -25,20 +25,13 @@ contract PlaylistShareV1 {
     // ── Auth ─────────────────────────────────────────────────────────────
 
     address public owner;
-    address public sponsor;
 
     modifier onlyOwner() {
         require(msg.sender == owner, "not owner");
         _;
     }
 
-    modifier onlySponsor() {
-        require(msg.sender == sponsor, "unauthorized");
-        _;
-    }
-
     event OwnerUpdated(address indexed newOwner);
-    event SponsorUpdated(address indexed newSponsor);
 
     // ── Storage ──────────────────────────────────────────────────────────
 
@@ -77,14 +70,11 @@ contract PlaylistShareV1 {
         uint64 unsharedAt
     );
 
-    constructor(address _sponsor, address _playlistV1) {
-        require(_sponsor != address(0), "zero sponsor");
+    constructor(address _playlistV1) {
         require(_playlistV1 != address(0), "zero playlistV1");
         owner = msg.sender;
-        sponsor = _sponsor;
         playlistV1 = IPlaylistV1(_playlistV1);
         emit OwnerUpdated(msg.sender);
-        emit SponsorUpdated(_sponsor);
     }
 
     function transferOwnership(address newOwner) external onlyOwner {
@@ -93,17 +83,7 @@ contract PlaylistShareV1 {
         emit OwnerUpdated(newOwner);
     }
 
-    function setSponsor(address newSponsor) external onlyOwner {
-        require(newSponsor != address(0), "zero sponsor");
-        sponsor = newSponsor;
-        emit SponsorUpdated(newSponsor);
-    }
-
-    function sharePlaylistFor(address playlistOwner, bytes32 playlistId, address grantee)
-        external
-        onlySponsor
-    {
-        require(playlistOwner != address(0), "zero playlistOwner");
+    function sharePlaylist(bytes32 playlistId, address grantee) external {
         require(playlistId != bytes32(0), "zero playlistId");
         require(grantee != address(0), "zero grantee");
 
@@ -119,7 +99,7 @@ contract PlaylistShareV1 {
         ) = playlistV1.getPlaylist(playlistId);
 
         require(exists, "not found");
-        require(owner_ == playlistOwner, "not owner");
+        require(owner_ == msg.sender, "not owner");
 
         uint64 nowTs = uint64(block.timestamp);
         Share storage s = shares[playlistId][grantee];
@@ -129,26 +109,22 @@ contract PlaylistShareV1 {
         s.sharedAt = nowTs;
         s.granted = true;
 
-        emit PlaylistShared(playlistId, playlistOwner, grantee, version, trackCount, tracksHash, nowTs);
+        emit PlaylistShared(playlistId, msg.sender, grantee, version, trackCount, tracksHash, nowTs);
     }
 
-    function unsharePlaylistFor(address playlistOwner, bytes32 playlistId, address grantee)
-        external
-        onlySponsor
-    {
-        require(playlistOwner != address(0), "zero playlistOwner");
+    function unsharePlaylist(bytes32 playlistId, address grantee) external {
         require(playlistId != bytes32(0), "zero playlistId");
         require(grantee != address(0), "zero grantee");
 
         (address owner_, , , , , , , ) = playlistV1.getPlaylist(playlistId);
-        require(owner_ == playlistOwner, "not owner");
+        require(owner_ == msg.sender, "not owner");
 
         Share memory prev = shares[playlistId][grantee];
         uint64 nowTs = uint64(block.timestamp);
 
         emit PlaylistUnshared(
             playlistId,
-            playlistOwner,
+            msg.sender,
             grantee,
             prev.playlistVersion,
             prev.trackCount,

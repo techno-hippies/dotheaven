@@ -43,7 +43,7 @@ if [ -n "${HEAVEN_XMTP_NONCE:-}" ]; then
     export XMTP_NONCE="${XMTP_NONCE:-$HEAVEN_XMTP_NONCE}"
 fi
 
-if [ -z "$HEAVEN_SPONSOR_PRIVATE_KEY" ] && [ -z "$PRIVATE_KEY" ] && [ ! -f "../../lit-actions/.env" ]; then
+if [ -z "$HEAVEN_SPONSOR_PRIVATE_KEY" ] && [ -z "$PRIVATE_KEY" ]; then
     echo "Warning: no sponsor private key found. content.encryptUploadRegister will fail at register step."
 fi
 
@@ -58,8 +58,6 @@ echo "  LOAD_UPLOAD_URL: ${LOAD_UPLOAD_URL}"
 echo "  LOAD_UPLOAD_TOKEN: ${LOAD_UPLOAD_TOKEN}"
 
 echo "Environment validated. Starting Heaven GPUI..."
-echo "  LIT_NETWORK: ${HEAVEN_LIT_NETWORK:-${LIT_NETWORK:-naga-dev}}"
-echo "  LIT_RPC_URL: ${HEAVEN_LIT_RPC_URL:-$LIT_RPC_URL}"
 echo "  XMTP_ENV: ${HEAVEN_XMTP_ENV}"
 echo "  XMTP_NONCE: ${HEAVEN_XMTP_NONCE:-${XMTP_NONCE:-auto}}"
 echo "  TEMPO_SCROBBLE_API: ${HEAVEN_TEMPO_SCROBBLE_API:-${TEMPO_SCROBBLE_API:-unset}}"

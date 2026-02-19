@@ -43,6 +43,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.pirate.app.theme.PiratePalette
 import com.pirate.app.ui.PirateMobileHeader
+import com.pirate.app.util.formatTimeAgoShort
+import com.pirate.app.util.shortAddress
 import java.util.Locale
 import kotlinx.coroutines.launch
 
@@ -297,7 +299,7 @@ private fun SongHeroCard(
           studyStatus?.error != null -> "Status: ${studyStatus.error}"
           else -> "Exercises not generated yet"
         }
-        Text(statusText, color = PiratePalette.TextMuted, style = MaterialTheme.typography.bodySmall)
+        Text(statusText, color = PiratePalette.TextMuted, style = MaterialTheme.typography.bodyMedium)
       }
 
       Button(
@@ -308,7 +310,7 @@ private fun SongHeroCard(
       }
       Text(
         text = "Language: ${learnerLanguage.lowercase(Locale.US)}",
-        style = MaterialTheme.typography.bodySmall,
+        style = MaterialTheme.typography.bodyMedium,
         color = PiratePalette.TextMuted,
       )
     }
@@ -326,7 +328,7 @@ private fun SongStatPill(label: String, value: String) {
       horizontalAlignment = Alignment.CenterHorizontally,
     ) {
       Text(value, fontWeight = FontWeight.SemiBold)
-      Text(label, style = MaterialTheme.typography.bodySmall, color = PiratePalette.TextMuted)
+      Text(label, style = MaterialTheme.typography.bodyMedium, color = PiratePalette.TextMuted)
     }
   }
 }
@@ -351,7 +353,7 @@ private fun SongOverviewPanel(
       ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
           Text("Track ID", style = MaterialTheme.typography.labelLarge, color = PiratePalette.TextMuted)
-          Text(stats?.trackId ?: "—", style = MaterialTheme.typography.bodySmall)
+          Text(stats?.trackId ?: "—", style = MaterialTheme.typography.bodyMedium)
         }
       }
     }
@@ -476,7 +478,7 @@ private fun ListenerRow(
     ) {
       Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text("#$rank ${shortAddress(address)}", fontWeight = FontWeight.SemiBold)
-        Text("Last: ${formatAgo(lastAtSec)}", style = MaterialTheme.typography.bodySmall, color = PiratePalette.TextMuted)
+        Text("Last: ${formatTimeAgoShort(lastAtSec)}", style = MaterialTheme.typography.bodyMedium, color = PiratePalette.TextMuted)
       }
       Text(count.toString(), fontWeight = FontWeight.SemiBold)
     }
@@ -504,26 +506,7 @@ private fun ScrobbleRow(
       verticalAlignment = Alignment.CenterVertically,
     ) {
       Text(shortAddress(address), fontWeight = FontWeight.Medium)
-      Text(formatAgo(playedAtSec), color = PiratePalette.TextMuted, style = MaterialTheme.typography.bodySmall)
+      Text(formatTimeAgoShort(playedAtSec), color = PiratePalette.TextMuted, style = MaterialTheme.typography.bodyMedium)
     }
-  }
-}
-
-private fun shortAddress(address: String): String {
-  val raw = address.trim()
-  if (raw.length <= 12) return raw
-  return "${raw.take(6)}...${raw.takeLast(4)}"
-}
-
-private fun formatAgo(timestampSec: Long): String {
-  if (timestampSec <= 0L) return "unknown"
-  val nowSec = System.currentTimeMillis() / 1_000L
-  val diff = (nowSec - timestampSec).coerceAtLeast(0L)
-  return when {
-    diff < 60L -> "${diff}s ago"
-    diff < 3600L -> "${diff / 60L}m ago"
-    diff < 86_400L -> "${diff / 3600L}h ago"
-    diff < 604_800L -> "${diff / 86_400L}d ago"
-    else -> "${diff / 604_800L}w ago"
   }
 }

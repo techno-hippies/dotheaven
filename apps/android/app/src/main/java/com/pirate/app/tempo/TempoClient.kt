@@ -9,6 +9,9 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.math.BigDecimal
+import java.math.BigInteger
+import java.math.RoundingMode
 import java.util.concurrent.TimeUnit
 
 /**
@@ -20,8 +23,18 @@ object TempoClient {
     const val RPC_URL = "https://rpc.moderato.tempo.xyz"
     const val SPONSOR_URL = "https://sponsor.moderato.tempo.xyz"
     const val EXPLORER_URL = "https://explore.tempo.xyz"
+    const val BASE_SEPOLIA_CHAIN_ID = 84532L
+    const val BASE_SEPOLIA_RPC_URL = "https://base-sepolia-rpc.publicnode.com"
+    const val BASE_SEPOLIA_USDC = "0x036cbd53842c5426634e7929541ec2318f3dcf7e"
+    // Update this after each SessionEscrow redeploy.
+    const val SESSION_ESCROW_V1 = "0xb1E233221FB25c65090A75cc60Df5164A2eA4B98"
+    const val PATH_USD = "0x20c0000000000000000000000000000000000000"
     const val ALPHA_USD = "0x20c0000000000000000000000000000000000001"
+    const val BETA_USD = "0x20c0000000000000000000000000000000000002"
+    const val THETA_USD = "0x20c0000000000000000000000000000000000003"
     const val NONCE_PRECOMPILE = "0x4E4F4E4345000000000000000000000000000000"
+
+    private const val TIP20_DECIMALS = 6
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -52,6 +65,24 @@ object TempoClient {
         val isMined: Boolean
             get() = !blockNumberHex.isNullOrBlank()
     }
+
+    data class Stablecoin(
+        val symbol: String,
+        val address: String,
+        val decimals: Int = TIP20_DECIMALS,
+    )
+
+    data class StablecoinBalance(
+        val token: Stablecoin,
+        val rawAmount: BigInteger,
+    )
+
+    val SUPPORTED_STABLECOINS: List<Stablecoin> = listOf(
+        Stablecoin(symbol = "AlphaUSD", address = ALPHA_USD),
+        Stablecoin(symbol = "BetaUSD", address = BETA_USD),
+        Stablecoin(symbol = "ThetaUSD", address = THETA_USD),
+        Stablecoin(symbol = "PathUSD", address = PATH_USD),
+    )
 
     private suspend fun rpc(
         method: String,
@@ -91,24 +122,40 @@ object TempoClient {
 
     /** Get AlphaUSD balance (ERC-20 balanceOf via eth_call). */
     suspend fun getBalance(address: String): String {
-        // balanceOf(address) selector = 0x70a08231
-        val addrPadded = address.removePrefix("0x").lowercase().padStart(64, '0')
-        val data = "0x70a08231$addrPadded"
+        val raw = getTokenBalanceRaw(address = address, token = ALPHA_USD)
+        return formatUnits(rawAmount = raw, decimals = TIP20_DECIMALS, maxFractionDigits = 2)
+    }
 
-        val callObj = JSONObject()
-            .put("to", ALPHA_USD)
-            .put("data", data)
+    /** Get balances for all supported Tempo stablecoins. */
+    suspend fun getStablecoinBalances(address: String): List<StablecoinBalance> {
+        return SUPPORTED_STABLECOINS.map { stablecoin ->
+            StablecoinBalance(
+                token = stablecoin,
+                rawAmount = getTokenBalanceRaw(address = address, token = stablecoin.address),
+            )
+        }
+    }
 
-        val result = rpc("eth_call", JSONArray().put(callObj).put("latest"))
-        val hex = result?.toString()?.removePrefix("0x") ?: "0"
-        if (hex.isEmpty() || hex == "0" || hex.all { it == '0' }) return "0"
+    suspend fun getErc20BalanceRaw(
+        address: String,
+        token: String,
+        rpcUrl: String = RPC_URL,
+    ): BigInteger {
+        return getTokenBalanceRaw(address = address, token = token, rpcUrl = rpcUrl)
+    }
 
-        // TIP-20 stablecoins use 6 decimals
-        val raw = hex.toBigInteger(16)
-        val whole = raw.divide(java.math.BigInteger.TEN.pow(6))
-        val frac = raw.mod(java.math.BigInteger.TEN.pow(6))
-        val fracStr = frac.toString().padStart(6, '0').take(2)
-        return "$whole.$fracStr"
+    fun formatUnits(
+        rawAmount: BigInteger,
+        decimals: Int = TIP20_DECIMALS,
+        maxFractionDigits: Int = 2,
+    ): String {
+        if (rawAmount <= BigInteger.ZERO) return "0"
+        val safeDecimals = decimals.coerceAtLeast(0)
+        val safeMaxFractionDigits = maxFractionDigits.coerceAtLeast(0)
+        val divisor = BigDecimal.TEN.pow(safeDecimals)
+        val value = rawAmount.toBigDecimal().divide(divisor, safeDecimals, RoundingMode.DOWN)
+        val scaled = value.setScale(safeMaxFractionDigits, RoundingMode.DOWN)
+        return scaled.stripTrailingZeros().toPlainString()
     }
 
     /** Get transaction count (nonce) for address. */
@@ -189,7 +236,14 @@ object TempoClient {
             )
             result?.toString() ?: throw RuntimeException("no relay signature returned")
         } catch (err: Exception) {
-            throw RuntimeException("Fee sponsorship failed: ${err.message}", err)
+            val directDiagnostic = runCatching {
+                rpc("eth_sendRawTransaction", JSONArray().put(signedTxHex), RPC_URL)
+                "direct send unexpectedly succeeded"
+            }.exceptionOrNull()?.message ?: "direct send unexpectedly succeeded"
+            throw RuntimeException(
+                "Fee sponsorship failed: ${err.message}; direct-send diagnostic: $directDiagnostic",
+                err,
+            )
         }
 
         val txHash = rpc("eth_sendRawTransaction", JSONArray().put(relaySigned), RPC_URL)
@@ -268,6 +322,24 @@ object TempoClient {
         val clean = value.trim().removePrefix("0x").removePrefix("0X")
         if (clean.isBlank()) return null
         return clean.toLongOrNull(16)
+    }
+
+    private suspend fun getTokenBalanceRaw(
+        address: String,
+        token: String,
+        rpcUrl: String = RPC_URL,
+    ): BigInteger {
+        // balanceOf(address) selector = 0x70a08231
+        val addrPadded = address.removePrefix("0x").lowercase().padStart(64, '0')
+        val data = "0x70a08231$addrPadded"
+
+        val callObj = JSONObject()
+            .put("to", token)
+            .put("data", data)
+
+        val result = rpc("eth_call", JSONArray().put(callObj).put("latest"), url = rpcUrl)
+        val hex = result?.toString()?.removePrefix("0x")?.ifBlank { "0" } ?: "0"
+        return hex.toBigIntegerOrNull(16) ?: BigInteger.ZERO
     }
 
     private fun encodeAddressWord(address: String): String {

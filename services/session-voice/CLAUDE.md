@@ -10,7 +10,7 @@ Operational notes for `services/session-voice`.
 ## Modes in This Codebase
 - Free rooms (credit-gated, renewable short-lived tokens).
 - Booked sessions (legacy/backward-compatible path).
-- Duet rooms (paid access via x402, Base Sepolia).
+- Duet rooms (paid access via x402, Base Sepolia USDC — note: x402 settlement is on Base Sepolia, not Tempo; this is intentional).
 
 ## Core Endpoints
 - Auth: `/auth/nonce`, `/auth/verify`

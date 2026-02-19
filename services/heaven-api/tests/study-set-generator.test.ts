@@ -4,7 +4,7 @@ import { validateStudySetPack } from '../src/lib/study-set-generator'
 
 function basePack(): StudySetPack {
   return {
-    specVersion: 'exercise-pack-v1',
+    specVersion: 'exercise-pack-v2',
     trackId: '0xabc123',
     language: 'en',
     sourceRefs: {
@@ -17,18 +17,25 @@ function basePack(): StudySetPack {
       generatedAt: 1_739_980_800,
     },
     lineTags: [
-      { text: 'Is this the real life?', lang: 'en' },
+      {
+        text: 'Is this the real life?',
+        lang: 'en',
+        lineId: 'L-001',
+        lineIndex: 0,
+        allPositions: [0, 8],
+      },
     ],
     questions: [
       {
         id: 'sib-001',
         type: 'say_it_back',
-        prompt: 'Listen and repeat:',
+        prompt: '',
         excerpt: 'Is this the real life?',
         choices: [],
         correctIndex: 0,
-        explanation: 'Repeat clearly.',
         difficulty: 'easy',
+        difficultyScore: 1.8,
+        sourceLineId: 'L-001',
       },
       {
         id: 'tr-001',
@@ -43,7 +50,15 @@ function basePack(): StudySetPack {
         ],
         correctIndex: 0,
         explanation: 'The exact line is the first option.',
+        choiceRationales: [
+          'This exactly matches the prompt meaning.',
+          'This changes the meaning from real life to real dream.',
+          'This asks about fantasy, which is different.',
+          'This changes the subject to memory, which is incorrect.',
+        ],
         difficulty: 'easy',
+        difficultyScore: 2.2,
+        sourceLineId: 'L-001',
       },
     ],
     compliance: {
@@ -82,7 +97,7 @@ describe('validateStudySetPack', () => {
     pack.generator.generatedAt = 0
 
     const issues = validateStudySetPack(pack)
-    expect(issues).toContain('specVersion must be exercise-pack-v1')
+    expect(issues).toContain('specVersion must be exercise-pack-v2')
     expect(issues).toContain('generator.promptHash must be 0x + 64 hex chars')
     expect(issues).toContain('generator.generatedAt must be a unix timestamp')
   })

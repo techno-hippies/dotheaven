@@ -1,0 +1,426 @@
+{
+  "specVersion": "exercise-pack-v2",
+  "trackId": "T0101545054",
+  "language": "es",
+  "sourceRefs": {
+    "lyricsRef": "local:T0101545054/en-lyrics.txt",
+    "geniusRef": "genius:1063"
+  },
+  "generator": {
+    "model": "google/gemini-3-flash-preview",
+    "promptHash": "0x9e0314c66872b9847022a96739ae92c4289950546e78319d5888ef9053440304",
+    "generatedAt": 1771508751
+  },
+  "lineTags": [
+    {
+      "text": "Is this the real life? Is this just fantasy?",
+      "lang": "en",
+      "difficulty": 1.07,
+      "difficultyLlm": 1,
+      "difficultyLexical": 1.24,
+      "fleschKincaid": 0.59,
+      "top1kRatio": 0.89,
+      "top10kRatio": 1,
+      "lineId": "L-001",
+      "lineIndex": 0,
+      "allPositions": [
+        1
+      ]
+    },
+    {
+      "text": "Mama, just killed a man",
+      "lang": "en",
+      "difficulty": 1.29,
+      "difficultyLlm": 1,
+      "difficultyLexical": 1.97,
+      "fleschKincaid": 2.88,
+      "top1kRatio": 0.6,
+      "top10kRatio": 0.8,
+      "lineId": "L-008",
+      "lineIndex": 7,
+      "allPositions": [
+        10
+      ]
+    },
+    {
+      "text": "Put a gun against his head, pulled my trigger, now he's dead",
+      "lang": "en",
+      "difficulty": 2.03,
+      "difficultyLlm": 2,
+      "difficultyLexical": 2.1,
+      "fleschKincaid": 3.84,
+      "top1kRatio": 0.58,
+      "top10kRatio": 0.92,
+      "lineId": "L-009",
+      "lineIndex": 8,
+      "allPositions": [
+        11
+      ]
+    },
+    {
+      "text": "Sends shivers down my spine, body's aching all the time",
+      "lang": "en",
+      "difficulty": 2.78,
+      "difficultyLlm": 3,
+      "difficultyLexical": 2.27,
+      "fleschKincaid": 3.65,
+      "top1kRatio": 0.5,
+      "top10kRatio": 0.7,
+      "lineId": "L-016",
+      "lineIndex": 15,
+      "allPositions": [
+        20
+      ]
+    },
+    {
+      "text": "I don't wanna die",
+      "lang": "en",
+      "difficulty": 1.5,
+      "difficultyLlm": 1,
+      "difficultyLexical": 2.65,
+      "fleschKincaid": 0.72,
+      "top1kRatio": 0.25,
+      "top10kRatio": 0.75,
+      "lineId": "L-020",
+      "lineIndex": 19,
+      "allPositions": [
+        24
+      ]
+    },
+    {
+      "text": "Scaramouche, Scaramouche, will you do the Fandango?",
+      "lang": "en",
+      "lang2": "it",
+      "difficulty": 3.95,
+      "difficultyLlm": 4,
+      "difficultyLexical": 2.99,
+      "fleschKincaid": 9.05,
+      "top1kRatio": 0.57,
+      "top10kRatio": 0.57,
+      "lineId": "L-023",
+      "lineIndex": 22,
+      "allPositions": [
+        31
+      ]
+    },
+    {
+      "text": "(Galileo) Galileo, (Galileo) Galileo, Galileo Figaro",
+      "lang": "it",
+      "lang2": "en",
+      "difficulty": 4.31,
+      "difficultyLlm": 4,
+      "difficultyLexical": 4.2,
+      "fleschKincaid": 22.15,
+      "top1kRatio": 0,
+      "top10kRatio": 0,
+      "lineId": "L-025",
+      "lineIndex": 24,
+      "allPositions": [
+        33
+      ]
+    },
+    {
+      "text": "Bismillah, we will not let you go (Let me go)",
+      "lang": "en",
+      "lang2": "ar",
+      "difficulty": 2.76,
+      "difficultyLlm": 3,
+      "difficultyLexical": 1.35,
+      "fleschKincaid": 2.47,
+      "top1kRatio": 0.9,
+      "top10kRatio": 0.9,
+      "lineId": "L-032",
+      "lineIndex": 31,
+      "allPositions": [
+        41
+      ]
+    },
+    {
+      "text": "Oh, mamma mia, mamma mia (Mamma mia, let me go)",
+      "lang": "it",
+      "lang2": "en",
+      "difficulty": 2.4,
+      "difficultyLlm": 2,
+      "difficultyLexical": 2.49,
+      "fleschKincaid": 3.65,
+      "top1kRatio": 0.4,
+      "top10kRatio": 0.7,
+      "lineId": "L-036",
+      "lineIndex": 35,
+      "allPositions": [
+        46
+      ]
+    },
+    {
+      "text": "Just gotta get out, just gotta get right outta here",
+      "lang": "en",
+      "difficulty": 1.95,
+      "difficultyLlm": 2,
+      "difficultyLexical": 1.83,
+      "fleschKincaid": 3.65,
+      "top1kRatio": 0.7,
+      "top10kRatio": 0.9,
+      "lineId": "L-041",
+      "lineIndex": 40,
+      "allPositions": [
+        53
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "id": "sib-001",
+      "type": "say_it_back",
+      "prompt": "",
+      "excerpt": "Mama, just killed a man",
+      "choices": [],
+      "correctIndex": 0,
+      "difficulty": "easy",
+      "difficultyScore": 1.29,
+      "sourceLineId": "L-008",
+      "excerptLang": "en"
+    },
+    {
+      "id": "tr-001",
+      "type": "translation_mcq",
+      "prompt": "¿Qué letra significa: '¿Es esto la vida real? ¿Es esto solo fantasía?'?",
+      "excerpt": "Is this the real life? Is this just fantasy?",
+      "sourceLineId": "L-001",
+      "choices": [
+        "Is this the real life? Is this just fantasy?",
+        "Mama, just killed a man",
+        "Thunderbolt and lightning, very, very frightening me",
+        "Just gotta get out, just gotta get right outta here"
+      ],
+      "correctIndex": 0,
+      "explanation": "La línea 'Is this the real life? Is this just fantasy?' se traduce directamente como una pregunta sobre si lo que ocurre es realidad o una fantasía.",
+      "choiceRationales": [
+        "Esta es la traducción correcta de la frase sobre la vida real y la fantasía.",
+        "Esta línea describe el acto de haber matado a un hombre.",
+        "Esta línea habla sobre truenos y relámpagos que asustan.",
+        "Esta línea expresa la necesidad de escapar de un lugar."
+      ],
+      "difficulty": "easy",
+      "difficultyScore": 1.58,
+      "excerptLang": "en"
+    },
+    {
+      "id": "sib-002",
+      "type": "say_it_back",
+      "prompt": "",
+      "excerpt": "Sends shivers down my spine, body's aching all the time",
+      "choices": [],
+      "correctIndex": 0,
+      "difficulty": "medium",
+      "difficultyScore": 2.78,
+      "sourceLineId": "L-016",
+      "excerptLang": "en"
+    },
+    {
+      "id": "tr-002",
+      "type": "translation_mcq",
+      "prompt": "¿Qué letra significa: 'No quiero morir'?",
+      "excerpt": "I don't wanna die",
+      "sourceLineId": "L-020",
+      "choices": [
+        "I don't wanna die",
+        "Sends shivers down my spine, body's aching all the time",
+        "Mama, just killed a man",
+        "Bismillah, we will not let you go (Let me go)"
+      ],
+      "correctIndex": 0,
+      "explanation": "'I don't wanna die' es la forma coloquial de decir 'I do not want to die', que significa 'No quiero morir'.",
+      "choiceRationales": [
+        "Esta es la traducción exacta de la frase solicitada.",
+        "Esta línea describe sensaciones físicas de escalofríos y dolor.",
+        "Esta línea dice que acaba de matar a alguien, no que no quiera morir.",
+        "Esta línea mezcla un término religioso con la negativa a dejar ir a alguien."
+      ],
+      "difficulty": "easy",
+      "difficultyScore": 1.78,
+      "excerptLang": "en"
+    },
+    {
+      "id": "sib-003",
+      "type": "say_it_back",
+      "prompt": "",
+      "excerpt": "Scaramouche, Scaramouche, will you do the Fandango?",
+      "choices": [],
+      "correctIndex": 0,
+      "difficulty": "hard",
+      "difficultyScore": 3.95,
+      "sourceLineId": "L-023",
+      "excerptLang": "en"
+    },
+    {
+      "id": "tv-001",
+      "type": "trivia_mcq",
+      "prompt": "¿Cuál era el título provisional de 'Bohemian Rhapsody' cuando Freddie Mercury comenzó a escribir la letra en 1968?",
+      "excerpt": "Mama, just killed a man",
+      "sourceLineId": "L-008",
+      "choices": [
+        "Mama's Boy",
+        "Bismillah Rhapsody",
+        "The Cowboy Song",
+        "The Killer's Confession"
+      ],
+      "correctIndex": 2,
+      "explanation": "Según las anotaciones de Genius, Freddie Mercury se refería originalmente a la canción como 'The Cowboy Song' durante sus primeras etapas de concepción.",
+      "choiceRationales": [
+        "Aunque se menciona a 'Mama', este título no tiene base en la historia de la producción.",
+        "Bismillah es una palabra usada en la canción, pero no formaba parte del título original.",
+        "Este fue el título de trabajo original documentado para la canción en 1968.",
+        "Aunque la letra es una confesión, este nunca fue el título provisional."
+      ],
+      "difficulty": "hard",
+      "difficultyScore": 2.78,
+      "excerptLang": "en",
+      "source": "genius",
+      "sourceClassification": "unreviewed"
+    },
+    {
+      "id": "sib-004",
+      "type": "say_it_back",
+      "prompt": "",
+      "excerpt": "(Galileo) Galileo, (Galileo) Galileo, Galileo Figaro",
+      "choices": [],
+      "correctIndex": 0,
+      "difficulty": "hard",
+      "difficultyScore": 4.31,
+      "sourceLineId": "L-025",
+      "excerptLang": "it"
+    },
+    {
+      "id": "tr-003",
+      "type": "translation_mcq",
+      "prompt": "¿Qué letra significa: 'Puse una pistola contra su cabeza, apreté mi gatillo, ahora está muerto'?",
+      "excerpt": "Put a gun against his head, pulled my trigger, now he's dead",
+      "sourceLineId": "L-009",
+      "choices": [
+        "Just gotta get out, just gotta get right outta here",
+        "Scaramouche, Scaramouche, will you do the Fandango?",
+        "Is this the real life? Is this just fantasy?",
+        "Put a gun against his head, pulled my trigger, now he's dead"
+      ],
+      "correctIndex": 3,
+      "explanation": "La frase describe detalladamente el uso de un arma ('gun'), el gatillo ('trigger') y el resultado de la muerte ('dead').",
+      "choiceRationales": [
+        "Esta línea se refiere a la urgencia de salir de un sitio.",
+        "Esta línea menciona a un personaje de la comedia del arte y un baile.",
+        "Esta línea cuestiona la naturaleza de la realidad.",
+        "Esta es la traducción correcta que describe la acción con el arma."
+      ],
+      "difficulty": "medium",
+      "difficultyScore": 2.56,
+      "excerptLang": "en"
+    },
+    {
+      "id": "sib-005",
+      "type": "say_it_back",
+      "prompt": "",
+      "excerpt": "Bismillah, we will not let you go (Let me go)",
+      "choices": [],
+      "correctIndex": 0,
+      "difficulty": "medium",
+      "difficultyScore": 2.76,
+      "sourceLineId": "L-032",
+      "excerptLang": "en"
+    },
+    {
+      "id": "tv-002",
+      "type": "trivia_mcq",
+      "prompt": "¿Cómo logró Brian May el efecto sonoro similar a un árbol de campanas durante el verso sobre los escalofríos?",
+      "excerpt": "Sends shivers down my spine, body's aching all the time",
+      "sourceLineId": "L-016",
+      "choices": [
+        "Usando un sintetizador Moog",
+        "Utilizando un pedal de efectos 'flanger' extremo",
+        "Tocando las cuerdas de la guitarra en el lado opuesto del puente",
+        "Grabando campanas reales en una catedral"
+      ],
+      "correctIndex": 2,
+      "explanation": "Brian May utilizó una técnica poco convencional tocando las cuerdas de su guitarra detrás del puente para imitar el sonido de un árbol de campanas.",
+      "choiceRationales": [
+        "Queen era famoso por poner 'No synthesizers' en sus créditos de álbumes en esa época.",
+        "Aunque usaban efectos, el sonido de 'campanas' se logró mediante la técnica física en las cuerdas.",
+        "Esta es la técnica específica descrita en la anotación para crear ese efecto de sonido.",
+        "No se utilizaron grabaciones externas de campanas para este efecto específico."
+      ],
+      "difficulty": "hard",
+      "difficultyScore": 3.45,
+      "excerptLang": "en",
+      "source": "genius",
+      "sourceClassification": "unreviewed"
+    },
+    {
+      "id": "sib-006",
+      "type": "say_it_back",
+      "prompt": "",
+      "excerpt": "Oh, mamma mia, mamma mia (Mamma mia, let me go)",
+      "choices": [],
+      "correctIndex": 0,
+      "difficulty": "easy",
+      "difficultyScore": 2.4,
+      "sourceLineId": "L-036",
+      "excerptLang": "it"
+    },
+    {
+      "id": "tr-004",
+      "type": "translation_mcq",
+      "prompt": "¿Qué letra significa: 'Solo tengo que salir, solo tengo que salir de aquí ahora mismo'?",
+      "excerpt": "Just gotta get out, just gotta get right outta here",
+      "sourceLineId": "L-041",
+      "choices": [
+        "Thunderbolt and lightning, very, very frightening me",
+        "I don't wanna die",
+        "Mama, just killed a man",
+        "Just gotta get out, just gotta get right outta here"
+      ],
+      "correctIndex": 3,
+      "explanation": "'Get out' es un 'phrasal verb' que significa salir o escapar, y 'outta here' es una contracción de 'out of here'.",
+      "choiceRationales": [
+        "Esta línea describe fenómenos meteorológicos aterradores.",
+        "Esta línea expresa el deseo de permanecer con vida.",
+        "Esta línea es una confesión de un crimen a una madre.",
+        "Esta es la traducción correcta sobre la necesidad de marcharse."
+      ],
+      "difficulty": "medium",
+      "difficultyScore": 2.53,
+      "excerptLang": "en"
+    },
+    {
+      "id": "tv-003",
+      "type": "trivia_mcq",
+      "prompt": "¿A qué figura de la industria musical se cree que Freddie Mercury lanza un ataque directo en la sección final de la canción?",
+      "excerpt": "Just gotta get out, just gotta get right outta here",
+      "sourceLineId": "L-041",
+      "choices": [
+        "Norman Sheffield",
+        "Don Arden",
+        "David Bowie",
+        "John Reid"
+      ],
+      "correctIndex": 0,
+      "explanation": "Se especula que la letra refleja el descontento de la banda con Norman Sheffield, su antiguo manager, debido al trato injusto que recibían.",
+      "choiceRationales": [
+        "Es el manager mencionado como el posible objetivo de las críticas por su trato injusto.",
+        "Don Arden fue un manager famoso de la época, pero no tuvo esta disputa con Queen.",
+        "David Bowie fue un colaborador y amigo, no un manager criticado en esta letra.",
+        "John Reid fue manager de Queen después, pero no es el objetivo de esta crítica específica."
+      ],
+      "difficulty": "medium",
+      "difficultyScore": 2.53,
+      "excerptLang": "en",
+      "source": "genius",
+      "sourceClassification": "accepted"
+    }
+  ],
+  "compliance": {
+    "excerptPolicy": "max-one-line-per-question",
+    "attribution": {
+      "track": "Bohemian Rhapsody",
+      "artist": "Queen",
+      "geniusSongId": 1063
+    }
+  }
+}

@@ -10,7 +10,7 @@ const app = new Hono<{ Bindings: Env }>()
  *
  * Mutual match conditions:
  * - Both parties have liked each other
- * - Both parties have PKP addresses (claimed users)
+ * - Both parties have addresses (claimed users)
  *
  * If target is a shadow profile that hasn't claimed yet, the like is stored
  * but no match is created until the shadow profile claims.

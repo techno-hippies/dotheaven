@@ -4,16 +4,17 @@ use crate::shared::address::is_evm_address;
 use crate::shared::config::non_empty_env;
 use crate::shared::rpc::eth_call_address;
 
-const DEFAULT_MEGAETH_RPC_URL: &str = "https://carrot.megaeth.com/rpc";
+const DEFAULT_TEMPO_RPC_URL: &str = "https://rpc.moderato.tempo.xyz";
 const DEFAULT_ETHEREUM_MAINNET_RPC_URL: &str = "https://ethereum-rpc.publicnode.com";
-const REGISTRY_V1: &str = "0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2";
+const REGISTRY_V2: &str = "0xA111c5cA16752B09fF16B3B8B24BA55a8486aB23";
 const HEAVEN_NODE_HEX: &str = "8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27";
+const PIRATE_NODE_HEX: &str = "ace9c9c435cf933be3564cdbcf7b7e2faee63e4f39034849eacb82d13f32f02a";
 const ENS_REGISTRY: &str = "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e";
 
 pub(super) fn resolve_recipient_identifier(input: &str) -> Result<String, String> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
-        return Err("Enter a wallet address, heaven username, or name.eth".to_string());
+        return Err("Enter a wallet address, heaven/pirate username, or name.eth".to_string());
     }
 
     if is_evm_address(trimmed) {
@@ -25,46 +26,58 @@ pub(super) fn resolve_recipient_identifier(input: &str) -> Result<String, String
         return resolve_ens_name_to_address(&lowered);
     }
 
-    // Heaven username: "alice" or "alice.heaven" (also allow "@alice")
-    let label = lowered
-        .trim_start_matches('@')
-        .strip_suffix(".heaven")
-        .unwrap_or(lowered.trim_start_matches('@'))
-        .trim();
+    // Tempo username: "alice", "alice.heaven", "alice.pirate" (also allow "@alice")
+    let raw_name = lowered.trim_start_matches('@').trim();
+    let (label, parent_node_hex, tld_suffix) = if let Some(base) = raw_name.strip_suffix(".heaven")
+    {
+        (base.trim(), HEAVEN_NODE_HEX, "heaven")
+    } else if let Some(base) = raw_name.strip_suffix(".pirate") {
+        (base.trim(), PIRATE_NODE_HEX, "pirate")
+    } else {
+        (raw_name, HEAVEN_NODE_HEX, "heaven")
+    };
 
     if label.is_empty() {
-        return Err("Invalid heaven username".to_string());
+        return Err("Invalid name".to_string());
     }
     if label.contains('.') {
         return Err(
-            "Unsupported name format. Use 0x..., alice, alice.heaven, or alice.eth".to_string(),
+            "Unsupported name format. Use 0x..., alice, alice.heaven, alice.pirate, or alice.eth"
+                .to_string(),
         );
     }
 
-    resolve_heaven_name_to_address(label)
+    resolve_tempo_name_to_address(label, parent_node_hex, tld_suffix)
 }
 
-fn resolve_heaven_name_to_address(label: &str) -> Result<String, String> {
-    let rpc_url =
-        non_empty_env("HEAVEN_RPC_URL").unwrap_or_else(|| DEFAULT_MEGAETH_RPC_URL.to_string());
+fn resolve_tempo_name_to_address(
+    label: &str,
+    parent_node_hex: &str,
+    tld_suffix: &str,
+) -> Result<String, String> {
+    let rpc_url = non_empty_env("TEMPO_RPC_URL")
+        .or_else(|| non_empty_env("HEAVEN_RPC_URL"))
+        .unwrap_or_else(|| DEFAULT_TEMPO_RPC_URL.to_string());
 
-    let heaven_node_bytes =
-        hex::decode(HEAVEN_NODE_HEX).map_err(|e| format!("Invalid HEAVEN_NODE constant: {e}"))?;
-    if heaven_node_bytes.len() != 32 {
-        return Err("Invalid HEAVEN_NODE constant length".to_string());
+    let parent_node_bytes = hex::decode(parent_node_hex)
+        .map_err(|e| format!("Invalid parent node constant ({tld_suffix}): {e}"))?;
+    if parent_node_bytes.len() != 32 {
+        return Err(format!(
+            "Invalid parent node constant length ({tld_suffix})"
+        ));
     }
 
     let label_hash = keccak256(label.as_bytes());
     let mut packed = Vec::with_capacity(64);
-    packed.extend_from_slice(&heaven_node_bytes);
+    packed.extend_from_slice(&parent_node_bytes);
     packed.extend_from_slice(label_hash.as_slice());
     let node = keccak256(&packed);
 
     // ownerOf(uint256) selector = 0x6352211e
     let data = format!("0x6352211e{}", hex::encode(node.as_slice()));
-    let owner = eth_call_address(&rpc_url, REGISTRY_V1, &data)?;
+    let owner = eth_call_address(&rpc_url, REGISTRY_V2, &data)?;
     if owner == "0x0000000000000000000000000000000000000000" {
-        return Err(format!("{label}.heaven not found"));
+        return Err(format!("{label}.{tld_suffix} not found"));
     }
     Ok(owner.to_lowercase())
 }

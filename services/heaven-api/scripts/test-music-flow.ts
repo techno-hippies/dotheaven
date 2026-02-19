@@ -14,7 +14,7 @@
  *   API_BASE=https://heaven-api.deletion-backup782.workers.dev bun run scripts/test-music-flow.ts
  *
  * Optional env:
- *   TEST_USER_PKP=0x...
+ *   TEST_USER_ADDRESS=0x...
  *   PUBLISH_TYPE=original|derivative|cover
  *   PARENT_IP_IDS=0xabc...,0xdef...          (required for derivative/cover)
  *   LICENSE_TERMS_IDS=1,2                    (required for derivative/cover)
@@ -24,7 +24,7 @@
 type MusicPublishType = 'original' | 'derivative' | 'cover'
 
 const API_BASE = (process.env.API_BASE || 'http://localhost:8787').replace(/\/+$/, '')
-const TEST_USER_PKP = (process.env.TEST_USER_PKP || '0x1234567890abcdef1234567890abcdef12345678').toLowerCase()
+const TEST_USER_ADDRESS = (process.env.TEST_USER_ADDRESS || '0x1234567890abcdef1234567890abcdef12345678').toLowerCase()
 const PUBLISH_TYPE = ((process.env.PUBLISH_TYPE || 'original').toLowerCase() as MusicPublishType)
 const FINALIZE_PERMANENT = process.env.FINALIZE_PERMANENT === 'true'
 
@@ -73,8 +73,8 @@ async function fetchJson(url: string, init?: RequestInit): Promise<{ status: num
   return { status: res.status, json: parsed }
 }
 
-async function ensureSelfVerified(userPkp: string): Promise<void> {
-  const identity = await fetchJson(`${API_BASE}/api/self/identity/${userPkp}`)
+async function ensureSelfVerified(userAddress: string): Promise<void> {
+  const identity = await fetchJson(`${API_BASE}/api/self/identity/${userAddress}`)
   if (identity.status === 200) {
     console.log('Self identity already verified')
     return
@@ -87,7 +87,7 @@ async function ensureSelfVerified(userPkp: string): Promise<void> {
   const sessionResp = await fetchJson(`${API_BASE}/api/self/session`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userPkp }),
+    body: JSON.stringify({ userAddress }),
   })
   if (sessionResp.status !== 200 || !sessionResp.json?.sessionId) {
     throw new Error(`Failed to create Self session: status=${sessionResp.status} payload=${JSON.stringify(sessionResp.json)}`)
@@ -123,7 +123,7 @@ async function main() {
   if (PUBLISH_TYPE !== 'original' && PUBLISH_TYPE !== 'derivative' && PUBLISH_TYPE !== 'cover') {
     throw new Error(`Unsupported PUBLISH_TYPE=${PUBLISH_TYPE}`)
   }
-  assertAddress(TEST_USER_PKP, 'TEST_USER_PKP')
+  assertAddress(TEST_USER_ADDRESS, 'TEST_USER_ADDRESS')
 
   const parentIpIds = parseCsvStrings(process.env.PARENT_IP_IDS).map((value) => assertAddress(value, 'PARENT_IP_IDS entry'))
   const licenseTermsIds = parseCsvIntStrings(process.env.LICENSE_TERMS_IDS)
@@ -134,7 +134,7 @@ async function main() {
 
   console.log('=== Music Flow Smoke Test ===')
   console.log(`API_BASE=${API_BASE}`)
-  console.log(`TEST_USER_PKP=${TEST_USER_PKP}`)
+  console.log(`TEST_USER_ADDRESS=${TEST_USER_ADDRESS}`)
   console.log(`PUBLISH_TYPE=${PUBLISH_TYPE}`)
   console.log(`FINALIZE_PERMANENT=${FINALIZE_PERMANENT}`)
 
@@ -144,7 +144,7 @@ async function main() {
   }
   console.log('Health check ok')
 
-  await ensureSelfVerified(TEST_USER_PKP)
+  await ensureSelfVerified(TEST_USER_ADDRESS)
 
   // Tiny deterministic bytes for the smoke upload.
   const uploadBytes = new TextEncoder().encode(`heaven-music-smoke-${Date.now()}`)
@@ -164,7 +164,7 @@ async function main() {
   const started = await fetchJson(`${API_BASE}/api/music/publish/start`, {
     method: 'POST',
     headers: {
-      'X-User-Pkp': TEST_USER_PKP,
+      'X-User-Address': TEST_USER_ADDRESS,
       'Idempotency-Key': idempotencyKey,
     },
     body: startForm,
@@ -192,7 +192,7 @@ async function main() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-User-Pkp': TEST_USER_PKP,
+      'X-User-Address': TEST_USER_ADDRESS,
     },
     body: JSON.stringify(preflightBody),
   })
@@ -217,7 +217,7 @@ async function main() {
   console.log('POST /api/music/publish/:jobId/anchor')
   const anchor = await fetchJson(`${API_BASE}/api/music/publish/${encodeURIComponent(jobId)}/anchor`, {
     method: 'POST',
-    headers: { 'X-User-Pkp': TEST_USER_PKP },
+    headers: { 'X-User-Address': TEST_USER_ADDRESS },
   })
   if (anchor.status !== 200) {
     throw new Error(`anchor failed: status=${anchor.status} payload=${JSON.stringify(anchor.json)}`)
@@ -243,7 +243,7 @@ async function main() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-User-Pkp': TEST_USER_PKP,
+      'X-User-Address': TEST_USER_ADDRESS,
     },
     body: JSON.stringify({
       ipMetadataJson,
@@ -267,7 +267,7 @@ async function main() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-User-Pkp': TEST_USER_PKP,
+      'X-User-Address': TEST_USER_ADDRESS,
     },
     body: JSON.stringify({
       ipMetadataJson,
@@ -287,7 +287,7 @@ async function main() {
   console.log('POST /api/music/publish/:jobId/register')
 
   const registerBody: Record<string, unknown> = {
-    recipient: TEST_USER_PKP,
+    recipient: TEST_USER_ADDRESS,
     ipMetadataURI,
     ipMetadataHash,
     nftMetadataURI,
@@ -311,7 +311,7 @@ async function main() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-User-Pkp': TEST_USER_PKP,
+      'X-User-Address': TEST_USER_ADDRESS,
     },
     body: JSON.stringify(registerBody),
   })

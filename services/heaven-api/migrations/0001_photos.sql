@@ -8,7 +8,7 @@
 
 CREATE TABLE IF NOT EXISTS user_photos (
   photo_id TEXT PRIMARY KEY,             -- UUID
-  user_id TEXT NOT NULL,                 -- PKP address or user identifier
+  user_id TEXT NOT NULL,                 -- address or user identifier
   slot INTEGER NOT NULL,                 -- 1..4 (position in profile)
   orig_key TEXT NOT NULL,                -- R2_ORIG key (e.g., "orig/{user_id}/{photo_id}.jpg")
   created_at INTEGER NOT NULL            -- Unix timestamp

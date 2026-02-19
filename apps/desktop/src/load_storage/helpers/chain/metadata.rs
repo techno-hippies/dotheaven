@@ -88,7 +88,7 @@ pub(crate) fn fetch_track_metadata_onchain(
     call_data.extend_from_slice(&track_id);
 
     let output = eth_call_raw(
-        &megaeth_rpc_url(),
+        &tempo_rpc_url(),
         &scrobble_v4(),
         &to_hex_prefixed(&call_data),
     )?;

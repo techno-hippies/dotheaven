@@ -21,31 +21,6 @@ pub(crate) fn convert_tags(tags: &[Value]) -> Vec<Tag> {
     out
 }
 
-pub(crate) fn parse_pkp_public_key(auth: &PersistedAuth) -> Result<Vec<u8>, String> {
-    let raw = auth
-        .pkp_public_key
-        .as_deref()
-        .ok_or("Missing PKP public key in auth")?
-        .trim();
-    let raw = raw.strip_prefix("0x").unwrap_or(raw);
-
-    let mut decoded =
-        hex::decode(raw).map_err(|e| format!("Invalid PKP public key hex in auth: {e}"))?;
-    if decoded.len() == 64 {
-        decoded.insert(0, 0x04);
-    }
-    if decoded.len() != 65 {
-        return Err(format!(
-            "Invalid PKP public key length: expected 64 or 65 bytes, got {}",
-            decoded.len()
-        ));
-    }
-    if decoded[0] != 0x04 {
-        return Err("PKP public key must be uncompressed secp256k1 (0x04 prefix)".to_string());
-    }
-    Ok(decoded)
-}
-
 pub(crate) fn upload_signed_dataitem(signed_dataitem: &[u8]) -> Result<UploadResult, String> {
     let token = load_turbo_upload_token();
     let endpoint = format!("{}/v1/tx/{}", load_turbo_upload_url(), token);
@@ -106,26 +81,20 @@ pub(crate) fn extract_gateway_base(payload: &Value) -> Option<String> {
 }
 
 pub(crate) fn build_blob(
-    lit_ciphertext_bytes: &[u8],
-    data_to_encrypt_hash_bytes: &[u8],
+    encrypted_key_bytes: &[u8],
+    key_hash_bytes: &[u8],
     iv: &[u8; 12],
     encrypted_audio: &[u8],
 ) -> Vec<u8> {
-    let header_size = 4
-        + lit_ciphertext_bytes.len()
-        + 4
-        + data_to_encrypt_hash_bytes.len()
-        + 1
-        + 1
-        + iv.len()
-        + 4;
+    let header_size =
+        4 + encrypted_key_bytes.len() + 4 + key_hash_bytes.len() + 1 + 1 + iv.len() + 4;
 
     let mut out = Vec::with_capacity(header_size + encrypted_audio.len());
-    out.extend_from_slice(&(lit_ciphertext_bytes.len() as u32).to_be_bytes());
-    out.extend_from_slice(lit_ciphertext_bytes);
+    out.extend_from_slice(&(encrypted_key_bytes.len() as u32).to_be_bytes());
+    out.extend_from_slice(encrypted_key_bytes);
 
-    out.extend_from_slice(&(data_to_encrypt_hash_bytes.len() as u32).to_be_bytes());
-    out.extend_from_slice(data_to_encrypt_hash_bytes);
+    out.extend_from_slice(&(key_hash_bytes.len() as u32).to_be_bytes());
+    out.extend_from_slice(key_hash_bytes);
 
     out.push(ALGO_AES_GCM_256);
     out.push(iv.len() as u8);

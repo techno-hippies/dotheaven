@@ -21,7 +21,7 @@ import org.web3j.abi.datatypes.generated.Uint64
 import org.web3j.abi.datatypes.generated.Uint8
 
 /**
- * Shared-with-you data layer (Goldsky subgraphs).
+ * Shared-with-you data layer (Tempo subgraphs via graph.dotheaven.org).
  *
  * Semantics:
  * - Tracks: activity subgraph AccessGrant → ContentEntry (contentId/pieceCid/datasetOwner/algo)
@@ -33,13 +33,13 @@ import org.web3j.abi.datatypes.generated.Uint8
  */
 object SharedWithYouApi {
   private const val TAG = "SharedWithYouApi"
-  private const val MEGAETH_RPC = "https://carrot.megaeth.com/rpc"
-  private const val SCROBBLE_V4 = "0xBcD4EbBb964182ffC5EA03FF70761770a326Ccf1"
+  private const val TEMPO_RPC = "https://rpc.moderato.tempo.xyz"
+  private const val SCROBBLE_V4 = "0xe00e82086480E61AaC8d5ad8B05B56A582dD0000"
   private const val SUBGRAPH_ACTIVITY =
-    "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/14.0.0/gn"
+    "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo"
 
   private const val SUBGRAPH_PLAYLISTS =
-    "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-playlists/1.0.0/gn"
+    "https://graph.dotheaven.org/subgraphs/name/dotheaven/playlist-feed-tempo"
 
   private val client = OkHttpClient()
   private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -702,7 +702,7 @@ object SharedWithYouApi {
     val body = JSONObject().put("query", query).toString().toRequestBody(jsonMediaType)
     val req = Request.Builder().url(url).post(body).build()
     client.newCall(req).execute().use { res ->
-      if (!res.isSuccessful) throw IllegalStateException("Goldsky query failed: ${res.code}")
+      if (!res.isSuccessful) throw IllegalStateException("Subgraph query failed: ${res.code}")
       val raw = res.body?.string().orEmpty()
       val json = JSONObject(raw)
       val errors = json.optJSONArray("errors")
@@ -728,7 +728,7 @@ object SharedWithYouApi {
         )
     val req =
       Request.Builder()
-        .url(MEGAETH_RPC)
+        .url(TEMPO_RPC)
         .post(payload.toString().toRequestBody(jsonMediaType))
         .build()
     client.newCall(req).execute().use { res ->

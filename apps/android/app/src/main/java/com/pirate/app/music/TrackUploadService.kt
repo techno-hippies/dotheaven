@@ -73,6 +73,7 @@ object TrackUploadService {
     // Upload to Load network
     val filename = "${buildFilenameHint(track)}.enc"
     val upload = LoadUploadApi.upload(
+      context = context,
       blob = blob,
       filename = filename,
       tags = listOf(

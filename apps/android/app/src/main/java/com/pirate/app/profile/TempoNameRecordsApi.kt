@@ -37,8 +37,9 @@ data class TempoPrimaryName(
 )
 
 object TempoNameRecordsApi {
-  const val REGISTRY_V1 = "0x29e1a73fC364855F073995075785e3fC2a1b6edC"
-  const val RECORDS_V1 = "0x6072C4337e57538AE896C03317f02d830A25bbe4"
+  // RegistryV2 + RecordsV1 (Tempo Moderato)
+  const val REGISTRY_V1 = "0xA111c5cA16752B09fF16B3B8B24BA55a8486aB23"
+  const val RECORDS_V1 = "0x57e36738f02Bb90664d00E4EC0C8507feeF3995c"
 
   /** HEAVEN_NODE = namehash("heaven.hnsbridge.eth") */
   const val HEAVEN_NODE = "0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27"

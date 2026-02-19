@@ -1,4 +1,4 @@
-//! Wallet page for native Lit (Rust SDK) flow in GPUI.
+//! Wallet page for Tempo passkey auth in GPUI.
 
 use gpui::prelude::FluentBuilder;
 use gpui::*;

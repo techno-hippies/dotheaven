@@ -468,6 +468,13 @@ class XmtpChatService(private val appContext: Context) {
         ?: throw IllegalStateException("No XMTP inboxId for address=$normalizedAddress")
     }
 
+    val resolvedAddress = TempoNameRecordsApi.resolveAddressForName(trimmed)
+    if (!resolvedAddress.isNullOrBlank()) {
+      val normalizedResolved = normalizeEthAddress(resolvedAddress)
+      return c.inboxIdFromIdentity(PublicIdentity(IdentityKind.ETHEREUM, normalizedResolved))
+        ?: throw IllegalStateException("No XMTP inboxId for name=$trimmed")
+    }
+
     return trimmed
   }
 

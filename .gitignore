@@ -68,5 +68,9 @@ Cargo.lock
 .wrangler/
 **/.wrangler/
 
-# Lit Actions cached auth/PKP output
-lit-actions/output/
+# Android / Gradle build artifacts
+**/.gradle/
+**/app/build/
+*.apk
+*.aab
+android/.gradle-user-home/

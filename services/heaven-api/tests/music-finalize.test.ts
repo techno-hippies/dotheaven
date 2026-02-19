@@ -127,7 +127,7 @@ function baseJobRow(overrides: Record<string, unknown> = {}): Record<string, unk
   const now = Math.floor(Date.now() / 1000)
   return {
     job_id: 'music_test_job',
-    user_pkp: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    user_address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     status: 'policy_passed',
     publish_type: 'original',
     idempotency_key: null,
@@ -205,16 +205,16 @@ class MockDb {
 
   private async first<T>(sql: string, params: unknown[]): Promise<T | null> {
     if (sql.includes('FROM user_identity')) {
-      const userPkp = params[0]
-      if (userPkp !== this.row.user_pkp) return null
-      return { user_pkp: userPkp } as T
+      const userAddress = params[0]
+      if (userAddress !== this.row.user_address) return null
+      return { user_address: userAddress } as T
     }
     if (sql.includes('FROM music_upload_bans')) {
       return null
     }
-    if (sql.includes('FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?')) {
-      const [jobId, userPkp] = params
-      if (jobId !== this.row.job_id || userPkp !== this.row.user_pkp) return null
+    if (sql.includes('FROM music_publish_jobs WHERE job_id = ? AND user_address = ?')) {
+      const [jobId, userAddress] = params
+      if (jobId !== this.row.job_id || userAddress !== this.row.user_address) return null
       return { ...this.row } as T
     }
     throw new Error(`Unhandled first SQL: ${sql}`)
@@ -270,7 +270,7 @@ async function postFinalize(env: Record<string, unknown>, body: Record<string, u
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-user-pkp': '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        'x-user-address': '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       },
       body: JSON.stringify(body),
     },

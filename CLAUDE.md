@@ -27,10 +27,9 @@ This file is intentionally short. Use it as the top-level operator guide.
 ## Repo Map
 - Product apps: `apps/README.md`
 - Shared packages: `packages/README.md`
-- Smart contracts: `contracts/README.md`
+- Smart contracts: `contracts/README.md` (active chain: Tempo)
 - Backend/infra services: `services/README.md`
 - Indexers: `subgraphs/README.md`
-- Lit actions: `lit-actions/README.md`
 
 ## Team Conventions
 - Keep docs close to code and keep them current.

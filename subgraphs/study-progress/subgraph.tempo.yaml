@@ -1,0 +1,51 @@
+specVersion: 1.0.0
+indexerHints:
+  prune: auto
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: StudyAttemptsV1
+    network: tempo-moderato
+    source:
+      # Update to deployed address before deploying this subgraph.
+      address: "0x1bd1D9206a1D0ca2447A4Da7d040A440DaFBFC9C"
+      abi: StudyAttemptsV1
+      startBlock: 5563867
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - StudyAttempt
+        - UserStudySetProgress
+        - UserStudySetQuestionTouch
+      abis:
+        - name: StudyAttemptsV1
+          file: ./abis/StudyAttemptsV1.json
+      eventHandlers:
+        - event: AttemptSubmitted(indexed address,indexed bytes32,indexed bytes32,uint8,uint16,uint64)
+          handler: handleAttemptSubmitted
+      file: ./src/attempts.ts
+
+  - kind: ethereum
+    name: StudySetRegistryV1
+    network: tempo-moderato
+    source:
+      # Update to deployed address before deploying this subgraph.
+      address: "0x7fD583d6e9D2F820432455D071617b5C1449c7a4"
+      abi: StudySetRegistryV1
+      startBlock: 5563863
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - StudySetAnchor
+      abis:
+        - name: StudySetRegistryV1
+          file: ./abis/StudySetRegistryV1.json
+      eventHandlers:
+        - event: StudySetRegistered(indexed bytes32,indexed bytes32,indexed bytes32,uint8,string,bytes32,address,address)
+          handler: handleStudySetRegistered
+      file: ./src/registry.ts

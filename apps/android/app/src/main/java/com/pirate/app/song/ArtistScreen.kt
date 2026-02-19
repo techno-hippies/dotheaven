@@ -38,6 +38,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.pirate.app.theme.PiratePalette
 import com.pirate.app.ui.PirateMobileHeader
+import com.pirate.app.util.formatTimeAgoShort
+import com.pirate.app.util.shortAddress
 
 enum class ArtistTab(val label: String) {
   Songs("Songs"),
@@ -185,7 +187,7 @@ private fun ArtistHeroCard(
       }
       Text(
         text = "Recent activity: ${scrobbles.size} scrobbles",
-        style = MaterialTheme.typography.bodySmall,
+        style = MaterialTheme.typography.bodyMedium,
         color = PiratePalette.TextMuted,
       )
     }
@@ -200,7 +202,7 @@ private fun ArtistStatPill(label: String, value: String) {
   ) {
     Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
       Text(value, fontWeight = FontWeight.SemiBold)
-      Text(label, style = MaterialTheme.typography.bodySmall, color = PiratePalette.TextMuted)
+      Text(label, style = MaterialTheme.typography.bodyMedium, color = PiratePalette.TextMuted)
     }
   }
 }
@@ -248,7 +250,7 @@ private fun ArtistSongsPanel(
               }
             }
             if (subtitle.isNotBlank()) {
-              Text(subtitle, style = MaterialTheme.typography.bodySmall, color = PiratePalette.TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+              Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = PiratePalette.TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
           }
           Text(row.scrobbleCountTotal.toString(), fontWeight = FontWeight.SemiBold)
@@ -293,7 +295,7 @@ private fun ArtistLeaderboardPanel(
         ) {
           Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text("#${idx + 1} ${shortAddress(row.userAddress)}", fontWeight = FontWeight.SemiBold)
-            Text("Last: ${formatAgo(row.lastScrobbleAtSec)}", style = MaterialTheme.typography.bodySmall, color = PiratePalette.TextMuted)
+            Text("Last: ${formatTimeAgoShort(row.lastScrobbleAtSec)}", style = MaterialTheme.typography.bodyMedium, color = PiratePalette.TextMuted)
           }
           Text(row.scrobbleCount.toString(), fontWeight = FontWeight.SemiBold)
         }
@@ -338,33 +340,14 @@ private fun ArtistScrobblesPanel(
             Text(
               text = shortAddress(row.userAddress),
               color = PiratePalette.TextMuted,
-              style = MaterialTheme.typography.bodySmall,
+              style = MaterialTheme.typography.bodyMedium,
               modifier = Modifier.clickable { onOpenProfile(row.userAddress) },
             )
             Text("•", color = PiratePalette.TextMuted)
-            Text(formatAgo(row.playedAtSec), color = PiratePalette.TextMuted, style = MaterialTheme.typography.bodySmall)
+            Text(formatTimeAgoShort(row.playedAtSec), color = PiratePalette.TextMuted, style = MaterialTheme.typography.bodyMedium)
           }
         }
       }
     }
-  }
-}
-
-private fun shortAddress(address: String): String {
-  val raw = address.trim()
-  if (raw.length <= 12) return raw
-  return "${raw.take(6)}...${raw.takeLast(4)}"
-}
-
-private fun formatAgo(timestampSec: Long): String {
-  if (timestampSec <= 0L) return "unknown"
-  val nowSec = System.currentTimeMillis() / 1_000L
-  val diff = (nowSec - timestampSec).coerceAtLeast(0L)
-  return when {
-    diff < 60L -> "${diff}s ago"
-    diff < 3600L -> "${diff / 60L}m ago"
-    diff < 86_400L -> "${diff / 3600L}h ago"
-    diff < 604_800L -> "${diff / 86_400L}d ago"
-    else -> "${diff / 604_800L}w ago"
   }
 }

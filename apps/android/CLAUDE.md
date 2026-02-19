@@ -33,7 +33,7 @@ JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./apps/android/gradlew -p ./
 
 - `app/src/main/java/com/pirate/app/` — Main app code (legacy package namespace)
 - `app/src/main/java/com/pirate/app/onboarding/` — Onboarding flow (8 steps)
-- `app/src/main/java/com/pirate/app/lit/` — Lit Protocol / PKP auth
+- `app/src/main/java/com/pirate/app/tempo/` — Tempo chain auth (passkeys, session keys)
 - `app/src/main/java/com/pirate/app/profile/` — Profile screen
 - `app/src/main/java/com/pirate/app/scarlett/` — AI chat (Scarlett)
 - `app/src/main/java/com/pirate/app/music/` — Music / content access

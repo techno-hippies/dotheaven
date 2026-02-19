@@ -10,36 +10,29 @@ contract PlaylistShareV1Test is Test {
     PlaylistShareV1 share;
 
     address deployer = address(0xA11CE);
-    address sponsor = address(0xB0B);
     address user = address(0xC0FFEE);
+    address otherUser = address(0xCAFE);
     address grantee = address(0xBEEF);
 
     function setUp() public {
         vm.prank(deployer);
-        playlist = new PlaylistV1(sponsor);
+        playlist = new PlaylistV1();
 
         vm.prank(deployer);
-        share = new PlaylistShareV1(sponsor, address(playlist));
+        share = new PlaylistShareV1(address(playlist));
     }
 
     // ── Auth ─────────────────────────────────────────────────────────────
 
     function test_constructor() public view {
         assertEq(share.owner(), deployer);
-        assertEq(share.sponsor(), sponsor);
         assertEq(address(share.playlistV1()), address(playlist));
-    }
-
-    function test_constructor_reverts_zeroSponsor() public {
-        vm.prank(deployer);
-        vm.expectRevert("zero sponsor");
-        new PlaylistShareV1(address(0), address(playlist));
     }
 
     function test_constructor_reverts_zeroPlaylistV1() public {
         vm.prank(deployer);
         vm.expectRevert("zero playlistV1");
-        new PlaylistShareV1(sponsor, address(0));
+        new PlaylistShareV1(address(0));
     }
 
     function test_transferOwnership() public {
@@ -55,41 +48,16 @@ contract PlaylistShareV1Test is Test {
         share.transferOwnership(user);
     }
 
-    function test_setSponsor() public {
-        address newSponsor = address(0xABCD);
-        vm.prank(deployer);
-        share.setSponsor(newSponsor);
-        assertEq(share.sponsor(), newSponsor);
-    }
-
-    function test_setSponsor_reverts_nonOwner() public {
-        vm.prank(user);
-        vm.expectRevert("not owner");
-        share.setSponsor(user);
-    }
-
-    function test_onlySponsor_guarded() public {
-        bytes32 playlistId = _createPlaylist(user);
-
-        vm.prank(user);
-        vm.expectRevert("unauthorized");
-        share.sharePlaylistFor(user, playlistId, grantee);
-
-        vm.prank(user);
-        vm.expectRevert("unauthorized");
-        share.unsharePlaylistFor(user, playlistId, grantee);
-    }
-
     // ── Share ────────────────────────────────────────────────────────────
 
-    function test_sharePlaylistFor_setsSnapshot() public {
+    function test_sharePlaylist_setsSnapshot() public {
         bytes32 playlistId = _createPlaylist(user);
 
         (, , , uint32 version, uint32 trackCount, , , bytes32 tracksHash) = playlist.getPlaylist(playlistId);
 
         vm.warp(1_700_000_123);
-        vm.prank(sponsor);
-        share.sharePlaylistFor(user, playlistId, grantee);
+        vm.prank(user);
+        share.sharePlaylist(playlistId, grantee);
 
         (uint32 snapVersion, uint32 snapTrackCount, bytes32 snapTracksHash, uint64 sharedAt, bool granted) =
             share.shares(playlistId, grantee);
@@ -101,22 +69,22 @@ contract PlaylistShareV1Test is Test {
         assertTrue(granted);
     }
 
-    function test_sharePlaylistFor_overwritesExistingSnapshot() public {
+    function test_sharePlaylist_overwritesExistingSnapshot() public {
         bytes32 playlistId = _createPlaylist(user);
 
         vm.warp(1_700_000_100);
-        vm.prank(sponsor);
-        share.sharePlaylistFor(user, playlistId, grantee);
+        vm.prank(user);
+        share.sharePlaylist(playlistId, grantee);
 
         bytes32[] memory newTracks = _tracks(3);
-        vm.prank(sponsor);
+        vm.prank(user);
         playlist.setTracks(playlistId, newTracks);
 
         (, , , uint32 version, uint32 trackCount, , , bytes32 tracksHash) = playlist.getPlaylist(playlistId);
 
         vm.warp(1_700_000_200);
-        vm.prank(sponsor);
-        share.sharePlaylistFor(user, playlistId, grantee);
+        vm.prank(user);
+        share.sharePlaylist(playlistId, grantee);
 
         (uint32 snapVersion, uint32 snapTrackCount, bytes32 snapTracksHash, uint64 sharedAt, bool granted) =
             share.shares(playlistId, grantee);
@@ -128,47 +96,43 @@ contract PlaylistShareV1Test is Test {
         assertTrue(granted);
     }
 
-    function test_sharePlaylistFor_reverts_invalidInputs() public {
+    function test_sharePlaylist_reverts_invalidInputs() public {
         bytes32 playlistId = _createPlaylist(user);
 
-        vm.prank(sponsor);
-        vm.expectRevert("zero playlistOwner");
-        share.sharePlaylistFor(address(0), playlistId, grantee);
-
-        vm.prank(sponsor);
+        vm.prank(user);
         vm.expectRevert("zero playlistId");
-        share.sharePlaylistFor(user, bytes32(0), grantee);
+        share.sharePlaylist(bytes32(0), grantee);
 
-        vm.prank(sponsor);
+        vm.prank(user);
         vm.expectRevert("zero grantee");
-        share.sharePlaylistFor(user, playlistId, address(0));
+        share.sharePlaylist(playlistId, address(0));
     }
 
-    function test_sharePlaylistFor_reverts_notFound() public {
-        vm.prank(sponsor);
+    function test_sharePlaylist_reverts_notFound() public {
+        vm.prank(user);
         vm.expectRevert("not found");
-        share.sharePlaylistFor(user, bytes32(uint256(12345)), grantee);
+        share.sharePlaylist(bytes32(uint256(12345)), grantee);
     }
 
-    function test_sharePlaylistFor_reverts_notOwner() public {
+    function test_sharePlaylist_reverts_notOwner() public {
         bytes32 playlistId = _createPlaylist(user);
 
-        vm.prank(sponsor);
+        vm.prank(otherUser);
         vm.expectRevert("not owner");
-        share.sharePlaylistFor(address(0xCAFE), playlistId, grantee);
+        share.sharePlaylist(playlistId, grantee);
     }
 
     // ── Unshare ──────────────────────────────────────────────────────────
 
-    function test_unsharePlaylistFor_clearsShareState() public {
+    function test_unsharePlaylist_clearsShareState() public {
         bytes32 playlistId = _createPlaylist(user);
 
-        vm.prank(sponsor);
-        share.sharePlaylistFor(user, playlistId, grantee);
+        vm.prank(user);
+        share.sharePlaylist(playlistId, grantee);
 
         vm.warp(1_700_000_200);
-        vm.prank(sponsor);
-        share.unsharePlaylistFor(user, playlistId, grantee);
+        vm.prank(user);
+        share.unsharePlaylist(playlistId, grantee);
 
         (uint32 snapVersion, uint32 snapTrackCount, bytes32 snapTracksHash, uint64 sharedAt, bool granted) =
             share.shares(playlistId, grantee);
@@ -180,44 +144,40 @@ contract PlaylistShareV1Test is Test {
         assertFalse(granted);
     }
 
-    function test_unsharePlaylistFor_allowsDeletedPlaylists_whenOwnerMatches() public {
+    function test_unsharePlaylist_allowsDeletedPlaylists_whenOwnerMatches() public {
         bytes32 playlistId = _createPlaylist(user);
 
-        vm.prank(sponsor);
-        share.sharePlaylistFor(user, playlistId, grantee);
+        vm.prank(user);
+        share.sharePlaylist(playlistId, grantee);
 
-        vm.prank(sponsor);
+        vm.prank(user);
         playlist.deletePlaylist(playlistId);
 
-        vm.prank(sponsor);
-        share.unsharePlaylistFor(user, playlistId, grantee);
+        vm.prank(user);
+        share.unsharePlaylist(playlistId, grantee);
 
         (, , , , bool granted) = share.shares(playlistId, grantee);
         assertFalse(granted);
     }
 
-    function test_unsharePlaylistFor_reverts_invalidInputs() public {
+    function test_unsharePlaylist_reverts_invalidInputs() public {
         bytes32 playlistId = _createPlaylist(user);
 
-        vm.prank(sponsor);
-        vm.expectRevert("zero playlistOwner");
-        share.unsharePlaylistFor(address(0), playlistId, grantee);
-
-        vm.prank(sponsor);
+        vm.prank(user);
         vm.expectRevert("zero playlistId");
-        share.unsharePlaylistFor(user, bytes32(0), grantee);
+        share.unsharePlaylist(bytes32(0), grantee);
 
-        vm.prank(sponsor);
+        vm.prank(user);
         vm.expectRevert("zero grantee");
-        share.unsharePlaylistFor(user, playlistId, address(0));
+        share.unsharePlaylist(playlistId, address(0));
     }
 
-    function test_unsharePlaylistFor_reverts_notOwner() public {
+    function test_unsharePlaylist_reverts_notOwner() public {
         bytes32 playlistId = _createPlaylist(user);
 
-        vm.prank(sponsor);
+        vm.prank(otherUser);
         vm.expectRevert("not owner");
-        share.unsharePlaylistFor(address(0xCAFE), playlistId, grantee);
+        share.unsharePlaylist(playlistId, grantee);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
@@ -225,8 +185,8 @@ contract PlaylistShareV1Test is Test {
     function _createPlaylist(address playlistOwner) internal returns (bytes32 playlistId) {
         bytes32[] memory tracks = _tracks(2);
         vm.warp(1_700_000_000);
-        vm.prank(sponsor);
-        playlistId = playlist.createPlaylistFor(playlistOwner, "Tempo Playlist", "", 1, tracks);
+        vm.prank(playlistOwner);
+        playlistId = playlist.createPlaylist("Tempo Playlist", "", 1, tracks);
     }
 
     function _tracks(uint256 n) internal pure returns (bytes32[] memory t) {

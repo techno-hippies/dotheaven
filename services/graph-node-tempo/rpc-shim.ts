@@ -7,10 +7,15 @@ if (!upstream) {
   process.exit(1)
 }
 
+// Fields that Graph Node does not understand — strip from both txs and receipts.
+const STRIP_FIELDS = new Set(["feePayer", "feeToken"])
+
 function patchTxObject(obj: unknown): void {
   if (!obj || typeof obj !== "object") return
   const tx = obj as Record<string, unknown>
   if (tx.type === "0x76") {
+    // Downgrade Tempo type-118 to legacy (type 0x0) so Graph Node can parse it.
+    tx.type = "0x0"
     if (!("value" in tx)) tx.value = "0x0"
     if (!("input" in tx)) tx.input = "0x"
     if (!("to" in tx)) tx.to = null
@@ -18,7 +23,19 @@ function patchTxObject(obj: unknown): void {
     if (!("r" in tx)) tx.r = zero32
     if (!("s" in tx)) tx.s = zero32
     if (!("yParity" in tx)) tx.yParity = "0x0"
+    // Strip Tempo-specific fields Graph Node doesn't expect.
+    for (const f of STRIP_FIELDS) delete tx[f]
   }
+}
+
+function patchReceiptObject(obj: unknown): void {
+  if (!obj || typeof obj !== "object") return
+  const r = obj as Record<string, unknown>
+  if (r.type === "0x76") {
+    r.type = "0x0"
+  }
+  // Strip Tempo-specific fields from ALL receipts (Tempo RPC includes them on every type).
+  for (const f of STRIP_FIELDS) delete r[f]
 }
 
 function patchRpcPayload(obj: unknown): void {
@@ -30,7 +47,15 @@ function patchRpcPayload(obj: unknown): void {
   }
 
   const record = obj as Record<string, unknown>
-  patchTxObject(record)
+
+  // Patch transaction objects (have "input" or "nonce" fields)
+  if ("nonce" in record || "input" in record) {
+    patchTxObject(record)
+  }
+  // Patch receipt objects (have "transactionHash" + "cumulativeGasUsed")
+  else if ("transactionHash" in record && "cumulativeGasUsed" in record) {
+    patchReceiptObject(record)
+  }
 
   for (const value of Object.values(record)) {
     if (value && typeof value === "object") patchRpcPayload(value)

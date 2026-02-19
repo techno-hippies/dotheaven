@@ -1,0 +1,20 @@
+{
+  "name": "study-progress-subgraph",
+  "version": "1.0.0",
+  "description": "Study attempts + study set anchors subgraph on Tempo Moderato — dotheaven",
+  "scripts": {
+    "codegen": "graph codegen",
+    "build": "graph codegen && graph build",
+    "build:tempo": "graph codegen subgraph.tempo.yaml && graph build subgraph.tempo.yaml",
+    "build:tempo:local": "graph codegen subgraph.tempo.local.yaml && graph build subgraph.tempo.local.yaml",
+    "set-addresses": "node scripts/set-addresses.mjs",
+    "create:tempo:local": "graph create --node http://localhost:8020/ dotheaven/study-progress-tempo",
+    "remove:tempo:local": "graph remove --node http://localhost:8020/ dotheaven/study-progress-tempo",
+    "deploy:tempo:local": "graph deploy --version-label ${VERSION_LABEL:-local} --node http://localhost:8020/ --ipfs http://localhost:5001 dotheaven/study-progress-tempo subgraph.tempo.local.yaml"
+  },
+  "keywords": ["the-graph", "tempo", "study", "fsrs", "learning"],
+  "devDependencies": {
+    "@graphprotocol/graph-cli": "^0.98.1",
+    "@graphprotocol/graph-ts": "^0.35.1"
+  }
+}

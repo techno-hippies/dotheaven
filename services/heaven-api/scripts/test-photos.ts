@@ -18,7 +18,7 @@
  */
 
 const API_BASE = 'http://localhost:8787'
-const TEST_USER_PKP = '0x1234567890abcdef1234567890abcdef12345678'
+const TEST_USER_ADDRESS = '0x1234567890abcdef1234567890abcdef12345678'
 
 // Create a simple test image (1x1 red pixel PNG)
 function createTestImage(): Blob {
@@ -60,7 +60,7 @@ async function testPhotoPipeline() {
   const res = await fetch(`${API_BASE}/api/photos/pipeline`, {
     method: 'POST',
     headers: {
-      'X-User-Pkp': TEST_USER_PKP,
+      'X-User-Address': TEST_USER_ADDRESS,
     },
     body: formData,
   })
@@ -77,7 +77,7 @@ async function testJobStatus(jobId: string) {
 
   const res = await fetch(`${API_BASE}/api/photos/pipeline/${jobId}`, {
     headers: {
-      'X-User-Pkp': TEST_USER_PKP,
+      'X-User-Address': TEST_USER_ADDRESS,
     },
   })
 
@@ -118,11 +118,11 @@ async function testPhotoAccess() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-User-Pkp': TEST_USER_PKP,
+      'X-User-Address': TEST_USER_ADDRESS,
     },
     body: JSON.stringify({
       matchId: 'test-match-123',
-      ownerUserId: TEST_USER_PKP,
+      ownerUserId: TEST_USER_ADDRESS,
       viewerUserId: '0xabcdef1234567890abcdef1234567890abcdef12',
       viewerWallet: '0xabcdef1234567890abcdef1234567890abcdef12',
     }),
@@ -139,7 +139,7 @@ async function main() {
   console.log('Photo Pipeline Test Script')
   console.log('==========================')
   console.log(`API Base: ${API_BASE}`)
-  console.log(`Test User: ${TEST_USER_PKP}`)
+  console.log(`Test User: ${TEST_USER_ADDRESS}`)
 
   // Health check
   const healthOk = await testHealthCheck()
@@ -166,7 +166,7 @@ async function main() {
 
       // Try to fetch anime tiles
       if (pipelineResult.data.animeTiles?.length > 0) {
-        await testAnimeTile(TEST_USER_PKP, 1)
+        await testAnimeTile(TEST_USER_ADDRESS, 1)
       }
     }
 

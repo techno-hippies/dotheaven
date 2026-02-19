@@ -1,5 +1,6 @@
 package com.pirate.app.onboarding
 
+import com.pirate.app.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -12,14 +13,14 @@ import org.json.JSONObject
 import java.math.BigInteger
 
 /**
- * RPC helpers for onboarding: name availability, nonces, node computation.
- * Talks to MegaETH testnet directly via eth_call.
+ * RPC helpers for onboarding reads: name availability, profile/name lookups, node computation.
+ * Talks to Tempo Moderato via eth_call.
  */
 object OnboardingRpcHelpers {
-  private const val RPC_URL = "https://carrot.megaeth.com/rpc"
-  private const val REGISTRY_V1 = "0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2"
-  private const val RECORDS_V1 = "0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3"
-  private const val PROFILE_V2 = "0xe00e82086480E61AaC8d5ad8B05B56A582dD0000"
+  private const val RPC_URL = "https://rpc.moderato.tempo.xyz"
+  private const val REGISTRY_V1 = "0xA111c5cA16752B09fF16B3B8B24BA55a8486aB23"
+  private const val RECORDS_V1 = "0x57e36738f02Bb90664d00E4EC0C8507feeF3995c"
+  private const val PROFILE_V2 = "0x6FDb2F5B13F8D7f365B4A75A2763d5C7270E8066"
 
   /** HEAVEN_NODE = namehash("heaven.hnsbridge.eth") */
   private const val HEAVEN_NODE = "0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27"
@@ -58,29 +59,6 @@ object OnboardingRpcHelpers {
       // Revert means token doesn't exist — name is available
       true
     }
-  }
-
-  // ── Nonce queries ─────────────────────────────────────────────────
-
-  /** Fetch the profile nonce for a user address from ProfileV2.nonces(address) */
-  suspend fun fetchProfileNonce(userAddress: String): String = withContext(Dispatchers.IO) {
-    val addr = userAddress.trim().lowercase().removePrefix("0x").padStart(64, '0')
-    // nonces(address) selector = 0x7ecebe00
-    val data = "0x7ecebe00$addr"
-    val result = ethCall(PROFILE_V2, data)
-    BigInteger(result.removePrefix("0x").ifBlank { "0" }, 16).toString(10)
-  }
-
-  /** Fetch the record nonce for a node from RecordsV1.nonces(bytes32) */
-  suspend fun fetchRecordNonce(node: String): String = withContext(Dispatchers.IO) {
-    val nodeHex = node.removePrefix("0x").padStart(64, '0')
-    // nonces(bytes32) selector = 0x27e235e3 — actually need the right selector
-    // RecordsV1.nonces is mapping(bytes32 => uint256), selector depends on function sig
-    // keccak256("nonces(bytes32)") = first 4 bytes
-    val selector = functionSelector("nonces(bytes32)")
-    val data = "0x$selector$nodeHex"
-    val result = ethCall(RECORDS_V1, data)
-    BigInteger(result.removePrefix("0x").ifBlank { "0" }, 16).toString(10)
   }
 
   /** Get primary name for an address from RegistryV1.primaryName(address) → (string label, bytes32 parentNode) */
@@ -153,7 +131,7 @@ object OnboardingRpcHelpers {
     }
   }
 
-  private const val FOLLOW_V1 = "0x3F32cF9e70EF69DFFed74Dfe07034cb03cF726cb"
+  fun hasFollowContract(): Boolean = followContractOrNull() != null
 
   /** Get a text record value for a node and key from RecordsV1 */
   suspend fun getTextRecord(node: String, key: String): String? = withContext(Dispatchers.IO) {
@@ -182,15 +160,16 @@ object OnboardingRpcHelpers {
 
   /** Fetch follower and following counts for an address from FollowV1 */
   suspend fun getFollowCounts(userAddress: String): Pair<Int, Int> = withContext(Dispatchers.IO) {
+    val followContract = followContractOrNull() ?: return@withContext 0 to 0
     val addr = userAddress.trim().lowercase().removePrefix("0x").padStart(64, '0')
     val followerSel = functionSelector("followerCount(address)")
     val followingSel = functionSelector("followingCount(address)")
     val followers = try {
-      val r = ethCall(FOLLOW_V1, "0x$followerSel$addr")
+      val r = ethCall(followContract, "0x$followerSel$addr")
       BigInteger(r.removePrefix("0x").ifBlank { "0" }, 16).toInt()
     } catch (_: Exception) { 0 }
     val following = try {
-      val r = ethCall(FOLLOW_V1, "0x$followingSel$addr")
+      val r = ethCall(followContract, "0x$followingSel$addr")
       BigInteger(r.removePrefix("0x").ifBlank { "0" }, 16).toInt()
     } catch (_: Exception) { 0 }
     followers to following
@@ -198,11 +177,12 @@ object OnboardingRpcHelpers {
 
   /** Check if viewer currently follows target on FollowV1 */
   suspend fun getFollowState(viewerAddress: String, targetAddress: String): Boolean = withContext(Dispatchers.IO) {
+    val followContract = followContractOrNull() ?: return@withContext false
     val viewer = viewerAddress.trim().lowercase().removePrefix("0x").padStart(64, '0')
     val target = targetAddress.trim().lowercase().removePrefix("0x").padStart(64, '0')
     val followsSel = functionSelector("follows(address,address)")
     try {
-      val r = ethCall(FOLLOW_V1, "0x$followsSel$viewer$target")
+      val r = ethCall(followContract, "0x$followsSel$viewer$target")
       BigInteger(r.removePrefix("0x").ifBlank { "0" }, 16) != BigInteger.ZERO
     } catch (_: Exception) {
       false
@@ -236,6 +216,13 @@ object OnboardingRpcHelpers {
   private fun functionSelector(sig: String): String {
     val hash = keccak256(sig.toByteArray(Charsets.UTF_8))
     return bytesToHex(hash.copyOfRange(0, 4))
+  }
+
+  private fun followContractOrNull(): String? {
+    val configured = BuildConfig.TEMPO_FOLLOW_V1.trim()
+    if (!configured.startsWith("0x", ignoreCase = true)) return null
+    if (configured.length != 42) return null
+    return configured
   }
 
   fun keccak256(input: ByteArray): ByteArray {

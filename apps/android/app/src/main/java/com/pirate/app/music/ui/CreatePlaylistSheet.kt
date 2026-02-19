@@ -7,9 +7,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.clickable
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -30,7 +27,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.pirate.app.music.LocalPlaylistsStore
-import com.pirate.app.music.PlaylistV1LitAction
+import com.pirate.app.music.OnChainPlaylistsApi
+import com.pirate.app.music.TempoPlaylistApi
+import com.pirate.app.tempo.SessionKeyManager
+import com.pirate.app.tempo.TempoPasskeyManager
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -39,9 +40,7 @@ fun CreatePlaylistSheet(
   open: Boolean,
   isAuthenticated: Boolean,
   ownerEthAddress: String?,
-  pkpPublicKey: String?,
-  litNetwork: String,
-  litRpcUrl: String,
+  tempoAccount: TempoPasskeyManager.PasskeyAccount?,
   onClose: () -> Unit,
   onShowMessage: (String) -> Unit,
   onSuccess: (playlistId: String, playlistName: String) -> Unit,
@@ -53,17 +52,13 @@ fun CreatePlaylistSheet(
 
   var name by remember { mutableStateOf("") }
   var busy by remember { mutableStateOf(false) }
-  var onChain by remember { mutableStateOf(false) }
 
   LaunchedEffect(open) {
     if (open) {
       name = ""
       busy = false
-      onChain = false
     }
   }
-
-  val canCreateOnChain = isAuthenticated && !ownerEthAddress.isNullOrBlank() && !pkpPublicKey.isNullOrBlank()
 
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
   ModalBottomSheet(
@@ -88,23 +83,6 @@ fun CreatePlaylistSheet(
         enabled = !busy,
       )
 
-      if (canCreateOnChain) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-          ChoicePill(
-            label = "Local",
-            selected = !onChain,
-            enabled = !busy,
-            onClick = { onChain = false },
-          )
-          ChoicePill(
-            label = "On-chain",
-            selected = onChain,
-            enabled = !busy,
-            onClick = { onChain = true },
-          )
-        }
-      }
-
       Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         OutlinedButton(
           enabled = !busy,
@@ -117,46 +95,44 @@ fun CreatePlaylistSheet(
             val trimmed = name.trim()
             scope.launch {
               busy = true
-              if (!onChain) {
-                val created = LocalPlaylistsStore.createLocalPlaylist(context, trimmed, initialTrack = null)
-                onShowMessage("Created ${created.name}")
-                onSuccess(created.id, created.name)
-                busy = false
-                onClose()
-                return@launch
-              }
-
-              if (!canCreateOnChain) {
-                onShowMessage("Sign in to create on-chain playlists")
-                busy = false
-                return@launch
-              }
-
-              val result =
-                runCatching {
-                  PlaylistV1LitAction.createEmptyPlaylist(
-                    appContext = context,
-                    litNetwork = litNetwork,
-                    litRpcUrl = litRpcUrl,
-                    userPkpPublicKey = pkpPublicKey!!,
-                    userEthAddress = ownerEthAddress!!,
-                    name = trimmed,
-                    visibility = 0,
-                  )
-                }.getOrElse { err ->
-                  onShowMessage("On-chain create failed: ${err.message ?: "unknown error"}")
+              val owner = ownerEthAddress?.trim()?.lowercase().orEmpty()
+              if (isAuthenticated && owner.isNotBlank() && tempoAccount != null) {
+                val sessionKey =
+                  SessionKeyManager.load(context)?.takeIf {
+                    SessionKeyManager.isValid(it, ownerAddress = owner)
+                  }
+                if (sessionKey == null) {
+                  onShowMessage("Session expired. Sign in again to create playlists.")
                   busy = false
                   return@launch
                 }
 
-              if (!result.success || result.playlistId.isNullOrBlank()) {
-                onShowMessage("On-chain create failed: ${result.error ?: "unknown error"}")
-                busy = false
-                return@launch
-              }
+                val result =
+                  TempoPlaylistApi.createPlaylist(
+                    account = tempoAccount,
+                    sessionKey = sessionKey,
+                    name = trimmed,
+                    coverCid = "",
+                    visibility = 0,
+                    trackIds = emptyList(),
+                  )
+                if (!result.success) {
+                  onShowMessage("Create failed: ${result.error ?: "unknown error"}")
+                  busy = false
+                  return@launch
+                }
 
-              onShowMessage("Created on-chain playlist")
-              onSuccess(result.playlistId, trimmed)
+                val resolvedId = resolveCreatedPlaylistId(owner, trimmed, result.playlistId)
+                onShowMessage("Created $trimmed")
+                onSuccess(
+                  resolvedId ?: "pending:${System.currentTimeMillis()}",
+                  trimmed,
+                )
+              } else {
+                val created = LocalPlaylistsStore.createLocalPlaylist(context, trimmed, initialTrack = null)
+                onShowMessage("Created ${created.name}")
+                onSuccess(created.id, created.name)
+              }
               busy = false
               onClose()
             }
@@ -169,28 +145,26 @@ fun CreatePlaylistSheet(
   }
 }
 
-@Composable
-private fun ChoicePill(
-  label: String,
-  selected: Boolean,
-  enabled: Boolean,
-  onClick: () -> Unit,
-) {
-  val bg =
-    if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-  val fg =
-    if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+private suspend fun resolveCreatedPlaylistId(
+  ownerAddress: String,
+  playlistName: String,
+  immediateId: String?,
+): String? {
+  val direct = immediateId?.trim().orEmpty()
+  if (direct.startsWith("0x") && direct.length == 66) return direct.lowercase()
 
-  Surface(
-    modifier = Modifier.clickable(enabled = enabled, onClick = onClick),
-    color = bg,
-    shape = MaterialTheme.shapes.extraLarge,
-  ) {
-    Text(
-      text = label,
-      modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-      color = fg,
-      fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-    )
+  repeat(4) {
+    val candidates = runCatching { OnChainPlaylistsApi.fetchUserPlaylists(ownerAddress, maxEntries = 30) }.getOrNull()
+    val match =
+      candidates
+        ?.firstOrNull { playlist ->
+          playlist.name.trim().equals(playlistName.trim(), ignoreCase = true)
+        }
+        ?.id
+        ?.trim()
+    if (!match.isNullOrBlank()) return match.lowercase()
+    delay(1_200L)
   }
+
+  return null
 }

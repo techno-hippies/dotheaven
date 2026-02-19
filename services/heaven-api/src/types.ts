@@ -89,12 +89,12 @@ export interface Env {
   FILEBASE_FOOD_SECRET_KEY?: string
   FILEBASE_FOOD_BUCKET?: string
 
-  // LLM API config for study-set generation (OpenAI-compatible: OpenRouter, DeepInfra, etc.)
+  // OpenRouter for study-set generation
   OPENROUTER_API_KEY?: string
-  // Optional: override chat completions URL (default: OpenRouter). e.g. https://api.deepinfra.com/v1/openai/chat/completions
-  LLM_API_BASE_URL?: string
   // Optional model override for study-set generation
   OPENROUTER_STUDY_MODEL?: string
+  // Genius API key for server-side referent resolution in study-set generation
+  GENIUS_API_KEY?: string
 
   // DeepInfra API key for speech-to-text (Voxtral)
   DEEPINFRA_API_KEY?: string
@@ -128,8 +128,22 @@ export interface Env {
   TEMPO_CHAIN_ID?: string
   TEMPO_SPONSOR_PRIVATE_KEY?: string
   TEMPO_OPERATOR_PRIVATE_KEY?: string
+  TEMPO_NAME_REGISTRY_V2?: string
+  TEMPO_PREMIUM_NAME_STORE_V2?: string
+  TEMPO_HEAVEN_NODE?: string
+  TEMPO_PIRATE_NODE?: string
+  TEMPO_POLICY_SIGNER_PRIVATE_KEY?: string
+  TEMPO_POLICY_SIGNER_ADDRESS?: string
+  NAMES_PERMIT_TTL_SECONDS?: string
+  NAMES_POW_TTL_SECONDS?: string
+  NAMES_POW_DIFFICULTY_HEX?: string
+  NAMES_LONG_WALLET_LIMIT_10M?: string
+  NAMES_LONG_IP_LIMIT_10M?: string
+  NAMES_LONG_DEVICE_LIMIT_10M?: string
   TEMPO_SCROBBLE_V4?: string
   TEMPO_CONTENT_REGISTRY?: string
+  TEMPO_CANONICAL_LYRICS_REGISTRY?: string
+  TEMPO_STUDY_SET_REGISTRY?: string
   TEMPO_TX_WAIT_TIMEOUT_MS?: string
 
   // R2 buckets for photo pipeline
@@ -269,7 +283,7 @@ export interface MatchesResponse {
 export interface HeavenNameRow {
   label: string
   label_display: string | null
-  pkp_address: string
+  owner_address: string
   status: 'active' | 'expired'
   registered_at: number
   expires_at: number
@@ -287,7 +301,7 @@ export interface HeavenReservedRow {
 
 export interface HeavenNonceRow {
   nonce: string
-  pkp_address: string
+  owner_address: string
   used_at: number | null
   expires_at: number
   created_at: number
@@ -299,7 +313,7 @@ export interface HeavenNonceRow {
 
 export interface ScrobbleBatchRow {
   id: number
-  user_pkp: string
+  user_address: string
   cid: string
   track_count: number
   start_ts: number
@@ -431,7 +445,7 @@ export interface PhotoRevealResponse {
 
 export interface SelfVerificationRow {
   session_id: string
-  user_pkp: string
+  user_address: string
   status: 'pending' | 'verified' | 'failed' | 'expired'
   date_of_birth: string | null
   age: number | null
@@ -445,10 +459,11 @@ export interface SelfVerificationRow {
 }
 
 export interface UserIdentityRow {
-  user_pkp: string
+  user_address: string
   date_of_birth: string
   age_at_verification: number
   nationality: string
+  identity_nullifier_hash: string | null
   verification_session_id: string
   verified_at: number
   created_at: number
@@ -458,7 +473,7 @@ export interface UserIdentityRow {
 // API request/response types
 
 export interface SelfSessionRequest {
-  userPkp: string
+  userAddress: string
 }
 
 export interface SelfSessionResponse {
@@ -512,7 +527,7 @@ export type MusicPublishType = 'original' | 'derivative' | 'cover'
 
 export interface MusicPublishJobRow {
   job_id: string
-  user_pkp: string
+  user_address: string
   status: MusicPublishStatus
   publish_type: MusicPublishType | null
   idempotency_key: string | null
@@ -567,7 +582,7 @@ export interface MusicPublishJobRow {
 
 export interface MusicUploadBanRow {
   ban_id: number
-  user_pkp: string
+  user_address: string
   self_nullifier: string | null
   reason_code: string
   reason: string

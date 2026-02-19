@@ -16,6 +16,7 @@ object SelfVerificationService {
     val verified: Boolean,
     val age: Int? = null,
     val nationality: String? = null,
+    val hasShortNameCredential: Boolean = true,
   )
 
   data class SessionResult(
@@ -47,6 +48,7 @@ object SelfVerificationService {
         verified = true,
         age = json.optInt("currentAge", -1).takeIf { it >= 0 },
         nationality = json.optString("nationality", "").takeIf { it.isNotEmpty() },
+        hasShortNameCredential = json.optBoolean("hasShortNameCredential", true),
       )
     } finally {
       conn.disconnect()
@@ -62,7 +64,7 @@ object SelfVerificationService {
     conn.readTimeout = 10_000
     conn.doOutput = true
     try {
-      val payload = JSONObject().put("userPkp", pkp.lowercase()).toString()
+      val payload = JSONObject().put("userAddress", pkp.lowercase()).toString()
       conn.outputStream.use { it.write(payload.toByteArray()) }
       val status = conn.responseCode
       val body = (if (status in 200..299) conn.inputStream else conn.errorStream).bufferedReader().readText()

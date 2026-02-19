@@ -1,5 +1,6 @@
 package com.pirate.app.music
 
+import com.pirate.app.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -10,22 +11,44 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 object OnChainPlaylistsApi {
-  private const val MEGA_RPC = "https://carrot.megaeth.com/rpc"
-  private const val PLAYLIST_V1 = "0xF0337C4A335cbB3B31c981945d3bE5B914F7B329"
-  private const val USER_NONCES_SELECTOR = "0x2f7801f4" // userNonces(address)
+  private const val TEMPO_RPC = "https://rpc.moderato.tempo.xyz"
+  private const val PLAYLIST_V1 = "0xeF6a21324548155630670397DA68318E126510EF"
+  private const val OWNER_NONCES_SELECTOR = "0x56916b04" // ownerNonces(address)
 
-  private const val SUBGRAPH_PLAYLISTS =
-    "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-playlists/1.0.0/gn"
+  private const val DEFAULT_SUBGRAPH_PLAYLISTS =
+    "https://graph.dotheaven.org/subgraphs/name/dotheaven/playlist-feed-tempo"
 
   private val client = OkHttpClient()
   private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
   suspend fun fetchUserPlaylists(ownerAddress: String, maxEntries: Int = 50): List<OnChainPlaylist> = withContext(Dispatchers.IO) {
     val addr = ownerAddress.trim().lowercase()
+    if (addr.isBlank()) return@withContext emptyList()
+    var sawSuccessfulEmpty = false
+    var lastError: Throwable? = null
+    for (subgraphUrl in playlistsSubgraphUrls()) {
+      try {
+        val playlists = fetchUserPlaylistsFromSubgraph(subgraphUrl, addr, maxEntries)
+        if (playlists.isNotEmpty()) return@withContext playlists
+        sawSuccessfulEmpty = true
+      } catch (error: Throwable) {
+        lastError = error
+      }
+    }
+    if (sawSuccessfulEmpty) return@withContext emptyList()
+    if (lastError != null) throw lastError
+    emptyList()
+  }
+
+  private fun fetchUserPlaylistsFromSubgraph(
+    subgraphUrl: String,
+    ownerAddress: String,
+    maxEntries: Int,
+  ): List<OnChainPlaylist> {
     val query = """
       {
         playlists(
-          where: { owner: "$addr", exists: true }
+          where: { owner: "$ownerAddress", exists: true }
           orderBy: updatedAt
           orderDirection: desc
           first: $maxEntries
@@ -37,11 +60,16 @@ object OnChainPlaylistsApi {
     """.trimIndent()
 
     val body = JSONObject().put("query", query).toString().toRequestBody(jsonMediaType)
-    val req = Request.Builder().url(SUBGRAPH_PLAYLISTS).post(body).build()
-    client.newCall(req).execute().use { res ->
-      if (!res.isSuccessful) throw IllegalStateException("Goldsky query failed: ${res.code}")
+    val req = Request.Builder().url(subgraphUrl).post(body).build()
+    return client.newCall(req).execute().use { res ->
+      if (!res.isSuccessful) throw IllegalStateException("Playlist query failed: ${res.code}")
       val raw = res.body?.string().orEmpty()
       val json = JSONObject(raw)
+      val errors = json.optJSONArray("errors")
+      if (errors != null && errors.length() > 0) {
+        val msg = errors.optJSONObject(0)?.optString("message", "GraphQL error") ?: "GraphQL error"
+        throw IllegalStateException(msg)
+      }
       val playlists = json.optJSONObject("data")?.optJSONArray("playlists") ?: JSONArray()
       val out = ArrayList<OnChainPlaylist>(playlists.length())
       for (i in 0 until playlists.length()) {
@@ -71,10 +99,32 @@ object OnChainPlaylistsApi {
     maxEntries: Int = 1000,
   ): List<String> = withContext(Dispatchers.IO) {
     val id = playlistId.trim().lowercase()
+    if (id.isBlank()) return@withContext emptyList()
+    var sawSuccessfulEmpty = false
+    var lastError: Throwable? = null
+    for (subgraphUrl in playlistsSubgraphUrls()) {
+      try {
+        val trackIds = fetchPlaylistTrackIdsFromSubgraph(subgraphUrl, id, maxEntries)
+        if (trackIds.isNotEmpty()) return@withContext trackIds
+        sawSuccessfulEmpty = true
+      } catch (error: Throwable) {
+        lastError = error
+      }
+    }
+    if (sawSuccessfulEmpty) return@withContext emptyList()
+    if (lastError != null) throw lastError
+    emptyList()
+  }
+
+  private fun fetchPlaylistTrackIdsFromSubgraph(
+    subgraphUrl: String,
+    playlistId: String,
+    maxEntries: Int,
+  ): List<String> {
     val query = """
       {
         playlistTracks(
-          where: { playlist: "$id" }
+          where: { playlist: "$playlistId" }
           orderBy: position
           orderDirection: asc
           first: $maxEntries
@@ -85,11 +135,16 @@ object OnChainPlaylistsApi {
     """.trimIndent()
 
     val body = JSONObject().put("query", query).toString().toRequestBody(jsonMediaType)
-    val req = Request.Builder().url(SUBGRAPH_PLAYLISTS).post(body).build()
-    client.newCall(req).execute().use { res ->
-      if (!res.isSuccessful) throw IllegalStateException("Goldsky query failed: ${res.code}")
+    val req = Request.Builder().url(subgraphUrl).post(body).build()
+    return client.newCall(req).execute().use { res ->
+      if (!res.isSuccessful) throw IllegalStateException("Playlist query failed: ${res.code}")
       val raw = res.body?.string().orEmpty()
       val json = JSONObject(raw)
+      val errors = json.optJSONArray("errors")
+      if (errors != null && errors.length() > 0) {
+        val msg = errors.optJSONObject(0)?.optString("message", "GraphQL error") ?: "GraphQL error"
+        throw IllegalStateException(msg)
+      }
       val tracks = json.optJSONObject("data")?.optJSONArray("playlistTracks") ?: JSONArray()
       val out = ArrayList<String>(tracks.length())
       for (i in 0 until tracks.length()) {
@@ -101,14 +156,20 @@ object OnChainPlaylistsApi {
     }
   }
 
-  /**
-   * PlaylistV1.userNonces(address) → decimal string, used as replay-protection nonce for playlist-v1 Lit Action.
-   */
+  private fun playlistsSubgraphUrls(): List<String> {
+    val fromBuildConfig = BuildConfig.TEMPO_PLAYLISTS_SUBGRAPH_URL.trim().removeSuffix("/")
+    val urls = ArrayList<String>(2)
+    if (fromBuildConfig.isNotBlank()) urls.add(fromBuildConfig)
+    urls.add(DEFAULT_SUBGRAPH_PLAYLISTS)
+    return urls.distinct()
+  }
+
+  /** Legacy helper: PlaylistV1.ownerNonces(address) -> decimal string. */
   suspend fun fetchUserNonce(userAddress: String): String = withContext(Dispatchers.IO) {
     val addr = userAddress.trim().lowercase()
     if (!addr.startsWith("0x") || addr.length != 42) throw IllegalArgumentException("Invalid user address: $userAddress")
 
-    val data = USER_NONCES_SELECTOR + addr.drop(2).padStart(64, '0')
+    val data = OWNER_NONCES_SELECTOR + addr.drop(2).padStart(64, '0')
     val payload = JSONObject()
       .put("jsonrpc", "2.0")
       .put("id", 1)
@@ -122,7 +183,7 @@ object OnChainPlaylistsApi {
 
     val req =
       Request.Builder()
-        .url(MEGA_RPC)
+        .url(TEMPO_RPC)
         .post(payload.toString().toRequestBody(jsonMediaType))
         .build()
 

@@ -12,7 +12,6 @@ use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
 use alloy_primitives::{keccak256, Address, B256};
 use alloy_sol_types::SolValue;
-use base64::Engine;
 use bundles_rs::ans104::{data_item::DataItem, tags::Tag};
 use bundles_rs::crypto::signer::SignatureType;
 use ethers::abi::{decode as abi_decode, ParamType, Token};
@@ -21,11 +20,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use crate::auth::PersistedAuth;
-use crate::lit_action_registry::{self as registry, ResolvedAction};
-use crate::lit_wallet::LitWalletService;
-use crate::shared::rpc::{
-    http_get_bytes, http_get_bytes_range, http_get_json, http_post_json, read_json_or_text,
-};
+use crate::shared::rpc::{http_get_bytes, http_post_json, read_json_or_text};
 mod config;
 mod content;
 mod decrypt;
@@ -39,8 +34,7 @@ use model::{ContentRegistryEntry, LoadHealthResult, ParsedContentBlob, UploadRes
 pub use model::{PlaylistCoverImageInput, PlaylistTrackInput, TrackMetaInput};
 
 pub struct LoadStorageService {
-    lit: Option<LitWalletService>,
-    init_error: Option<String>,
+    _private: (),
 }
 
 impl Default for LoadStorageService {
@@ -51,25 +45,13 @@ impl Default for LoadStorageService {
 
 impl LoadStorageService {
     pub fn new() -> Self {
-        match LitWalletService::new() {
-            Ok(lit) => Self {
-                lit: Some(lit),
-                init_error: None,
-            },
-            Err(err) => Self {
-                lit: None,
-                init_error: Some(err),
-            },
-        }
+        Self { _private: () }
     }
 
     pub fn health(&mut self) -> Result<Value, String> {
         Ok(json!({
             "ok": true,
             "component": "load-native",
-            "litRuntimeAvailable": self.init_error.is_none(),
-            "litRuntimeError": self.init_error.clone(),
-            "litNetwork": lit_network_name(),
             "loadUploadMode": load_upload_mode_label(),
             "loadUploadUrl": load_turbo_upload_url(),
             "loadUploadToken": load_turbo_upload_token(),
@@ -167,34 +149,26 @@ impl LoadStorageService {
 
     pub fn storage_deposit_and_approve(
         &mut self,
-        auth: &PersistedAuth,
+        _auth: &PersistedAuth,
         amount_hint: &str,
     ) -> Result<Value, String> {
         if !load_user_pays_enabled() {
             return Ok(json!({
                 "ok": true,
                 "txHash": Value::Null,
-                "message": "Offchain Load upload mode has no in-app deposit step. Set HEAVEN_LOAD_USER_PAYS_ENABLED=true to run Base Sepolia PKP funding.",
+                "message": "Offchain Load upload mode has no in-app deposit step.",
                 "uploadMode": load_upload_mode_label(),
                 "uploadToken": load_turbo_upload_token(),
                 "amountHint": amount_hint,
                 "turboFundingEnabled": false,
             }));
         }
-        if auth.provider_kind() == crate::auth::AuthProviderKind::TempoPasskey {
-            return Err(
-                "Turbo user-pays funding from GPUI is not yet available for Tempo passkey sessions."
-                    .to_string(),
-            );
-        }
-        self.ensure_lit_ready(auth)?;
-
-        self.run_turbo_user_pays_funding(auth, amount_hint)
+        Err("Turbo user-pays funding is not yet available for Tempo sessions.".to_string())
     }
 
     fn fetch_turbo_balance(&self, auth: &PersistedAuth) -> Result<Value, String> {
         let user_address = auth
-            .primary_wallet_address()
+            .wallet_address()
             .ok_or("Missing wallet address in auth")?;
         let proxy_url = turbo_funding_proxy_url();
         let balance_url = format!("{proxy_url}/turbo/balance");
@@ -209,22 +183,5 @@ impl LoadStorageService {
 
     fn load_health_check(&self) -> LoadHealthResult {
         check_health()
-    }
-
-    fn ensure_lit_ready(&mut self, auth: &PersistedAuth) -> Result<(), String> {
-        if let Some(err) = &self.init_error {
-            return Err(format!("Lit runtime unavailable: {err}"));
-        }
-        auth.require_lit_auth("Load storage operations")?;
-        self.lit_mut()?.initialize_from_auth(auth)?;
-        Ok(())
-    }
-
-    fn lit_mut(&mut self) -> Result<&mut LitWalletService, String> {
-        self.lit.as_mut().ok_or_else(|| {
-            self.init_error
-                .clone()
-                .unwrap_or_else(|| "Lit runtime unavailable".to_string())
-        })
     }
 }

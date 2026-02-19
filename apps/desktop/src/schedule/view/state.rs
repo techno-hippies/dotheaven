@@ -25,7 +25,7 @@ pub(crate) struct ScheduleView {
 
 impl ScheduleView {
     pub(crate) fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let base_price_input = cx.new(|cx| InputState::new(window, cx).placeholder("0.025"));
+        let base_price_input = cx.new(|cx| InputState::new(window, cx).placeholder("25.00"));
         let slot_start_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("2026-02-14 18:00"));
         let slot_duration_input = cx.new(|cx| InputState::new(window, cx).placeholder("60"));
@@ -52,9 +52,9 @@ impl ScheduleView {
                     status: BookingStatus::Upcoming,
                     is_host: true,
                     tx_hash: "0x9d..01".into(),
-                    price_eth: "0.025".into(),
+                    price_usd: "25.00".into(),
                     cancel_cutoff_mins: 30,
-                    amount_eth: "0.025".into(),
+                    amount_usd: "25.00".into(),
                 },
                 BookingRow {
                     id: 2,
@@ -65,9 +65,9 @@ impl ScheduleView {
                     status: BookingStatus::Live,
                     is_host: false,
                     tx_hash: "0x9d..02".into(),
-                    price_eth: "0.040".into(),
+                    price_usd: "40.00".into(),
                     cancel_cutoff_mins: 45,
-                    amount_eth: "0.040".into(),
+                    amount_usd: "40.00".into(),
                 },
             ],
             slot_rows: vec![
@@ -78,7 +78,7 @@ impl ScheduleView {
                     duration_mins: 60,
                     status: SlotStatus::Open,
                     guest_name: None,
-                    price_eth: "0.025".into(),
+                    price_usd: "25.00".into(),
                 },
                 SlotRow {
                     id: 2,
@@ -87,7 +87,7 @@ impl ScheduleView {
                     duration_mins: 45,
                     status: SlotStatus::Booked,
                     guest_name: Some("Ariya".into()),
-                    price_eth: "0.030".into(),
+                    price_usd: "30.00".into(),
                 },
             ],
             base_price_input,
@@ -253,7 +253,7 @@ impl ScheduleView {
             duration_mins: 20,
             status: SlotStatus::Open,
             guest_name: None,
-            price_eth: self.base_price.clone(),
+            price_usd: self.base_price.clone(),
         });
 
         cx.notify();
@@ -349,7 +349,7 @@ impl ScheduleView {
             duration_mins: duration,
             status: SlotStatus::Open,
             guest_name: None,
-            price_eth: self.base_price.clone(),
+            price_usd: self.base_price.clone(),
         });
 
         self.slot_start_input

@@ -1,16 +1,5 @@
 use super::*;
 
-fn track_metadata_registered(track_id_hex: &str) -> bool {
-    fetch_track_metadata_subgraph(track_id_hex)
-        .ok()
-        .flatten()
-        .is_some()
-        || fetch_track_metadata_onchain(track_id_hex)
-            .ok()
-            .flatten()
-            .is_some()
-}
-
 impl LoadStorageService {
     pub fn content_encrypt_upload_register(
         &mut self,
@@ -19,10 +8,6 @@ impl LoadStorageService {
         _with_cdn: bool,
         track: TrackMetaInput,
     ) -> Result<Value, String> {
-        if auth.provider_kind() != crate::auth::AuthProviderKind::TempoPasskey {
-            self.ensure_lit_ready(auth)?;
-        }
-
         let source_bytes = fs::read(file_path)
             .map_err(|e| format!("Failed to read file for upload ({}): {e}", file_path))?;
 
@@ -62,7 +47,7 @@ impl LoadStorageService {
             .map(str::to_string);
 
         let owner = auth
-            .primary_wallet_address()
+            .wallet_address()
             .ok_or("Missing wallet address in auth")?;
 
         let track_id = build_track_id(&title, &artist, &album, mbid.as_deref(), ip_id.as_deref())?;
@@ -91,45 +76,12 @@ impl LoadStorageService {
         )?;
 
         let track_id_hex = to_hex_prefixed(track_id.as_slice()).to_lowercase();
-        let (register_response, metadata_registered) = if auth.provider_kind()
-            == crate::auth::AuthProviderKind::TempoPasskey
-        {
-            (
-                json!({
-                    "version": "tempo-direct-upload-v1",
-                    "txHash": Value::Null,
-                    "blockNumber": Value::Null,
-                }),
-                false,
-            )
-        } else {
-            let response = self.register_content(
-                auth,
-                to_hex_prefixed(track_id.as_slice()),
-                &upload_result.id,
-                &title,
-                &artist,
-                &album,
-            )?;
-            let metadata_registered = track_metadata_registered(&track_id_hex);
-            if !metadata_registered {
-                log::warn!(
-                        "[LoadStorage] track metadata missing after register: trackId={} title=\"{}\" artist=\"{}\" registerVersion={} txHash={}",
-                        track_id_hex,
-                        title,
-                        artist,
-                        response
-                            .get("version")
-                            .and_then(Value::as_str)
-                            .unwrap_or("unknown"),
-                        response
-                            .get("txHash")
-                            .and_then(Value::as_str)
-                            .unwrap_or("n/a"),
-                    );
-            }
-            (response, metadata_registered)
-        };
+        let register_response = json!({
+            "version": "tempo-direct-upload-v1",
+            "txHash": Value::Null,
+            "blockNumber": Value::Null,
+        });
+        let metadata_registered = false;
 
         Ok(json!({
             "trackId": track_id_hex,
@@ -152,19 +104,15 @@ impl LoadStorageService {
         auth: &PersistedAuth,
         file_path: &str,
         track_id_hex: &str,
-        title: &str,
-        artist: &str,
-        album: &str,
+        _title: &str,
+        _artist: &str,
+        _album: &str,
     ) -> Result<Value, String> {
-        if auth.provider_kind() != crate::auth::AuthProviderKind::TempoPasskey {
-            self.ensure_lit_ready(auth)?;
-        }
-
         let source_bytes = fs::read(file_path)
             .map_err(|e| format!("Failed to read file for upload ({}): {e}", file_path))?;
 
         let owner = auth
-            .primary_wallet_address()
+            .wallet_address()
             .ok_or("Missing wallet address in auth")?;
 
         let track_id_norm = normalize_bytes32_hex(track_id_hex, "trackId")?;
@@ -195,52 +143,13 @@ impl LoadStorageService {
         )?;
 
         let content_id_hex = to_hex_prefixed(content_id.as_slice()).to_lowercase();
-        let (deactivate_payload, register_response, metadata_registered) = if auth.provider_kind()
-            == crate::auth::AuthProviderKind::TempoPasskey
-        {
-            (
-                Value::Null,
-                json!({
-                    "version": "tempo-direct-upload-v1",
-                    "txHash": Value::Null,
-                    "blockNumber": Value::Null,
-                }),
-                false,
-            )
-        } else {
-            let mut deactivate_payload = Value::Null;
-            if let Ok(entry) = fetch_content_registry_entry(&content_id_hex) {
-                if entry.active {
-                    deactivate_payload = self.content_deactivate(auth, &content_id_hex)?;
-                }
-            }
-            let register_response = self.register_content(
-                auth,
-                track_id_norm.clone(),
-                &upload_result.id,
-                title,
-                artist,
-                album,
-            )?;
-            let metadata_registered = track_metadata_registered(&track_id_norm);
-            if !metadata_registered {
-                log::warn!(
-                        "[LoadStorage] track metadata missing after replace register: trackId={} title=\"{}\" artist=\"{}\" registerVersion={} txHash={}",
-                        track_id_norm,
-                        title,
-                        artist,
-                        register_response
-                            .get("version")
-                            .and_then(Value::as_str)
-                            .unwrap_or("unknown"),
-                        register_response
-                            .get("txHash")
-                            .and_then(Value::as_str)
-                            .unwrap_or("n/a"),
-                    );
-            }
-            (deactivate_payload, register_response, metadata_registered)
-        };
+        let deactivate_payload = Value::Null;
+        let register_response = json!({
+            "version": "tempo-direct-upload-v1",
+            "txHash": Value::Null,
+            "blockNumber": Value::Null,
+        });
+        let metadata_registered = false;
 
         Ok(json!({
             "replaced": true,

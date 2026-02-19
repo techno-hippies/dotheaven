@@ -8,7 +8,6 @@ User-facing clients in this repository.
 - `android/` — Kotlin + Jetpack Compose Android app.
 
 ## Notes
-- React Native has been removed from this repository.
 - iOS Swift client is planned but not present yet.
 
 ## Start Here

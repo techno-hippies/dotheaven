@@ -3,12 +3,12 @@
  *
  * IMPORTANT: This is the single source of truth for all contract addresses.
  * When deploying new contracts, update ONLY this file.
- *
- * Chain: MegaETH Testnet (6343)
  */
 
 export const MEGAETH_CHAIN_ID = 6343
 export const MEGAETH_RPC = 'https://carrot.megaeth.com/rpc'
+export const TEMPO_CHAIN_ID = 42431
+export const TEMPO_RPC = 'https://rpc.moderato.tempo.xyz'
 
 // ── Scrobble Contracts ─────────────────────────────────────────────
 
@@ -23,11 +23,14 @@ export const SCROBBLE_V3 = '0x144c450cd5B641404EEB5D5eD523399dD94049E0'
 /** ProfileV2 — Structured profile data (enums, packed fields) */
 export const PROFILE_V2 = '0xe00e82086480E61AaC8d5ad8B05B56A582dD0000'
 
-/** RegistryV1 — .heaven name NFTs */
-export const REGISTRY_V1 = '0x22B618DaBB5aCdC214eeaA1c4C5e2eF6eb4488C2'
+/** RegistryV2 — .heaven/.pirate name NFTs (Tempo Moderato) */
+export const REGISTRY_V1 = '0xA111c5cA16752B09fF16B3B8B24BA55a8486aB23'
 
-/** RecordsV1 — ENS-compatible text records */
-export const RECORDS_V1 = '0x80D1b5BBcfaBDFDB5597223133A404Dc5379Baf3'
+/** RecordsV1 — ENS-compatible text records (Tempo Moderato) */
+export const RECORDS_V1 = '0x57e36738f02Bb90664d00E4EC0C8507feeF3995c'
+
+/** PremiumNameStore — AlphaUSD premium storefront (Tempo Moderato) */
+export const PREMIUM_NAME_STORE = '0x5efE75a72EAE3178A7a4F310e841b1D3fF980D3D'
 
 /** VerificationMirror — Celo verification mirrored to MegaETH */
 export const VERIFICATION_MIRROR = '0xb0864603A4d6b62eACB53fbFa32E7665BADCc7Fb'
@@ -51,31 +54,34 @@ export const POSTS_V1 = '0xFe674F421c2bBB6D664c7F5bc0D5A0204EE0bFA6'
 export const ENGAGEMENT_V2 = '0xAF769d204e51b64D282083Eb0493F6f37cd93138'
 
 /** FollowV1 — Social follow graph */
-export const FOLLOW_V1 = '0x3F32cF9e70EF69DFFed74Dfe07034cb03cF726cb'
+export const FOLLOW_V1 = '0x153DbEcA0CEF8563649cf475a687D14997D2c403'
 
 // ── Escrow ─────────────────────────────────────────────────────────
 
 /** SessionEscrowV1 — Meeting booking escrow */
-export const SESSION_ESCROW_V1 = '0x132212B78C4a7A3F19DE1BF63f119848c765c1d2'
+export const SESSION_ESCROW_V1 = '0xb1E233221FB25c65090A75cc60Df5164A2eA4B98'
 
 // ── ENS / Name Resolution ──────────────────────────────────────────
 
 /** Heaven parent node: namehash("heaven.hnsbridge.eth") */
 export const HEAVEN_NODE = '0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27'
 
-// ── Subgraph Endpoints (Goldsky) ─────────────────────────────────────
+/** Pirate parent node: namehash("pirate.hnsbridge.eth") */
+export const PIRATE_NODE = '0xace9c9c435cf933be3564cdbcf7b7e2faee63e4f39034849eacb82d13f32f02a'
 
-const GOLDSKY_BASE = 'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs'
+// ── Subgraph Endpoints (The Graph via local Cloudflare tunnel) ───────────
+
+const THE_GRAPH_BASE = 'https://graph.dotheaven.org/subgraphs/name/dotheaven'
 
 /** Activity subgraph — posts, scrobbles, engagement, content, follows */
-export const SUBGRAPH_ACTIVITY = `${GOLDSKY_BASE}/dotheaven-activity/14.0.0/gn`
+export const SUBGRAPH_ACTIVITY = `${THE_GRAPH_BASE}/activity-feed-tempo`
 
 /** Profiles subgraph — ProfileV2 events (denormalized enums) */
-export const SUBGRAPH_PROFILES = 'https://graph.dotheaven.org/subgraphs/name/dotheaven/profiles-tempo'
-export const SUBGRAPH_PROFILES_FALLBACK = `${GOLDSKY_BASE}/dotheaven-profiles/1.0.0/gn`
+export const SUBGRAPH_PROFILES = `${THE_GRAPH_BASE}/profiles-tempo`
+export const SUBGRAPH_PROFILES_FALLBACK = `${THE_GRAPH_BASE}/profiles-tempo`
 
 /** Playlists subgraph — PlaylistV1 events */
-export const SUBGRAPH_PLAYLISTS = `${GOLDSKY_BASE}/dotheaven-playlists/1.0.0/gn`
+export const SUBGRAPH_PLAYLISTS = `${THE_GRAPH_BASE}/playlist-feed-tempo`
 
 // ── Celo (Self.xyz verification) ───────────────────────────────────
 

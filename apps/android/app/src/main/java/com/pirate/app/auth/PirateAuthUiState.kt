@@ -1,14 +1,11 @@
 package com.pirate.app.auth
 
-import com.pirate.app.lit.PirateAuthConfig
 import com.pirate.app.tempo.TempoClient
 import com.pirate.app.tempo.TempoPasskeyManager
 
 data class PirateAuthUiState(
-  val authServiceBaseUrl: String = PirateAuthConfig.DEFAULT_AUTH_SERVICE_BASE_URL,
-  val passkeyRpId: String = PirateAuthConfig.DEFAULT_PASSKEY_RP_ID,
-  val litNetwork: String = PirateAuthConfig.DEFAULT_LIT_NETWORK,
-  val litRpcUrl: String = PirateAuthConfig.DEFAULT_LIT_RPC_URL,
+  val authServiceBaseUrl: String = "https://naga-dev-auth-service.getlit.dev",
+  val passkeyRpId: String = "pirate-passkey.heaven.cat",
   val tempoRpcUrl: String = TempoClient.RPC_URL,
   val tempoFeePayerUrl: String = TempoClient.SPONSOR_URL,
   val tempoChainId: Long = TempoClient.CHAIN_ID,
@@ -17,40 +14,32 @@ data class PirateAuthUiState(
   val tempoPubKeyX: String? = null,
   val tempoPubKeyY: String? = null,
   val tempoRpId: String = TempoPasskeyManager.DEFAULT_RP_ID,
-  val pkpPublicKey: String? = null,
-  val pkpEthAddress: String? = null,
-  val pkpTokenId: String? = null,
-  val authMethodType: Int? = null,
-  val authMethodId: String? = null,
-  val accessToken: String? = null,
+  val signerType: SignerType? = null,
   val selfVerified: Boolean = false,
   val output: String = "Ready.",
   val busy: Boolean = false,
 ) {
+  enum class SignerType {
+    PASSKEY,
+  }
+
   fun hasTempoCredentials(): Boolean {
-    return !tempoAddress.isNullOrBlank() &&
-      !tempoCredentialId.isNullOrBlank() &&
+    val address = !tempoAddress.isNullOrBlank()
+    if (!address) return false
+
+    val hasPasskeyFields = !tempoCredentialId.isNullOrBlank() &&
       !tempoPubKeyX.isNullOrBlank() &&
       !tempoPubKeyY.isNullOrBlank()
-  }
 
-  fun hasLitAuthContextParams(): Boolean {
-    return !pkpPublicKey.isNullOrBlank() &&
-      authMethodType != null &&
-      !authMethodId.isNullOrBlank() &&
-      !accessToken.isNullOrBlank()
-  }
-
-  fun hasLitAuthCredentials(): Boolean {
-    return hasLitAuthContextParams() && !pkpEthAddress.isNullOrBlank()
+    return hasPasskeyFields
   }
 
   fun hasAnyCredentials(): Boolean {
-    return hasTempoCredentials() || hasLitAuthCredentials()
+    return hasTempoCredentials()
   }
 
   fun activeAddress(): String? {
-    return tempoAddress?.takeIf { it.isNotBlank() } ?: pkpEthAddress
+    return tempoAddress?.takeIf { it.isNotBlank() }
   }
 
   /** Build 65-byte uncompressed P256 public key (0x04 || x || y) from stored hex coords. */
@@ -74,38 +63,31 @@ data class PirateAuthUiState(
 
     fun save(context: android.content.Context, state: PirateAuthUiState) {
       context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE).edit()
-        .putString("pkpPublicKey", state.pkpPublicKey)
-        .putString("pkpEthAddress", state.pkpEthAddress)
-        .putString("pkpTokenId", state.pkpTokenId)
         .putString("tempoAddress", state.tempoAddress)
         .putString("tempoCredentialId", state.tempoCredentialId)
         .putString("tempoPubKeyX", state.tempoPubKeyX)
         .putString("tempoPubKeyY", state.tempoPubKeyY)
         .putString("tempoRpId", state.tempoRpId)
+        .putString("signerType", state.signerType?.name)
         .putString("tempoFeePayerUrl", state.tempoFeePayerUrl)
-        .putInt("authMethodType", state.authMethodType ?: -1)
-        .putString("authMethodId", state.authMethodId)
-        .putString("accessToken", state.accessToken)
         .putBoolean("selfVerified", state.selfVerified)
         .apply()
     }
 
     fun load(context: android.content.Context): PirateAuthUiState {
       val prefs = context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
-      val amt = prefs.getInt("authMethodType", -1)
+      val signerType =
+        prefs.getString("signerType", null)?.let { raw ->
+          runCatching { SignerType.valueOf(raw) }.getOrNull()
+        }
       return PirateAuthUiState(
-        pkpPublicKey = prefs.getString("pkpPublicKey", null),
-        pkpEthAddress = prefs.getString("pkpEthAddress", null),
-        pkpTokenId = prefs.getString("pkpTokenId", null),
         tempoAddress = prefs.getString("tempoAddress", null),
         tempoCredentialId = prefs.getString("tempoCredentialId", null),
         tempoPubKeyX = prefs.getString("tempoPubKeyX", null),
         tempoPubKeyY = prefs.getString("tempoPubKeyY", null),
         tempoRpId = prefs.getString("tempoRpId", null) ?: TempoPasskeyManager.DEFAULT_RP_ID,
+        signerType = signerType,
         tempoFeePayerUrl = prefs.getString("tempoFeePayerUrl", null) ?: TempoClient.SPONSOR_URL,
-        authMethodType = if (amt >= 0) amt else null,
-        authMethodId = prefs.getString("authMethodId", null),
-        accessToken = prefs.getString("accessToken", null),
         selfVerified = prefs.getBoolean("selfVerified", false),
       )
     }

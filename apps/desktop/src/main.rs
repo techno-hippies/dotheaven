@@ -8,8 +8,6 @@ mod discover;
 mod heaven_http_client;
 mod icons;
 mod library;
-mod lit_action_registry;
-mod lit_wallet;
 mod load_storage;
 mod lyrics;
 mod music_db;

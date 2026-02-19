@@ -312,7 +312,7 @@ app.post('/verify-dm', async (c) => {
  *
  * Body: { claimId: string, address: string, signature: string, timestamp: number, nonce: string }
  *
- * Requires claimant signature from the claimed PKP address.
+ * Requires claimant signature from the claimed address.
  */
 app.post('/complete', async (c) => {
   const body = await c.req.json<{

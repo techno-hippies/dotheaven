@@ -13,13 +13,13 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 
 const API_BASE = process.env.API_BASE || 'http://localhost:8787'
-const TEST_USER_PKP = '0x1234567890abcdef1234567890abcdef12345678'
+const TEST_USER_ADDRESS = '0x1234567890abcdef1234567890abcdef12345678'
 const IMAGES_DIR = '/home/t42/Desktop/test-images'
 
 async function main() {
   console.log('=== Photo Pipeline Test ===')
   console.log(`API: ${API_BASE}`)
-  console.log(`User: ${TEST_USER_PKP}`)
+  console.log(`User: ${TEST_USER_ADDRESS}`)
   console.log(`Images: ${IMAGES_DIR}`)
   console.log('')
 
@@ -56,7 +56,7 @@ async function main() {
   const pipelineRes = await fetch(`${API_BASE}/api/photos/pipeline`, {
     method: 'POST',
     headers: {
-      'X-User-Pkp': TEST_USER_PKP,
+      'X-User-Address': TEST_USER_ADDRESS,
     },
     body: formData,
   })
@@ -96,7 +96,7 @@ async function main() {
   if (result.jobId) {
     console.log('\n5. Checking job status...')
     const jobRes = await fetch(`${API_BASE}/api/photos/pipeline/${result.jobId}`, {
-      headers: { 'X-User-Pkp': TEST_USER_PKP },
+      headers: { 'X-User-Address': TEST_USER_ADDRESS },
     })
     const jobData = await jobRes.json()
     console.log('   Job:', JSON.stringify(jobData, null, 2))

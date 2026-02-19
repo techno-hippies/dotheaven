@@ -8,6 +8,7 @@ Port of MegaETH contracts to Tempo. No AA contracts — Tempo handles account ab
 ## Contracts
 - Naming/records: `RegistryV1.sol`, `RecordsV1.sol`
 - Profile: `ProfileV2.sol`
+- Social: `FollowV1.sol`
 - Music/activity: `ScrobbleV4.sol`
 - Playlists: `PlaylistV1.sol`, `PlaylistShareV1.sol`
 - Content: `ContentRegistry.sol`

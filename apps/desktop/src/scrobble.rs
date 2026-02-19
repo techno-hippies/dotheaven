@@ -11,7 +11,7 @@ mod tempo;
 const DEFAULT_TEMPO_RPC_URL: &str = "https://rpc.moderato.tempo.xyz";
 const DEFAULT_TEMPO_FEE_PAYER_URL: &str = "https://sponsor.moderato.tempo.xyz";
 const DEFAULT_TEMPO_CHAIN_ID: u64 = 42431;
-const DEFAULT_TEMPO_SCROBBLE_V4: &str = "0x07B8BdE8BaD74DC974F783AA71C7C51d6B37C363";
+const DEFAULT_TEMPO_SCROBBLE_V4: &str = "0xe00e82086480E61AaC8d5ad8B05B56A582dD0000";
 
 #[derive(Debug, Clone)]
 pub struct TempoScrobbleSession {
@@ -152,7 +152,7 @@ impl ScrobbleService {
         }
 
         let wallet_address = auth
-            .primary_wallet_address()
+            .wallet_address()
             .ok_or("Missing authenticated wallet address for Tempo scrobble.")?
             .to_string();
 

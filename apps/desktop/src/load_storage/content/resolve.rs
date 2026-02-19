@@ -140,12 +140,8 @@ impl LoadStorageService {
         auth: &PersistedAuth,
         track_id_hex: &str,
     ) -> Result<Value, String> {
-        if auth.provider_kind() != crate::auth::AuthProviderKind::TempoPasskey {
-            self.ensure_lit_ready(auth)?;
-        }
-
         let owner = auth
-            .primary_wallet_address()
+            .wallet_address()
             .ok_or("Missing wallet address in auth")?;
         let owner_norm = owner.to_lowercase();
 
@@ -155,53 +151,24 @@ impl LoadStorageService {
         let content_id = compute_content_id(track_id, owner)?;
         let content_id_hex = to_hex_prefixed(content_id.as_slice()).to_lowercase();
 
-        if auth.provider_kind() == crate::auth::AuthProviderKind::TempoPasskey {
-            if let Some((piece_cid, register_version)) =
-                resolve_tempo_offchain_piece_cid(&owner_norm, &track_id_norm, &content_id_hex)?
-            {
-                return Ok(json!({
-                    "trackId": track_id_norm,
-                    "contentId": content_id_hex,
-                    "pieceCid": piece_cid,
-                    "gatewayUrl": format!("{}/resolve/{}", load_gateway_url(), piece_cid),
-                    "registerVersion": register_version,
-                    "txHash": Value::Null,
-                    "blockNumber": Value::Null,
-                }));
-            }
-            return Err(format!(
-                "No offchain Tempo upload found for trackId={} contentId={} owner={}",
-                track_id_norm, content_id_hex, owner_norm
-            ));
+        if let Some((piece_cid, register_version)) =
+            resolve_tempo_offchain_piece_cid(&owner_norm, &track_id_norm, &content_id_hex)?
+        {
+            return Ok(json!({
+                "trackId": track_id_norm,
+                "contentId": content_id_hex,
+                "pieceCid": piece_cid,
+                "gatewayUrl": format!("{}/resolve/{}", load_gateway_url(), piece_cid),
+                "registerVersion": register_version,
+                "txHash": Value::Null,
+                "blockNumber": Value::Null,
+            }));
         }
 
-        let entry = fetch_content_registry_entry(&content_id_hex)?;
-        if !entry.active {
-            return Err(format!(
-                "Content is not active on ContentRegistry (contentId={content_id_hex})"
-            ));
-        }
-        if entry.owner.to_lowercase() != owner_norm {
-            return Err(format!(
-                "Content owner mismatch for contentId={content_id_hex} (owner={}, expected={})",
-                entry.owner, owner
-            ));
-        }
-        if entry.piece_cid.is_empty() {
-            return Err(format!(
-                "Content found but pieceCid is empty (contentId={content_id_hex})"
-            ));
-        }
-
-        Ok(json!({
-            "trackId": track_id_norm,
-            "contentId": content_id_hex,
-            "pieceCid": entry.piece_cid,
-            "gatewayUrl": format!("{}/resolve/{}", load_gateway_url(), entry.piece_cid),
-            "registerVersion": "onchain-recovered",
-            "txHash": Value::Null,
-            "blockNumber": Value::Null,
-        }))
+        Err(format!(
+            "No offchain Tempo upload found for trackId={} contentId={} owner={}",
+            track_id_norm, content_id_hex, owner_norm
+        ))
     }
 
     pub fn resolve_registered_content_for_track(
@@ -210,10 +177,6 @@ impl LoadStorageService {
         file_path: &str,
         track: TrackMetaInput,
     ) -> Result<Value, String> {
-        if auth.provider_kind() != crate::auth::AuthProviderKind::TempoPasskey {
-            self.ensure_lit_ready(auth)?;
-        }
-
         let fallback = infer_title_artist_album(file_path);
         let title = track
             .title
@@ -250,7 +213,7 @@ impl LoadStorageService {
             .map(str::to_string);
 
         let owner = auth
-            .primary_wallet_address()
+            .wallet_address()
             .ok_or("Missing wallet address in auth")?;
         let owner_norm = owner.to_lowercase();
 
@@ -259,53 +222,24 @@ impl LoadStorageService {
         let content_id_hex = to_hex_prefixed(content_id.as_slice()).to_lowercase();
         let track_id_hex = to_hex_prefixed(track_id.as_slice()).to_lowercase();
 
-        if auth.provider_kind() == crate::auth::AuthProviderKind::TempoPasskey {
-            if let Some((piece_cid, register_version)) =
-                resolve_tempo_offchain_piece_cid(&owner_norm, &track_id_hex, &content_id_hex)?
-            {
-                return Ok(json!({
-                    "trackId": track_id_hex,
-                    "contentId": content_id_hex,
-                    "pieceCid": piece_cid,
-                    "gatewayUrl": format!("{}/resolve/{}", load_gateway_url(), piece_cid),
-                    "registerVersion": register_version,
-                    "txHash": Value::Null,
-                    "blockNumber": Value::Null,
-                }));
-            }
-            return Err(format!(
-                "No offchain Tempo upload found for trackId={} contentId={} owner={}",
-                track_id_hex, content_id_hex, owner_norm
-            ));
+        if let Some((piece_cid, register_version)) =
+            resolve_tempo_offchain_piece_cid(&owner_norm, &track_id_hex, &content_id_hex)?
+        {
+            return Ok(json!({
+                "trackId": track_id_hex,
+                "contentId": content_id_hex,
+                "pieceCid": piece_cid,
+                "gatewayUrl": format!("{}/resolve/{}", load_gateway_url(), piece_cid),
+                "registerVersion": register_version,
+                "txHash": Value::Null,
+                "blockNumber": Value::Null,
+            }));
         }
 
-        let entry = fetch_content_registry_entry(&content_id_hex)?;
-        if !entry.active {
-            return Err(format!(
-                "Content is not active on ContentRegistry (contentId={content_id_hex})"
-            ));
-        }
-        if entry.owner.to_lowercase() != owner_norm {
-            return Err(format!(
-                "Content owner mismatch for contentId={content_id_hex} (owner={}, expected={})",
-                entry.owner, owner
-            ));
-        }
-        if entry.piece_cid.is_empty() {
-            return Err(format!(
-                "Content found but pieceCid is empty (contentId={content_id_hex})"
-            ));
-        }
-
-        Ok(json!({
-            "trackId": track_id_hex,
-            "contentId": content_id_hex,
-            "pieceCid": entry.piece_cid,
-            "gatewayUrl": format!("{}/resolve/{}", load_gateway_url(), entry.piece_cid),
-            "registerVersion": "onchain-recovered",
-            "txHash": Value::Null,
-            "blockNumber": Value::Null,
-        }))
+        Err(format!(
+            "No offchain Tempo upload found for trackId={} contentId={} owner={}",
+            track_id_hex, content_id_hex, owner_norm
+        ))
     }
 
     pub fn resolve_shared_track_metadata(

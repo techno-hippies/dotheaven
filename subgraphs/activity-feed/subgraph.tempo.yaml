@@ -39,6 +39,40 @@ dataSources:
           handler: handleTrackUpdatedV4
       file: ./src/scrobble-v4.ts
   - kind: ethereum
+    name: ScrobbleV4New
+    network: tempo-moderato
+    source:
+      address: "0xe00e82086480E61AaC8d5ad8B05B56A582dD0000"
+      abi: ScrobbleV4
+      startBlock: 5570674
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Track
+        - Scrobble
+        - UserVerification
+        - UserListeningStats
+        - UserArtistStats
+      abis:
+        - name: ScrobbleV4
+          file: ./abis/ScrobbleV4.json
+      eventHandlers:
+        - event: TrackRegistered(indexed bytes32,indexed uint8,bytes32,indexed bytes32,uint64,uint32)
+          handler: handleTrackRegisteredV4
+        - event: TrackCoverSet(indexed bytes32,string)
+          handler: handleTrackCoverSetV4
+        - event: TrackLyricsSet(indexed bytes32,string)
+          handler: handleTrackLyricsSetV4
+        - event: TrackLyricsOverwritten(indexed bytes32,string)
+          handler: handleTrackLyricsOverwrittenV4
+        - event: Scrobbled(indexed address,indexed bytes32,uint64)
+          handler: handleScrobbledV4
+        - event: TrackUpdated(indexed bytes32,indexed bytes32)
+          handler: handleTrackUpdatedV4
+      file: ./src/scrobble-v4.ts
+  - kind: ethereum
     name: ContentRegistry
     network: tempo-moderato
     source:

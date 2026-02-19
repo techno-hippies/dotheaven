@@ -180,24 +180,6 @@ export class PlaylistTracksSet__Params {
   }
 }
 
-export class SponsorUpdated extends ethereum.Event {
-  get params(): SponsorUpdated__Params {
-    return new SponsorUpdated__Params(this);
-  }
-}
-
-export class SponsorUpdated__Params {
-  _event: SponsorUpdated;
-
-  constructor(event: SponsorUpdated) {
-    this._event = event;
-  }
-
-  get newSponsor(): Address {
-    return this._event.parameters[0].value.toAddress();
-  }
-}
-
 export class PlaylistV1__getPlaylistResult {
   value0: Address;
   value1: i32;
@@ -451,18 +433,16 @@ export class PlaylistV1 extends ethereum.SmartContract {
     return ethereum.CallResult.fromValue(value[0].toI32());
   }
 
-  createPlaylistFor(
-    playlistOwner: Address,
+  createPlaylist(
     name: string,
     coverCid: string,
     visibility: i32,
     trackIds: Array<Bytes>,
   ): Bytes {
     let result = super.call(
-      "createPlaylistFor",
-      "createPlaylistFor(address,string,string,uint8,bytes32[]):(bytes32)",
+      "createPlaylist",
+      "createPlaylist(string,string,uint8,bytes32[]):(bytes32)",
       [
-        ethereum.Value.fromAddress(playlistOwner),
         ethereum.Value.fromString(name),
         ethereum.Value.fromString(coverCid),
         ethereum.Value.fromUnsignedBigInt(BigInt.fromI32(visibility)),
@@ -473,18 +453,16 @@ export class PlaylistV1 extends ethereum.SmartContract {
     return result[0].toBytes();
   }
 
-  try_createPlaylistFor(
-    playlistOwner: Address,
+  try_createPlaylist(
     name: string,
     coverCid: string,
     visibility: i32,
     trackIds: Array<Bytes>,
   ): ethereum.CallResult<Bytes> {
     let result = super.tryCall(
-      "createPlaylistFor",
-      "createPlaylistFor(address,string,string,uint8,bytes32[]):(bytes32)",
+      "createPlaylist",
+      "createPlaylist(string,string,uint8,bytes32[]):(bytes32)",
       [
-        ethereum.Value.fromAddress(playlistOwner),
         ethereum.Value.fromString(name),
         ethereum.Value.fromString(coverCid),
         ethereum.Value.fromUnsignedBigInt(BigInt.fromI32(visibility)),
@@ -621,40 +599,6 @@ export class PlaylistV1 extends ethereum.SmartContract {
       ),
     );
   }
-
-  sponsor(): Address {
-    let result = super.call("sponsor", "sponsor():(address)", []);
-
-    return result[0].toAddress();
-  }
-
-  try_sponsor(): ethereum.CallResult<Address> {
-    let result = super.tryCall("sponsor", "sponsor():(address)", []);
-    if (result.reverted) {
-      return new ethereum.CallResult();
-    }
-    let value = result.value;
-    return ethereum.CallResult.fromValue(value[0].toAddress());
-  }
-
-  userNonces(param0: Address): BigInt {
-    let result = super.call("userNonces", "userNonces(address):(uint256)", [
-      ethereum.Value.fromAddress(param0),
-    ]);
-
-    return result[0].toBigInt();
-  }
-
-  try_userNonces(param0: Address): ethereum.CallResult<BigInt> {
-    let result = super.tryCall("userNonces", "userNonces(address):(uint256)", [
-      ethereum.Value.fromAddress(param0),
-    ]);
-    if (result.reverted) {
-      return new ethereum.CallResult();
-    }
-    let value = result.value;
-    return ethereum.CallResult.fromValue(value[0].toBigInt());
-  }
 }
 
 export class ConstructorCall extends ethereum.Call {
@@ -673,10 +617,6 @@ export class ConstructorCall__Inputs {
   constructor(call: ConstructorCall) {
     this._call = call;
   }
-
-  get _sponsor(): Address {
-    return this._call.inputValues[0].value.toAddress();
-  }
 }
 
 export class ConstructorCall__Outputs {
@@ -687,82 +627,44 @@ export class ConstructorCall__Outputs {
   }
 }
 
-export class ConsumeNonceCall extends ethereum.Call {
-  get inputs(): ConsumeNonceCall__Inputs {
-    return new ConsumeNonceCall__Inputs(this);
+export class CreatePlaylistCall extends ethereum.Call {
+  get inputs(): CreatePlaylistCall__Inputs {
+    return new CreatePlaylistCall__Inputs(this);
   }
 
-  get outputs(): ConsumeNonceCall__Outputs {
-    return new ConsumeNonceCall__Outputs(this);
+  get outputs(): CreatePlaylistCall__Outputs {
+    return new CreatePlaylistCall__Outputs(this);
   }
 }
 
-export class ConsumeNonceCall__Inputs {
-  _call: ConsumeNonceCall;
+export class CreatePlaylistCall__Inputs {
+  _call: CreatePlaylistCall;
 
-  constructor(call: ConsumeNonceCall) {
+  constructor(call: CreatePlaylistCall) {
     this._call = call;
-  }
-
-  get user(): Address {
-    return this._call.inputValues[0].value.toAddress();
-  }
-
-  get expectedNonce(): BigInt {
-    return this._call.inputValues[1].value.toBigInt();
-  }
-}
-
-export class ConsumeNonceCall__Outputs {
-  _call: ConsumeNonceCall;
-
-  constructor(call: ConsumeNonceCall) {
-    this._call = call;
-  }
-}
-
-export class CreatePlaylistForCall extends ethereum.Call {
-  get inputs(): CreatePlaylistForCall__Inputs {
-    return new CreatePlaylistForCall__Inputs(this);
-  }
-
-  get outputs(): CreatePlaylistForCall__Outputs {
-    return new CreatePlaylistForCall__Outputs(this);
-  }
-}
-
-export class CreatePlaylistForCall__Inputs {
-  _call: CreatePlaylistForCall;
-
-  constructor(call: CreatePlaylistForCall) {
-    this._call = call;
-  }
-
-  get playlistOwner(): Address {
-    return this._call.inputValues[0].value.toAddress();
   }
 
   get name(): string {
-    return this._call.inputValues[1].value.toString();
+    return this._call.inputValues[0].value.toString();
   }
 
   get coverCid(): string {
-    return this._call.inputValues[2].value.toString();
+    return this._call.inputValues[1].value.toString();
   }
 
   get visibility(): i32 {
-    return this._call.inputValues[3].value.toI32();
+    return this._call.inputValues[2].value.toI32();
   }
 
   get trackIds(): Array<Bytes> {
-    return this._call.inputValues[4].value.toBytesArray();
+    return this._call.inputValues[3].value.toBytesArray();
   }
 }
 
-export class CreatePlaylistForCall__Outputs {
-  _call: CreatePlaylistForCall;
+export class CreatePlaylistCall__Outputs {
+  _call: CreatePlaylistCall;
 
-  constructor(call: CreatePlaylistForCall) {
+  constructor(call: CreatePlaylistCall) {
     this._call = call;
   }
 
@@ -797,36 +699,6 @@ export class DeletePlaylistCall__Outputs {
   _call: DeletePlaylistCall;
 
   constructor(call: DeletePlaylistCall) {
-    this._call = call;
-  }
-}
-
-export class SetSponsorCall extends ethereum.Call {
-  get inputs(): SetSponsorCall__Inputs {
-    return new SetSponsorCall__Inputs(this);
-  }
-
-  get outputs(): SetSponsorCall__Outputs {
-    return new SetSponsorCall__Outputs(this);
-  }
-}
-
-export class SetSponsorCall__Inputs {
-  _call: SetSponsorCall;
-
-  constructor(call: SetSponsorCall) {
-    this._call = call;
-  }
-
-  get newSponsor(): Address {
-    return this._call.inputValues[0].value.toAddress();
-  }
-}
-
-export class SetSponsorCall__Outputs {
-  _call: SetSponsorCall;
-
-  constructor(call: SetSponsorCall) {
     this._call = call;
   }
 }

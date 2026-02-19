@@ -26,12 +26,12 @@ object FollowListApi {
   private const val DEFAULT_TEMPO_SUBGRAPH_ACTIVITY =
     "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo"
   private const val LEGACY_SUBGRAPH_ACTIVITY =
-    "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/14.0.0/gn"
+    "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo"
 
   private const val DEFAULT_TEMPO_SUBGRAPH_PROFILES =
     "https://graph.dotheaven.org/subgraphs/name/dotheaven/profiles-tempo"
   private const val LEGACY_SUBGRAPH_PROFILES =
-    "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-profiles/1.0.0/gn"
+    "https://graph.dotheaven.org/subgraphs/name/dotheaven/profiles-tempo"
 
   private val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
   private val http = OkHttpClient()

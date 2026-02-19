@@ -1,7 +1,8 @@
 package com.pirate.app.profile
 
+import android.content.Context
 import com.pirate.app.arweave.Ans104DataItem
-import com.pirate.app.tempo.SessionKeyManager
+import com.pirate.app.security.LocalSecp256k1Store
 
 data class ProfileAvatarUploadResult(
   val success: Boolean,
@@ -14,8 +15,9 @@ object ProfileAvatarUploadApi {
   private const val MAX_UPLOAD_BYTES = 1 * 1024 * 1024 // Current loaded-turbo-api freeUploadLimitBytes.
 
   fun uploadAvatarJpeg(
+    appContext: Context,
+    ownerEthAddress: String,
     jpegBytes: ByteArray,
-    sessionKey: SessionKeyManager.SessionKey,
   ): ProfileAvatarUploadResult {
     if (jpegBytes.isEmpty()) {
       return ProfileAvatarUploadResult(success = false, error = "Avatar image is empty.")
@@ -25,6 +27,7 @@ object ProfileAvatarUploadApi {
     }
 
     return runCatching {
+      val identity = LocalSecp256k1Store.getOrCreateIdentity(appContext, ownerEthAddress)
       val build = Ans104DataItem.buildAndSign(
         payload = jpegBytes,
         tags = listOf(
@@ -33,7 +36,7 @@ object ProfileAvatarUploadApi {
           Ans104DataItem.Tag(name = "Heaven-Type", value = "avatar"),
           Ans104DataItem.Tag(name = "Upload-Source", value = "heaven-android"),
         ),
-        sessionKey = sessionKey,
+        signingKeyPair = identity.keyPair,
       )
       val id = Ans104DataItem.uploadSignedDataItem(build.bytes).trim()
       if (id.isEmpty()) throw IllegalStateException("Avatar upload returned an empty dataitem id.")

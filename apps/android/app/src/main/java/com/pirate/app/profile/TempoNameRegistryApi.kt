@@ -132,7 +132,7 @@ object TempoNameRegistryApi {
       val minimumGasLimit = if (bootstrapSessionKey) GAS_LIMIT_REGISTER_WITH_SESSION_BOOTSTRAP else GAS_LIMIT_REGISTER
       val gasLimit = withRegisterGasBuffer(estimated = estimatedGasLimit, minimum = minimumGasLimit)
       val bootstrappedSessionKey =
-        if (bootstrapSessionKey) SessionKeyManager.generate(ownerAddress = account.address) else null
+        if (bootstrapSessionKey) SessionKeyManager.generate(activity = activity, ownerAddress = account.address) else null
       val signedKeyAuthorization =
         if (bootstrappedSessionKey != null) {
           val keyAuthDigest = SessionKeyManager.buildKeyAuthDigest(bootstrappedSessionKey)

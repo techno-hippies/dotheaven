@@ -1,0 +1,51 @@
+{
+  "generatedAt": "2026-02-19T13:46:13.657Z",
+  "language": "es",
+  "songs": [
+    {
+      "iswc": "T0101545054",
+      "geniusSongId": 1063,
+      "title": "Bohemian Rhapsody",
+      "artist": "Queen",
+      "referentCount": 3,
+      "output": "services/heaven-api/generated/study-sets/2026-02-19/T0101545054-bohemian-rhapsody-es-v2.json",
+      "counts": {
+        "total": 13,
+        "sayItBack": 6,
+        "translationMcq": 4,
+        "triviaMcq": 3,
+        "triviaWithGenius": 3
+      }
+    },
+    {
+      "iswc": "T0112199333",
+      "geniusSongId": 110982,
+      "title": "Toxic",
+      "artist": "Britney Spears",
+      "referentCount": 3,
+      "output": "services/heaven-api/generated/study-sets/2026-02-19/T0112199333-toxic-es-v2.json",
+      "counts": {
+        "total": 13,
+        "sayItBack": 6,
+        "translationMcq": 4,
+        "triviaMcq": 3,
+        "triviaWithGenius": 3
+      }
+    },
+    {
+      "iswc": "T0101817440",
+      "geniusSongId": 75243,
+      "title": "Another One Bites the Dust",
+      "artist": "Queen",
+      "referentCount": 3,
+      "output": "services/heaven-api/generated/study-sets/2026-02-19/T0101817440-another-one-bites-the-dust-es-v2.json",
+      "counts": {
+        "total": 13,
+        "sayItBack": 6,
+        "translationMcq": 4,
+        "triviaMcq": 3,
+        "triviaWithGenius": 3
+      }
+    }
+  ]
+}

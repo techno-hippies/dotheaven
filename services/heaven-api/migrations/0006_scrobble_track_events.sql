@@ -5,7 +5,7 @@
 CREATE TABLE IF NOT EXISTS scrobble_track_events (
   id TEXT PRIMARY KEY,
 
-  user_pkp TEXT NOT NULL,
+  user_address TEXT NOT NULL,
   played_at INTEGER NOT NULL,
   source TEXT,
 
@@ -34,7 +34,7 @@ CREATE INDEX IF NOT EXISTS idx_ste_track_key_time
 
 -- Per-user history
 CREATE INDEX IF NOT EXISTS idx_ste_user_time
-  ON scrobble_track_events(user_pkp, played_at);
+  ON scrobble_track_events(user_address, played_at);
 
 -- Cross-user by canonical recording (when MBIDs are available)
 CREATE INDEX IF NOT EXISTS idx_ste_mbid_time

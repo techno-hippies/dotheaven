@@ -4,9 +4,6 @@ Sovereign social + music network with onchain identity, scrobbling, publishing, 
 
 ## Current Product Architecture (February 2026)
 
-We removed the old Tauri desktop path and moved desktop to a native Rust + GPUI client.
-React Native has been removed from this repository.
-
 Mobile is native-first:
 - Android is Kotlin + Jetpack Compose (`apps/android`).
 - iOS will be a native Swift app (planned).
@@ -29,10 +26,12 @@ dotheaven/
 │   ├── desktop/          # Native desktop app (Rust + GPUI)
 │   └── android/          # Native Android app (Kotlin + Compose)
 ├── packages/             # Shared TS libs (core/i18n/platform/ui)
-├── contracts/            # Smart contracts (MegaETH/Celo/Base)
+├── contracts/
+│   ├── tempo/            # Active protocol contracts (Tempo chain)
+│   ├── megaeth-legacy/   # Old MegaETH contracts (no longer active)
+│   └── celo/             # Self.xyz verification (Celo)
 ├── services/             # Workers/APIs/voice/gateway/relayers
-├── subgraphs/            # Indexers
-└── lit-actions/          # Lit protocol actions
+└── subgraphs/            # Indexers
 ```
 
 ## Mega Early Alpha Release Plan

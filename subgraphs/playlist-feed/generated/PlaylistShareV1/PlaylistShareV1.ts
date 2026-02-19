@@ -10,6 +10,24 @@ import {
   BigInt,
 } from "@graphprotocol/graph-ts";
 
+export class OwnerUpdated extends ethereum.Event {
+  get params(): OwnerUpdated__Params {
+    return new OwnerUpdated__Params(this);
+  }
+}
+
+export class OwnerUpdated__Params {
+  _event: OwnerUpdated;
+
+  constructor(event: OwnerUpdated) {
+    this._event = event;
+  }
+
+  get newOwner(): Address {
+    return this._event.parameters[0].value.toAddress();
+  }
+}
+
 export class PlaylistShared extends ethereum.Event {
   get params(): PlaylistShared__Params {
     return new PlaylistShared__Params(this);
@@ -94,8 +112,264 @@ export class PlaylistUnshared__Params {
   }
 }
 
+export class PlaylistShareV1__sharesResult {
+  value0: BigInt;
+  value1: BigInt;
+  value2: Bytes;
+  value3: BigInt;
+  value4: boolean;
+
+  constructor(
+    value0: BigInt,
+    value1: BigInt,
+    value2: Bytes,
+    value3: BigInt,
+    value4: boolean,
+  ) {
+    this.value0 = value0;
+    this.value1 = value1;
+    this.value2 = value2;
+    this.value3 = value3;
+    this.value4 = value4;
+  }
+
+  toMap(): TypedMap<string, ethereum.Value> {
+    let map = new TypedMap<string, ethereum.Value>();
+    map.set("value0", ethereum.Value.fromUnsignedBigInt(this.value0));
+    map.set("value1", ethereum.Value.fromUnsignedBigInt(this.value1));
+    map.set("value2", ethereum.Value.fromFixedBytes(this.value2));
+    map.set("value3", ethereum.Value.fromUnsignedBigInt(this.value3));
+    map.set("value4", ethereum.Value.fromBoolean(this.value4));
+    return map;
+  }
+
+  getPlaylistVersion(): BigInt {
+    return this.value0;
+  }
+
+  getTrackCount(): BigInt {
+    return this.value1;
+  }
+
+  getTracksHash(): Bytes {
+    return this.value2;
+  }
+
+  getSharedAt(): BigInt {
+    return this.value3;
+  }
+
+  getGranted(): boolean {
+    return this.value4;
+  }
+}
+
 export class PlaylistShareV1 extends ethereum.SmartContract {
   static bind(address: Address): PlaylistShareV1 {
     return new PlaylistShareV1("PlaylistShareV1", address);
+  }
+
+  owner(): Address {
+    let result = super.call("owner", "owner():(address)", []);
+
+    return result[0].toAddress();
+  }
+
+  try_owner(): ethereum.CallResult<Address> {
+    let result = super.tryCall("owner", "owner():(address)", []);
+    if (result.reverted) {
+      return new ethereum.CallResult();
+    }
+    let value = result.value;
+    return ethereum.CallResult.fromValue(value[0].toAddress());
+  }
+
+  playlistV1(): Address {
+    let result = super.call("playlistV1", "playlistV1():(address)", []);
+
+    return result[0].toAddress();
+  }
+
+  try_playlistV1(): ethereum.CallResult<Address> {
+    let result = super.tryCall("playlistV1", "playlistV1():(address)", []);
+    if (result.reverted) {
+      return new ethereum.CallResult();
+    }
+    let value = result.value;
+    return ethereum.CallResult.fromValue(value[0].toAddress());
+  }
+
+  shares(param0: Bytes, param1: Address): PlaylistShareV1__sharesResult {
+    let result = super.call(
+      "shares",
+      "shares(bytes32,address):(uint32,uint32,bytes32,uint64,bool)",
+      [
+        ethereum.Value.fromFixedBytes(param0),
+        ethereum.Value.fromAddress(param1),
+      ],
+    );
+
+    return new PlaylistShareV1__sharesResult(
+      result[0].toBigInt(),
+      result[1].toBigInt(),
+      result[2].toBytes(),
+      result[3].toBigInt(),
+      result[4].toBoolean(),
+    );
+  }
+
+  try_shares(
+    param0: Bytes,
+    param1: Address,
+  ): ethereum.CallResult<PlaylistShareV1__sharesResult> {
+    let result = super.tryCall(
+      "shares",
+      "shares(bytes32,address):(uint32,uint32,bytes32,uint64,bool)",
+      [
+        ethereum.Value.fromFixedBytes(param0),
+        ethereum.Value.fromAddress(param1),
+      ],
+    );
+    if (result.reverted) {
+      return new ethereum.CallResult();
+    }
+    let value = result.value;
+    return ethereum.CallResult.fromValue(
+      new PlaylistShareV1__sharesResult(
+        value[0].toBigInt(),
+        value[1].toBigInt(),
+        value[2].toBytes(),
+        value[3].toBigInt(),
+        value[4].toBoolean(),
+      ),
+    );
+  }
+}
+
+export class ConstructorCall extends ethereum.Call {
+  get inputs(): ConstructorCall__Inputs {
+    return new ConstructorCall__Inputs(this);
+  }
+
+  get outputs(): ConstructorCall__Outputs {
+    return new ConstructorCall__Outputs(this);
+  }
+}
+
+export class ConstructorCall__Inputs {
+  _call: ConstructorCall;
+
+  constructor(call: ConstructorCall) {
+    this._call = call;
+  }
+
+  get _playlistV1(): Address {
+    return this._call.inputValues[0].value.toAddress();
+  }
+}
+
+export class ConstructorCall__Outputs {
+  _call: ConstructorCall;
+
+  constructor(call: ConstructorCall) {
+    this._call = call;
+  }
+}
+
+export class SharePlaylistCall extends ethereum.Call {
+  get inputs(): SharePlaylistCall__Inputs {
+    return new SharePlaylistCall__Inputs(this);
+  }
+
+  get outputs(): SharePlaylistCall__Outputs {
+    return new SharePlaylistCall__Outputs(this);
+  }
+}
+
+export class SharePlaylistCall__Inputs {
+  _call: SharePlaylistCall;
+
+  constructor(call: SharePlaylistCall) {
+    this._call = call;
+  }
+
+  get playlistId(): Bytes {
+    return this._call.inputValues[0].value.toBytes();
+  }
+
+  get grantee(): Address {
+    return this._call.inputValues[1].value.toAddress();
+  }
+}
+
+export class SharePlaylistCall__Outputs {
+  _call: SharePlaylistCall;
+
+  constructor(call: SharePlaylistCall) {
+    this._call = call;
+  }
+}
+
+export class TransferOwnershipCall extends ethereum.Call {
+  get inputs(): TransferOwnershipCall__Inputs {
+    return new TransferOwnershipCall__Inputs(this);
+  }
+
+  get outputs(): TransferOwnershipCall__Outputs {
+    return new TransferOwnershipCall__Outputs(this);
+  }
+}
+
+export class TransferOwnershipCall__Inputs {
+  _call: TransferOwnershipCall;
+
+  constructor(call: TransferOwnershipCall) {
+    this._call = call;
+  }
+
+  get newOwner(): Address {
+    return this._call.inputValues[0].value.toAddress();
+  }
+}
+
+export class TransferOwnershipCall__Outputs {
+  _call: TransferOwnershipCall;
+
+  constructor(call: TransferOwnershipCall) {
+    this._call = call;
+  }
+}
+
+export class UnsharePlaylistCall extends ethereum.Call {
+  get inputs(): UnsharePlaylistCall__Inputs {
+    return new UnsharePlaylistCall__Inputs(this);
+  }
+
+  get outputs(): UnsharePlaylistCall__Outputs {
+    return new UnsharePlaylistCall__Outputs(this);
+  }
+}
+
+export class UnsharePlaylistCall__Inputs {
+  _call: UnsharePlaylistCall;
+
+  constructor(call: UnsharePlaylistCall) {
+    this._call = call;
+  }
+
+  get playlistId(): Bytes {
+    return this._call.inputValues[0].value.toBytes();
+  }
+
+  get grantee(): Address {
+    return this._call.inputValues[1].value.toAddress();
+  }
+}
+
+export class UnsharePlaylistCall__Outputs {
+  _call: UnsharePlaylistCall;
+
+  constructor(call: UnsharePlaylistCall) {
+    this._call = call;
   }
 }

@@ -202,11 +202,11 @@ interface MealAnalyzeResponse {
 // ============================================================================
 
 const mealAuthMiddleware = async (c: any, next: any) => {
-  // Dev mode: allow X-User-Pkp header for testing
+  // Dev mode: allow X-User-Address header for testing
   if (c.env.ENVIRONMENT === 'development') {
-    const devPkp = c.req.header('X-User-Pkp')
-    if (devPkp) {
-      c.set('userPkp' as never, devPkp.toLowerCase())
+    const devAddress = c.req.header('X-User-Address')
+    if (devAddress) {
+      c.set('userAddress' as never, devAddress.toLowerCase())
       return next()
     }
   }
@@ -221,9 +221,9 @@ const mealAuthMiddleware = async (c: any, next: any) => {
     if (c.env.ENVIRONMENT === 'development') {
       const parts = token.split('.')
       if (parts.length !== 3) throw new Error('Invalid token format')
-      const payload = JSON.parse(atob(parts[1])) as { pkp: string }
-      if (!payload.pkp) throw new Error('Missing pkp in token')
-      c.set('userPkp' as never, payload.pkp.toLowerCase())
+      const payload = JSON.parse(atob(parts[1])) as { address: string }
+      if (!payload.address) throw new Error('Missing address in token')
+      c.set('userAddress' as never, payload.address.toLowerCase())
     } else {
       return c.json({ success: false, error: 'Production auth not implemented' }, 501)
     }
@@ -441,8 +441,8 @@ IMPORTANT:
 // ============================================================================
 
 app.post('/analyze', async (c) => {
-  const userPkp = c.get('userPkp' as never) as string
-  if (!userPkp) {
+  const userAddress = c.get('userAddress' as never) as string
+  if (!userAddress) {
     return c.json({ success: false, error: 'User not authenticated' } as MealAnalyzeResponse, 401)
   }
 
@@ -515,7 +515,7 @@ app.post('/analyze', async (c) => {
   }
 
   const now = Math.floor(Date.now() / 1000)
-  const userPrefix = userPkp.slice(2, 10)
+  const userPrefix = userAddress.slice(2, 10)
 
   // Read and resize photo (max 512px square, saves storage + API costs)
   const rawBytes = await photoFile.arrayBuffer()
@@ -599,7 +599,7 @@ app.post('/analyze', async (c) => {
   try {
     const analysisData = {
       version: 3,
-      user: userPkp,
+      user: userAddress,
       photoCid,
       capturedAt,
       analyzedAt: now,
@@ -625,11 +625,11 @@ app.post('/analyze', async (c) => {
   // 4. Store in D1 (optional, for history)
   try {
     await c.env.DB.prepare(`
-      INSERT INTO meal_photos (user_pkp, photo_cid, analysis_cid, description,
+      INSERT INTO meal_photos (user_address, photo_cid, analysis_cid, description,
         total_calories, total_protein, total_carbs, total_fat, captured_at, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      userPkp,
+      userAddress,
       photoCid,
       analysisCid || null,
       analysis.description,
@@ -655,7 +655,7 @@ app.post('/analyze', async (c) => {
       const result = await createMealAttestation(
         BASE_SEPOLIA_RELAY_PK,
         BASE_SEPOLIA_RPC,
-        userPkp,
+        userAddress,
         capturedAt,
         0, // source: Phone
         photoCid
@@ -671,7 +671,7 @@ app.post('/analyze', async (c) => {
           const calResult = await createMealCaloriesAttestation(
             BASE_SEPOLIA_RELAY_PK,
             BASE_SEPOLIA_RPC,
-            userPkp,
+            userAddress,
             attestationUid,
             analysis.totals.calories || 0,
             analysis.totals.protein_g || 0,
@@ -719,12 +719,12 @@ app.post('/analyze', async (c) => {
 
 app.get('/history', async (c) => {
   // Dev mode auth
-  let userPkp: string | undefined
+  let userAddress: string | undefined
   if (c.env.ENVIRONMENT === 'development') {
-    userPkp = c.req.header('X-User-Pkp')?.toLowerCase()
+    userAddress = c.req.header('X-User-Address')?.toLowerCase()
   }
 
-  if (!userPkp) {
+  if (!userAddress) {
     return c.json({ error: 'User not authenticated' }, 401)
   }
 
@@ -732,10 +732,10 @@ app.get('/history', async (c) => {
     SELECT photo_cid, analysis_cid, description, total_calories, total_protein,
            total_carbs, total_fat, captured_at, attestation_uid
     FROM meal_photos
-    WHERE user_pkp = ?
+    WHERE user_address = ?
     ORDER BY captured_at DESC
     LIMIT 100
-  `).bind(userPkp).all()
+  `).bind(userAddress).all()
 
   const meals = (rows.results ?? []).map((row: Record<string, unknown>) => ({
     photoCid: row.photo_cid,
@@ -757,8 +757,8 @@ app.get('/history', async (c) => {
 // ============================================================================
 
 app.post('/anime', async (c) => {
-  const userPkp = c.get('userPkp' as never) as string
-  if (!userPkp) {
+  const userAddress = c.get('userAddress' as never) as string
+  if (!userAddress) {
     return c.json({ success: false, error: 'User not authenticated' }, 401)
   }
 
@@ -845,7 +845,7 @@ app.post('/anime', async (c) => {
   const animeBytes = await animeResponse.arrayBuffer()
 
   // Pin anime version to IPFS
-  const userPrefix = userPkp.slice(2, 10)
+  const userPrefix = userAddress.slice(2, 10)
   const now = Math.floor(Date.now() / 1000)
   const animeFileName = `meal-anime-${userPrefix}-${now}.webp`
   const animeCid = await pinBinaryToFilebase(

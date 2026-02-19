@@ -47,7 +47,7 @@ Set with `wrangler secret put ...` in the target environment:
 - `FILEBASE_ACCESS_KEY`, `FILEBASE_SECRET_KEY`, `FILEBASE_BUCKET`
 - `FAL_KEY`
 - `WATERMARK_SECRET`
-- `BASE_SEPOLIA_RELAY_PK` (when EAS relay writes are enabled)
+- `BASE_SEPOLIA_RELAY_PK` (legacy — was for EAS relay writes on Base Sepolia)
 - meal pipeline secrets if meal APIs are enabled
 
 ## Main Route Surfaces

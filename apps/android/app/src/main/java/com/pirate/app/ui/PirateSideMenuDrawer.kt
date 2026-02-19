@@ -6,16 +6,19 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.NavigationDrawerItem
@@ -56,19 +59,23 @@ fun PirateSideMenuDrawer(
   ethAddress: String?,
   heavenName: String?,
   avatarUri: String?,
+  selfVerified: Boolean,
   onNavigateProfile: () -> Unit,
-  onNavigateMusic: () -> Unit,
-  onNavigateSchedule: () -> Unit,
-  onNavigateChat: () -> Unit,
+  onNavigateWallet: () -> Unit,
+  onNavigateNameStore: () -> Unit,
+  onNavigateVerifyIdentity: () -> Unit,
   onNavigatePublish: () -> Unit,
   onSignUp: () -> Unit,
   onSignIn: () -> Unit,
-  onSwitchAccount: () -> Unit,
   onLogout: () -> Unit,
 ) {
-  ModalDrawerSheet {
+  ModalDrawerSheet(
+    modifier = Modifier.fillMaxHeight(),
+  ) {
     Column(
-      modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+      modifier = Modifier
+        .fillMaxHeight()
+        .padding(start = 16.dp, end = 16.dp, top = 12.dp),
       verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
       // Header: avatar + name (clickable → profile) or branding
@@ -106,11 +113,19 @@ fun PirateSideMenuDrawer(
             }
           }
           Column {
-            Text(
-              heavenName ?: shortAddr(ethAddress),
-              fontWeight = FontWeight.Bold,
-              style = MaterialTheme.typography.bodyLarge,
-            )
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+              Text(
+                heavenName ?: shortAddr(ethAddress),
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyLarge,
+              )
+              if (selfVerified) {
+                VerifiedSealBadge(size = 16.dp)
+              }
+            }
             Text(
               "View profile",
               style = MaterialTheme.typography.bodyMedium,
@@ -132,28 +147,46 @@ fun PirateSideMenuDrawer(
       HorizontalDivider()
 
       NavigationDrawerItem(
-        label = { Text("Music") },
+        label = { Text("Wallet") },
         selected = false,
-        onClick = onNavigateMusic,
-        modifier = Modifier.fillMaxWidth(),
-        colors = NavigationDrawerItemDefaults.colors(),
-      )
-      NavigationDrawerItem(
-        label = { Text("Chat") },
-        selected = false,
-        onClick = onNavigateChat,
-        modifier = Modifier.fillMaxWidth(),
-        colors = NavigationDrawerItemDefaults.colors(),
-      )
-      NavigationDrawerItem(
-        label = { Text("Schedule") },
-        selected = false,
-        onClick = onNavigateSchedule,
+        onClick = onNavigateWallet,
         modifier = Modifier.fillMaxWidth(),
         colors = NavigationDrawerItemDefaults.colors(),
       )
 
       if (isAuthenticated) {
+        if (!selfVerified) {
+          Button(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onNavigateVerifyIdentity,
+            enabled = !busy,
+            colors =
+              ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+              ),
+          ) {
+            Icon(Icons.Rounded.Shield, contentDescription = null)
+            Spacer(Modifier.size(8.dp))
+            Text("Verify Identity")
+          }
+          Text(
+            "Required for publishing and short names.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(horizontal = 4.dp),
+          )
+          HorizontalDivider()
+        }
+
+        NavigationDrawerItem(
+          label = { Text("Store") },
+          selected = false,
+          onClick = onNavigateNameStore,
+          modifier = Modifier.fillMaxWidth(),
+          colors = NavigationDrawerItemDefaults.colors(),
+        )
+
         HorizontalDivider()
         NavigationDrawerItem(
           label = { Text("Publish Song") },
@@ -167,13 +200,6 @@ fun PirateSideMenuDrawer(
       Spacer(modifier = Modifier.weight(1f, fill = true))
 
       if (isAuthenticated) {
-        OutlinedButton(
-          modifier = Modifier.fillMaxWidth(),
-          onClick = onSwitchAccount,
-          enabled = !busy,
-        ) {
-          Text("Switch Account")
-        }
         OutlinedButton(
           modifier = Modifier.fillMaxWidth(),
           onClick = onLogout,
@@ -197,8 +223,6 @@ fun PirateSideMenuDrawer(
           Text("Log In")
         }
       }
-
-      Spacer(modifier = Modifier.height(4.dp))
     }
   }
 }

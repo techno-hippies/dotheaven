@@ -1,16 +1,21 @@
 {
   "name": "playlist-feed-subgraph",
   "version": "1.0.0",
-  "description": "Playlist feed subgraph on MegaETH — dotheaven",
+  "description": "Playlist feed subgraph — dotheaven",
   "scripts": {
     "codegen": "graph codegen",
     "build": "graph codegen && graph build",
+    "build:tempo": "graph codegen subgraph.tempo.yaml && graph build subgraph.tempo.yaml",
+    "build:tempo:local": "graph codegen subgraph.tempo.local.yaml && graph build subgraph.tempo.local.yaml",
     "deploy": "graph deploy playlist-feed --node https://api.studio.thegraph.com/deploy/",
     "create-local": "graph create --node http://localhost:8020/ playlist-feed",
     "remove-local": "graph remove --node http://localhost:8020/ playlist-feed",
-    "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 playlist-feed"
+    "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 playlist-feed",
+    "create:tempo:local": "graph create --node http://localhost:8020/ dotheaven/playlist-feed-tempo",
+    "remove:tempo:local": "graph remove --node http://localhost:8020/ dotheaven/playlist-feed-tempo",
+    "deploy:tempo:local": "graph deploy --version-label ${VERSION_LABEL:-local} --node http://localhost:8020/ --ipfs http://localhost:5001 dotheaven/playlist-feed-tempo subgraph.tempo.local.yaml"
   },
-  "keywords": ["the-graph", "megaeth", "playlist", "music"],
+  "keywords": ["the-graph", "tempo", "playlist", "music"],
   "devDependencies": {
     "@graphprotocol/graph-cli": "^0.98.1",
     "@graphprotocol/graph-ts": "^0.35.1"

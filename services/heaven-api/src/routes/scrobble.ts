@@ -140,7 +140,7 @@ async function pinToFilebase(
 const JWT_SECRET = 'heaven-scrobble-secret-change-me' // TODO: Move to env
 
 interface JwtPayload {
-  pkp: string // PKP address
+  address: string // address
   iat: number
   exp: number
 }
@@ -150,11 +150,11 @@ interface JwtPayload {
 app.use('/submit', async (c, next) => {
   const authHeader = c.req.header('Authorization')
 
-  // Dev mode: allow X-User-Pkp header for testing
+  // Dev mode: allow X-User-Address header for testing
   if (c.env.ENVIRONMENT === 'development') {
-    const devPkp = c.req.header('X-User-Pkp')
-    if (devPkp) {
-      c.set('userPkp' as never, devPkp.toLowerCase())
+    const devAddress = c.req.header('X-User-Address')
+    if (devAddress) {
+      c.set('userAddress' as never, devAddress.toLowerCase())
       return next()
     }
   }
@@ -173,8 +173,8 @@ app.use('/submit', async (c, next) => {
       const parts = token.split('.')
       if (parts.length !== 3) throw new Error('Invalid token format')
       const payload = JSON.parse(atob(parts[1])) as JwtPayload
-      if (!payload.pkp) throw new Error('Missing pkp in token')
-      c.set('userPkp' as never, payload.pkp.toLowerCase())
+      if (!payload.address) throw new Error('Missing address in token')
+      c.set('userAddress' as never, payload.address.toLowerCase())
     } else {
       // Production: verify signature
       // TODO: Implement proper verification
@@ -193,8 +193,8 @@ app.use('/submit', async (c, next) => {
 // ============================================================================
 
 app.post('/submit', async (c) => {
-  const userPkp = c.get('userPkp' as never) as string
-  if (!userPkp) {
+  const userAddress = c.get('userAddress' as never) as string
+  if (!userAddress) {
     return c.json({ success: false, error: 'User not authenticated' } as ScrobbleSubmitResponse, 401)
   }
 
@@ -285,7 +285,7 @@ app.post('/submit', async (c) => {
   const batchData = {
     version: 3,
     resolver_version: 'resolver-v1',
-    user: userPkp,
+    user: userAddress,
     startTs: String(startTs),
     endTs: String(endTs),
     count,
@@ -307,7 +307,7 @@ app.post('/submit', async (c) => {
   const batchJson = JSON.stringify(batchData)
 
   // Deterministic filename: content-hash prefix so retries overwrite same S3 object
-  const userPrefix = userPkp.slice(2, 10)
+  const userPrefix = userAddress.slice(2, 10)
   const batchHash = (await sha256Hex(batchJson)).slice(0, 16)
   const fileName = `scrobble-${userPrefix}-${startTs}-${batchHash}.json`
 
@@ -321,7 +321,7 @@ app.post('/submit', async (c) => {
       batchJson,
       fileName
     )
-    console.log(`[Scrobble] Pinned batch for ${userPkp}: ${cid} (${count} tracks)`)
+    console.log(`[Scrobble] Pinned batch for ${userAddress}: ${cid} (${count} tracks)`)
   } catch (err) {
     console.error('[Scrobble] Filebase error:', err)
     return c.json({ success: false, error: 'Failed to pin to IPFS' } as ScrobbleSubmitResponse, 500)
@@ -330,9 +330,9 @@ app.post('/submit', async (c) => {
   // Store batch metadata in D1
   try {
     await c.env.DB.prepare(`
-      INSERT INTO scrobble_batches (user_pkp, cid, track_count, start_ts, end_ts, created_at)
+      INSERT INTO scrobble_batches (user_address, cid, track_count, start_ts, end_ts, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).bind(userPkp, cid, count, startTs, endTs, now).run()
+    `).bind(userAddress, cid, count, startTs, endTs, now).run()
   } catch (err) {
     // Log but don't fail - the IPFS pin is the important part
     console.error('[Scrobble] D1 batch error (non-fatal):', err)
@@ -344,12 +344,12 @@ app.post('/submit', async (c) => {
       enrichedTracks.map(async (et) => {
         const playedAt = et.raw.playedAt
         // ID is independent of CID so retries with different pinnedAt don't create duplicates
-        const idMaterial = `${userPkp}|${playedAt}|${et.track_key}|${et.raw.source ?? ''}`
+        const idMaterial = `${userAddress}|${playedAt}|${et.track_key}|${et.raw.source ?? ''}`
         const id = await sha256Hex(idMaterial)
 
         return c.env.DB.prepare(`
           INSERT OR IGNORE INTO scrobble_track_events (
-            id, user_pkp, played_at, source, track_key,
+            id, user_address, played_at, source, track_key,
             mbid, isrc, acoustid, confidence,
             title_norm, artist_norm, album_norm, duration_s,
             batch_cid
@@ -361,7 +361,7 @@ app.post('/submit', async (c) => {
           )
         `).bind(
           id,
-          userPkp,
+          userAddress,
           playedAt,
           et.raw.source ?? null,
           et.track_key,
@@ -382,7 +382,7 @@ app.post('/submit', async (c) => {
     for (let i = 0; i < stmts.length; i += 500) {
       await c.env.DB.batch(stmts.slice(i, i + 500))
     }
-    console.log(`[Scrobble] Inserted ${stmts.length} track events for ${userPkp}`)
+    console.log(`[Scrobble] Inserted ${stmts.length} track events for ${userAddress}`)
   } catch (err) {
     // Non-fatal: IPFS blob is the source of truth
     console.error('[Scrobble] D1 track events error (non-fatal):', err)
@@ -398,7 +398,7 @@ app.post('/submit', async (c) => {
       const result = await createScrobbleAttestation(
         BASE_SEPOLIA_RELAY_PK,
         BASE_SEPOLIA_RPC,
-        userPkp, // recipient is the user's PKP
+        userAddress, // recipient is the user's address
         startTs,
         endTs,
         count,
@@ -450,18 +450,18 @@ interface BatchesResponse {
 }
 
 app.get('/batches', async (c) => {
-  const userPkp = c.get('userPkp' as never) as string
-  if (!userPkp) {
+  const userAddress = c.get('userAddress' as never) as string
+  if (!userAddress) {
     return c.json({ error: 'User not authenticated' }, 401)
   }
 
   const rows = await c.env.DB.prepare(`
     SELECT cid, track_count, start_ts, end_ts, created_at
     FROM scrobble_batches
-    WHERE user_pkp = ?
+    WHERE user_address = ?
     ORDER BY created_at DESC
     LIMIT 100
-  `).bind(userPkp).all()
+  `).bind(userAddress).all()
 
   const batches = (rows.results ?? []).map((row: any) => ({
     cid: row.cid,

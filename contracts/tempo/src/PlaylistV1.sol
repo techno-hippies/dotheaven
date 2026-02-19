@@ -12,39 +12,30 @@ contract PlaylistV1 {
     // ── Auth ─────────────────────────────────────────────────────────────
 
     address public owner;
-    address public sponsor;
 
     modifier onlyOwner() {
         require(msg.sender == owner, "not owner");
         _;
     }
 
-    modifier onlySponsor() {
-        require(msg.sender == sponsor, "unauthorized");
+    modifier onlyPlaylistOwner(bytes32 playlistId) {
+        Playlist storage p = playlists[playlistId];
+        require(p.exists, "not found");
+        require(p.owner == msg.sender, "not owner");
         _;
     }
 
     event OwnerUpdated(address indexed newOwner);
-    event SponsorUpdated(address indexed newSponsor);
 
-    constructor(address _sponsor) {
-        require(_sponsor != address(0), "zero sponsor");
+    constructor() {
         owner = msg.sender;
-        sponsor = _sponsor;
         emit OwnerUpdated(msg.sender);
-        emit SponsorUpdated(_sponsor);
     }
 
     function transferOwnership(address newOwner) external onlyOwner {
         require(newOwner != address(0), "zero owner");
         owner = newOwner;
         emit OwnerUpdated(newOwner);
-    }
-
-    function setSponsor(address newSponsor) external onlyOwner {
-        require(newSponsor != address(0), "zero sponsor");
-        sponsor = newSponsor;
-        emit SponsorUpdated(newSponsor);
     }
 
     // ── Constants ─────────────────────────────────────────────────────────
@@ -74,9 +65,6 @@ contract PlaylistV1 {
 
     mapping(bytes32 => Playlist) public playlists;
     mapping(address => uint64) public ownerNonces;
-
-    /// @notice Replay protection — monotonic nonce per user, consumed by Lit Action
-    mapping(address => uint256) public userNonces;
 
     // ── Events ───────────────────────────────────────────────────────────
 
@@ -116,26 +104,15 @@ contract PlaylistV1 {
         uint64 updatedAt
     );
 
-    // ── Replay Protection ──────────────────────────────────────────────
-
-    /// @notice Consume a nonce for replay protection. Must be called with the expected nonce.
-    ///         The Lit Action includes userNonce in the signed message; this ensures each
-    ///         signature can only be used once.
-    function consumeNonce(address user, uint256 expectedNonce) external onlySponsor {
-        require(userNonces[user] == expectedNonce, "bad nonce");
-        userNonces[user] = expectedNonce + 1;
-    }
-
     // ── Core API ─────────────────────────────────────────────────────────
 
-    function createPlaylistFor(
-        address playlistOwner,
+    function createPlaylist(
         string calldata name,
         string calldata coverCid,
         uint8 visibility,
         bytes32[] calldata trackIds
-    ) external onlySponsor returns (bytes32 playlistId) {
-        require(playlistOwner != address(0), "zero playlistOwner");
+    ) external returns (bytes32 playlistId) {
+        address playlistOwner = msg.sender;
         _validateMeta(name, coverCid, visibility);
         _validateTracks(trackIds);
 
@@ -180,9 +157,11 @@ contract PlaylistV1 {
         );
     }
 
-    function setTracks(bytes32 playlistId, bytes32[] calldata trackIds) external onlySponsor {
+    function setTracks(bytes32 playlistId, bytes32[] calldata trackIds)
+        external
+        onlyPlaylistOwner(playlistId)
+    {
         Playlist storage p = playlists[playlistId];
-        require(p.exists, "not found");
         _validateTracks(trackIds);
 
         uint64 nowTs = uint64(block.timestamp);
@@ -203,9 +182,8 @@ contract PlaylistV1 {
         string calldata name,
         string calldata coverCid,
         uint8 visibility
-    ) external onlySponsor {
+    ) external onlyPlaylistOwner(playlistId) {
         Playlist storage p = playlists[playlistId];
-        require(p.exists, "not found");
         _validateMeta(name, coverCid, visibility);
 
         uint64 nowTs = uint64(block.timestamp);
@@ -218,9 +196,8 @@ contract PlaylistV1 {
         emit PlaylistMetaUpdated(playlistId, newVersion, visibility, nowTs, name, coverCid);
     }
 
-    function deletePlaylist(bytes32 playlistId) external onlySponsor {
+    function deletePlaylist(bytes32 playlistId) external onlyPlaylistOwner(playlistId) {
         Playlist storage p = playlists[playlistId];
-        require(p.exists, "not found");
 
         uint64 nowTs = uint64(block.timestamp);
         uint32 newVersion = p.version + 1;

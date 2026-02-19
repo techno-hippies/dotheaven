@@ -46,7 +46,7 @@ impl LibraryView {
             }
         };
         let owner = auth
-            .primary_wallet_address()
+            .wallet_address()
             .map(|value| value.to_lowercase())
             .unwrap_or_default();
         if owner.is_empty() {

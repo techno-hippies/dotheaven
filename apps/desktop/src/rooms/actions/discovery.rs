@@ -51,7 +51,7 @@ impl RoomsView {
                 match result {
                     Ok(discovery) => {
                         let wallet = auth::load_from_disk()
-                            .and_then(|profile| profile.pkp_address)
+                            .and_then(|profile| profile.wallet_address().map(str::to_string))
                             .map(|value| value.to_ascii_lowercase());
                         let discovered_rooms =
                             map_discovery_rooms(discovery.rooms, wallet.as_deref());

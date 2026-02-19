@@ -130,7 +130,7 @@ impl LibraryView {
         let track_meta = track_meta_input_from_row(&track_for_record);
         let path = track_for_record.file_path.clone();
         let owner_address = auth
-            .primary_wallet_address()
+            .wallet_address()
             .map(|value| value.to_lowercase())
             .unwrap_or_default();
 
@@ -254,7 +254,7 @@ impl LibraryView {
             }
         };
         let owner_address = auth
-            .primary_wallet_address()
+            .wallet_address()
             .map(|value| value.to_lowercase())
             .unwrap_or_default();
         if owner_address.is_empty() {

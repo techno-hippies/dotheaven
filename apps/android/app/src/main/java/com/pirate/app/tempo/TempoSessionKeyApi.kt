@@ -31,7 +31,7 @@ object TempoSessionKeyApi {
         throw IllegalStateException("Wrong chain connected: $chainId (expected ${TempoClient.CHAIN_ID})")
       }
 
-      val sessionKey = SessionKeyManager.generate(ownerAddress = account.address)
+      val sessionKey = SessionKeyManager.generate(activity = activity, ownerAddress = account.address)
 
       val keyAuthDigest = SessionKeyManager.buildKeyAuthDigest(sessionKey)
       val keyAuthAssertion =

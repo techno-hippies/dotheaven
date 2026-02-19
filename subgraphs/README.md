@@ -8,3 +8,4 @@ Indexers for on-chain Heaven protocol data.
 ## Usage
 - Each subgraph folder contains its own schema, mappings, and deployment config.
 - Keep ABI and mapping changes in sync with contract changes.
+- Study attempts + study set anchors indexing lives in `subgraphs/study-progress`.

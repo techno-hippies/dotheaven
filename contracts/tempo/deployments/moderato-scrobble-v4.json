@@ -5,17 +5,22 @@
     "rpcUrl": "https://rpc.moderato.tempo.xyz",
     "explorer": "https://explore.tempo.xyz"
   },
-  "deployedAt": "2026-02-17T14:40:48Z",
+  "deployedAt": "2026-02-19T18:30:00Z",
   "deployer": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
   "operator": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+  "previousDeployment": {
+    "address": "0x07B8BdE8BaD74DC974F783AA71C7C51d6B37C363",
+    "blockNumber": 5311022,
+    "note": "Lacked registerTracksForUser; kept on-chain for historical data"
+  },
   "script": "script/DeployScrobbleV4.s.sol",
   "command": "forge script script/DeployScrobbleV4.s.sol:DeployScrobbleV4Script --rpc-url tempo_moderato --broadcast",
   "contract": {
     "name": "ScrobbleV4",
-    "address": "0x07B8BdE8BaD74DC974F783AA71C7C51d6B37C363",
-    "deployTx": "0x4e2ede9385d877449f2f20c9f8de8b09bc2ca7d0bee9a7f76946657be9ec738f",
-    "blockNumber": 5311022,
-    "gasUsed": 10574378,
+    "address": "0xe00e82086480E61AaC8d5ad8B05B56A582dD0000",
+    "deployTx": "0x0c656e9e83ed77cf4d5bba29fa11c31b7eb57a77434a26dc1757b01358b5d8b8",
+    "blockNumber": 5570674,
+    "gasUsed": 11078454,
     "status": true
   },
   "postDeployChecks": {

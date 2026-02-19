@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -28,6 +29,7 @@ fun PirateMobileHeader(
   isAuthenticated: Boolean = false,
   onAvatarPress: (() -> Unit)? = null,
   onBackPress: (() -> Unit)? = null,
+  onClosePress: (() -> Unit)? = null,
   rightSlot: (@Composable () -> Unit)? = null,
 ) {
   Surface(color = MaterialTheme.colorScheme.background) {
@@ -47,6 +49,17 @@ fun PirateMobileHeader(
           Icon(
             Icons.AutoMirrored.Rounded.ArrowBack,
             contentDescription = "Back",
+            tint = MaterialTheme.colorScheme.onBackground,
+          )
+        }
+      } else if (onClosePress != null) {
+        IconButton(
+          modifier = Modifier.align(Alignment.CenterStart),
+          onClick = onClosePress,
+        ) {
+          Icon(
+            Icons.Rounded.Close,
+            contentDescription = "Close",
             tint = MaterialTheme.colorScheme.onBackground,
           )
         }

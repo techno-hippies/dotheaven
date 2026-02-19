@@ -49,6 +49,25 @@ SELF_SCOPE = "heaven"
 SELF_ENDPOINT = "https://heaven-api.deletion-backup782.workers.dev/api/self/verify"
 SELF_MOCK_PASSPORT = "true"  # Set to "false" for production
 
+# Tempo music publish finalize — ContentRegistry on MegaETH testnet
+TEMPO_CONTENT_REGISTRY = "0x9ca08C2D2170A43ecfA12AB35e06F2E1cEEB4Ef2"
+# TEMPO_CANONICAL_LYRICS_REGISTRY = "0x..." # Canonical lyrics refs for study generation
+TEMPO_STUDY_SET_REGISTRY = "0x7fD583d6e9D2F820432455D071617b5C1449c7a4" # StudySetRegistryV1 for on-chain pack refs
+
+# Tempo names anti-squat policy
+TEMPO_NAME_REGISTRY_V2 = "0xA111c5cA16752B09fF16B3B8B24BA55a8486aB23"
+TEMPO_PREMIUM_NAME_STORE_V2 = "0x46Bcae2625157b562c974bb5a912dfcb811a234A"
+TEMPO_HEAVEN_NODE = "0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27"
+TEMPO_PIRATE_NODE = "0xace9c9c435cf933be3564cdbcf7b7e2faee63e4f39034849eacb82d13f32f02a"
+# TEMPO_POLICY_SIGNER_PRIVATE_KEY = "0x..."   # Backend signing key for NamePermit EIP-712
+TEMPO_POLICY_SIGNER_ADDRESS = "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB"
+# NAMES_PERMIT_TTL_SECONDS = "180"
+# NAMES_POW_TTL_SECONDS = "300"
+# NAMES_POW_DIFFICULTY_HEX = "4"
+# NAMES_LONG_WALLET_LIMIT_10M = "8"
+# NAMES_LONG_IP_LIMIT_10M = "24"
+# NAMES_LONG_DEVICE_LIMIT_10M = "12"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "heaven-api"

@@ -1,0 +1,21 @@
+{
+  "network": {
+    "name": "Tempo Testnet (Moderato)",
+    "chainId": 42431,
+    "rpcUrl": "https://rpc.moderato.tempo.xyz",
+    "explorer": "https://explore.tempo.xyz"
+  },
+  "deployedAt": "2026-02-19T13:28:16Z",
+  "deployer": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+  "script": "script/DeployFollowV1.s.sol",
+  "command": "forge script script/DeployFollowV1.s.sol:DeployFollowV1Script --rpc-url tempo_moderato --broadcast --slow --gas-estimate-multiplier 100",
+  "contracts": {
+    "followV1": {
+      "address": "0x153DbEcA0CEF8563649cf475a687D14997D2c403",
+      "deployTx": "0x02dc53fa6f41eb7cb363804d05cd6527cefe7621ae437586d006babf785d4645",
+      "blockNumber": 5556047,
+      "gasUsed": 2119506,
+      "version": "FollowV1"
+    }
+  }
+}

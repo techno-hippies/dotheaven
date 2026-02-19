@@ -1,7 +1,7 @@
 -- Heaven V0 API Schema
 -- D1 database for candidates, likes, and matches
 
--- Claimed users (PKP addresses)
+-- Claimed users (wallet addresses)
 CREATE TABLE IF NOT EXISTS users (
   address TEXT PRIMARY KEY,
   created_at INTEGER NOT NULL,
@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
   directory_tier TEXT DEFAULT 'claimed' CHECK(directory_tier IN ('handoff', 'claimed', 'verified'))
 );
 
--- Seeded scraped profiles (shadow = no PKP yet)
+-- Seeded scraped profiles (shadow = no address yet)
 CREATE TABLE IF NOT EXISTS shadow_profiles (
   id TEXT PRIMARY KEY,
   source TEXT NOT NULL,                  -- 'dateme', 'acx', 'cuties'
@@ -59,7 +59,7 @@ CREATE INDEX IF NOT EXISTS idx_claim_code_hash ON claim_tokens(human_code_hash) 
 -- Likes (can target user address or shadow profile)
 CREATE TABLE IF NOT EXISTS likes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  liker_address TEXT NOT NULL,           -- PKP address of person who liked
+  liker_address TEXT NOT NULL,           -- address of person who liked
   target_type TEXT NOT NULL CHECK(target_type IN ('user', 'shadow')),
   target_id TEXT NOT NULL,               -- address if 'user', shadow_profiles.id if 'shadow'
   created_at INTEGER NOT NULL,
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS likes (
 CREATE INDEX IF NOT EXISTS idx_likes_liker ON likes(liker_address);
 CREATE INDEX IF NOT EXISTS idx_likes_target ON likes(target_type, target_id);
 
--- Matches (only between claimed users with PKP addresses)
+-- Matches (only between claimed users with wallet addresses)
 -- user1 < user2 (lexicographically sorted) to ensure uniqueness
 CREATE TABLE IF NOT EXISTS matches (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,7 +104,7 @@ CREATE INDEX IF NOT EXISTS idx_rate_limits_locked ON claim_rate_limits(locked_un
 CREATE TABLE IF NOT EXISTS heaven_names (
   label TEXT PRIMARY KEY,                -- normalized lowercase (e.g., "alex")
   label_display TEXT,                    -- original case for UI (e.g., "Alex")
-  pkp_address TEXT NOT NULL,             -- owner's PKP address (normalized lowercase 0x...)
+  owner_address TEXT NOT NULL,             -- owner's address (normalized lowercase 0x...)
   status TEXT NOT NULL DEFAULT 'active'
     CHECK(status IN ('active', 'expired')),
   registered_at INTEGER NOT NULL,        -- Unix timestamp
@@ -115,8 +115,8 @@ CREATE TABLE IF NOT EXISTS heaven_names (
   updated_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
--- Reverse lookup: PKP -> name (for onboarding check)
-CREATE INDEX IF NOT EXISTS idx_heaven_names_pkp ON heaven_names(pkp_address);
+-- Reverse lookup: address -> name (for onboarding check)
+CREATE INDEX IF NOT EXISTS idx_heaven_names_owner_address ON heaven_names(owner_address);
 -- For expiry cron jobs
 CREATE INDEX IF NOT EXISTS idx_heaven_names_expires ON heaven_names(expires_at);
 -- For status queries
@@ -133,14 +133,14 @@ CREATE TABLE IF NOT EXISTS heaven_reserved (
 -- Anti-replay nonces for registration signatures
 CREATE TABLE IF NOT EXISTS heaven_nonces (
   nonce TEXT PRIMARY KEY,
-  pkp_address TEXT NOT NULL,             -- Who generated this nonce
+  owner_address TEXT NOT NULL,             -- Who generated this nonce
   used_at INTEGER,                       -- NULL if unused, timestamp if used
   expires_at INTEGER NOT NULL,           -- Nonces expire after 5 minutes
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
 CREATE INDEX IF NOT EXISTS idx_heaven_nonces_expires ON heaven_nonces(expires_at);
-CREATE INDEX IF NOT EXISTS idx_heaven_nonces_pkp ON heaven_nonces(pkp_address);
+CREATE INDEX IF NOT EXISTS idx_heaven_nonces_owner_address ON heaven_nonces(owner_address);
 
 -- ============================================================================
 -- Scrobble Batches (music listening history pinned to IPFS)
@@ -148,7 +148,7 @@ CREATE INDEX IF NOT EXISTS idx_heaven_nonces_pkp ON heaven_nonces(pkp_address);
 
 CREATE TABLE IF NOT EXISTS scrobble_batches (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_pkp TEXT NOT NULL,              -- PKP address of the user
+  user_address TEXT NOT NULL,              -- address of the user
   cid TEXT NOT NULL,                   -- IPFS CID of the batch JSON
   track_count INTEGER NOT NULL,        -- Number of tracks in batch
   start_ts INTEGER NOT NULL,           -- Earliest playedAt timestamp
@@ -156,7 +156,7 @@ CREATE TABLE IF NOT EXISTS scrobble_batches (
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
-CREATE INDEX IF NOT EXISTS idx_scrobble_batches_user ON scrobble_batches(user_pkp);
+CREATE INDEX IF NOT EXISTS idx_scrobble_batches_user ON scrobble_batches(user_address);
 CREATE INDEX IF NOT EXISTS idx_scrobble_batches_created ON scrobble_batches(created_at);
 
 -- ============================================================================
@@ -165,7 +165,7 @@ CREATE INDEX IF NOT EXISTS idx_scrobble_batches_created ON scrobble_batches(crea
 
 CREATE TABLE IF NOT EXISTS music_publish_jobs (
   job_id TEXT PRIMARY KEY,
-  user_pkp TEXT NOT NULL, -- caller wallet/PKP (lowercase 0x...)
+  user_address TEXT NOT NULL, -- caller wallet/address (lowercase 0x...)
 
   status TEXT NOT NULL
     CHECK(status IN (
@@ -232,7 +232,7 @@ CREATE TABLE IF NOT EXISTS music_publish_jobs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_music_publish_jobs_user_created
-  ON music_publish_jobs(user_pkp, created_at DESC);
+  ON music_publish_jobs(user_address, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_music_publish_jobs_status_updated
   ON music_publish_jobs(status, updated_at DESC);
@@ -241,12 +241,12 @@ CREATE INDEX IF NOT EXISTS idx_music_publish_jobs_sha256
   ON music_publish_jobs(audio_sha256);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_music_publish_jobs_user_idempotency
-  ON music_publish_jobs(user_pkp, idempotency_key)
+  ON music_publish_jobs(user_address, idempotency_key)
   WHERE idempotency_key IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS music_upload_bans (
   ban_id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_pkp TEXT NOT NULL,
+  user_address TEXT NOT NULL,
   self_nullifier TEXT, -- optional when available from Self
   reason_code TEXT NOT NULL,
   reason TEXT NOT NULL,
@@ -258,8 +258,22 @@ CREATE TABLE IF NOT EXISTS music_upload_bans (
 );
 
 CREATE INDEX IF NOT EXISTS idx_music_upload_bans_user_active
-  ON music_upload_bans(user_pkp, active, created_at DESC);
+  ON music_upload_bans(user_address, active, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_music_upload_bans_nullifier_active
   ON music_upload_bans(self_nullifier, active)
   WHERE self_nullifier IS NOT NULL;
+
+-- ============================================================================
+-- Study Set Generation Locks (ephemeral, non-canonical)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS study_set_generation_locks (
+  lock_key TEXT PRIMARY KEY,
+  owner_wallet TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_study_set_generation_locks_expires
+  ON study_set_generation_locks(expires_at);

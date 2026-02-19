@@ -1,0 +1,401 @@
+{
+  "specVersion": "exercise-pack-v2",
+  "trackId": "T0112199333",
+  "language": "es",
+  "sourceRefs": {
+    "lyricsRef": "local:T0112199333/en-lyrics.txt",
+    "geniusRef": "genius:110982"
+  },
+  "generator": {
+    "model": "google/gemini-3-flash-preview",
+    "promptHash": "0x64ca7fbbf87ca79781ce6a91444ff215c9e7a24fac4ad4bfee03166dd3918fa6",
+    "generatedAt": 1771508762
+  },
+  "lineTags": [
+    {
+      "text": "Baby, can't you see I'm callin'?",
+      "lang": "en",
+      "difficulty": 1.34,
+      "difficultyLlm": 1,
+      "difficultyLexical": 2.15,
+      "fleschKincaid": 2.48,
+      "top1kRatio": 0.5,
+      "top10kRatio": 0.5,
+      "lineId": "L-001",
+      "lineIndex": 0,
+      "allPositions": [
+        1
+      ]
+    },
+    {
+      "text": "A guy like you should wear a warnin'",
+      "lang": "en",
+      "difficulty": 1.95,
+      "difficultyLlm": 2,
+      "difficultyLexical": 1.83,
+      "fleschKincaid": 0.8,
+      "top1kRatio": 0.63,
+      "top10kRatio": 0.88,
+      "lineId": "L-002",
+      "lineIndex": 1,
+      "allPositions": [
+        2
+      ]
+    },
+    {
+      "text": "I need a hit, baby, give me it",
+      "lang": "en",
+      "difficulty": 1.08,
+      "difficultyLlm": 1,
+      "difficultyLexical": 1.27,
+      "fleschKincaid": 0.8,
+      "top1kRatio": 0.88,
+      "top10kRatio": 1,
+      "lineId": "L-005",
+      "lineIndex": 4,
+      "allPositions": [
+        5
+      ]
+    },
+    {
+      "text": "You're dangerous, I'm lovin' it",
+      "lang": "en",
+      "difficulty": 2.37,
+      "difficultyLlm": 2,
+      "difficultyLexical": 3.24,
+      "fleschKincaid": 5.24,
+      "top1kRatio": 0.2,
+      "top10kRatio": 0.4,
+      "lineId": "L-006",
+      "lineIndex": 5,
+      "allPositions": [
+        6
+      ]
+    },
+    {
+      "text": "Too high, can't come down",
+      "lang": "en",
+      "difficulty": 1,
+      "difficultyLlm": 1,
+      "difficultyLexical": 1.44,
+      "fleschKincaid": -1.84,
+      "top1kRatio": 0.8,
+      "top10kRatio": 0.8,
+      "lineId": "L-007",
+      "lineIndex": 6,
+      "allPositions": [
+        9,
+        28
+      ]
+    },
+    {
+      "text": "You're toxic, I'm slippin' under",
+      "lang": "en",
+      "difficulty": 2.67,
+      "difficultyLlm": 3,
+      "difficultyLexical": 3.08,
+      "fleschKincaid": 5.24,
+      "top1kRatio": 0.2,
+      "top10kRatio": 0.4,
+      "lineId": "L-011",
+      "lineIndex": 10,
+      "allPositions": [
+        15,
+        34,
+        46
+      ]
+    },
+    {
+      "text": "Don't you know that you're toxic?",
+      "lang": "en",
+      "difficulty": 1.68,
+      "difficultyLlm": 2,
+      "difficultyLexical": 2.1,
+      "fleschKincaid": 0.52,
+      "top1kRatio": 0.5,
+      "top10kRatio": 0.67,
+      "lineId": "L-014",
+      "lineIndex": 13,
+      "allPositions": [
+        18,
+        20,
+        37,
+        39,
+        40,
+        49,
+        54
+      ]
+    },
+    {
+      "text": "I took a sip from my devil's cup",
+      "lang": "en",
+      "difficulty": 2.73,
+      "difficultyLlm": 3,
+      "difficultyLexical": 2.1,
+      "fleschKincaid": 0.8,
+      "top1kRatio": 0.5,
+      "top10kRatio": 0.88,
+      "lineId": "L-017",
+      "lineIndex": 16,
+      "allPositions": [
+        24
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "id": "sib-001",
+      "type": "say_it_back",
+      "prompt": "",
+      "excerpt": "A guy like you should wear a warnin'",
+      "choices": [],
+      "correctIndex": 0,
+      "difficulty": "easy",
+      "difficultyScore": 1.95,
+      "sourceLineId": "L-002",
+      "excerptLang": "en"
+    },
+    {
+      "id": "tr-001",
+      "type": "translation_mcq",
+      "prompt": "¿Qué letra significa: '¿Cariño, no ves que estoy llamando?'?",
+      "excerpt": "Baby, can't you see I'm callin'?",
+      "sourceLineId": "L-001",
+      "choices": [
+        "Can you feel me now?",
+        "Baby, can't you see I'm callin'?",
+        "A guy like you should wear a warnin'",
+        "Don't you know that you're toxic?"
+      ],
+      "correctIndex": 1,
+      "explanation": "La frase 'Baby, can't you see I'm callin'?' se traduce directamente como '¿Cariño, no ves que estoy llamando?'.",
+      "choiceRationales": [
+        "Esta línea significa '¿Puedes sentirme ahora?'.",
+        "Esta es la traducción correcta de la frase solicitada.",
+        "Esta línea significa 'Un chico como tú debería llevar una advertencia'.",
+        "Esta línea significa '¿No sabes que eres tóxico?'."
+      ],
+      "difficulty": "easy",
+      "difficultyScore": 1.7,
+      "excerptLang": "en"
+    },
+    {
+      "id": "sib-002",
+      "type": "say_it_back",
+      "prompt": "",
+      "excerpt": "You're dangerous, I'm lovin' it",
+      "choices": [],
+      "correctIndex": 0,
+      "difficulty": "easy",
+      "difficultyScore": 2.37,
+      "sourceLineId": "L-006",
+      "excerptLang": "en"
+    },
+    {
+      "id": "tr-002",
+      "type": "translation_mcq",
+      "prompt": "¿Qué letra significa: 'Eres peligroso, me encanta'?",
+      "excerpt": "You're dangerous, I'm lovin' it",
+      "sourceLineId": "L-006",
+      "choices": [
+        "You're dangerous, I'm lovin' it",
+        "I need a hit, baby, give me it",
+        "You're toxic, I'm slippin' under",
+        "Losing my head, spinnin' 'round and 'round"
+      ],
+      "correctIndex": 0,
+      "explanation": "En inglés, 'dangerous' significa peligroso y 'lovin' it' expresa que a alguien le encanta algo.",
+      "choiceRationales": [
+        "Esta es la traducción exacta de 'Eres peligroso, me encanta'.",
+        "Esta línea significa 'Necesito una dosis, cariño, dámela'.",
+        "Esta línea significa 'Eres tóxico, me estoy hundiendo'.",
+        "Esta línea describe perder la cabeza y dar vueltas."
+      ],
+      "difficulty": "medium",
+      "difficultyScore": 2.72,
+      "excerptLang": "en"
+    },
+    {
+      "id": "sib-003",
+      "type": "say_it_back",
+      "prompt": "",
+      "excerpt": "Too high, can't come down",
+      "choices": [],
+      "correctIndex": 0,
+      "difficulty": "easy",
+      "difficultyScore": 1,
+      "sourceLineId": "L-007",
+      "excerptLang": "en"
+    },
+    {
+      "id": "tv-001",
+      "type": "trivia_mcq",
+      "prompt": "Según las interpretaciones de la letra, ¿hacia qué artista podría ser una respuesta el primer verso de la canción?",
+      "excerpt": "Baby, can't you see I'm callin'?",
+      "sourceLineId": "L-001",
+      "choices": [
+        "Justin Timberlake",
+        "Fred Durst",
+        "Kevin Federline",
+        "Wade Robson"
+      ],
+      "correctIndex": 0,
+      "explanation": "La anotación indica que el verso puede ser una respuesta a Justin Timberlake después de cómo la representó en el video de 'Cry Me a River'.",
+      "choiceRationales": [
+        "La anotación menciona específicamente que los versos pueden ser una respuesta a Justin Timberlake.",
+        "Aunque hubo rumores sobre Fred Durst, la anotación se centra en Timberlake.",
+        "Kevin Federline fue su esposo posterior, pero no es el mencionado en relación a este verso.",
+        "Wade Robson no es el artista mencionado en esta interpretación específica de la letra."
+      ],
+      "difficulty": "medium",
+      "difficultyScore": 2.25,
+      "excerptLang": "en",
+      "source": "genius",
+      "sourceClassification": "accepted"
+    },
+    {
+      "id": "sib-004",
+      "type": "say_it_back",
+      "prompt": "",
+      "excerpt": "You're toxic, I'm slippin' under",
+      "choices": [],
+      "correctIndex": 0,
+      "difficulty": "medium",
+      "difficultyScore": 2.67,
+      "sourceLineId": "L-011",
+      "excerptLang": "en"
+    },
+    {
+      "id": "tr-003",
+      "type": "translation_mcq",
+      "prompt": "¿Qué letra significa: 'Demasiado drogada, no puedo bajar'?",
+      "excerpt": "Too high, can't come down",
+      "sourceLineId": "L-007",
+      "choices": [
+        "Too high, can't come down",
+        "A guy like you should wear a warnin'",
+        "I took a sip from my devil's cup",
+        "Don't you know that you're toxic?"
+      ],
+      "correctIndex": 0,
+      "explanation": "'Too high' se refiere a estar muy alto (o drogado en este contexto metafórico) y 'can't come down' a no poder bajar.",
+      "choiceRationales": [
+        "Esta es la traducción correcta de la frase sobre estar en lo alto y no poder bajar.",
+        "Esta línea habla sobre un chico que debería llevar una advertencia.",
+        "Esta línea significa 'Tomé un sorbo de la copa de mi demonio'.",
+        "Esta línea es una pregunta sobre ser tóxico."
+      ],
+      "difficulty": "medium",
+      "difficultyScore": 2.1,
+      "excerptLang": "en"
+    },
+    {
+      "id": "sib-005",
+      "type": "say_it_back",
+      "prompt": "",
+      "excerpt": "Don't you know that you're toxic?",
+      "choices": [],
+      "correctIndex": 0,
+      "difficulty": "easy",
+      "difficultyScore": 1.68,
+      "sourceLineId": "L-014",
+      "excerptLang": "en"
+    },
+    {
+      "id": "tv-002",
+      "type": "trivia_mcq",
+      "prompt": "¿Quiénes realizaron las armonías altas y bajas en el pre-coro de 'Toxic'?",
+      "excerpt": "Too high, can't come down",
+      "sourceLineId": "L-007",
+      "choices": [
+        "Britney y Madonna",
+        "Cathy y Emma",
+        "Max Martin y Rami",
+        "Bloodshy & Avant"
+      ],
+      "correctIndex": 1,
+      "explanation": "La anotación del pre-coro especifica que Cathy y Emma realizaron las armonías altas y bajas mientras Britney hacía las medias.",
+      "choiceRationales": [
+        "Madonna colaboró en 'Me Against the Music', pero no en las armonías de este pre-coro.",
+        "Cathy y Emma son las vocalistas acreditadas para estas armonías específicas en la anotación.",
+        "Max Martin es un productor famoso, pero no realizó estas armonías según la anotación.",
+        "Bloodshy & Avant son los productores, no las vocalistas de las armonías mencionadas."
+      ],
+      "difficulty": "hard",
+      "difficultyScore": 2.65,
+      "excerptLang": "en",
+      "source": "genius",
+      "sourceClassification": "unreviewed"
+    },
+    {
+      "id": "sib-006",
+      "type": "say_it_back",
+      "prompt": "",
+      "excerpt": "I took a sip from my devil's cup",
+      "choices": [],
+      "correctIndex": 0,
+      "difficulty": "medium",
+      "difficultyScore": 2.73,
+      "sourceLineId": "L-017",
+      "excerptLang": "en"
+    },
+    {
+      "id": "tr-004",
+      "type": "translation_mcq",
+      "prompt": "¿Qué letra significa: 'Tomé un sorbo de la copa de mi demonio'?",
+      "excerpt": "I took a sip from my devil's cup",
+      "sourceLineId": "L-017",
+      "choices": [
+        "I took a sip from my devil's cup",
+        "Baby, can't you see I'm callin'?",
+        "Losing my head, spinnin' 'round and 'round",
+        "I need a hit, baby, give me it"
+      ],
+      "correctIndex": 0,
+      "explanation": "'Took a sip' significa tomar un sorbo y 'devil's cup' es la copa del demonio.",
+      "choiceRationales": [
+        "Esta es la traducción correcta de la frase metafórica sobre la copa del demonio.",
+        "Esta línea es una pregunta sobre una llamada telefónica.",
+        "Esta línea describe la sensación de mareo y pérdida de control.",
+        "Esta línea pide una 'dosis' o golpe de adrenalina."
+      ],
+      "difficulty": "hard",
+      "difficultyScore": 3.43,
+      "excerptLang": "en"
+    },
+    {
+      "id": "tv-003",
+      "type": "trivia_mcq",
+      "prompt": "¿Con qué compara Britney a su amante en la línea 'I need a hit'?",
+      "excerpt": "I need a hit, baby, give me it",
+      "sourceLineId": "L-005",
+      "choices": [
+        "Con un vehículo",
+        "Con una droga",
+        "Con un deporte",
+        "Con un éxito musical"
+      ],
+      "correctIndex": 1,
+      "explanation": "La anotación explica que Britney usa metáforas de adicción, comparando a su amante con una droga por el placer y peligro que conlleva.",
+      "choiceRationales": [
+        "No se menciona ninguna comparación con vehículos en la anotación de esta línea.",
+        "La anotación destaca que ella compara a su amante con una droga por la adicción que siente.",
+        "No hay referencias deportivas en la explicación de esta metáfora.",
+        "Aunque 'hit' puede significar éxito musical, en este contexto la anotación aclara que se refiere a una adicción."
+      ],
+      "difficulty": "medium",
+      "difficultyScore": 2.14,
+      "excerptLang": "en",
+      "source": "genius",
+      "sourceClassification": "accepted"
+    }
+  ],
+  "compliance": {
+    "excerptPolicy": "max-one-line-per-question",
+    "attribution": {
+      "track": "Toxic",
+      "artist": "Britney Spears",
+      "geniusSongId": 110982
+    }
+  }
+}

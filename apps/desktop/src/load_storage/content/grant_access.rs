@@ -1,8 +1,7 @@
 use super::*;
-use serde::Serialize;
 
-const REGISTRY_V1: &str = "0x29e1a73fC364855F073995075785e3fC2a1b6edC";
-const RECORDS_V1: &str = "0x6072C4337e57538AE896C03317f02d830A25bbe4";
+const REGISTRY_V1: &str = "0xA111c5cA16752B09fF16B3B8B24BA55a8486aB23";
+const RECORDS_V1: &str = "0x57e36738f02Bb90664d00E4EC0C8507feeF3995c";
 const CONTENT_PUBKEY_RECORD_KEY: &str = "contentPubKey";
 
 fn u64_to_u256_word(value: u64) -> [u8; 32] {
@@ -127,259 +126,13 @@ fn fetch_content_pubkey_for_address(user_address: &str) -> Result<Vec<u8>, Strin
 }
 
 impl LoadStorageService {
-    pub fn content_deactivate(
-        &mut self,
-        auth: &PersistedAuth,
-        content_id_hex: &str,
-    ) -> Result<Value, String> {
-        self.ensure_lit_ready(auth)?;
-
-        let user_public_key = auth
-            .pkp_public_key
-            .as_deref()
-            .ok_or("Missing PKP public key in auth")?;
-
-        let normalized_content_id = normalize_content_id_hex(content_id_hex)?;
-
-        let timestamp = chrono::Utc::now().timestamp_millis().to_string();
-        let nonce = format!(
-            "{:x}",
-            chrono::Utc::now()
-                .timestamp_nanos_opt()
-                .unwrap_or_default()
-                .unsigned_abs()
-        );
-
-        let message =
-            format!("heaven:content:deactivate:{normalized_content_id}:{timestamp}:{nonce}");
-        let signature_bytes = self
-            .lit_mut()?
-            .pkp_personal_sign(&message)
-            .map_err(|e| format!("Failed to sign content deactivate message: {e}"))?;
-        let signature_hex = to_hex_prefixed(&signature_bytes);
-
-        let sponsor_private_key = require_sponsor_private_key()?;
-        let sponsor_auth_context = self.lit_mut()?.create_auth_context_from_eth_wallet(
-            sponsor_pkp_public_key_hex().as_str(),
-            &sponsor_private_key,
-            "Heaven desktop sponsor content deactivation",
-            "localhost",
-            7,
-        )?;
-
-        let network = self
-            .lit_mut()?
-            .network_name()
-            .unwrap_or("naga-dev")
-            .to_string();
-        let action = registry::resolve_action(
-            &network,
-            "contentAccessV1",
-            &["HEAVEN_CONTENT_ACCESS_V1_CID"],
-            Some("HEAVEN_CONTENT_ACCESS_V1_CODE_PATH"),
-        )?;
-        log::info!(
-            "[ContentAccess] resolved action (deactivate): source={}",
-            action.source()
-        );
-
-        let params = json!({
-            "userPkpPublicKey": user_public_key,
-            "operation": "deactivate",
-            "contentId": normalized_content_id,
-            "timestamp": timestamp,
-            "nonce": nonce,
-            "signature": signature_hex,
-        });
-
-        let (execute_result, action_source): (lit_rust_sdk::ExecuteJsResponse, String) =
-            match &action {
-                ResolvedAction::Ipfs { cid, source } => self
-                    .lit_mut()?
-                    .execute_js_with_auth_context(
-                        None,
-                        Some(cid.clone()),
-                        Some(params),
-                        &sponsor_auth_context,
-                    )
-                    .map(|res| (res, source.clone())),
-                ResolvedAction::Code { code, source } => self
-                    .lit_mut()?
-                    .execute_js_with_auth_context(
-                        Some(code.clone()),
-                        None,
-                        Some(params),
-                        &sponsor_auth_context,
-                    )
-                    .map(|res| (res, source.clone())),
-            }
-            .map_err(|e| format!("Content deactivate executeJs failed: {e}"))?;
-
-        let mut payload = normalize_execute_response(execute_result.response)?;
-        if let Value::Object(obj) = &mut payload {
-            obj.entry("actionSource".to_string())
-                .or_insert(Value::String(action_source.clone()));
-        }
-        let success = payload
-            .get("success")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        if !success {
-            let msg = payload
-                .get("error")
-                .and_then(Value::as_str)
-                .unwrap_or("unknown error");
-            let version = payload
-                .get("version")
-                .and_then(Value::as_str)
-                .unwrap_or("unknown");
-            let tx_hash = payload
-                .get("txHash")
-                .and_then(Value::as_str)
-                .unwrap_or("n/a");
-            let mirror_tx = payload
-                .get("mirrorTxHash")
-                .and_then(Value::as_str)
-                .unwrap_or("n/a");
-            return Err(format!(
-                "Content deactivate failed: {msg} (version={version}, contentId={normalized_content_id}, txHash={tx_hash}, mirrorTxHash={mirror_tx}, actionSource={action_source})"
-            ));
-        }
-
-        Ok(payload)
-    }
-
     pub fn content_grant_access(
         &mut self,
         auth: &PersistedAuth,
         content_id_hex: &str,
         grantee_address: &str,
     ) -> Result<Value, String> {
-        if auth.provider_kind() == crate::auth::AuthProviderKind::TempoPasskey {
-            return self.content_share_envelope(auth, content_id_hex, grantee_address);
-        }
-        self.ensure_lit_ready(auth)?;
-
-        let user_public_key = auth
-            .pkp_public_key
-            .as_deref()
-            .ok_or("Missing PKP public key in auth")?;
-
-        let normalized_content_id = normalize_content_id_hex(content_id_hex)?;
-        let grantee = grantee_address
-            .parse::<Address>()
-            .map_err(|e| format!("Invalid grantee wallet address: {e}"))?;
-        let grantee_hex = to_hex_prefixed(grantee.as_slice()).to_lowercase();
-
-        let timestamp = chrono::Utc::now().timestamp_millis().to_string();
-        let nonce = format!(
-            "{:x}",
-            chrono::Utc::now()
-                .timestamp_nanos_opt()
-                .unwrap_or_default()
-                .unsigned_abs()
-        );
-
-        let grant_message = format!(
-            "heaven:content:grant:{normalized_content_id}:{}:{timestamp}:{nonce}",
-            grantee_hex.to_lowercase()
-        );
-        let signature_bytes = self
-            .lit_mut()?
-            .pkp_personal_sign(&grant_message)
-            .map_err(|e| format!("Failed to sign content access grant message: {e}"))?;
-        let signature_hex = to_hex_prefixed(&signature_bytes);
-
-        let sponsor_private_key = require_sponsor_private_key()?;
-        let sponsor_auth_context = self.lit_mut()?.create_auth_context_from_eth_wallet(
-            sponsor_pkp_public_key_hex().as_str(),
-            &sponsor_private_key,
-            "Heaven desktop sponsor content access grant",
-            "localhost",
-            7,
-        )?;
-
-        let network = self
-            .lit_mut()?
-            .network_name()
-            .unwrap_or("naga-dev")
-            .to_string();
-        let action = registry::resolve_action(
-            &network,
-            "contentAccessV1",
-            &["HEAVEN_CONTENT_ACCESS_V1_CID"],
-            Some("HEAVEN_CONTENT_ACCESS_V1_CODE_PATH"),
-        )?;
-        log::info!(
-            "[ContentAccess] resolved action: source={}",
-            action.source()
-        );
-
-        let params = json!({
-            "userPkpPublicKey": user_public_key,
-            "operation": "grant",
-            "contentId": normalized_content_id,
-            "grantee": grantee_hex,
-            "timestamp": timestamp,
-            "nonce": nonce,
-            "signature": signature_hex,
-        });
-
-        let (execute_result, action_source): (lit_rust_sdk::ExecuteJsResponse, String) =
-            match &action {
-                ResolvedAction::Ipfs { cid, source } => self
-                    .lit_mut()?
-                    .execute_js_with_auth_context(
-                        None,
-                        Some(cid.clone()),
-                        Some(params),
-                        &sponsor_auth_context,
-                    )
-                    .map(|res| (res, source.clone())),
-                ResolvedAction::Code { code, source } => self
-                    .lit_mut()?
-                    .execute_js_with_auth_context(
-                        Some(code.clone()),
-                        None,
-                        Some(params),
-                        &sponsor_auth_context,
-                    )
-                    .map(|res| (res, source.clone())),
-            }
-            .map_err(|e| format!("Content access executeJs failed: {e}"))?;
-
-        let mut payload = normalize_execute_response(execute_result.response)?;
-        if let Value::Object(obj) = &mut payload {
-            obj.entry("actionSource".to_string())
-                .or_insert(Value::String(action_source.clone()));
-        }
-        let success = payload
-            .get("success")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        if !success {
-            let msg = payload
-                .get("error")
-                .and_then(Value::as_str)
-                .unwrap_or("unknown error");
-            let version = payload
-                .get("version")
-                .and_then(Value::as_str)
-                .unwrap_or("unknown");
-            let tx_hash = payload
-                .get("txHash")
-                .and_then(Value::as_str)
-                .unwrap_or("n/a");
-            let mirror_tx = payload
-                .get("mirrorTxHash")
-                .and_then(Value::as_str)
-                .unwrap_or("n/a");
-            return Err(format!(
-                "Content access grant failed: {msg} (version={version}, contentId={normalized_content_id}, txHash={tx_hash}, mirrorTxHash={mirror_tx}, actionSource={action_source})"
-            ));
-        }
-
-        Ok(payload)
+        self.content_share_envelope(auth, content_id_hex, grantee_address)
     }
 
     pub fn content_share_envelope(
@@ -389,7 +142,7 @@ impl LoadStorageService {
         grantee_address: &str,
     ) -> Result<Value, String> {
         let owner_address = auth
-            .primary_wallet_address()
+            .wallet_address()
             .ok_or("Missing wallet address in auth")?;
         let owner = normalize_address(owner_address)?;
         let grantee = normalize_address(grantee_address)?;
@@ -476,158 +229,29 @@ impl LoadStorageService {
             return Err("contentIds must contain at least one valid entry".to_string());
         }
 
-        if auth.provider_kind() == crate::auth::AuthProviderKind::TempoPasskey {
-            let mut envelope_ids = Vec::<String>::with_capacity(normalized_content_ids.len());
-            for content_id in &normalized_content_ids {
-                let payload = self.content_share_envelope(auth, content_id, &grantee_hex)?;
-                let envelope_id = payload
-                    .get("envelopeId")
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .ok_or_else(|| {
-                        format!(
-                            "Tempo envelope share response missing envelopeId for contentId={content_id}"
-                        )
-                    })?;
-                envelope_ids.push(envelope_id.to_string());
-            }
-            return Ok(json!({
-                "success": true,
-                "version": "tempo-envelope-batch-v1",
-                "txHash": Value::Null,
-                "mirrorTxHash": Value::Null,
-                "envelopeIds": envelope_ids,
-                "contentIds": normalized_content_ids,
-            }));
+        let mut envelope_ids = Vec::<String>::with_capacity(normalized_content_ids.len());
+        for content_id in &normalized_content_ids {
+            let payload = self.content_share_envelope(auth, content_id, &grantee_hex)?;
+            let envelope_id = payload
+                .get("envelopeId")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| {
+                    format!(
+                        "Tempo envelope share response missing envelopeId for contentId={content_id}"
+                    )
+                })?;
+            envelope_ids.push(envelope_id.to_string());
         }
 
-        self.ensure_lit_ready(auth)?;
-        let user_public_key = auth
-            .pkp_public_key
-            .as_deref()
-            .ok_or("Missing PKP public key in auth")?;
-
-        let timestamp = chrono::Utc::now().timestamp_millis().to_string();
-        let nonce = format!(
-            "{:x}",
-            chrono::Utc::now()
-                .timestamp_nanos_opt()
-                .unwrap_or_default()
-                .unsigned_abs()
-        );
-
-        #[derive(Serialize)]
-        struct Payload<'a> {
-            #[serde(rename = "contentIds")]
-            content_ids: &'a Vec<String>,
-            grantee: &'a str,
-        }
-
-        let payload_json = serde_json::to_string(&Payload {
-            content_ids: &normalized_content_ids,
-            grantee: grantee_hex.as_str(),
-        })
-        .map_err(|e| format!("Failed encoding grantBatch payload: {e}"))?;
-        let payload_hash = sha256_hex(payload_json.as_bytes());
-        let grant_message =
-            format!("heaven:content:grantBatch:{payload_hash}:{timestamp}:{nonce}",);
-
-        let signature_bytes = self
-            .lit_mut()?
-            .pkp_personal_sign(&grant_message)
-            .map_err(|e| format!("Failed to sign content access batch grant message: {e}"))?;
-        let signature_hex = to_hex_prefixed(&signature_bytes);
-
-        let sponsor_private_key = require_sponsor_private_key()?;
-        let sponsor_auth_context = self.lit_mut()?.create_auth_context_from_eth_wallet(
-            sponsor_pkp_public_key_hex().as_str(),
-            &sponsor_private_key,
-            "Heaven desktop sponsor content access batch grant",
-            "localhost",
-            7,
-        )?;
-
-        let network = self
-            .lit_mut()?
-            .network_name()
-            .unwrap_or("naga-dev")
-            .to_string();
-        let action = registry::resolve_action(
-            &network,
-            "contentAccessV1",
-            &["HEAVEN_CONTENT_ACCESS_V1_CID"],
-            Some("HEAVEN_CONTENT_ACCESS_V1_CODE_PATH"),
-        )?;
-        log::info!(
-            "[ContentAccess] resolved action (batch): source={}",
-            action.source()
-        );
-
-        let params = json!({
-            "userPkpPublicKey": user_public_key,
-            "operation": "grantBatch",
+        Ok(json!({
+            "success": true,
+            "version": "tempo-envelope-batch-v1",
+            "txHash": Value::Null,
+            "mirrorTxHash": Value::Null,
+            "envelopeIds": envelope_ids,
             "contentIds": normalized_content_ids,
-            "grantee": grantee_hex,
-            "timestamp": timestamp,
-            "nonce": nonce,
-            "signature": signature_hex,
-        });
-
-        let (execute_result, action_source): (lit_rust_sdk::ExecuteJsResponse, String) =
-            match &action {
-                ResolvedAction::Ipfs { cid, source } => self
-                    .lit_mut()?
-                    .execute_js_with_auth_context(
-                        None,
-                        Some(cid.clone()),
-                        Some(params),
-                        &sponsor_auth_context,
-                    )
-                    .map(|res| (res, source.clone())),
-                ResolvedAction::Code { code, source } => self
-                    .lit_mut()?
-                    .execute_js_with_auth_context(
-                        Some(code.clone()),
-                        None,
-                        Some(params),
-                        &sponsor_auth_context,
-                    )
-                    .map(|res| (res, source.clone())),
-            }
-            .map_err(|e| format!("Content access batch executeJs failed: {e}"))?;
-
-        let mut payload = normalize_execute_response(execute_result.response)?;
-        if let Value::Object(obj) = &mut payload {
-            obj.entry("actionSource".to_string())
-                .or_insert(Value::String(action_source.clone()));
-        }
-        let success = payload
-            .get("success")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        if !success {
-            let msg = payload
-                .get("error")
-                .and_then(Value::as_str)
-                .unwrap_or("unknown error");
-            let version = payload
-                .get("version")
-                .and_then(Value::as_str)
-                .unwrap_or("unknown");
-            let tx_hash = payload
-                .get("txHash")
-                .and_then(Value::as_str)
-                .unwrap_or("n/a");
-            let mirror_tx = payload
-                .get("mirrorTxHash")
-                .and_then(Value::as_str)
-                .unwrap_or("n/a");
-            return Err(format!(
-                "Content access batch grant failed: {msg} (version={version}, txHash={tx_hash}, mirrorTxHash={mirror_tx}, actionSource={action_source})"
-            ));
-        }
-
-        Ok(payload)
+        }))
     }
 }

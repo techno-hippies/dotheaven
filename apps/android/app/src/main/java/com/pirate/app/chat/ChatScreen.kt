@@ -40,7 +40,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
@@ -73,14 +72,21 @@ import com.pirate.app.scarlett.VoiceCallState
 import com.pirate.app.theme.PiratePalette
 import com.pirate.app.ui.PirateMobileHeader
 import coil.compose.AsyncImage
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.xmtp.android.library.libxmtp.PermissionOption
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private enum class ChatView { Conversations, Thread, Scarlett }
-private enum class ComposerTab { Dm, Group }
+private enum class ChatView {
+  Conversations,
+  Thread,
+  Scarlett,
+  NewConversation,
+  NewGroupMembers,
+  NewGroupDetails,
+}
 
 private const val SCARLETT_INTRO = "Hey, I'm Scarlett. I will match you with other users who like your music and meet your preferences to make new friends or date!"
 
@@ -116,19 +122,21 @@ fun ChatScreen(
 
   var currentView by remember { mutableStateOf(ChatView.Conversations) }
   var connecting by remember { mutableStateOf(false) }
-  var showComposerSheet by remember { mutableStateOf(false) }
-  var composerTab by remember { mutableStateOf(ComposerTab.Dm) }
   var newDmAddress by remember { mutableStateOf("") }
   var newDmBusy by remember { mutableStateOf(false) }
   var newDmError by remember { mutableStateOf<String?>(null) }
+  var dmDirectorySuggestions by remember { mutableStateOf<List<DmSuggestion>>(emptyList()) }
+  var dmDirectoryBusy by remember { mutableStateOf(false) }
+  var dmDirectoryError by remember { mutableStateOf<String?>(null) }
+  var newGroupMemberQuery by remember { mutableStateOf("") }
+  var newGroupMembers by remember { mutableStateOf<List<String>>(emptyList()) }
   var newGroupName by remember { mutableStateOf("") }
   var newGroupDescription by remember { mutableStateOf("") }
-  var newGroupImageUrl by remember { mutableStateOf("") }
-  var newGroupAppData by remember { mutableStateOf("") }
-  var newGroupMembers by remember { mutableStateOf("") }
-  var newGroupPermissionMode by remember { mutableStateOf(GroupPermissionMode.ALL_MEMBERS) }
   var newGroupBusy by remember { mutableStateOf(false) }
   var newGroupError by remember { mutableStateOf<String?>(null) }
+  var groupDirectorySuggestions by remember { mutableStateOf<List<DmSuggestion>>(emptyList()) }
+  var groupDirectoryBusy by remember { mutableStateOf(false) }
+  var groupDirectoryError by remember { mutableStateOf<String?>(null) }
   var showSettingsSheet by remember { mutableStateOf(false) }
   var disappearingRetentionSeconds by remember { mutableStateOf<Long?>(null) }
   var disappearingBusy by remember { mutableStateOf(false) }
@@ -142,8 +150,8 @@ fun ChatScreen(
   var groupPermissionMetadata by remember { mutableStateOf(PermissionOption.Allow) }
   var groupPermissionBusy by remember { mutableStateOf(false) }
   var groupPermissionError by remember { mutableStateOf<String?>(null) }
-  val dmSuggestions = remember(conversations, newDmAddress, showComposerSheet, composerTab, activeConversationId) {
-    if (showComposerSheet && composerTab == ComposerTab.Dm) {
+  val dmRecentSuggestions = remember(conversations, newDmAddress, currentView, activeConversationId) {
+    if (currentView == ChatView.NewConversation) {
       buildDmSuggestions(
         conversations = conversations,
         query = newDmAddress,
@@ -153,6 +161,31 @@ fun ChatScreen(
       emptyList()
     }
   }
+  val groupRecentSuggestions = remember(conversations, newGroupMemberQuery, currentView, activeConversationId) {
+    if (currentView == ChatView.NewGroupMembers) {
+      buildDmSuggestions(
+        conversations = conversations,
+        query = newGroupMemberQuery,
+        excludeConversationId = activeConversationId,
+      )
+    } else {
+      emptyList()
+    }
+  }
+  val dmVisibleDirectorySuggestions =
+    remember(dmDirectorySuggestions, dmRecentSuggestions) {
+      dropKnownSuggestions(
+        directorySuggestions = dmDirectorySuggestions,
+        existingSuggestions = dmRecentSuggestions,
+      )
+    }
+  val groupVisibleDirectorySuggestions =
+    remember(groupDirectorySuggestions, groupRecentSuggestions) {
+      dropKnownSuggestions(
+        directorySuggestions = groupDirectorySuggestions,
+        existingSuggestions = groupRecentSuggestions,
+      )
+    }
 
   // Auto-connect when authenticated (silently retry on failure)
   LaunchedEffect(isAuthenticated, userAddress) {
@@ -180,6 +213,146 @@ fun ChatScreen(
   val inThread = currentView == ChatView.Thread || currentView == ChatView.Scarlett || activeConversationId != null
   LaunchedEffect(inThread) {
     onThreadVisibilityChange(inThread)
+  }
+
+  LaunchedEffect(currentView, newDmAddress) {
+    if (currentView != ChatView.NewConversation) {
+      dmDirectorySuggestions = emptyList()
+      dmDirectoryBusy = false
+      dmDirectoryError = null
+      return@LaunchedEffect
+    }
+    val query = newDmAddress.trim()
+    if (query.length < 2 || looksLikeEthereumAddress(query)) {
+      dmDirectorySuggestions = emptyList()
+      dmDirectoryBusy = false
+      dmDirectoryError = null
+      return@LaunchedEffect
+    }
+    delay(280)
+    dmDirectoryBusy = true
+    dmDirectoryError = null
+    try {
+      val profiles = ChatDirectoryApi.searchProfilesByDisplayNamePrefix(query, first = 12)
+      dmDirectorySuggestions =
+        profiles
+          .mapNotNull(::directoryProfileToSuggestion)
+      dmDirectoryError = null
+    } catch (e: kotlinx.coroutines.CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      dmDirectorySuggestions = emptyList()
+      dmDirectoryError = e.message ?: "Directory search unavailable"
+    } finally {
+      dmDirectoryBusy = false
+    }
+  }
+
+  LaunchedEffect(currentView, newGroupMemberQuery) {
+    if (currentView != ChatView.NewGroupMembers) {
+      groupDirectorySuggestions = emptyList()
+      groupDirectoryBusy = false
+      groupDirectoryError = null
+      return@LaunchedEffect
+    }
+    val query = newGroupMemberQuery.trim()
+    if (query.length < 2 || looksLikeEthereumAddress(query)) {
+      groupDirectorySuggestions = emptyList()
+      groupDirectoryBusy = false
+      groupDirectoryError = null
+      return@LaunchedEffect
+    }
+    delay(280)
+    groupDirectoryBusy = true
+    groupDirectoryError = null
+    try {
+      val profiles = ChatDirectoryApi.searchProfilesByDisplayNamePrefix(query, first = 12)
+      groupDirectorySuggestions =
+        profiles
+          .mapNotNull(::directoryProfileToSuggestion)
+      groupDirectoryError = null
+    } catch (e: kotlinx.coroutines.CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      groupDirectorySuggestions = emptyList()
+      groupDirectoryError = e.message ?: "Directory search unavailable"
+    } finally {
+      groupDirectoryBusy = false
+    }
+  }
+
+  fun openDm(targetInput: String) {
+    val target = targetInput.trim()
+    if (target.isBlank() || newDmBusy) return
+    scope.launch {
+      try {
+        newDmBusy = true
+        newDmError = null
+        val selfAddress = userAddress
+        if (!isAuthenticated || selfAddress.isNullOrBlank()) {
+          throw IllegalStateException("Sign in to start a DM")
+        }
+        if (!chatService.connected.value) {
+          chatService.connect(selfAddress)
+        }
+        val convId = chatService.newDm(target)
+        chatService.openConversation(convId)
+        newDmAddress = ""
+      } catch (e: Exception) {
+        val msg = e.message ?: "Unknown error"
+        newDmError = msg
+        onShowMessage("New DM failed: $msg")
+      } finally {
+        newDmBusy = false
+      }
+    }
+  }
+
+  fun addGroupMembers(rawInput: String) {
+    val inputs = parseGroupMembersInput(rawInput)
+    if (inputs.isEmpty()) return
+    val existing = newGroupMembers.associateBy { it.lowercase() }.toMutableMap()
+    inputs.forEach { member ->
+      existing.putIfAbsent(member.lowercase(), member)
+    }
+    newGroupMembers = existing.values.toList()
+  }
+
+  fun createGroup() {
+    if (newGroupBusy || newGroupMembers.isEmpty()) return
+    scope.launch {
+      try {
+        newGroupBusy = true
+        newGroupError = null
+        val selfAddress = userAddress
+        if (!isAuthenticated || selfAddress.isNullOrBlank()) {
+          throw IllegalStateException("Sign in to create a group")
+        }
+        if (!chatService.connected.value) {
+          chatService.connect(selfAddress)
+        }
+        val groupId =
+          chatService.newGroup(
+            memberAddressesOrInboxIds = newGroupMembers,
+            name = newGroupName,
+            description = newGroupDescription,
+            imageUrl = "",
+            appData = "",
+            permissionMode = GroupPermissionMode.ALL_MEMBERS,
+          )
+        chatService.openConversation(groupId)
+        newGroupName = ""
+        newGroupDescription = ""
+        newGroupMemberQuery = ""
+        newGroupMembers = emptyList()
+      } catch (e: Exception) {
+        val msg = e.message ?: "Unknown error"
+        newGroupError = msg
+        onShowMessage("Create group failed: $msg")
+      } finally {
+        newGroupBusy = false
+      }
+    }
   }
 
   Box(modifier = Modifier.fillMaxSize()) {
@@ -253,6 +426,86 @@ fun ChatScreen(
         }
       }
 
+      currentView == ChatView.NewConversation -> {
+        NewConversationScreen(
+          query = newDmAddress,
+          submitBusy = newDmBusy,
+          submitError = newDmError,
+          recents = dmRecentSuggestions,
+          directorySuggestions = dmVisibleDirectorySuggestions,
+          directoryBusy = dmDirectoryBusy,
+          directoryError = dmDirectoryError,
+          onBack = { currentView = ChatView.Conversations },
+          onQueryChange = {
+            newDmAddress = it
+            if (!newDmError.isNullOrBlank()) newDmError = null
+            if (!dmDirectoryError.isNullOrBlank()) dmDirectoryError = null
+          },
+          onSubmit = { openDm(newDmAddress) },
+          onOpenSuggestion = { openDm(it) },
+          onOpenGroup = {
+            newGroupMemberQuery = ""
+            newGroupMembers = emptyList()
+            newGroupName = ""
+            newGroupDescription = ""
+            newGroupError = null
+            groupDirectorySuggestions = emptyList()
+            groupDirectoryBusy = false
+            groupDirectoryError = null
+            currentView = ChatView.NewGroupMembers
+          },
+        )
+      }
+
+      currentView == ChatView.NewGroupMembers -> {
+        NewGroupMembersScreen(
+          query = newGroupMemberQuery,
+          members = newGroupMembers,
+          recents = groupRecentSuggestions,
+          directorySuggestions = groupVisibleDirectorySuggestions,
+          directoryBusy = groupDirectoryBusy,
+          directoryError = groupDirectoryError,
+          busy = newGroupBusy,
+          error = newGroupError,
+          onBack = { currentView = ChatView.NewConversation },
+          onQueryChange = {
+            newGroupMemberQuery = it
+            if (!newGroupError.isNullOrBlank()) newGroupError = null
+            if (!groupDirectoryError.isNullOrBlank()) groupDirectoryError = null
+          },
+          onAddQuery = {
+            addGroupMembers(newGroupMemberQuery)
+            newGroupMemberQuery = ""
+          },
+          onAddSuggestion = { value ->
+            addGroupMembers(value)
+            newGroupMemberQuery = ""
+          },
+          onRemoveMember = { member ->
+            newGroupMembers =
+              newGroupMembers.filterNot { it.equals(member, ignoreCase = true) }
+          },
+          onNext = { currentView = ChatView.NewGroupDetails },
+        )
+      }
+
+      currentView == ChatView.NewGroupDetails -> {
+        NewGroupDetailsScreen(
+          groupName = newGroupName,
+          description = newGroupDescription,
+          memberCount = newGroupMembers.size,
+          busy = newGroupBusy,
+          error = newGroupError,
+          onBack = { currentView = ChatView.NewGroupMembers },
+          onNameChange = {
+            newGroupName = it
+            if (!newGroupError.isNullOrBlank()) newGroupError = null
+          },
+          onDescriptionChange = { newGroupDescription = it },
+          onCreate = { createGroup() },
+        )
+      }
+
       else -> {
         ConversationList(
           conversations = conversations,
@@ -261,10 +514,20 @@ fun ChatScreen(
           xmtpConnecting = connecting,
           onOpenScarlett = { currentView = ChatView.Scarlett },
           onOpenComposer = {
-            composerTab = ComposerTab.Dm
+            newDmAddress = ""
             newDmError = null
+            dmDirectorySuggestions = emptyList()
+            dmDirectoryBusy = false
+            dmDirectoryError = null
+            newGroupMemberQuery = ""
+            newGroupMembers = emptyList()
+            newGroupName = ""
+            newGroupDescription = ""
             newGroupError = null
-            showComposerSheet = true
+            groupDirectorySuggestions = emptyList()
+            groupDirectoryBusy = false
+            groupDirectoryError = null
+            currentView = ChatView.NewConversation
           },
           onOpenConversation = { convId ->
             scope.launch {
@@ -273,265 +536,6 @@ fun ChatScreen(
           },
           onOpenDrawer = onOpenDrawer,
         )
-      }
-    }
-
-    if (showComposerSheet) {
-      ModalBottomSheet(
-        onDismissRequest = { showComposerSheet = false },
-      ) {
-        Column(
-          modifier = Modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(bottom = 16.dp)
-            .padding(horizontal = 16.dp),
-        ) {
-          Text(
-            text = "New conversation",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
-          )
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-          ) {
-            OutlinedButton(
-              onClick = { composerTab = ComposerTab.Dm },
-              modifier = Modifier.weight(1f),
-              enabled = !newDmBusy && !newGroupBusy,
-            ) {
-              Text(if (composerTab == ComposerTab.Dm) "DM ✓" else "Direct message")
-            }
-            OutlinedButton(
-              onClick = { composerTab = ComposerTab.Group },
-              modifier = Modifier.weight(1f),
-              enabled = !newDmBusy && !newGroupBusy,
-            ) {
-              Text(if (composerTab == ComposerTab.Group) "Group ✓" else "Group")
-            }
-          }
-          Spacer(modifier = Modifier.height(12.dp))
-
-          if (composerTab == ComposerTab.Dm) {
-            OutlinedTextField(
-              value = newDmAddress,
-              onValueChange = { newDmAddress = it },
-              modifier = Modifier.fillMaxWidth(),
-              placeholder = { Text("Search by name or paste address") },
-              singleLine = true,
-              enabled = !newDmBusy,
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(
-              onClick = {
-                val target = newDmAddress.trim()
-                if (target.isBlank()) return@Button
-                scope.launch {
-                  try {
-                    newDmBusy = true
-                    newDmError = null
-                    val selfAddress = userAddress
-                    if (!isAuthenticated || selfAddress.isNullOrBlank()) {
-                      throw IllegalStateException("Sign in to start a DM")
-                    }
-                    if (!chatService.connected.value) {
-                      chatService.connect(selfAddress)
-                    }
-                    val convId = chatService.newDm(target)
-                    chatService.openConversation(convId)
-                    newDmAddress = ""
-                    showComposerSheet = false
-                  } catch (e: Exception) {
-                    val msg = e.message ?: "Unknown error"
-                    newDmError = msg
-                    onShowMessage("New DM failed: $msg")
-                  } finally {
-                    newDmBusy = false
-                  }
-                }
-              },
-              enabled = newDmAddress.isNotBlank() && !newDmBusy,
-            ) {
-              Text("Open chat")
-            }
-            if (dmSuggestions.isNotEmpty()) {
-              Spacer(modifier = Modifier.height(8.dp))
-              Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-              ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                  dmSuggestions.forEachIndexed { index, suggestion ->
-                    Row(
-                      modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = !newDmBusy) {
-                          newDmAddress = suggestion.inputValue
-                        }
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                      verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                      IdentityAvatar(
-                        displayName = suggestion.title,
-                        avatarUri = suggestion.avatarUri,
-                        size = 32.dp,
-                      )
-                      Spacer(modifier = Modifier.width(10.dp))
-                      Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                          text = suggestion.title,
-                          fontWeight = FontWeight.Medium,
-                          maxLines = 1,
-                          overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                          text = suggestion.subtitle,
-                          color = PiratePalette.TextMuted,
-                          style = MaterialTheme.typography.bodySmall,
-                          maxLines = 1,
-                          overflow = TextOverflow.Ellipsis,
-                        )
-                      }
-                    }
-                    if (index < dmSuggestions.lastIndex) {
-                      HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    }
-                  }
-                }
-              }
-            }
-            if (!newDmError.isNullOrBlank()) {
-              Text(
-                text = newDmError ?: "",
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(top = 8.dp),
-              )
-            }
-          } else {
-            OutlinedTextField(
-              value = newGroupName,
-              onValueChange = { newGroupName = it },
-              modifier = Modifier.fillMaxWidth(),
-              placeholder = { Text("Group name") },
-              singleLine = true,
-              enabled = !newGroupBusy,
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-              value = newGroupDescription,
-              onValueChange = { newGroupDescription = it },
-              modifier = Modifier.fillMaxWidth(),
-              placeholder = { Text("Description (optional)") },
-              enabled = !newGroupBusy,
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-              value = newGroupImageUrl,
-              onValueChange = { newGroupImageUrl = it },
-              modifier = Modifier.fillMaxWidth(),
-              placeholder = { Text("Image URL (optional)") },
-              singleLine = true,
-              enabled = !newGroupBusy,
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-              value = newGroupMembers,
-              onValueChange = { newGroupMembers = it },
-              modifier = Modifier.fillMaxWidth(),
-              placeholder = { Text("Member addresses or inbox IDs (comma, space, or newline)") },
-              minLines = 2,
-              enabled = !newGroupBusy,
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-              value = newGroupAppData,
-              onValueChange = { newGroupAppData = it },
-              modifier = Modifier.fillMaxWidth(),
-              placeholder = { Text("App data JSON (optional)") },
-              enabled = !newGroupBusy,
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-              text = "Permissions",
-              style = MaterialTheme.typography.labelLarge,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            listOf(
-              GroupPermissionMode.ALL_MEMBERS to "All members",
-              GroupPermissionMode.ADMIN_ONLY to "Admin only",
-            ).forEach { (mode, label) ->
-              Row(
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .clickable(enabled = !newGroupBusy) { newGroupPermissionMode = mode }
-                  .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-              ) {
-                RadioButton(
-                  selected = newGroupPermissionMode == mode,
-                  onClick = null,
-                  enabled = !newGroupBusy,
-                )
-                Text(text = label)
-              }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(
-              onClick = {
-                scope.launch {
-                  try {
-                    newGroupBusy = true
-                    newGroupError = null
-                    val selfAddress = userAddress
-                    if (!isAuthenticated || selfAddress.isNullOrBlank()) {
-                      throw IllegalStateException("Sign in to create a group")
-                    }
-                    if (!chatService.connected.value) {
-                      chatService.connect(selfAddress)
-                    }
-                    val memberInputs = parseGroupMembersInput(newGroupMembers)
-                    val groupId =
-                      chatService.newGroup(
-                        memberAddressesOrInboxIds = memberInputs,
-                        name = newGroupName,
-                        description = newGroupDescription,
-                        imageUrl = newGroupImageUrl,
-                        appData = newGroupAppData,
-                        permissionMode = newGroupPermissionMode,
-                      )
-                    chatService.openConversation(groupId)
-                    newGroupName = ""
-                    newGroupDescription = ""
-                    newGroupImageUrl = ""
-                    newGroupAppData = ""
-                    newGroupMembers = ""
-                    newGroupPermissionMode = GroupPermissionMode.ALL_MEMBERS
-                    showComposerSheet = false
-                  } catch (e: Exception) {
-                    val msg = e.message ?: "Unknown error"
-                    newGroupError = msg
-                    onShowMessage("Create group failed: $msg")
-                  } finally {
-                    newGroupBusy = false
-                  }
-                }
-              },
-              enabled = !newGroupBusy && parseGroupMembersInput(newGroupMembers).isNotEmpty(),
-            ) {
-              Text("Create group")
-            }
-            if (!newGroupError.isNullOrBlank()) {
-              Text(
-                text = newGroupError ?: "",
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(top = 8.dp),
-              )
-            }
-          }
-        }
       }
     }
 
@@ -816,6 +820,453 @@ private fun ConversationList(
           HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
       }
+    }
+  }
+}
+
+@Composable
+private fun NewConversationScreen(
+  query: String,
+  submitBusy: Boolean,
+  submitError: String?,
+  recents: List<DmSuggestion>,
+  directorySuggestions: List<DmSuggestion>,
+  directoryBusy: Boolean,
+  directoryError: String?,
+  onBack: () -> Unit,
+  onQueryChange: (String) -> Unit,
+  onSubmit: () -> Unit,
+  onOpenSuggestion: (String) -> Unit,
+  onOpenGroup: () -> Unit,
+) {
+  val queryTrimmed = query.trim()
+  val showDirectorySection = shouldSearchDirectory(queryTrimmed)
+  val canOpenDirect = looksLikeDirectDmTarget(queryTrimmed)
+  Column(modifier = Modifier.fillMaxSize()) {
+    PirateMobileHeader(
+      title = "New conversation",
+      onBackPress = onBack,
+      isAuthenticated = true,
+    )
+    OutlinedTextField(
+      value = query,
+      onValueChange = onQueryChange,
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 16.dp, vertical = 8.dp),
+      placeholder = { Text("Search display name or enter name.heaven / name.pirate") },
+      singleLine = true,
+      enabled = !submitBusy,
+      keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+        imeAction = androidx.compose.ui.text.input.ImeAction.Send,
+      ),
+      keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+        onSend = { onSubmit() },
+      ),
+    )
+    if (!submitError.isNullOrBlank()) {
+      Text(
+        text = submitError,
+        color = MaterialTheme.colorScheme.error,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+      )
+    }
+    if (!directoryError.isNullOrBlank()) {
+      Text(
+        text = directoryError,
+        color = PiratePalette.TextMuted,
+        style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+      )
+    }
+    LazyColumn(
+      modifier = Modifier.fillMaxWidth().weight(1f),
+    ) {
+      item(key = "new-group") {
+        ListItem(
+          headlineContent = { Text("New group") },
+          leadingContent = { Icon(Icons.Rounded.Add, contentDescription = null) },
+          modifier = Modifier.clickable(enabled = !submitBusy, onClick = onOpenGroup),
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+      }
+
+      if (canOpenDirect) {
+        item(key = "direct-open") {
+          ListItem(
+            headlineContent = { Text("Message \"$queryTrimmed\"") },
+            supportingContent = { Text("Exact name.heaven / name.pirate or wallet address") },
+            modifier = Modifier.clickable(enabled = !submitBusy, onClick = onSubmit),
+          )
+          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        }
+      }
+
+      item(key = "recents-label") {
+        Text(
+          text = "Recents",
+          style = MaterialTheme.typography.labelLarge,
+          modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+      }
+
+      if (recents.isEmpty()) {
+        item(key = "recents-empty") {
+          Text(
+            text = "No recent DMs yet",
+            color = PiratePalette.TextMuted,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+          )
+        }
+      } else {
+        items(
+          items = recents,
+          key = { "recent-${it.inputValue.lowercase()}" },
+        ) { suggestion ->
+          DmSuggestionRow(
+            suggestion = suggestion,
+            enabled = !submitBusy,
+            onClick = { onOpenSuggestion(suggestion.inputValue) },
+          )
+          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        }
+      }
+
+      if (showDirectorySection) {
+        item(key = "directory-label") {
+          Text(
+            text = "Directory",
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+          )
+        }
+        when {
+          directoryBusy -> {
+            item(key = "directory-loading") {
+              Text(
+                text = "Searching directory...",
+                color = PiratePalette.TextMuted,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+              )
+            }
+          }
+          directorySuggestions.isEmpty() -> {
+            item(key = "directory-empty") {
+              Text(
+                text = "No directory matches",
+                color = PiratePalette.TextMuted,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+              )
+            }
+          }
+          else -> {
+            items(
+              items = directorySuggestions,
+              key = { "dir-${it.inputValue.lowercase()}" },
+            ) { suggestion ->
+              DmSuggestionRow(
+                suggestion = suggestion,
+                enabled = !submitBusy,
+                onClick = { onOpenSuggestion(suggestion.inputValue) },
+              )
+              HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun NewGroupMembersScreen(
+  query: String,
+  members: List<String>,
+  recents: List<DmSuggestion>,
+  directorySuggestions: List<DmSuggestion>,
+  directoryBusy: Boolean,
+  directoryError: String?,
+  busy: Boolean,
+  error: String?,
+  onBack: () -> Unit,
+  onQueryChange: (String) -> Unit,
+  onAddQuery: () -> Unit,
+  onAddSuggestion: (String) -> Unit,
+  onRemoveMember: (String) -> Unit,
+  onNext: () -> Unit,
+) {
+  val queryTrimmed = query.trim()
+  val showDirectorySection = shouldSearchDirectory(queryTrimmed)
+  Column(modifier = Modifier.fillMaxSize()) {
+    PirateMobileHeader(
+      title = "New group",
+      onBackPress = onBack,
+      isAuthenticated = true,
+    )
+    Text(
+      text = "Add members",
+      style = MaterialTheme.typography.titleMedium,
+      modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+    )
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 16.dp, vertical = 8.dp),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = Modifier.weight(1f),
+        placeholder = { Text("Search display name or enter name.heaven / name.pirate") },
+        singleLine = true,
+        enabled = !busy,
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+          imeAction = androidx.compose.ui.text.input.ImeAction.Send,
+        ),
+        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+          onSend = { onAddQuery() },
+        ),
+      )
+      Button(
+        onClick = onAddQuery,
+        enabled = query.trim().isNotBlank() && !busy,
+      ) {
+        Text("Add")
+      }
+    }
+    if (!error.isNullOrBlank()) {
+      Text(
+        text = error,
+        color = MaterialTheme.colorScheme.error,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+      )
+    }
+    if (!directoryError.isNullOrBlank()) {
+      Text(
+        text = directoryError,
+        color = PiratePalette.TextMuted,
+        style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+      )
+    }
+    LazyColumn(
+      modifier = Modifier.fillMaxWidth().weight(1f),
+    ) {
+      if (members.isEmpty()) {
+        item(key = "members-empty") {
+          Text(
+            text = "No members selected yet",
+            color = PiratePalette.TextMuted,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+          )
+        }
+      } else {
+        item(key = "members-title") {
+          Text(
+            text = "Selected (${members.size})",
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+          )
+        }
+        items(
+          items = members,
+          key = { "member-${it.lowercase()}" },
+        ) { member ->
+          ListItem(
+            headlineContent = { Text(memberDisplayName(member)) },
+            supportingContent = { Text(member, style = MaterialTheme.typography.bodySmall) },
+            trailingContent = { Text("Remove", color = MaterialTheme.colorScheme.primary) },
+            modifier = Modifier.clickable(enabled = !busy) { onRemoveMember(member) },
+          )
+          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        }
+      }
+      item(key = "suggestions-title") {
+        Text(
+          text = "Recents",
+          style = MaterialTheme.typography.labelLarge,
+          modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+      }
+      if (recents.isEmpty()) {
+        item(key = "suggestions-empty") {
+          Text(
+            text = "No recent suggestions",
+            color = PiratePalette.TextMuted,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+          )
+        }
+      } else {
+        items(
+          items = recents,
+          key = { "recent-suggest-${it.inputValue.lowercase()}" },
+        ) { suggestion ->
+          DmSuggestionRow(
+            suggestion = suggestion,
+            enabled = !busy,
+            onClick = { onAddSuggestion(suggestion.inputValue) },
+          )
+          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        }
+      }
+      if (showDirectorySection) {
+        item(key = "directory-title") {
+          Text(
+            text = "Directory",
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+          )
+        }
+        when {
+          directoryBusy -> {
+            item(key = "directory-loading") {
+              Text(
+                text = "Searching directory...",
+                color = PiratePalette.TextMuted,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+              )
+            }
+          }
+          directorySuggestions.isEmpty() -> {
+            item(key = "directory-empty") {
+              Text(
+                text = "No directory matches",
+                color = PiratePalette.TextMuted,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+              )
+            }
+          }
+          else -> {
+            items(
+              items = directorySuggestions,
+              key = { "dir-suggest-${it.inputValue.lowercase()}" },
+            ) { suggestion ->
+              DmSuggestionRow(
+                suggestion = suggestion,
+                enabled = !busy,
+                onClick = { onAddSuggestion(suggestion.inputValue) },
+              )
+              HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+          }
+        }
+      }
+      item(key = "spacer-end") {
+        Spacer(modifier = Modifier.height(16.dp))
+      }
+    }
+    Button(
+      onClick = onNext,
+      enabled = members.isNotEmpty() && !busy,
+      modifier = Modifier
+        .fillMaxWidth()
+        .navigationBarsPadding()
+        .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+      Text("Next")
+    }
+  }
+}
+
+@Composable
+private fun NewGroupDetailsScreen(
+  groupName: String,
+  description: String,
+  memberCount: Int,
+  busy: Boolean,
+  error: String?,
+  onBack: () -> Unit,
+  onNameChange: (String) -> Unit,
+  onDescriptionChange: (String) -> Unit,
+  onCreate: () -> Unit,
+) {
+  Column(modifier = Modifier.fillMaxSize()) {
+    PirateMobileHeader(
+      title = "Group details",
+      onBackPress = onBack,
+      isAuthenticated = true,
+    )
+    Text(
+      text = "$memberCount member${if (memberCount == 1) "" else "s"} selected",
+      color = PiratePalette.TextMuted,
+      modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+    )
+    OutlinedTextField(
+      value = groupName,
+      onValueChange = onNameChange,
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 16.dp, vertical = 8.dp),
+      placeholder = { Text("Group name (optional)") },
+      singleLine = true,
+      enabled = !busy,
+    )
+    OutlinedTextField(
+      value = description,
+      onValueChange = onDescriptionChange,
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 16.dp, vertical = 4.dp),
+      placeholder = { Text("Description (optional)") },
+      enabled = !busy,
+      minLines = 2,
+    )
+    if (!error.isNullOrBlank()) {
+      Text(
+        text = error,
+        color = MaterialTheme.colorScheme.error,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+      )
+    }
+    Spacer(modifier = Modifier.weight(1f))
+    Button(
+      onClick = onCreate,
+      enabled = memberCount > 0 && !busy,
+      modifier = Modifier
+        .fillMaxWidth()
+        .navigationBarsPadding()
+        .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+      Text(if (busy) "Creating..." else "Create group")
+    }
+  }
+}
+
+@Composable
+private fun DmSuggestionRow(
+  suggestion: DmSuggestion,
+  enabled: Boolean,
+  onClick: () -> Unit,
+) {
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .clickable(enabled = enabled, onClick = onClick)
+      .padding(horizontal = 16.dp, vertical = 10.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    IdentityAvatar(
+      displayName = suggestion.title,
+      avatarUri = suggestion.avatarUri,
+      size = 36.dp,
+    )
+    Spacer(modifier = Modifier.width(10.dp))
+    Column(modifier = Modifier.weight(1f)) {
+      Text(
+        text = suggestion.title,
+        fontWeight = FontWeight.Medium,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+      Text(
+        text = suggestion.subtitle,
+        color = PiratePalette.TextMuted,
+        style = MaterialTheme.typography.bodySmall,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
     }
   }
 }
@@ -1354,7 +1805,6 @@ private fun buildDmSuggestions(
   limit: Int = 6,
 ): List<DmSuggestion> {
   val needle = query.trim().lowercase()
-  if (needle.isBlank()) return emptyList()
   return conversations
     .asSequence()
     .filter { convo ->
@@ -1362,10 +1812,15 @@ private fun buildDmSuggestions(
       if (!excludeConversationId.isNullOrBlank() && convo.id == excludeConversationId) return@filter false
       val address = convo.peerAddress.orEmpty()
       val inboxId = convo.peerInboxId.orEmpty()
-      convo.displayName.lowercase().contains(needle) ||
-        address.lowercase().contains(needle) ||
-        inboxId.lowercase().contains(needle)
+      if (needle.isBlank()) {
+        true
+      } else {
+        convo.displayName.lowercase().contains(needle) ||
+          address.lowercase().contains(needle) ||
+          inboxId.lowercase().contains(needle)
+      }
     }
+    .sortedByDescending { it.lastMessageTimestampMs }
     .map { convo ->
       val address = convo.peerAddress.orEmpty()
       val inboxId = convo.peerInboxId.orEmpty()
@@ -1385,6 +1840,7 @@ private fun buildDmSuggestions(
         avatarUri = convo.avatarUri,
       )
     }
+    .filter { it.inputValue.isNotBlank() }
     .distinctBy { it.inputValue.lowercase() }
     .take(limit)
     .toList()
@@ -1395,6 +1851,71 @@ private fun parseGroupMembersInput(input: String): List<String> {
     .split(',', '\n', '\t', ' ')
     .map { it.trim() }
     .filter { it.isNotBlank() }
+}
+
+private fun shouldSearchDirectory(query: String): Boolean {
+  val normalized = query.trim()
+  if (normalized.length < 2) return false
+  if (looksLikeEthereumAddress(normalized)) return false
+  return true
+}
+
+private fun looksLikeDirectDmTarget(value: String): Boolean {
+  val normalized = value.trim()
+  if (normalized.isBlank()) return false
+  if (looksLikeEthereumAddress(normalized)) return true
+  if (looksLikeTempoName(normalized)) return true
+  return false
+}
+
+private fun looksLikeTempoName(value: String): Boolean {
+  val normalized = value.trim().lowercase().removePrefix("@")
+  if (normalized.isBlank()) return false
+  val dotIndex = normalized.lastIndexOf('.')
+  if (dotIndex <= 0 || dotIndex >= normalized.lastIndex) return false
+  val label = normalized.substring(0, dotIndex)
+  val tld = normalized.substring(dotIndex + 1)
+  if (tld != "heaven" && tld != "pirate") return false
+  if (label.isBlank()) return false
+  return label.all { it.isLetterOrDigit() || it == '-' || it == '_' }
+}
+
+private fun directoryProfileToSuggestion(profile: ChatDirectoryProfile): DmSuggestion? {
+  val address = profile.address.trim().lowercase()
+  if (!looksLikeEthereumAddress(address)) return null
+  val title = profile.displayName.ifBlank { abbreviateAddress(address) }
+  return DmSuggestion(
+    title = title,
+    subtitle = abbreviateAddress(address),
+    inputValue = address,
+    avatarUri = profile.photoUri,
+  )
+}
+
+private fun dropKnownSuggestions(
+  directorySuggestions: List<DmSuggestion>,
+  existingSuggestions: List<DmSuggestion>,
+): List<DmSuggestion> {
+  if (directorySuggestions.isEmpty()) return emptyList()
+  if (existingSuggestions.isEmpty()) return directorySuggestions
+  val existingInputs =
+    existingSuggestions
+      .asSequence()
+      .map { it.inputValue.trim().lowercase() }
+      .filter { it.isNotBlank() }
+      .toSet()
+  if (existingInputs.isEmpty()) return directorySuggestions
+  return directorySuggestions.filterNot { it.inputValue.trim().lowercase() in existingInputs }
+}
+
+private fun memberDisplayName(value: String): String {
+  val trimmed = value.trim()
+  if (trimmed.isBlank()) return ""
+  return if (looksLikeEthereumAddress(trimmed) || trimmed.length > 22) {
+    abbreviateAddress(trimmed)
+  } else {
+    trimmed
+  }
 }
 
 private fun permissionOptionLabel(option: PermissionOption): String {

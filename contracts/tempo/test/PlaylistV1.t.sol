@@ -8,19 +8,18 @@ contract PlaylistV1Test is Test {
     PlaylistV1 pl;
 
     address deployer = address(0xA11CE);
-    address sponsor  = address(0xB0B);
-    address user     = address(0xC0FFEE);
+    address user = address(0xC0FFEE);
+    address otherUser = address(0xBEEF);
 
     function setUp() public {
         vm.prank(deployer);
-        pl = new PlaylistV1(sponsor);
+        pl = new PlaylistV1();
     }
 
     // ── Auth ─────────────────────────────────────────────────────────────
 
     function test_constructor() public view {
         assertEq(pl.owner(), deployer);
-        assertEq(pl.sponsor(), sponsor);
     }
 
     function test_transferOwnership() public {
@@ -36,59 +35,36 @@ contract PlaylistV1Test is Test {
         pl.transferOwnership(user);
     }
 
-    function test_setSponsor() public {
-        address newSponsor = address(0xBEEF);
-        vm.prank(deployer);
-        pl.setSponsor(newSponsor);
-        assertEq(pl.sponsor(), newSponsor);
-    }
-
-    function test_onlySponsor_guarded() public {
+    function test_onlyPlaylistOwner_guarded() public {
         bytes32[] memory tracks = _tracks(2);
 
-        vm.expectRevert("unauthorized");
-        pl.createPlaylistFor(user, "n", "", 0, tracks);
+        vm.prank(user);
+        bytes32 playlistId = pl.createPlaylist("n", "", 0, tracks);
 
-        vm.expectRevert("unauthorized");
+        vm.prank(otherUser);
+        vm.expectRevert("not owner");
+        pl.setTracks(playlistId, tracks);
+
+        vm.prank(otherUser);
+        vm.expectRevert("not owner");
+        pl.updateMeta(playlistId, "n", "", 0);
+
+        vm.prank(otherUser);
+        vm.expectRevert("not owner");
+        pl.deletePlaylist(playlistId);
+    }
+
+    function test_nonexistent_playlist_reverts_notFound() public {
+        bytes32[] memory tracks = _tracks(1);
+
+        vm.expectRevert("not found");
         pl.setTracks(bytes32("x"), tracks);
 
-        vm.expectRevert("unauthorized");
+        vm.expectRevert("not found");
         pl.updateMeta(bytes32("x"), "n", "", 0);
 
-        vm.expectRevert("unauthorized");
+        vm.expectRevert("not found");
         pl.deletePlaylist(bytes32("x"));
-
-        vm.expectRevert("unauthorized");
-        pl.consumeNonce(user, 0);
-    }
-
-    // ── Nonce Replay Protection ───────────────────────────────────────
-
-    function test_consumeNonce_increments() public {
-        assertEq(pl.userNonces(user), 0);
-
-        vm.prank(sponsor);
-        pl.consumeNonce(user, 0);
-        assertEq(pl.userNonces(user), 1);
-
-        vm.prank(sponsor);
-        pl.consumeNonce(user, 1);
-        assertEq(pl.userNonces(user), 2);
-    }
-
-    function test_consumeNonce_reverts_wrongNonce() public {
-        vm.prank(sponsor);
-        vm.expectRevert("bad nonce");
-        pl.consumeNonce(user, 1); // expected 0
-    }
-
-    function test_consumeNonce_prevents_replay() public {
-        vm.prank(sponsor);
-        pl.consumeNonce(user, 0);
-
-        vm.prank(sponsor);
-        vm.expectRevert("bad nonce");
-        pl.consumeNonce(user, 0);
     }
 
     // ── Create ───────────────────────────────────────────────────────────
@@ -99,8 +75,8 @@ contract PlaylistV1Test is Test {
         uint64 t0 = 1_700_000_000;
         vm.warp(t0);
 
-        vm.prank(sponsor);
-        bytes32 playlistId = pl.createPlaylistFor(user, "My Playlist", "QmTestCoverCid123", 0, tracks);
+        vm.prank(user);
+        bytes32 playlistId = pl.createPlaylist("My Playlist", "QmTestCoverCid123", 0, tracks);
 
         (
             address owner_,
@@ -129,49 +105,46 @@ contract PlaylistV1Test is Test {
         bytes32[] memory tracks = new bytes32[](0);
 
         vm.warp(1_700_000_000);
-        vm.prank(sponsor);
-        bytes32 playlistId = pl.createPlaylistFor(user, "Empty", "", 0, tracks);
+        vm.prank(user);
+        bytes32 playlistId = pl.createPlaylist("Empty", "", 0, tracks);
 
         (, , bool exists, , uint32 trackCount, , , ) = pl.getPlaylist(playlistId);
         assertTrue(exists);
         assertEq(trackCount, 0);
     }
 
-    function test_createPlaylist_incrementsNonce() public {
+    function test_createPlaylist_incrementsOwnerNonce() public {
         bytes32[] memory tracks = _tracks(1);
 
         vm.warp(1_700_000_000);
-        vm.prank(sponsor);
-        bytes32 id1 = pl.createPlaylistFor(user, "A", "", 0, tracks);
+        vm.prank(user);
+        bytes32 id1 = pl.createPlaylist("A", "", 0, tracks);
 
-        vm.prank(sponsor);
-        bytes32 id2 = pl.createPlaylistFor(user, "B", "", 0, tracks);
+        vm.prank(user);
+        bytes32 id2 = pl.createPlaylist("B", "", 0, tracks);
 
         assertTrue(id1 != id2);
         assertEq(pl.ownerNonces(user), 2);
-    }
 
-    function test_createPlaylist_reverts_zeroOwner() public {
-        bytes32[] memory tracks = _tracks(1);
-        vm.prank(sponsor);
-        vm.expectRevert("zero playlistOwner");
-        pl.createPlaylistFor(address(0), "n", "", 0, tracks);
+        vm.prank(otherUser);
+        pl.createPlaylist("C", "", 0, tracks);
+        assertEq(pl.ownerNonces(otherUser), 1);
     }
 
     function test_createPlaylist_reverts_badVisibility() public {
         bytes32[] memory tracks = _tracks(1);
-        vm.prank(sponsor);
+        vm.prank(user);
         vm.expectRevert("bad visibility");
-        pl.createPlaylistFor(user, "n", "", 99, tracks);
+        pl.createPlaylist("n", "", 99, tracks);
     }
 
     function test_createPlaylist_reverts_zeroTrackId() public {
         bytes32[] memory tracks = new bytes32[](1);
         tracks[0] = bytes32(0);
 
-        vm.prank(sponsor);
+        vm.prank(user);
         vm.expectRevert("zero trackId");
-        pl.createPlaylistFor(user, "n", "", 0, tracks);
+        pl.createPlaylist("n", "", 0, tracks);
     }
 
     function test_createPlaylist_reverts_nameTooLong() public {
@@ -179,9 +152,9 @@ contract PlaylistV1Test is Test {
         bytes memory longName = new bytes(65);
         for (uint256 i; i < 65; i++) longName[i] = "a";
 
-        vm.prank(sponsor);
+        vm.prank(user);
         vm.expectRevert("name too long");
-        pl.createPlaylistFor(user, string(longName), "", 0, tracks);
+        pl.createPlaylist(string(longName), "", 0, tracks);
     }
 
     function test_createPlaylist_reverts_coverCidTooLong() public {
@@ -189,17 +162,17 @@ contract PlaylistV1Test is Test {
         bytes memory longCid = new bytes(129);
         for (uint256 i; i < 129; i++) longCid[i] = "Q";
 
-        vm.prank(sponsor);
+        vm.prank(user);
         vm.expectRevert("coverCid too long");
-        pl.createPlaylistFor(user, "n", string(longCid), 0, tracks);
+        pl.createPlaylist("n", string(longCid), 0, tracks);
     }
 
     function test_createPlaylist_emptyCoverCid() public {
         bytes32[] memory tracks = _tracks(1);
 
         vm.warp(1_700_000_000);
-        vm.prank(sponsor);
-        bytes32 playlistId = pl.createPlaylistFor(user, "n", "", 0, tracks);
+        vm.prank(user);
+        bytes32 playlistId = pl.createPlaylist("n", "", 0, tracks);
 
         (, , bool exists, , , , , ) = pl.getPlaylist(playlistId);
         assertTrue(exists);
@@ -212,11 +185,11 @@ contract PlaylistV1Test is Test {
         bytes32[] memory tracksB = _tracks(4);
 
         vm.warp(1_700_000_000);
-        vm.prank(sponsor);
-        bytes32 playlistId = pl.createPlaylistFor(user, "n", "", 1, tracksA);
+        vm.prank(user);
+        bytes32 playlistId = pl.createPlaylist("n", "", 1, tracksA);
 
         vm.warp(1_700_000_100);
-        vm.prank(sponsor);
+        vm.prank(user);
         pl.setTracks(playlistId, tracksB);
 
         (, , bool exists, uint32 version, uint32 count, , uint64 updatedAt, bytes32 hash) = pl.getPlaylist(playlistId);
@@ -231,7 +204,6 @@ contract PlaylistV1Test is Test {
 
     function test_setTracks_reverts_notFound() public {
         bytes32[] memory tracks = _tracks(1);
-        vm.prank(sponsor);
         vm.expectRevert("not found");
         pl.setTracks(bytes32("nonexistent"), tracks);
     }
@@ -241,10 +213,10 @@ contract PlaylistV1Test is Test {
         bytes32[] memory empty = new bytes32[](0);
 
         vm.warp(1_700_000_000);
-        vm.prank(sponsor);
-        bytes32 playlistId = pl.createPlaylistFor(user, "n", "", 0, tracks);
+        vm.prank(user);
+        bytes32 playlistId = pl.createPlaylist("n", "", 0, tracks);
 
-        vm.prank(sponsor);
+        vm.prank(user);
         pl.setTracks(playlistId, empty);
 
         (, , , , uint32 count, , , ) = pl.getPlaylist(playlistId);
@@ -257,11 +229,11 @@ contract PlaylistV1Test is Test {
         bytes32[] memory tracks = _tracks(1);
 
         vm.warp(1_700_000_000);
-        vm.prank(sponsor);
-        bytes32 playlistId = pl.createPlaylistFor(user, "n", "", 0, tracks);
+        vm.prank(user);
+        bytes32 playlistId = pl.createPlaylist("n", "", 0, tracks);
 
         vm.warp(1_700_000_050);
-        vm.prank(sponsor);
+        vm.prank(user);
         pl.updateMeta(playlistId, "new name", "QmNewCover456", 2);
 
         (, uint8 vis, bool exists, uint32 version, , , uint64 updatedAt, ) = pl.getPlaylist(playlistId);
@@ -272,7 +244,6 @@ contract PlaylistV1Test is Test {
     }
 
     function test_updateMeta_reverts_notFound() public {
-        vm.prank(sponsor);
         vm.expectRevert("not found");
         pl.updateMeta(bytes32("nonexistent"), "n", "", 0);
     }
@@ -281,13 +252,13 @@ contract PlaylistV1Test is Test {
         bytes32[] memory tracks = _tracks(1);
 
         vm.warp(1_700_000_000);
-        vm.prank(sponsor);
-        bytes32 playlistId = pl.createPlaylistFor(user, "n", "", 0, tracks);
+        vm.prank(user);
+        bytes32 playlistId = pl.createPlaylist("n", "", 0, tracks);
 
         bytes memory longCid = new bytes(129);
         for (uint256 i; i < 129; i++) longCid[i] = "Q";
 
-        vm.prank(sponsor);
+        vm.prank(user);
         vm.expectRevert("coverCid too long");
         pl.updateMeta(playlistId, "n", string(longCid), 0);
     }
@@ -298,11 +269,11 @@ contract PlaylistV1Test is Test {
         bytes32[] memory tracks = _tracks(1);
 
         vm.warp(1_700_000_000);
-        vm.prank(sponsor);
-        bytes32 playlistId = pl.createPlaylistFor(user, "n", "", 0, tracks);
+        vm.prank(user);
+        bytes32 playlistId = pl.createPlaylist("n", "", 0, tracks);
 
         vm.warp(1_700_000_010);
-        vm.prank(sponsor);
+        vm.prank(user);
         pl.deletePlaylist(playlistId);
 
         (, , bool exists, uint32 version, , , uint64 updatedAt, ) = pl.getPlaylist(playlistId);
@@ -312,7 +283,6 @@ contract PlaylistV1Test is Test {
     }
 
     function test_deletePlaylist_reverts_notFound() public {
-        vm.prank(sponsor);
         vm.expectRevert("not found");
         pl.deletePlaylist(bytes32("nonexistent"));
     }
@@ -321,21 +291,21 @@ contract PlaylistV1Test is Test {
         bytes32[] memory tracks = _tracks(1);
 
         vm.warp(1_700_000_000);
-        vm.prank(sponsor);
-        bytes32 playlistId = pl.createPlaylistFor(user, "n", "", 0, tracks);
+        vm.prank(user);
+        bytes32 playlistId = pl.createPlaylist("n", "", 0, tracks);
 
-        vm.prank(sponsor);
+        vm.prank(user);
         pl.deletePlaylist(playlistId);
 
-        vm.prank(sponsor);
+        vm.prank(user);
         vm.expectRevert("not found");
         pl.setTracks(playlistId, tracks);
 
-        vm.prank(sponsor);
+        vm.prank(user);
         vm.expectRevert("not found");
         pl.updateMeta(playlistId, "n", "", 0);
 
-        vm.prank(sponsor);
+        vm.prank(user);
         vm.expectRevert("not found");
         pl.deletePlaylist(playlistId);
     }
@@ -346,7 +316,9 @@ contract PlaylistV1Test is Test {
         arr = new bytes32[](n);
         for (uint256 i; i < n; ) {
             arr[i] = keccak256(abi.encodePacked("track", i));
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
     }
 }

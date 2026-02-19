@@ -375,10 +375,10 @@ object SongPublishService {
   suspend fun publish(
     context: Context,
     formData: SongFormData,
-    pkpEthAddress: String,
+    ownerAddress: String,
     onProgress: (Int) -> Unit,
   ): PublishResult {
-    val userPkp = normalizeUserPkp(pkpEthAddress)
+    val userPkp = normalizeUserPkp(ownerAddress)
     if (formData.title.isBlank()) throw IllegalStateException("Song title is required")
     if (formData.artist.isBlank()) throw IllegalStateException("Artist is required")
     if (formData.lyrics.isBlank()) throw IllegalStateException("Lyrics are required")

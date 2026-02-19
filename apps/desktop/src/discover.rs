@@ -30,7 +30,7 @@ const MAX_NEW_RELEASES: usize = 10;
 const MAX_TOP_SONGS: usize = 10;
 
 const DEFAULT_SUBGRAPH_ACTIVITY_URL: &str =
-    "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/14.0.0/gn";
+    "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TopSongsMode {

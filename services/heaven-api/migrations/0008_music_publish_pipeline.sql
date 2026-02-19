@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS music_publish_jobs (
   job_id TEXT PRIMARY KEY,
-  user_pkp TEXT NOT NULL, -- caller wallet/PKP (lowercase 0x...)
+  user_address TEXT NOT NULL, -- caller wallet/address (lowercase 0x...)
 
   status TEXT NOT NULL
     CHECK(status IN (
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS music_publish_jobs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_music_publish_jobs_user_created
-  ON music_publish_jobs(user_pkp, created_at DESC);
+  ON music_publish_jobs(user_address, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_music_publish_jobs_status_updated
   ON music_publish_jobs(status, updated_at DESC);
@@ -75,12 +75,12 @@ CREATE INDEX IF NOT EXISTS idx_music_publish_jobs_sha256
   ON music_publish_jobs(audio_sha256);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_music_publish_jobs_user_idempotency
-  ON music_publish_jobs(user_pkp, idempotency_key)
+  ON music_publish_jobs(user_address, idempotency_key)
   WHERE idempotency_key IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS music_upload_bans (
   ban_id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_pkp TEXT NOT NULL,
+  user_address TEXT NOT NULL,
   self_nullifier TEXT, -- optional when available from Self
   reason_code TEXT NOT NULL,
   reason TEXT NOT NULL,
@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS music_upload_bans (
 );
 
 CREATE INDEX IF NOT EXISTS idx_music_upload_bans_user_active
-  ON music_upload_bans(user_pkp, active, created_at DESC);
+  ON music_upload_bans(user_address, active, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_music_upload_bans_nullifier_active
   ON music_upload_bans(self_nullifier, active)

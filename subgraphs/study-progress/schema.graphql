@@ -1,0 +1,78 @@
+"""
+Immutable attempt event from StudyAttemptsV1.
+Canonical replay ordering is (blockNumber, logIndex), mirrored as canonicalOrder.
+"""
+type StudyAttempt @entity(immutable: true) {
+  id: ID!                           # "{txHash}-{logIndex}"
+  userStudySet: UserStudySetProgress!
+  user: Bytes!
+  studySetKey: Bytes!
+  questionId: Bytes!
+  rating: Int!                      # 1=Again, 2=Hard, 3=Good, 4=Easy
+  score: Int!                       # basis points (0-10000)
+  clientTimestamp: BigInt!          # user-provided calldata timestamp (non-canonical)
+  canonicalOrder: BigInt!           # blockNumber * 1_000_000 + logIndex
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  logIndex: BigInt!
+  transactionHash: Bytes!
+}
+
+"""
+Mutable aggregate for fast user queue bootstrap.
+"""
+type UserStudySetProgress @entity(immutable: false) {
+  id: ID!                           # "{user}-{studySetKey}"
+  user: Bytes!
+  studySetKey: Bytes!
+
+  totalAttempts: Int!
+  uniqueQuestionsTouched: Int!
+  correctAttempts: Int!             # score == 10000
+  incorrectAttempts: Int!           # score < 10000
+  totalScore: BigInt!               # rolling sum for avg
+  averageScore: BigDecimal!
+
+  latestCanonicalOrder: BigInt!
+  latestBlockNumber: BigInt!
+  latestBlockTimestamp: BigInt!
+  latestLogIndex: BigInt!
+
+  attempts: [StudyAttempt!]! @derivedFrom(field: "userStudySet")
+}
+
+"""
+First touch marker per (user, studySet, question).
+Used to derive uniqueQuestionsTouched deterministically.
+"""
+type UserStudySetQuestionTouch @entity(immutable: true) {
+  id: ID!                           # "{user}-{studySetKey}-{questionId}"
+  user: Bytes!
+  studySetKey: Bytes!
+  questionId: Bytes!
+  firstAttempt: StudyAttempt!
+  firstCanonicalOrder: BigInt!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  logIndex: BigInt!
+  transactionHash: Bytes!
+}
+
+"""
+Canonical study set anchor from StudySetRegistryV1.
+"""
+type StudySetAnchor @entity(immutable: true) {
+  id: ID!                           # studySetKey hex
+  studySetKey: Bytes!
+  trackId: Bytes!
+  langHash: Bytes!
+  version: Int!
+  studySetRef: String!
+  studySetHash: Bytes!
+  submitter: Bytes!
+  paidBy: Bytes!
+  createdAtBlockNumber: BigInt!
+  createdAtBlockTimestamp: BigInt!
+  createdAtLogIndex: BigInt!
+  transactionHash: Bytes!
+}

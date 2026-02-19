@@ -9,7 +9,6 @@ use gpui_component::select::{SelectEvent, SelectState};
 use gpui_component::StyledExt;
 
 use crate::auth;
-use crate::lit_wallet::LitWalletService;
 use crate::load_storage::{LoadStorageService, TrackMetaInput};
 use crate::voice::jacktrip::JackTripController;
 
@@ -39,19 +38,11 @@ define_color_fns! {
     ACCENT_RED => accent_red,
 }
 
-const SMOKE_ACTION_CODE: &str = r#"(async () => {
-  const now = new Date().toISOString();
-  Lit.Actions.setResponse({ response: JSON.stringify({ ok: true, source: "gpui-rust", now }) });
-})();"#;
-
 pub struct SettingsView {
-    service: Arc<Mutex<LitWalletService>>,
     storage: Arc<Mutex<LoadStorageService>>,
     jacktrip_test: Arc<Mutex<JackTripController>>,
     busy: bool,
     status: String,
-    last_action_response: Option<String>,
-    last_signature: Option<String>,
     last_storage_response: Option<String>,
     last_voice_response: Option<String>,
     error: Option<String>,

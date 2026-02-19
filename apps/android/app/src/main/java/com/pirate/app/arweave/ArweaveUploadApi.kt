@@ -1,8 +1,9 @@
 package com.pirate.app.arweave
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import com.pirate.app.tempo.SessionKeyManager
+import com.pirate.app.security.LocalSecp256k1Store
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -26,16 +27,64 @@ object ArweaveUploadApi {
   )
 
   /**
+   * Upload encrypted track audio bytes to Arweave Turbo.
+   * Payload must already be encrypted (iv + ciphertext blob).
+   */
+  suspend fun uploadEncryptedAudio(
+    context: Context,
+    ownerEthAddress: String,
+    encryptedBlob: ByteArray,
+    filename: String,
+    contentId: String,
+    trackId: String,
+    algo: Int,
+  ): UploadResult = withContext(Dispatchers.IO) {
+    require(encryptedBlob.isNotEmpty()) { "Encrypted audio payload is empty" }
+    val identity = LocalSecp256k1Store.getOrCreateIdentity(context, ownerEthAddress)
+
+    val tags = buildList {
+      add(Ans104DataItem.Tag("Content-Type", "application/octet-stream"))
+      add(Ans104DataItem.Tag("App-Name", "heaven"))
+      add(Ans104DataItem.Tag("Heaven-Type", "track-audio"))
+      add(Ans104DataItem.Tag("Upload-Source", "heaven-android"))
+      add(Ans104DataItem.Tag("Heaven-Content-Id", contentId.trim().lowercase()))
+      add(Ans104DataItem.Tag("Heaven-Track-Id", trackId.trim().lowercase()))
+      add(Ans104DataItem.Tag("Heaven-Algo", algo.toString()))
+      if (filename.isNotBlank()) {
+        add(Ans104DataItem.Tag("File-Name", filename.trim()))
+      }
+    }
+
+    val signed = Ans104DataItem.buildAndSign(
+      payload = encryptedBlob,
+      tags = tags,
+      signingKeyPair = identity.keyPair,
+    )
+    val endpoint = arweaveTurboEndpoint()
+    val id = Ans104DataItem.uploadSignedDataItem(signed.bytes, uploadUrl = endpoint).trim()
+    if (id.isEmpty()) {
+      throw IllegalStateException("Arweave Turbo upload succeeded but returned no id")
+    }
+
+    UploadResult(
+      arRef = "ar://$id",
+      gatewayUrl = "${ArweaveTurboConfig.GATEWAY_URL}/$id",
+    )
+  }
+
+  /**
    * Upload cover image bytes to Arweave Turbo. Compresses if >100KB.
    * Returns `ar://<dataitem_id>`.
    */
   suspend fun uploadCover(
+    context: Context,
+    ownerEthAddress: String,
     coverBytes: ByteArray,
     filename: String,
     contentType: String,
-    sessionKey: SessionKeyManager.SessionKey,
   ): UploadResult = withContext(Dispatchers.IO) {
     require(coverBytes.isNotEmpty()) { "Cover bytes are empty" }
+    val identity = LocalSecp256k1Store.getOrCreateIdentity(context, ownerEthAddress)
 
     val (payload, resolvedContentType) = prepareCover(coverBytes, contentType)
 
@@ -52,7 +101,7 @@ object ArweaveUploadApi {
     val signed = Ans104DataItem.buildAndSign(
       payload = payload,
       tags = tags,
-      sessionKey = sessionKey,
+      signingKeyPair = identity.keyPair,
     )
     val endpoint = arweaveTurboEndpoint()
     val id = Ans104DataItem.uploadSignedDataItem(signed.bytes, uploadUrl = endpoint).trim()
@@ -71,15 +120,17 @@ object ArweaveUploadApi {
    * Returns `ar://<dataitem_id>`.
    */
   suspend fun uploadLyrics(
+    context: Context,
+    ownerEthAddress: String,
     trackId: String,
     lyricsJson: String,
-    sessionKey: SessionKeyManager.SessionKey,
   ): UploadResult = withContext(Dispatchers.IO) {
     val payload = lyricsJson.trim().toByteArray(Charsets.UTF_8)
     require(payload.isNotEmpty()) { "Lyrics payload is empty" }
     require(payload.size <= MAX_LYRICS_BYTES) {
       "Lyrics payload exceeds max bytes (${payload.size} > $MAX_LYRICS_BYTES)"
     }
+    val identity = LocalSecp256k1Store.getOrCreateIdentity(context, ownerEthAddress)
 
     val tags = listOf(
       Ans104DataItem.Tag("Content-Type", "application/json"),
@@ -92,7 +143,7 @@ object ArweaveUploadApi {
     val signed = Ans104DataItem.buildAndSign(
       payload = payload,
       tags = tags,
-      sessionKey = sessionKey,
+      signingKeyPair = identity.keyPair,
     )
     val endpoint = arweaveTurboEndpoint()
     val id = Ans104DataItem.uploadSignedDataItem(signed.bytes, uploadUrl = endpoint).trim()

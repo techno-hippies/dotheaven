@@ -5,49 +5,44 @@
     "rpcUrl": "https://rpc.moderato.tempo.xyz",
     "explorer": "https://explore.tempo.xyz"
   },
-  "deployedAt": "2026-02-16T17:09:27Z",
+  "deployedAt": "2026-02-19T15:40:54Z",
   "deployer": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
-  "sponsor": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
-  "playlistV1": "0xB130B6F86C60680eb98740599484739335C6A525",
+  "playlistV1": "0xeF6a21324548155630670397DA68318E126510EF",
   "script": "script/DeployPlaylistShareV1.s.sol",
-  "command": "forge script script/DeployPlaylistShareV1.s.sol --rpc-url https://rpc.moderato.tempo.xyz --broadcast --slow --gas-estimate-multiplier 100",
+  "command": "forge script script/DeployPlaylistShareV1.s.sol:DeployPlaylistShareV1Script --rpc-url https://rpc.moderato.tempo.xyz --broadcast --slow --gas-estimate-multiplier 100",
   "contract": {
     "name": "PlaylistShareV1",
-    "address": "0xB66BF4066F40b36Da0da34916799a069CBc79408",
-    "deployTx": "0x35ececac570d59140983a939b260462988ad14c9399330da24b89510ea78dfec",
-    "blockNumber": 5200157,
-    "gasUsed": 3385635,
+    "address": "0x1912cEa18eAFC17cd0f21F58fCF87E699Be512Aa",
+    "deployTx": "0x0342ea6aa286cdabbbe4096e27c2f3e9a25649bedee2e373c40b2738b3389bc5",
+    "blockNumber": 5567630,
+    "gasUsed": 2692278,
     "status": true
   },
   "postDeployChecks": {
     "bytecodePresent": true,
     "owner": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
-    "sponsor": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
-    "playlistV1": "0xB130B6F86C60680eb98740599484739335C6A525"
+    "playlistV1": "0xeF6a21324548155630670397DA68318E126510EF"
   },
   "smokeTest": {
-    "playlistId": "0x053177c4bc3745c862d87821aa8a772dbae7897551cefff5c2d12e2a6b8c027a",
+    "playlistId": "0xcdbff9f86585941cf7e862f663ca0f827532409b672d97c9a651fc3b530cc90a",
     "playlistOwner": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
     "grantee": "0x1111111111111111111111111111111111111111",
-    "createPlaylistForTx": "0x4d41715f3d59c5b1bee39cdcfb158f35d5582abeff8dbef9618b46aacc5106db",
-    "createPlaylistForGasUsed": 799961,
-    "sharePlaylistForTx": "0x78e02224abc4d51bcf6574da65dcaaa62851ad475dad28a3bc6e6209c726659f",
-    "sharePlaylistForGasUsed": 795592,
-    "unsharePlaylistForTx": "0xe737c485f796fa4f8b14fb4ac391220f65385653829c26419d605953e27fd752",
-    "unsharePlaylistForGasUsed": 43386,
-    "snapshotAfterShare": {
-      "playlistVersion": 1,
+    "sharePlaylistTx": "0xcf914467a5afa26d2d7547590128fa207413af3aecfaeef4b6e35496f5b8a18a",
+    "sharePlaylistGasUsed": 792925,
+    "unsharePlaylistTx": "0x55e4793c0c5b80232abc38ddc1b9ceba08c33c309fa56b7f0195fccc3707ca18",
+    "unsharePlaylistGasUsed": 41230,
+    "snapshotAtShare": {
+      "playlistVersion": 3,
       "trackCount": 2,
-      "tracksHash": "0x734dbd10b7c3d01aea6957e52ecfbf01cda71130e8895a80541b5d31e884f62d",
-      "sharedAt": 1771261845,
+      "tracksHash": "0xd9b58d08013a8f9e49a27a15ebd227268c41c698dc7f9c0ab34bf95c55a87f4f",
+      "sharedAt": 1771515872,
       "granted": true
     },
-    "snapshotAfterUnshare": {
-      "playlistVersion": 0,
-      "trackCount": 0,
-      "tracksHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-      "sharedAt": 0,
-      "granted": false
+    "snapshotAtUnshareEvent": {
+      "playlistVersion": 3,
+      "trackCount": 2,
+      "tracksHash": "0xd9b58d08013a8f9e49a27a15ebd227268c41c698dc7f9c0ab34bf95c55a87f4f",
+      "unsharedAt": 1771515876
     }
   }
 }

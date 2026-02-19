@@ -7,7 +7,7 @@
  * - POST /session       - Create verification session, return deeplink
  * - POST /verify        - Receive proof from Self relayer (webhook)
  * - GET  /session/:id   - Poll for verification result
- * - GET  /identity/:pkp - Get stored identity for a user
+ * - GET  /identity/:address - Get stored identity for a user
  */
 
 import { Hono } from 'hono'
@@ -30,6 +30,15 @@ const app = new Hono<{ Bindings: Env }>()
 
 const SESSION_EXPIRY_SECONDS = 10 * 60  // 10 minutes
 const SELF_UNIVERSAL_LINK_BASE = 'https://redirect.self.xyz'
+const ZERO_BYTES32 = '0x0000000000000000000000000000000000000000000000000000000000000000'
+
+// Mirrors @selfxyz/core discloseIndices[*].nullifierIndex for supported attestation IDs.
+const NULLIFIER_INDEX_BY_ATTESTATION: Record<number, number> = {
+  1: 7, // PASSPORT
+  2: 8, // BIOMETRIC_ID_CARD
+  3: 0, // AADHAAR
+  4: 14, // SELFRICA_ID_CARD
+}
 
 // ============================================================================
 // Helpers
@@ -69,10 +78,17 @@ function generateSessionId(): string {
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-function normalizePkpAddress(address: string): string | null {
+function normalizeAddress(address: string): string | null {
   if (!address) return null
   const clean = address.toLowerCase().trim()
   if (!/^0x[a-f0-9]{40}$/.test(clean)) return null
+  return clean
+}
+
+function normalizeBytes32(input: string | null | undefined): string | null {
+  if (!input) return null
+  const clean = input.toLowerCase().trim()
+  if (!/^0x[a-f0-9]{64}$/.test(clean)) return null
   return clean
 }
 
@@ -103,6 +119,76 @@ async function hashProof(proof: SelfVerifyRequest['proof']): Promise<string> {
   return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
+function parseSignalAsBytes32(signal: string | null | undefined): string | null {
+  if (!signal) return null
+  const raw = signal.trim()
+  if (!raw) return null
+
+  let value: bigint
+  try {
+    if (raw.startsWith('0x') || raw.startsWith('0X')) {
+      if (!/^0x[0-9a-fA-F]+$/.test(raw)) return null
+      value = BigInt(raw)
+    } else {
+      if (/^[0-9]+$/.test(raw)) {
+        value = BigInt(raw)
+      } else if (/^[0-9a-fA-F]+$/.test(raw)) {
+        value = BigInt(`0x${raw}`)
+      } else {
+        return null
+      }
+    }
+  } catch {
+    return null
+  }
+
+  const max = (1n << 256n) - 1n
+  if (value < 0n || value > max) return null
+  return `0x${value.toString(16).padStart(64, '0')}`
+}
+
+async function hashToBytes32(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input))
+  const hex = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('')
+  return `0x${hex}`
+}
+
+async function deriveIdentityNullifierHash(params: {
+  env: Env
+  attestationId: number
+  publicSignals: string[]
+  userAddress: string
+  userContextData: string
+  isMockMode: boolean
+}): Promise<string | null> {
+  const { env, attestationId, publicSignals, userAddress, userContextData, isMockMode } = params
+  const signals = Array.isArray(publicSignals) ? publicSignals : []
+
+  const preferredIndex = NULLIFIER_INDEX_BY_ATTESTATION[attestationId]
+  if (preferredIndex === undefined) {
+    if (!isMockMode) return null
+    const mockRawNullifier = await hashToBytes32(
+      `self-mock-nullifier:v1:${userAddress.toLowerCase()}:${attestationId}:${userContextData}`,
+    )
+    const scope = (env.SELF_SCOPE || 'heaven').trim().toLowerCase()
+    return hashToBytes32(`heaven-names:v1:${scope}:${mockRawNullifier.toLowerCase()}`)
+  }
+
+  let rawNullifier = parseSignalAsBytes32(signals[preferredIndex])
+
+  // In mock mode, publicSignals are often synthetic/minimal or missing expected index values.
+  if ((!rawNullifier || rawNullifier === ZERO_BYTES32) && isMockMode) {
+    rawNullifier = await hashToBytes32(
+      `self-mock-nullifier:v1:${userAddress.toLowerCase()}:${attestationId}:${userContextData}`,
+    )
+  }
+
+  if (!rawNullifier || rawNullifier === ZERO_BYTES32) return null
+
+  const scope = (env.SELF_SCOPE || 'heaven').trim().toLowerCase()
+  return hashToBytes32(`heaven-names:v1:${scope}:${rawNullifier.toLowerCase()}`)
+}
+
 /**
  * Build the Self.xyz universal link for mobile deeplink
  */
@@ -111,7 +197,7 @@ function buildSelfDeeplink(
   endpoint: string,
   scope: string,
   callbackUrl: string,
-  userPkp: string,
+  userAddress: string,
   mockMode: boolean
 ): string {
   const selfApp: SelfAppPayload = {
@@ -123,7 +209,7 @@ function buildSelfDeeplink(
     header: 'Verify with Self',
     scope,
     sessionId,
-    userId: userPkp,
+    userId: userAddress,
     userIdType: 'hex',
     devMode: mockMode,
     disclosures: {
@@ -216,32 +302,40 @@ function extractSessionId(userContextData: string): string | null {
 app.post('/session', async (c) => {
   const body = await c.req.json<SelfSessionRequest>()
 
-  // Validate PKP address
-  const pkp = normalizePkpAddress(body.userPkp)
-  if (!pkp) {
-    return c.json({ error: 'Invalid PKP address' }, 400)
+  // Validate address
+  const address = normalizeAddress(body.userAddress)
+  if (!address) {
+    return c.json({ error: 'Invalid address' }, 400)
   }
 
   // Check if user already has verified identity
   const existingIdentity = await c.env.DB.prepare(`
-    SELECT * FROM user_identity WHERE user_pkp = ?
-  `).bind(pkp).first<UserIdentityRow>()
+    SELECT * FROM user_identity WHERE user_address = ?
+  `).bind(address).first<UserIdentityRow>()
 
   if (existingIdentity) {
-    return c.json({
-      error: 'Already verified',
-      age: existingIdentity.age_at_verification,
-      nationality: existingIdentity.nationality,
-    }, 400)
+    const hasShortNameCredential = normalizeBytes32(existingIdentity.identity_nullifier_hash) !== null
+    if (!hasShortNameCredential) {
+      // Legacy verification rows (pre-nullifier rollout) must be able to re-verify once
+      // to mint the app-scoped nullifier used by short-name purchase policy.
+      console.log(`[Self] Identity refresh required for ${address}: missing short-name credential`)
+    } else {
+      return c.json({
+        error: 'Already verified',
+        age: existingIdentity.age_at_verification,
+        nationality: existingIdentity.nationality,
+        hasShortNameCredential: true,
+      }, 400)
+    }
   }
 
   // Check for existing pending session
   const now = Math.floor(Date.now() / 1000)
   const existingSession = await c.env.DB.prepare(`
     SELECT * FROM self_verifications
-    WHERE user_pkp = ? AND status = 'pending' AND expires_at > ?
+    WHERE user_address = ? AND status = 'pending' AND expires_at > ?
     ORDER BY created_at DESC LIMIT 1
-  `).bind(pkp, now).first<SelfVerificationRow>()
+  `).bind(address, now).first<SelfVerificationRow>()
 
   if (existingSession) {
     // Return existing session
@@ -252,7 +346,7 @@ app.post('/session', async (c) => {
 
     const response: SelfSessionResponse = {
       sessionId: existingSession.session_id,
-      deeplinkUrl: buildSelfDeeplink(existingSession.session_id, endpoint, scope, callbackUrl, pkp, mockMode),
+      deeplinkUrl: buildSelfDeeplink(existingSession.session_id, endpoint, scope, callbackUrl, address, mockMode),
       expiresAt: existingSession.expires_at,
     }
     return c.json(response)
@@ -263,9 +357,9 @@ app.post('/session', async (c) => {
   const expiresAt = now + SESSION_EXPIRY_SECONDS
 
   await c.env.DB.prepare(`
-    INSERT INTO self_verifications (session_id, user_pkp, status, created_at, expires_at)
+    INSERT INTO self_verifications (session_id, user_address, status, created_at, expires_at)
     VALUES (?, ?, 'pending', ?, ?)
-  `).bind(sessionId, pkp, now, expiresAt).run()
+  `).bind(sessionId, address, now, expiresAt).run()
 
   // Build deeplink URL
   const scope = c.env.SELF_SCOPE || 'heaven'
@@ -275,11 +369,11 @@ app.post('/session', async (c) => {
 
   const response: SelfSessionResponse = {
     sessionId,
-    deeplinkUrl: buildSelfDeeplink(sessionId, endpoint, scope, callbackUrl, pkp, mockMode),
+    deeplinkUrl: buildSelfDeeplink(sessionId, endpoint, scope, callbackUrl, address, mockMode),
     expiresAt,
   }
 
-  console.log(`[Self] Created session ${sessionId} for ${pkp}`)
+  console.log(`[Self] Created session ${sessionId} for ${address}`)
   return c.json(response)
 })
 
@@ -430,6 +524,30 @@ app.post('/verify', async (c) => {
   // Hash proof for audit trail
   const proofHash = await hashProof(body.proof)
 
+  const identityNullifierHash = await deriveIdentityNullifierHash({
+    env: c.env,
+    attestationId: body.attestationId,
+    publicSignals: body.publicSignals || [],
+    userAddress: session.user_address,
+    userContextData: body.userContextData || '',
+    isMockMode,
+  })
+
+  if (!identityNullifierHash) {
+    await c.env.DB.prepare(`
+      UPDATE self_verifications
+      SET status = 'failed', failure_reason = 'Missing nullifier in publicSignals'
+      WHERE session_id = ?
+    `).bind(sessionId).run()
+
+    const response: SelfVerifyResponse = {
+      status: 'error',
+      result: false,
+      reason: 'Missing nullifier in publicSignals',
+    }
+    return c.json(response, 200)
+  }
+
   // Update session with verified data
   await c.env.DB.prepare(`
     UPDATE self_verifications
@@ -453,20 +571,22 @@ app.post('/verify', async (c) => {
 
   // Store in user_identity table
   await c.env.DB.prepare(`
-    INSERT INTO user_identity (user_pkp, date_of_birth, age_at_verification, nationality, verification_session_id, verified_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(user_pkp) DO UPDATE SET
+    INSERT INTO user_identity (user_address, date_of_birth, age_at_verification, nationality, identity_nullifier_hash, verification_session_id, verified_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_address) DO UPDATE SET
       date_of_birth = excluded.date_of_birth,
       age_at_verification = excluded.age_at_verification,
       nationality = excluded.nationality,
+      identity_nullifier_hash = excluded.identity_nullifier_hash,
       verification_session_id = excluded.verification_session_id,
       verified_at = excluded.verified_at,
       updated_at = excluded.updated_at
   `).bind(
-    session.user_pkp,
+    session.user_address,
     dateOfBirth,
     age,
     nationality,
+    identityNullifierHash,
     sessionId,
     now,
     now,
@@ -476,9 +596,9 @@ app.post('/verify', async (c) => {
   // Update user's directory tier to 'verified'
   await c.env.DB.prepare(`
     UPDATE users SET directory_tier = 'verified' WHERE address = ?
-  `).bind(session.user_pkp).run()
+  `).bind(session.user_address).run()
 
-  console.log(`[Self] Verified ${session.user_pkp}: age=${age}, nationality=${nationality}`)
+  console.log(`[Self] Verified ${session.user_address}: age=${age}, nationality=${nationality}`)
 
   const response: SelfVerifyResponse = {
     status: 'success',
@@ -527,20 +647,20 @@ app.get('/session/:id', async (c) => {
 })
 
 // ============================================================================
-// GET /identity/:pkp - Get stored identity for a user
+// GET /identity/:address - Get stored identity for a user
 // ============================================================================
 
-app.get('/identity/:pkp', async (c) => {
-  const pkpParam = c.req.param('pkp')
-  const pkp = normalizePkpAddress(pkpParam)
+app.get('/identity/:address', async (c) => {
+  const addressParam = c.req.param('address')
+  const address = normalizeAddress(addressParam)
 
-  if (!pkp) {
-    return c.json({ error: 'Invalid PKP address' }, 400)
+  if (!address) {
+    return c.json({ error: 'Invalid address' }, 400)
   }
 
   const identity = await c.env.DB.prepare(`
-    SELECT * FROM user_identity WHERE user_pkp = ?
-  `).bind(pkp).first<UserIdentityRow>()
+    SELECT * FROM user_identity WHERE user_address = ?
+  `).bind(address).first<UserIdentityRow>()
 
   if (!identity) {
     return c.json({ error: 'No verified identity found' }, 404)
@@ -550,12 +670,13 @@ app.get('/identity/:pkp', async (c) => {
   const currentAge = calculateAge(identity.date_of_birth)
 
   return c.json({
-    pkp: identity.user_pkp,
+    address: identity.user_address,
     dateOfBirth: identity.date_of_birth,
     ageAtVerification: identity.age_at_verification,
     currentAge,
     nationality: identity.nationality,
     verifiedAt: identity.verified_at,
+    hasShortNameCredential: normalizeBytes32(identity.identity_nullifier_hash) !== null,
   })
 })
 

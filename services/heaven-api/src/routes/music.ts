@@ -19,7 +19,7 @@ import type {
 } from '../types'
 
 type MusicVariables = {
-  userPkp: string
+  userAddress: string
 }
 
 const app = new Hono<{ Bindings: Env; Variables: MusicVariables }>()
@@ -106,7 +106,7 @@ const TEMPO_CONTENT_REGISTRY_ABI = [
 
 const ABI_CODER = AbiCoder.defaultAbiCoder()
 
-function normalizePkpAddress(address: string): string | null {
+function normalizeAddress(address: string): string | null {
   const clean = address.toLowerCase().trim()
   if (!/^0x[a-f0-9]{40}$/.test(clean)) return null
   return clean
@@ -677,7 +677,7 @@ async function registerStoryDerivative(
 function serializeJob(row: MusicPublishJobRow) {
   return {
     jobId: row.job_id,
-    userPkp: row.user_pkp,
+    userAddress: row.user_address,
     status: row.status,
     publishType: row.publish_type,
     idempotencyKey: row.idempotency_key,
@@ -751,14 +751,14 @@ async function requireMusicAccess(
   c: Context<{ Bindings: Env; Variables: MusicVariables }>,
   next: Next,
 ) {
-  const userPkp = normalizePkpAddress(c.req.header('X-User-Pkp') || '')
-  if (!userPkp) {
-    return c.json({ error: 'Missing or invalid X-User-Pkp header' }, 401)
+  const userAddress = normalizeAddress(c.req.header('X-User-Address') || '')
+  if (!userAddress) {
+    return c.json({ error: 'Missing or invalid X-User-Address header' }, 401)
   }
 
   const identity = await c.env.DB.prepare(`
-    SELECT * FROM user_identity WHERE user_pkp = ?
-  `).bind(userPkp).first<UserIdentityRow>()
+    SELECT * FROM user_identity WHERE user_address = ?
+  `).bind(userAddress).first<UserIdentityRow>()
 
   if (!identity) {
     return c.json({ error: 'Self.xyz verification required for music upload/publish' }, 403)
@@ -767,11 +767,11 @@ async function requireMusicAccess(
   const now = Math.floor(Date.now() / 1000)
   const ban = await c.env.DB.prepare(`
     SELECT * FROM music_upload_bans
-    WHERE user_pkp = ? AND active = 1
+    WHERE user_address = ? AND active = 1
       AND (expires_at IS NULL OR expires_at > ?)
     ORDER BY created_at DESC
     LIMIT 1
-  `).bind(userPkp, now).first<MusicUploadBanRow>()
+  `).bind(userAddress, now).first<MusicUploadBanRow>()
 
   if (ban) {
     return c.json({
@@ -781,7 +781,7 @@ async function requireMusicAccess(
     }, 403)
   }
 
-  c.set('userPkp', userPkp)
+  c.set('userAddress', userAddress)
   await next()
 }
 
@@ -792,7 +792,7 @@ app.use('/publish/*', requireMusicAccess)
 
 // Stage upload only. This endpoint intentionally does not anchor to Arweave.
 app.post('/publish/start', async (c) => {
-  const userPkp = c.get('userPkp')
+  const userAddress = c.get('userAddress')
   const apiKey = c.env.LOAD_S3_AGENT_API_KEY
   if (!apiKey) {
     return c.json({ error: 'Music upload not configured (LOAD_S3_AGENT_API_KEY)' }, 500)
@@ -817,8 +817,8 @@ app.post('/publish/start', async (c) => {
       COUNT(*) AS publish_count,
       COALESCE(SUM(file_size), 0) AS total_bytes
     FROM music_publish_jobs
-    WHERE user_pkp = ? AND created_at >= ?
-  `).bind(userPkp, dayStart).first<{ publish_count: number; total_bytes: number }>()
+    WHERE user_address = ? AND created_at >= ?
+  `).bind(userAddress, dayStart).first<{ publish_count: number; total_bytes: number }>()
 
   const publishCount = Number(usage?.publish_count ?? 0)
   const totalBytes = Number(usage?.total_bytes ?? 0)
@@ -852,10 +852,10 @@ app.post('/publish/start', async (c) => {
   if (idempotencyKey) {
     const existing = await c.env.DB.prepare(`
       SELECT * FROM music_publish_jobs
-      WHERE user_pkp = ? AND idempotency_key = ?
+      WHERE user_address = ? AND idempotency_key = ?
       ORDER BY created_at DESC
       LIMIT 1
-    `).bind(userPkp, idempotencyKey).first<MusicPublishJobRow>()
+    `).bind(userAddress, idempotencyKey).first<MusicPublishJobRow>()
     if (existing) {
       return c.json({ existing: true, job: serializeJob(existing) })
     }
@@ -922,14 +922,14 @@ app.post('/publish/start', async (c) => {
 
   await c.env.DB.prepare(`
     INSERT INTO music_publish_jobs (
-      job_id, user_pkp, status, publish_type, idempotency_key,
+      job_id, user_address, status, publish_type, idempotency_key,
       file_name, content_type, file_size, audio_sha256, fingerprint, duration_s,
       staged_dataitem_id, staged_gateway_url, staged_payload_json,
       created_at, updated_at
     ) VALUES (?, ?, 'staged', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     jobId,
-    userPkp,
+    userAddress,
     publishType,
     idempotencyKey,
     file.name || null,
@@ -960,7 +960,7 @@ app.post('/publish/start', async (c) => {
 })
 
 app.post('/publish/:jobId/artifacts/stage', async (c) => {
-  const userPkp = c.get('userPkp')
+  const userAddress = c.get('userAddress')
   const jobId = c.req.param('jobId')
   const apiKey = c.env.LOAD_S3_AGENT_API_KEY
   if (!apiKey) {
@@ -968,8 +968,8 @@ app.post('/publish/:jobId/artifacts/stage', async (c) => {
   }
 
   const row = await c.env.DB.prepare(`
-    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
-  `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_address = ?
+  `).bind(jobId, userAddress).first<MusicPublishJobRow>()
   if (!row) {
     return c.json({ error: 'Job not found' }, 404)
   }
@@ -1083,7 +1083,7 @@ app.post('/publish/:jobId/artifacts/stage', async (c) => {
         lyrics_bytes = ?,
         lyrics_staged_payload_json = ?,
         updated_at = ?
-    WHERE job_id = ? AND user_pkp = ?
+    WHERE job_id = ? AND user_address = ?
   `).bind(
     coverUpload?.dataitemId ?? row.cover_staged_dataitem_id,
     coverUpload?.gatewayUrl ?? row.cover_staged_gateway_url,
@@ -1097,12 +1097,12 @@ app.post('/publish/:jobId/artifacts/stage', async (c) => {
     lyricsUpload ? JSON.stringify(lyricsUpload.payload) : row.lyrics_staged_payload_json,
     now,
     jobId,
-    userPkp,
+    userAddress,
   ).run()
 
   const updated = await c.env.DB.prepare(`
-    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
-  `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_address = ?
+  `).bind(jobId, userAddress).first<MusicPublishJobRow>()
   if (!updated) {
     return c.json({ error: 'Failed to load artifact-staged job' }, 500)
   }
@@ -1137,7 +1137,7 @@ interface MusicPreflightRequest {
 }
 
 app.post('/preflight', async (c) => {
-  const userPkp = c.get('userPkp')
+  const userAddress = c.get('userAddress')
 
   let body: MusicPreflightRequest
   try {
@@ -1152,8 +1152,8 @@ app.post('/preflight', async (c) => {
   }
 
   const row = await c.env.DB.prepare(`
-    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
-  `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_address = ?
+  `).bind(jobId, userAddress).first<MusicPublishJobRow>()
   if (!row) {
     return c.json({ error: 'Job not found' }, 404)
   }
@@ -1201,8 +1201,8 @@ app.post('/preflight', async (c) => {
   await c.env.DB.prepare(`
     UPDATE music_publish_jobs
     SET status = 'checking', updated_at = ?
-    WHERE job_id = ? AND user_pkp = ?
-  `).bind(checkingNow, jobId, userPkp).run()
+    WHERE job_id = ? AND user_address = ?
+  `).bind(checkingNow, jobId, userAddress).run()
 
   const duplicateHashRows: Array<{
     job_id: string
@@ -1270,12 +1270,11 @@ app.post('/preflight', async (c) => {
                 arweave_ref: string | null
               }>()
               duplicateHashRows.push(...matches.results)
+              // Softened: duplicate hash is informational only — don't block upload
               if (duplicateHashRows.length > 0) {
-                status = 'manual_review'
-                policyDecision = 'manual_review'
-                policyReasonCode = 'duplicate_hash_match'
-                policyReason = 'Existing track with matching audio hash found; manual review required'
-              } else if (
+                hashDuplicateCheck = 'warn_duplicate_found'
+              }
+              if (
                 !row.cover_staged_dataitem_id
                 || !row.cover_staged_gateway_url
                 || !row.lyrics_staged_dataitem_id
@@ -1327,7 +1326,7 @@ app.post('/preflight', async (c) => {
         policy_reason_code = ?,
         policy_reason = ?,
         updated_at = ?
-    WHERE job_id = ? AND user_pkp = ?
+    WHERE job_id = ? AND user_address = ?
   `).bind(
     status,
     publishType,
@@ -1340,12 +1339,12 @@ app.post('/preflight', async (c) => {
     policyReason,
     now,
     jobId,
-    userPkp,
+    userAddress,
   ).run()
 
   const updated = await c.env.DB.prepare(`
-    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
-  `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_address = ?
+  `).bind(jobId, userAddress).first<MusicPublishJobRow>()
 
   if (!updated) {
     return c.json({ error: 'Failed to load updated job' }, 500)
@@ -1378,12 +1377,12 @@ app.post('/preflight', async (c) => {
 })
 
 app.get('/publish/:jobId', async (c) => {
-  const userPkp = c.get('userPkp')
+  const userAddress = c.get('userAddress')
   const jobId = c.req.param('jobId')
 
   const row = await c.env.DB.prepare(`
-    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
-  `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_address = ?
+  `).bind(jobId, userAddress).first<MusicPublishJobRow>()
 
   if (!row) {
     return c.json({ error: 'Job not found' }, 404)
@@ -1403,7 +1402,7 @@ interface TempoFinalizeRequestBody {
 }
 
 app.post('/publish/:jobId/finalize', async (c) => {
-  const userPkp = c.get('userPkp')
+  const userAddress = c.get('userAddress')
   const jobId = c.req.param('jobId')
 
   const sponsorPk = c.env.TEMPO_SPONSOR_PRIVATE_KEY || c.env.STORY_SPONSOR_PRIVATE_KEY || c.env.PRIVATE_KEY
@@ -1445,8 +1444,8 @@ app.post('/publish/:jobId/finalize', async (c) => {
   }
 
   const row = await c.env.DB.prepare(`
-    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
-  `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_address = ?
+  `).bind(jobId, userAddress).first<MusicPublishJobRow>()
 
   if (!row) {
     return c.json({ error: 'Job not found' }, 404)
@@ -1510,7 +1509,7 @@ app.post('/publish/:jobId/finalize', async (c) => {
   if (!pieceCidBytes.length) return c.json({ error: 'pieceCid is empty' }, 400)
   if (pieceCidBytes.length > 128) return c.json({ error: 'pieceCid exceeds 128-byte on-chain limit' }, 400)
 
-  const datasetOwner = normalizePkpAddress((body.datasetOwner || userPkp).trim())
+  const datasetOwner = normalizeAddress((body.datasetOwner || userAddress).trim())
   if (!datasetOwner) {
     return c.json({ error: 'datasetOwner must be a valid 0x address when provided' }, 400)
   }
@@ -1526,13 +1525,13 @@ app.post('/publish/:jobId/finalize', async (c) => {
     UPDATE music_publish_jobs
     SET status = 'registering',
         updated_at = ?
-    WHERE job_id = ? AND user_pkp = ? AND status IN ('policy_passed', 'anchored', 'registered')
-  `).bind(lockNow, jobId, userPkp).run()
+    WHERE job_id = ? AND user_address = ? AND status IN ('policy_passed', 'anchored', 'registered')
+  `).bind(lockNow, jobId, userAddress).run()
   const lockChanges = Number(lock.meta?.changes ?? 0)
   if (lockChanges !== 1) {
     const latest = await c.env.DB.prepare(`
-      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
-    `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_address = ?
+    `).bind(jobId, userAddress).first<MusicPublishJobRow>()
     if (!latest) {
       return c.json({ error: 'Job not found after finalize lock attempt' }, 404)
     }
@@ -1562,7 +1561,7 @@ app.post('/publish/:jobId/finalize', async (c) => {
     const contentRegistryContract = new Contract(contentRegistryAddress, TEMPO_CONTENT_REGISTRY_ABI, sponsorWallet)
 
     const { trackId, payload } = computeMetaTrackId(title, artist, album)
-    const contentId = computeContentId(trackId, userPkp)
+    const contentId = computeContentId(trackId, userAddress)
 
     let trackRegistered = false
     let contentRegistered = false
@@ -1615,7 +1614,7 @@ app.post('/publish/:jobId/finalize', async (c) => {
     if (!contentEntryActive(contentState)) {
       try {
         const tx = await contentRegistryContract.registerContentFor(
-          userPkp,
+          userAddress,
           trackId,
           datasetOwner,
           pieceCidBytes,
@@ -1639,17 +1638,17 @@ app.post('/publish/:jobId/finalize', async (c) => {
           error_code = NULL,
           error_message = NULL,
           updated_at = ?
-      WHERE job_id = ? AND user_pkp = ?
+      WHERE job_id = ? AND user_address = ?
     `).bind(
       tempoTxHash,
       now,
       jobId,
-      userPkp,
+      userAddress,
     ).run()
 
     const updated = await c.env.DB.prepare(`
-      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
-    `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_address = ?
+    `).bind(jobId, userAddress).first<MusicPublishJobRow>()
 
     if (!updated) {
       return c.json({ error: 'Failed to load finalized job' }, 500)
@@ -1685,12 +1684,12 @@ app.post('/publish/:jobId/finalize', async (c) => {
           error_code = 'tempo_finalize_failed',
           error_message = ?,
           updated_at = ?
-      WHERE job_id = ? AND user_pkp = ?
-    `).bind(previousStatus, message, now, jobId, userPkp).run()
+      WHERE job_id = ? AND user_address = ?
+    `).bind(previousStatus, message, now, jobId, userAddress).run()
 
     const latest = await c.env.DB.prepare(`
-      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
-    `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_address = ?
+    `).bind(jobId, userAddress).first<MusicPublishJobRow>()
 
     return c.json({
       error: 'Tempo finalize failed',
@@ -1702,7 +1701,7 @@ app.post('/publish/:jobId/finalize', async (c) => {
 
 // Explicit anchor step: only after preflight passes.
 app.post('/publish/:jobId/anchor', async (c) => {
-  const userPkp = c.get('userPkp')
+  const userAddress = c.get('userAddress')
   const jobId = c.req.param('jobId')
 
   const apiKey = c.env.LOAD_S3_AGENT_API_KEY
@@ -1711,8 +1710,8 @@ app.post('/publish/:jobId/anchor', async (c) => {
   }
 
   const row = await c.env.DB.prepare(`
-    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
-  `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_address = ?
+  `).bind(jobId, userAddress).first<MusicPublishJobRow>()
 
   if (!row) {
     return c.json({ error: 'Job not found' }, 404)
@@ -1733,13 +1732,13 @@ app.post('/publish/:jobId/anchor', async (c) => {
   const now = Math.floor(Date.now() / 1000)
   const lock = await c.env.DB.prepare(`
     UPDATE music_publish_jobs SET status = 'anchoring', updated_at = ?
-    WHERE job_id = ? AND user_pkp = ? AND status = 'policy_passed'
-  `).bind(now, jobId, userPkp).run()
+    WHERE job_id = ? AND user_address = ? AND status = 'policy_passed'
+  `).bind(now, jobId, userAddress).run()
   const lockChanges = Number(lock.meta?.changes ?? 0)
   if (lockChanges !== 1) {
     const latest = await c.env.DB.prepare(`
-      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
-    `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_address = ?
+    `).bind(jobId, userAddress).first<MusicPublishJobRow>()
     if (!latest) {
       return c.json({ error: 'Job not found after lock attempt' }, 404)
     }
@@ -1767,8 +1766,8 @@ app.post('/publish/:jobId/anchor', async (c) => {
           error_code = 'anchor_failed',
           error_message = ?,
           updated_at = ?
-      WHERE job_id = ? AND user_pkp = ?
-    `).bind(`LS3 post failed (status ${postResp.status})`, failNow, jobId, userPkp).run()
+      WHERE job_id = ? AND user_address = ?
+    `).bind(`LS3 post failed (status ${postResp.status})`, failNow, jobId, userAddress).run()
 
     return c.json({
       error: 'LS3 post-to-arweave failed',
@@ -1798,7 +1797,7 @@ app.post('/publish/:jobId/anchor', async (c) => {
         error_code = NULL,
         error_message = NULL,
         updated_at = ?
-    WHERE job_id = ? AND user_pkp = ?
+    WHERE job_id = ? AND user_address = ?
   `).bind(
     row.staged_dataitem_id,
     `ar://${row.staged_dataitem_id}`,
@@ -1807,12 +1806,12 @@ app.post('/publish/:jobId/anchor', async (c) => {
     JSON.stringify(postPayload),
     doneNow,
     jobId,
-    userPkp,
+    userAddress,
   ).run()
 
   const updated = await c.env.DB.prepare(`
-    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
-  `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_address = ?
+  `).bind(jobId, userAddress).first<MusicPublishJobRow>()
 
   if (!updated) {
     return c.json({ error: 'Failed to load anchored job' }, 500)
@@ -1855,7 +1854,7 @@ function metadataResponseFromRow(jobId: string, row: MusicPublishJobRow) {
 }
 
 app.post('/publish/:jobId/metadata', async (c) => {
-  const userPkp = c.get('userPkp')
+  const userAddress = c.get('userAddress')
   const jobId = c.req.param('jobId')
   const apiKey = c.env.LOAD_S3_AGENT_API_KEY
   if (!apiKey) {
@@ -1863,8 +1862,8 @@ app.post('/publish/:jobId/metadata', async (c) => {
   }
 
   const row = await c.env.DB.prepare(`
-    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
-  `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_address = ?
+  `).bind(jobId, userAddress).first<MusicPublishJobRow>()
   if (!row) {
     return c.json({ error: 'Job not found' }, 404)
   }
@@ -1910,16 +1909,16 @@ app.post('/publish/:jobId/metadata', async (c) => {
     SET metadata_status = 'anchoring',
         metadata_error = NULL,
         updated_at = ?
-    WHERE job_id = ? AND user_pkp = ?
+    WHERE job_id = ? AND user_address = ?
       AND (metadata_status IS NULL OR metadata_status IN ('none', 'failed'))
       AND ip_metadata_uri IS NULL
       AND nft_metadata_uri IS NULL
-  `).bind(lockNow, jobId, userPkp).run()
+  `).bind(lockNow, jobId, userAddress).run()
   const lockChanges = Number(lock.meta?.changes ?? 0)
   if (lockChanges !== 1) {
     const latest = await c.env.DB.prepare(`
-      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
-    `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_address = ?
+    `).bind(jobId, userAddress).first<MusicPublishJobRow>()
     if (!latest) {
       return c.json({ error: 'Job not found after metadata lock attempt' }, 404)
     }
@@ -1973,7 +1972,7 @@ app.post('/publish/:jobId/metadata', async (c) => {
           nft_metadata_hash = ?,
           nft_metadata_dataitem_id = ?,
           updated_at = ?
-      WHERE job_id = ? AND user_pkp = ?
+      WHERE job_id = ? AND user_address = ?
     `).bind(
       ipAnchor.ref,
       ipAnchor.payloadHash,
@@ -1983,12 +1982,12 @@ app.post('/publish/:jobId/metadata', async (c) => {
       nftAnchor.dataitemId,
       doneNow,
       jobId,
-      userPkp,
+      userAddress,
     ).run()
 
     const updated = await c.env.DB.prepare(`
-      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
-    `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_address = ?
+    `).bind(jobId, userAddress).first<MusicPublishJobRow>()
     if (!updated) {
       return c.json({ error: 'Failed to load metadata-anchored job' }, 500)
     }
@@ -2004,11 +2003,11 @@ app.post('/publish/:jobId/metadata', async (c) => {
       SET metadata_status = 'failed',
           metadata_error = ?,
           updated_at = ?
-      WHERE job_id = ? AND user_pkp = ?
-    `).bind(asErrorMessage(error).slice(0, 2048), failNow, jobId, userPkp).run()
+      WHERE job_id = ? AND user_address = ?
+    `).bind(asErrorMessage(error).slice(0, 2048), failNow, jobId, userAddress).run()
     const latest = await c.env.DB.prepare(`
-      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
-    `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_address = ?
+    `).bind(jobId, userAddress).first<MusicPublishJobRow>()
     return c.json({
       error: 'Music metadata anchor failed',
       details: asErrorMessage(error).slice(0, 2048),
@@ -2036,7 +2035,7 @@ interface StoryRegisterRequestBody {
 }
 
 app.post('/publish/:jobId/register', async (c) => {
-  const userPkp = c.get('userPkp')
+  const userAddress = c.get('userAddress')
   const jobId = c.req.param('jobId')
 
   const sponsorPk = c.env.STORY_SPONSOR_PRIVATE_KEY || c.env.PRIVATE_KEY
@@ -2050,8 +2049,8 @@ app.post('/publish/:jobId/register', async (c) => {
   }
 
   const row = await c.env.DB.prepare(`
-    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
-  `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+    SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_address = ?
+  `).bind(jobId, userAddress).first<MusicPublishJobRow>()
 
   if (!row) {
     return c.json({ error: 'Job not found' }, 404)
@@ -2077,7 +2076,7 @@ app.post('/publish/:jobId/register', async (c) => {
     return c.json({ error: 'Invalid JSON body' }, 400)
   }
 
-  const recipient = normalizePkpAddress(body.recipient || userPkp)
+  const recipient = normalizeAddress(body.recipient || userAddress)
   if (!recipient) {
     return c.json({ error: 'recipient must be a valid 0x address when provided' }, 400)
   }
@@ -2174,13 +2173,13 @@ app.post('/publish/:jobId/register', async (c) => {
   const lock = await c.env.DB.prepare(`
     UPDATE music_publish_jobs
     SET status = 'registering', updated_at = ?
-    WHERE job_id = ? AND user_pkp = ? AND status = 'anchored'
-  `).bind(lockNow, jobId, userPkp).run()
+    WHERE job_id = ? AND user_address = ? AND status = 'anchored'
+  `).bind(lockNow, jobId, userAddress).run()
   const lockChanges = Number(lock.meta?.changes ?? 0)
   if (lockChanges !== 1) {
     const latest = await c.env.DB.prepare(`
-      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
-    `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_address = ?
+    `).bind(jobId, userAddress).first<MusicPublishJobRow>()
     if (!latest) {
       return c.json({ error: 'Job not found after register lock attempt' }, 404)
     }
@@ -2242,7 +2241,7 @@ app.post('/publish/:jobId/register', async (c) => {
           error_code = NULL,
           error_message = NULL,
           updated_at = ?
-      WHERE job_id = ? AND user_pkp = ?
+      WHERE job_id = ? AND user_address = ?
     `).bind(
       registration.txHash,
       registration.ipId,
@@ -2251,12 +2250,12 @@ app.post('/publish/:jobId/register', async (c) => {
       registration.blockNumber,
       now,
       jobId,
-      userPkp,
+      userAddress,
     ).run()
 
     const updated = await c.env.DB.prepare(`
-      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
-    `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_address = ?
+    `).bind(jobId, userAddress).first<MusicPublishJobRow>()
 
     if (!updated) {
       return c.json({ error: 'Failed to load registered job' }, 500)
@@ -2275,12 +2274,12 @@ app.post('/publish/:jobId/register', async (c) => {
           error_code = 'story_register_failed',
           error_message = ?,
           updated_at = ?
-      WHERE job_id = ? AND user_pkp = ?
-    `).bind(message, now, jobId, userPkp).run()
+      WHERE job_id = ? AND user_address = ?
+    `).bind(message, now, jobId, userAddress).run()
 
     const latest = await c.env.DB.prepare(`
-      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_pkp = ?
-    `).bind(jobId, userPkp).first<MusicPublishJobRow>()
+      SELECT * FROM music_publish_jobs WHERE job_id = ? AND user_address = ?
+    `).bind(jobId, userAddress).first<MusicPublishJobRow>()
 
     return c.json({
       error: 'Story registration failed',

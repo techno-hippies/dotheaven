@@ -16,6 +16,14 @@ pub(crate) fn playlist_v1() -> String {
         .unwrap_or_else(|| DEFAULT_PLAYLIST_V1.to_string())
 }
 
+pub(crate) fn playlist_share_v1() -> String {
+    std::env::var("HEAVEN_PLAYLIST_SHARE_V1")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| DEFAULT_PLAYLIST_SHARE_V1.to_string())
+}
+
 pub(crate) fn scrobble_v4() -> String {
     std::env::var("HEAVEN_AA_SCROBBLE_V4")
         .ok()
@@ -72,7 +80,7 @@ pub(crate) fn require_sponsor_private_key() -> Result<String, String> {
         }
     }
 
-    for path in ["../../lit-actions/.env", "../.env", ".env"] {
+    for path in ["../.env", ".env"] {
         if let Ok(contents) = fs::read_to_string(path) {
             for line in contents.lines() {
                 let trimmed = line.trim();
@@ -90,37 +98,12 @@ pub(crate) fn require_sponsor_private_key() -> Result<String, String> {
     Err("Missing sponsor private key: set HEAVEN_SPONSOR_PRIVATE_KEY or PRIVATE_KEY".to_string())
 }
 
-pub(crate) fn sponsor_pkp_public_key_hex() -> String {
-    let raw = std::env::var("HEAVEN_SPONSOR_PKP_PUBLIC_KEY")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| DEFAULT_SPONSOR_PKP_PUBLIC_KEY.to_string());
-    ensure_0x_prefixed(&raw)
-}
-
 pub(crate) fn ensure_0x_prefixed(value: &str) -> String {
     if value.starts_with("0x") {
         value.to_string()
     } else {
         format!("0x{value}")
     }
-}
-
-pub(crate) fn content_access_mirror() -> String {
-    std::env::var("HEAVEN_CONTENT_ACCESS_MIRROR")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| DEFAULT_CONTENT_ACCESS_MIRROR.to_string())
-}
-
-pub(crate) fn lit_chain() -> String {
-    std::env::var("HEAVEN_LIT_CHAIN")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| DEFAULT_LIT_CHAIN.to_string())
 }
 
 pub(crate) fn load_turbo_upload_url() -> String {
@@ -213,12 +196,4 @@ pub(crate) fn min_upload_credit() -> f64 {
         .and_then(|v| v.trim().parse::<f64>().ok())
         .filter(|v| v.is_finite() && *v >= 0.0)
         .unwrap_or(DEFAULT_MIN_UPLOAD_CREDIT)
-}
-
-pub(crate) fn lit_network_name() -> String {
-    std::env::var("HEAVEN_LIT_NETWORK")
-        .ok()
-        .filter(|v| !v.trim().is_empty())
-        .or_else(|| std::env::var("LIT_NETWORK").ok())
-        .unwrap_or_else(|| "naga-dev".to_string())
 }

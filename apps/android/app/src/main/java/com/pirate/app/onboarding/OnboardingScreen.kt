@@ -132,18 +132,19 @@ private fun isUsableOnboardingSessionKey(
 @Composable
 fun OnboardingScreen(
   activity: androidx.fragment.app.FragmentActivity?,
-  pkpEthAddress: String,
+  userEthAddress: String,
   tempoAddress: String?,
   tempoCredentialId: String?,
   tempoPubKeyX: String?,
   tempoPubKeyY: String?,
   tempoRpId: String = TempoPasskeyManager.DEFAULT_RP_ID,
   initialStep: OnboardingStep = OnboardingStep.NAME,
+  onEnsureMessagingInbox: (() -> Unit)? = null,
   onComplete: () -> Unit,
 ) {
   val scope = rememberCoroutineScope()
   val context = androidx.compose.ui.platform.LocalContext.current
-  val tempoAccount = remember(tempoAddress, tempoCredentialId, tempoPubKeyX, tempoPubKeyY, tempoRpId, pkpEthAddress) {
+  val tempoAccount = remember(tempoAddress, tempoCredentialId, tempoPubKeyX, tempoPubKeyY, tempoRpId, userEthAddress) {
     TempoAccountFactory
       .fromSession(
         tempoAddress = tempoAddress,
@@ -153,7 +154,7 @@ fun OnboardingScreen(
         tempoRpId = tempoRpId,
       )
       ?.takeIf { account ->
-        pkpEthAddress.isBlank() || account.address.equals(pkpEthAddress, ignoreCase = true)
+        userEthAddress.isBlank() || account.address.equals(userEthAddress, ignoreCase = true)
       }
   }
   val canUseTempoNameRegistration = tempoAccount != null && activity != null
@@ -218,8 +219,8 @@ fun OnboardingScreen(
       sessionSetupStatus = SessionSetupStatus.FAILED
       sessionSetupError =
         when {
-          tempoAccount != null -> "Missing activity for Tempo passkey signing."
-          else -> "Tempo passkey account required for onboarding."
+          tempoAccount != null -> "Missing activity for Tempo transaction signing."
+          else -> "Tempo account required for onboarding."
         }
       return null
     }
@@ -295,7 +296,7 @@ fun OnboardingScreen(
       ?: run {
         onboardingSessionKey = null
         sessionSetupStatus = SessionSetupStatus.FAILED
-        sessionSetupError = "Missing activity for Tempo passkey signing."
+        sessionSetupError = "Missing activity for Tempo transaction signing."
         return null
       }
     val active = resolveKnownSessionKey(account = account, hostActivity = hostActivity)
@@ -315,7 +316,7 @@ fun OnboardingScreen(
     account: TempoPasskeyManager.PasskeyAccount,
     sessionKey: SessionKeyManager.SessionKey,
   ): String? {
-    val hostActivity = activity ?: return "Missing activity for Tempo passkey signing."
+    val hostActivity = activity ?: return "Missing activity for Tempo transaction signing."
     val contentPubKey = withContext(Dispatchers.IO) { ContentKeyManager.getOrCreate(context).publicKey }
     val targetName =
       when {
@@ -556,7 +557,7 @@ fun OnboardingScreen(
                         result.error ?: "Registration failed"
                       }
                     }
-                    else -> "Tempo passkey account required for onboarding."
+                    else -> "Tempo account required for onboarding."
                   }
 
                 if (registrationError == null) {
@@ -636,8 +637,8 @@ fun OnboardingScreen(
                 if (account == null || hostActivity == null) {
                   error =
                     when {
-                      tempoAccount != null -> "Missing activity for Tempo passkey signing."
-                      else -> "Tempo passkey account required for onboarding."
+                      tempoAccount != null -> "Missing activity for Tempo transaction signing."
+                      else -> "Tempo account required for onboarding."
                     }
                   return@launch
                 }
@@ -716,8 +717,8 @@ fun OnboardingScreen(
                   if (account == null || hostActivity == null) {
                     error =
                       when {
-                        tempoAccount != null -> "Missing activity for Tempo passkey signing."
-                        else -> "Tempo passkey account required for onboarding."
+                        tempoAccount != null -> "Missing activity for Tempo transaction signing."
+                        else -> "Tempo account required for onboarding."
                       }
                     return@launch
                   }
@@ -761,7 +762,7 @@ fun OnboardingScreen(
                 val hostActivity = activity
                 val account = tempoAccount
                 if (hostActivity == null || account == null) {
-                  error = "Tempo passkey account required for avatar upload."
+                  error = "Tempo account required for avatar upload."
                   return@launch
                 }
 
@@ -777,8 +778,9 @@ fun OnboardingScreen(
                 val uploadResult = withContext(Dispatchers.IO) {
                   val jpegBytes = Base64.decode(base64, Base64.DEFAULT)
                   ProfileAvatarUploadApi.uploadAvatarJpeg(
+                    appContext = context,
+                    ownerEthAddress = account.address,
                     jpegBytes = jpegBytes,
-                    sessionKey = activeSessionKey,
                   )
                 }
                 if (!uploadResult.success || uploadResult.avatarRef.isNullOrBlank()) {
@@ -806,7 +808,8 @@ fun OnboardingScreen(
                   }
                 }
 
-                markOnboardingComplete(context, pkpEthAddress)
+                markOnboardingComplete(context, account.address)
+                onEnsureMessagingInbox?.invoke()
                 step = OnboardingStep.DONE
               } catch (e: Exception) {
                 error = e.message ?: "Avatar upload failed"
@@ -822,7 +825,7 @@ fun OnboardingScreen(
               try {
                 val account = tempoAccount
                 if (account == null) {
-                  error = "Tempo passkey account required for onboarding."
+                  error = "Tempo account required for onboarding."
                   return@launch
                 }
                 val activeSessionKey = resolveSessionKeyForWrites(account = account)
@@ -833,7 +836,8 @@ fun OnboardingScreen(
                   error = contentPubKeyError
                   return@launch
                 }
-                markOnboardingComplete(context, pkpEthAddress)
+                markOnboardingComplete(context, account.address)
+                onEnsureMessagingInbox?.invoke()
                 step = OnboardingStep.DONE
               } finally {
                 submitting = false

@@ -1,5 +1,9 @@
 package com.pirate.app.schedule
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -35,27 +39,34 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.pirate.app.theme.PiratePalette
 import com.pirate.app.ui.PirateMobileHeader
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-private const val DEFAULT_BASE_PRICE = "0.025"
+private const val DEFAULT_BASE_PRICE = "25.00"
 private const val SLOT_DURATION_MINS = 20
+private const val SLOT_GUEST_NULL_SENTINEL = "__NULL_GUEST__"
 
 private enum class BookingStatus {
   Live,
@@ -72,14 +83,15 @@ private enum class SlotStatus {
 }
 
 private data class BookingRow(
-  val id: Int,
+  val id: Long,
+  val bookingId: Long? = null,
   val peerName: String,
   val peerAddress: String,
   val startTimeMillis: Long,
   val durationMinutes: Int,
   val status: BookingStatus,
   val isHost: Boolean,
-  val amountEth: String,
+  val amountUsd: String,
 )
 
 private data class SlotRow(
@@ -88,24 +100,180 @@ private data class SlotRow(
   val durationMinutes: Int,
   val status: SlotStatus,
   val guestName: String? = null,
-  val priceEth: String = DEFAULT_BASE_PRICE,
+  val priceUsd: String = DEFAULT_BASE_PRICE,
 )
+
+private val slotRowListSaver: Saver<List<SlotRow>, Any> = listSaver(
+  save = { slots -> slots.map(::slotRowToSaveable) },
+  restore = { saved -> saved.mapNotNull(::slotRowFromSaveable) },
+)
+
+private fun slotRowToSaveable(row: SlotRow): List<Any> = listOf(
+  row.id,
+  row.startTimeMillis,
+  row.durationMinutes,
+  row.status.name,
+  row.guestName ?: SLOT_GUEST_NULL_SENTINEL,
+  row.priceUsd,
+)
+
+private fun slotRowFromSaveable(value: Any): SlotRow? {
+  val fields = value as? List<*> ?: return null
+  if (fields.size < 6) return null
+
+  val id = (fields[0] as? Number)?.toInt() ?: return null
+  val startTimeMillis = (fields[1] as? Number)?.toLong() ?: return null
+  val durationMinutes = (fields[2] as? Number)?.toInt() ?: return null
+  val statusName = fields[3] as? String ?: return null
+  val status = SlotStatus.entries.firstOrNull { it.name == statusName } ?: return null
+  val guestRaw = fields[4] as? String ?: SLOT_GUEST_NULL_SENTINEL
+  val guestName = if (guestRaw == SLOT_GUEST_NULL_SENTINEL) null else guestRaw
+  val priceUsd = fields[5] as? String ?: DEFAULT_BASE_PRICE
+
+  return SlotRow(
+    id = id,
+    startTimeMillis = startTimeMillis,
+    durationMinutes = durationMinutes,
+    status = status,
+    guestName = guestName,
+    priceUsd = priceUsd,
+  )
+}
 
 @Composable
 fun ScheduleScreen(
   isAuthenticated: Boolean,
+  userAddress: String?,
   onOpenDrawer: () -> Unit,
+  onOpenAvailability: () -> Unit,
+  onJoinBooking: (Long) -> Unit,
+  onShowMessage: (String) -> Unit,
 ) {
-  var showAvailability by remember { mutableStateOf(false) }
-  var basePrice by remember { mutableStateOf(DEFAULT_BASE_PRICE) }
-  var basePriceEdit by remember { mutableStateOf(DEFAULT_BASE_PRICE) }
-  var editingPrice by remember { mutableStateOf(false) }
-  var acceptingBookings by remember { mutableStateOf(true) }
+  val context = LocalContext.current
   var upcomingBookings by remember { mutableStateOf(initialUpcomingBookings()) }
-  var weekOffset by remember { mutableIntStateOf(0) }
-  var selectedDayIndex by remember { mutableIntStateOf(todayWeekdayIndex()) }
+  var bookingsLoading by remember { mutableStateOf(false) }
+  var pendingJoinBookingId by remember { mutableStateOf<Long?>(null) }
 
-  val availabilitySlots = remember { initialAvailabilitySlots().toMutableStateList() }
+  val permissionLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.RequestPermission(),
+  ) { granted ->
+    val bookingId = pendingJoinBookingId
+    pendingJoinBookingId = null
+    if (bookingId == null) return@rememberLauncherForActivityResult
+    if (!granted) {
+      onShowMessage("Microphone permission is required for session calls.")
+      return@rememberLauncherForActivityResult
+    }
+    onJoinBooking(bookingId)
+  }
+
+  LaunchedEffect(isAuthenticated, userAddress) {
+    if (!isAuthenticated || userAddress.isNullOrBlank()) {
+      bookingsLoading = false
+      upcomingBookings = initialUpcomingBookings()
+      return@LaunchedEffect
+    }
+
+    bookingsLoading = true
+    runCatching {
+      withContext(Dispatchers.IO) {
+        TempoSessionEscrowApi.fetchUpcomingUserBookings(userAddress, maxResults = 20)
+      }
+    }.onSuccess { rows ->
+      val mapped = rows.map { row ->
+        BookingRow(
+          id = row.bookingId,
+          bookingId = row.bookingId,
+          peerName = abbreviateAddress(row.counterpartyAddress),
+          peerAddress = row.counterpartyAddress,
+          startTimeMillis = row.startTimeSec * 1_000L,
+          durationMinutes = row.durationMins,
+          status = if (row.isLive) BookingStatus.Live else BookingStatus.Upcoming,
+          isHost = row.isHost,
+          amountUsd = row.amountUsd,
+        )
+      }
+      upcomingBookings = mapped
+    }.onFailure { err ->
+      onShowMessage("Failed to load schedule: ${err.message ?: "unknown error"}")
+      upcomingBookings = emptyList()
+    }
+    bookingsLoading = false
+  }
+
+  Column(
+    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+  ) {
+    PirateMobileHeader(
+      title = "Schedule",
+      isAuthenticated = isAuthenticated,
+      onAvatarPress = onOpenDrawer,
+      rightSlot = {
+        IconButton(onClick = onOpenAvailability) {
+          Icon(
+            Icons.Rounded.EditCalendar,
+            contentDescription = "Edit availability",
+            tint = MaterialTheme.colorScheme.onBackground,
+          )
+        }
+      },
+    )
+
+    LazyColumn(
+      modifier = Modifier.fillMaxSize(),
+      contentPadding = PaddingValues(bottom = 12.dp),
+    ) {
+      // ── Upcoming Sessions ──
+      item {
+        UpcomingSessionsSection(
+          bookings = upcomingBookings,
+          loading = bookingsLoading,
+          isAuthenticated = isAuthenticated,
+          onJoin = join@{ bookingId ->
+            val selected = upcomingBookings.firstOrNull { it.id == bookingId } ?: return@join
+            val targetBookingId = selected.bookingId ?: selected.id
+            val hasMicPermission =
+              ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+            if (hasMicPermission) {
+              onJoinBooking(targetBookingId)
+            } else {
+              pendingJoinBookingId = targetBookingId
+              permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }
+            upcomingBookings = upcomingBookings.map { row ->
+              if (row.id != bookingId) row
+              else if (row.status == BookingStatus.Upcoming) row.copy(status = BookingStatus.Live)
+              else row
+            }
+          },
+          onCancel = cancel@{ bookingId ->
+            val booking = upcomingBookings.firstOrNull { it.id == bookingId } ?: return@cancel
+            if (booking.bookingId != null) {
+              onShowMessage("Canceling on-chain bookings is not wired in Android yet.")
+              return@cancel
+            }
+            upcomingBookings = upcomingBookings.filterNot { it.id == bookingId }
+          },
+        )
+      }
+    }
+  }
+}
+
+@Composable
+fun ScheduleAvailabilityScreen(
+  isAuthenticated: Boolean,
+  onClose: () -> Unit,
+) {
+  var basePrice by rememberSaveable { mutableStateOf(DEFAULT_BASE_PRICE) }
+  var basePriceEdit by rememberSaveable { mutableStateOf(DEFAULT_BASE_PRICE) }
+  var editingPrice by rememberSaveable { mutableStateOf(false) }
+  var acceptingBookings by rememberSaveable { mutableStateOf(true) }
+  var weekOffset by rememberSaveable { mutableStateOf(0) }
+  var selectedDayIndex by rememberSaveable { mutableStateOf(todayWeekdayIndex()) }
+  var availabilitySlots by rememberSaveable(stateSaver = slotRowListSaver) {
+    mutableStateOf(initialAvailabilitySlots())
+  }
   val halfHourSlots = remember {
     val list = mutableListOf<Pair<Int, Int>>()
     repeat(48) { index ->
@@ -131,142 +299,123 @@ fun ScheduleScreen(
     modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
   ) {
     PirateMobileHeader(
-      title = "Schedule",
-      isAuthenticated = isAuthenticated,
-      onAvatarPress = onOpenDrawer,
-      rightSlot = {
-        IconButton(onClick = { showAvailability = !showAvailability }) {
-          Icon(
-            Icons.Rounded.EditCalendar,
-            contentDescription = "Availability",
-            tint = if (showAvailability) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
-          )
-        }
-      },
+      title = "Availability",
+      onClosePress = onClose,
     )
 
     LazyColumn(
       modifier = Modifier.fillMaxSize(),
       contentPadding = PaddingValues(bottom = 12.dp),
     ) {
-      if (!showAvailability) {
-        // ── Upcoming Sessions ──
-        item {
-          UpcomingSessionsSection(
-            bookings = upcomingBookings,
-            isAuthenticated = isAuthenticated,
-            onJoin = { bookingId ->
-              upcomingBookings = upcomingBookings.map { booking ->
-                if (booking.id != bookingId) booking
-                else if (booking.status == BookingStatus.Upcoming) booking.copy(status = BookingStatus.Live)
-                else booking
-              }
-            },
-            onCancel = { bookingId ->
-              upcomingBookings = upcomingBookings.filterNot { it.id == bookingId }
-            },
-          )
-        }
-      } else {
-        // ── Availability Editor ──
-        item {
-          AvailabilityHeaderCard(
-            isAuthenticated = isAuthenticated,
-            basePrice = basePrice,
-            editingPrice = editingPrice,
-            editValue = basePriceEdit,
-            onEditStart = { editingPrice = true; basePriceEdit = basePrice },
-            onPriceChange = { basePriceEdit = it },
-            onCancelEdit = { editingPrice = false; basePriceEdit = basePrice },
-            onSavePrice = { basePrice = basePriceEdit.ifBlank { DEFAULT_BASE_PRICE }; editingPrice = false },
-          )
-        }
+      item {
+        AvailabilityHeaderCard(
+          isAuthenticated = isAuthenticated,
+          basePrice = basePrice,
+          editingPrice = editingPrice,
+          editValue = basePriceEdit,
+          onEditStart = { editingPrice = true; basePriceEdit = basePrice },
+          onPriceChange = { basePriceEdit = it },
+          onCancelEdit = { editingPrice = false; basePriceEdit = basePrice },
+          onSavePrice = { basePrice = basePriceEdit.ifBlank { DEFAULT_BASE_PRICE }; editingPrice = false },
+        )
+      }
 
-        item {
-          AvailabilityControls(acceptingBookings = acceptingBookings, onAcceptingChange = { acceptingBookings = it })
-        }
+      item {
+        AvailabilityControls(acceptingBookings = acceptingBookings, onAcceptingChange = { acceptingBookings = it })
+      }
 
-        item {
-          if (!acceptingBookings) {
-            Surface(
-              modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-              shape = RoundedCornerShape(10.dp),
-              color = MaterialTheme.colorScheme.error.copy(alpha = 0.10f),
-              border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.22f)),
-            ) {
-              Text("Bookings are paused", modifier = Modifier.fillMaxWidth().padding(12.dp), color = MaterialTheme.colorScheme.error)
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-          }
-        }
-
-        item {
-          WeekHeader(
-            weekLabel = weekLabel,
-            onPreviousWeek = { weekOffset -= 1 },
-            onNextWeek = { weekOffset += 1 },
-            onToday = { weekOffset = 0; selectedDayIndex = todayWeekdayIndex() },
-          )
-        }
-
-        item {
-          DayStrip(
-            weekDates = weekDates,
-            selectedDayIndex = selectedDayIndex,
-            onDaySelected = { selectedDayIndex = it },
-            hasSlotsOnDate = { date ->
-              availabilitySlots.any { it.status != SlotStatus.Cancelled && it.status != SlotStatus.Settled && isSameDay(it.startTimeMillis, date) }
-            },
-          )
-        }
-
-        item {
-          Text(
-            text = selectedDayLabel,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-          )
-        }
-
-        item { Spacer(modifier = Modifier.height(4.dp)) }
-
-        items(halfHourSlots.chunked(2)) { pair ->
-          Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+      item {
+        if (!acceptingBookings) {
+          Surface(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.error.copy(alpha = 0.10f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.22f)),
           ) {
-            pair.forEach { (hour, minute) ->
-              val startTime = slotStartMillis(selectedDay, hour, minute)
-              val existingSlot = slotByTime[startTime]
-              val isBooked = existingSlot?.status == SlotStatus.Booked
-              val disabled = isBooked || existingSlot?.status == SlotStatus.Settled || !acceptingBookings || !isAuthenticated
-
-              AvailabilitySlotCard(
-                timeLabel = formatTime(hour, minute),
-                status = existingSlot?.status,
-                onClick = {
-                  val idx = availabilitySlots.indexOfFirst { it.id == existingSlot?.id }
-                  if (disabled || existingSlot == null) {
-                    if (!disabled && idx < 0) {
-                      val nextId = (availabilitySlots.maxByOrNull { it.id }?.id ?: 0) + 1
-                      availabilitySlots.add(
-                        SlotRow(id = nextId, startTimeMillis = startTime, durationMinutes = SLOT_DURATION_MINS, status = SlotStatus.Open, priceEth = basePrice),
-                      )
-                    }
-                    return@AvailabilitySlotCard
-                  }
-                  when (existingSlot.status) {
-                    SlotStatus.Open -> availabilitySlots.removeAt(idx)
-                    SlotStatus.Cancelled -> availabilitySlots[idx] = existingSlot.copy(status = SlotStatus.Open, guestName = null)
-                    SlotStatus.Booked, SlotStatus.Settled -> {}
-                  }
-                },
-                enabled = !disabled,
-              )
-            }
-            if (pair.size == 1) Spacer(modifier = Modifier.weight(1f))
+            Text("Bookings are paused", modifier = Modifier.fillMaxWidth().padding(12.dp), color = MaterialTheme.colorScheme.error)
           }
+          Spacer(modifier = Modifier.height(10.dp))
+        }
+      }
+
+      item {
+        WeekHeader(
+          weekLabel = weekLabel,
+          onPreviousWeek = { weekOffset -= 1 },
+          onNextWeek = { weekOffset += 1 },
+          onToday = { weekOffset = 0; selectedDayIndex = todayWeekdayIndex() },
+        )
+      }
+
+      item {
+        DayStrip(
+          weekDates = weekDates,
+          selectedDayIndex = selectedDayIndex,
+          onDaySelected = { selectedDayIndex = it },
+          hasSlotsOnDate = { date ->
+            availabilitySlots.any { it.status != SlotStatus.Cancelled && it.status != SlotStatus.Settled && isSameDay(it.startTimeMillis, date) }
+          },
+        )
+      }
+
+      item {
+        Text(
+          text = selectedDayLabel,
+          modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.Bold,
+        )
+      }
+
+      item { Spacer(modifier = Modifier.height(4.dp)) }
+
+      items(halfHourSlots.chunked(2)) { pair ->
+        Row(
+          modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          pair.forEach { (hour, minute) ->
+            val startTime = slotStartMillis(selectedDay, hour, minute)
+            val existingSlot = slotByTime[startTime]
+            val isBooked = existingSlot?.status == SlotStatus.Booked
+            val disabled = isBooked || existingSlot?.status == SlotStatus.Settled || !acceptingBookings || !isAuthenticated
+
+            AvailabilitySlotCard(
+              timeLabel = formatTime(hour, minute),
+              status = existingSlot?.status,
+              onClick = {
+                val idx = availabilitySlots.indexOfFirst { it.id == existingSlot?.id }
+                if (disabled || existingSlot == null) {
+                  if (!disabled && idx < 0) {
+                    val nextId = (availabilitySlots.maxByOrNull { it.id }?.id ?: 0) + 1
+                    availabilitySlots = availabilitySlots + SlotRow(
+                      id = nextId,
+                      startTimeMillis = startTime,
+                      durationMinutes = SLOT_DURATION_MINS,
+                      status = SlotStatus.Open,
+                      priceUsd = basePrice,
+                    )
+                  }
+                  return@AvailabilitySlotCard
+                }
+                when (existingSlot.status) {
+                  SlotStatus.Open -> {
+                    if (idx >= 0) {
+                      availabilitySlots = availabilitySlots.toMutableList().also { it.removeAt(idx) }
+                    }
+                  }
+                  SlotStatus.Cancelled -> {
+                    if (idx >= 0) {
+                      availabilitySlots = availabilitySlots.toMutableList().also { it[idx] = existingSlot.copy(status = SlotStatus.Open, guestName = null) }
+                    }
+                  }
+                  SlotStatus.Booked, SlotStatus.Settled -> {}
+                }
+              },
+              enabled = !disabled,
+            )
+          }
+          if (pair.size == 1) Spacer(modifier = Modifier.weight(1f))
         }
       }
     }
@@ -278,10 +427,22 @@ fun ScheduleScreen(
 @Composable
 private fun UpcomingSessionsSection(
   bookings: List<BookingRow>,
+  loading: Boolean,
   isAuthenticated: Boolean,
-  onJoin: (Int) -> Unit,
-  onCancel: (Int) -> Unit,
+  onJoin: (Long) -> Unit,
+  onCancel: (Long) -> Unit,
 ) {
+  if (loading) {
+    Text(
+      "Loading schedule...",
+      modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp),
+      color = PiratePalette.TextMuted,
+      style = MaterialTheme.typography.bodyLarge,
+      textAlign = TextAlign.Center,
+    )
+    return
+  }
+
   if (bookings.isEmpty()) {
     Text(
       "No scheduled sessions right now.",
@@ -325,7 +486,7 @@ private fun UpcomingSessionsSection(
           color = Color(0xFFD4D4D4),
         )
         Text(
-          text = "${booking.durationMinutes} min · ${booking.amountEth} ETH",
+          text = "${booking.durationMinutes} min · $${booking.amountUsd}",
           style = MaterialTheme.typography.bodyLarge,
           color = Color(0xFFA3A3A3),
         )
@@ -365,13 +526,13 @@ private fun AvailabilityHeaderCard(
       Text("Base Price", style = MaterialTheme.typography.bodyLarge, color = PiratePalette.TextMuted)
       if (editingPrice) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          OutlinedTextField(value = editValue, onValueChange = onPriceChange, singleLine = true, label = { Text("ETH") }, enabled = isAuthenticated, modifier = Modifier.weight(1f))
+          OutlinedTextField(value = editValue, onValueChange = onPriceChange, singleLine = true, label = { Text("aUSD") }, enabled = isAuthenticated, modifier = Modifier.weight(1f))
           OutlinedButton(onClick = onCancelEdit, enabled = isAuthenticated) { Text("Cancel") }
           Button(onClick = onSavePrice, enabled = isAuthenticated) { Text("Save") }
         }
       } else {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-          Text("$basePrice ETH", style = MaterialTheme.typography.headlineSmall)
+          Text("$$basePrice", style = MaterialTheme.typography.headlineSmall)
           OutlinedButton(onClick = onEditStart, enabled = isAuthenticated) { Text("Edit") }
         }
       }
@@ -518,17 +679,17 @@ private fun isSameDay(first: Long, second: Long): Boolean {
 private fun initialUpcomingBookings(): List<BookingRow> {
   val now = System.currentTimeMillis()
   return listOf(
-    BookingRow(id = 1, peerName = "Ariya", peerAddress = "0xA11C...be77", startTimeMillis = now + 90 * 60 * 1000, durationMinutes = 30, status = BookingStatus.Upcoming, isHost = true, amountEth = "0.025"),
-    BookingRow(id = 2, peerName = "Tamsin", peerAddress = "0xD12A...4f22", startTimeMillis = now + 7 * 60 * 60 * 1000, durationMinutes = 60, status = BookingStatus.Live, isHost = false, amountEth = "0.040"),
+    BookingRow(id = 1L, peerName = "Ariya", peerAddress = "0xA11C...be77", startTimeMillis = now + 90 * 60 * 1000, durationMinutes = 30, status = BookingStatus.Upcoming, isHost = true, amountUsd = "25.00"),
+    BookingRow(id = 2L, peerName = "Tamsin", peerAddress = "0xD12A...4f22", startTimeMillis = now + 7 * 60 * 60 * 1000, durationMinutes = 60, status = BookingStatus.Live, isHost = false, amountUsd = "40.00"),
   )
 }
 
 private fun initialAvailabilitySlots(): List<SlotRow> {
   val now = System.currentTimeMillis(); val today = Calendar.getInstance().apply { timeInMillis = now }
   return listOf(
-    SlotRow(id = 1, startTimeMillis = slotStartAt(today.clone() as Calendar, 19, 0), durationMinutes = 20, status = SlotStatus.Open, priceEth = "0.025"),
-    SlotRow(id = 2, startTimeMillis = slotStartAt(today.clone() as Calendar, 21, 0), durationMinutes = 45, status = SlotStatus.Open, priceEth = "0.030"),
-    SlotRow(id = 3, startTimeMillis = slotStartAt((today.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 2) }, 19, 30), durationMinutes = 20, status = SlotStatus.Booked, guestName = "Ariya", priceEth = "0.025"),
+    SlotRow(id = 1, startTimeMillis = slotStartAt(today.clone() as Calendar, 19, 0), durationMinutes = 20, status = SlotStatus.Open, priceUsd = "25.00"),
+    SlotRow(id = 2, startTimeMillis = slotStartAt(today.clone() as Calendar, 21, 0), durationMinutes = 45, status = SlotStatus.Open, priceUsd = "30.00"),
+    SlotRow(id = 3, startTimeMillis = slotStartAt((today.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 2) }, 19, 30), durationMinutes = 20, status = SlotStatus.Booked, guestName = "Ariya", priceUsd = "25.00"),
   )
 }
 

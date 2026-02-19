@@ -24,14 +24,32 @@ android {
     val tempoScrobbleSubgraphUrl = (project.findProperty("TEMPO_SCROBBLE_SUBGRAPH_URL") as String?)
       ?.replace("\"", "\\\"")
       ?.trim()
-      ?: ""
+      ?: "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo"
     buildConfigField("String", "TEMPO_SCROBBLE_SUBGRAPH_URL", "\"$tempoScrobbleSubgraphUrl\"")
 
     val tempoProfilesSubgraphUrl = (project.findProperty("TEMPO_PROFILES_SUBGRAPH_URL") as String?)
       ?.replace("\"", "\\\"")
       ?.trim()
-      ?: ""
+      ?: "https://graph.dotheaven.org/subgraphs/name/dotheaven/profiles-tempo"
     buildConfigField("String", "TEMPO_PROFILES_SUBGRAPH_URL", "\"$tempoProfilesSubgraphUrl\"")
+
+    val tempoPlaylistsSubgraphUrl = (project.findProperty("TEMPO_PLAYLISTS_SUBGRAPH_URL") as String?)
+      ?.replace("\"", "\\\"")
+      ?.trim()
+      ?: "https://graph.dotheaven.org/subgraphs/name/dotheaven/playlist-feed-tempo"
+    buildConfigField("String", "TEMPO_PLAYLISTS_SUBGRAPH_URL", "\"$tempoPlaylistsSubgraphUrl\"")
+
+    val tempoStudyProgressSubgraphUrl = (project.findProperty("TEMPO_STUDY_PROGRESS_SUBGRAPH_URL") as String?)
+      ?.replace("\"", "\\\"")
+      ?.trim()
+      ?: "https://graph.dotheaven.org/subgraphs/name/dotheaven/study-progress-tempo"
+    buildConfigField("String", "TEMPO_STUDY_PROGRESS_SUBGRAPH_URL", "\"$tempoStudyProgressSubgraphUrl\"")
+
+    val tempoFollowV1 = (project.findProperty("TEMPO_FOLLOW_V1") as String?)
+      ?.replace("\"", "\\\"")
+      ?.trim()
+      ?: "0x153DbEcA0CEF8563649cf475a687D14997D2c403"
+    buildConfigField("String", "TEMPO_FOLLOW_V1", "\"$tempoFollowV1\"")
   }
 
   buildFeatures {
@@ -68,6 +86,7 @@ dependencies {
   implementation("androidx.compose.material3:material3")
   implementation("androidx.compose.material:material-icons-extended")
   implementation("androidx.navigation:navigation-compose:2.9.7")
+  implementation("androidx.fragment:fragment-ktx:1.8.9")
   implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
 
   // Native passkeys
@@ -85,16 +104,6 @@ dependencies {
   implementation("org.web3j:abi:4.12.2")
   implementation("org.web3j:crypto:4.12.2")
 
-  // Reown AppKit (WalletConnect) — wallet sign-in
-  implementation(platform("com.reown:android-bom:1.6.5"))
-  implementation("com.reown:android-core")
-  implementation("com.reown:appkit")
-  // AppKit UI requires Material 2 + accompanist bottom sheet
-  implementation("androidx.compose.material:material")
-  implementation("com.google.accompanist:accompanist-navigation-material:0.34.0")
-  // AppKit dialog requires fragments
-  implementation("androidx.navigation:navigation-fragment-ktx:2.9.7")
-
   // Agora RTC (voice calls)
   implementation("io.agora.rtc:full-sdk:4.5.1")
 
@@ -107,6 +116,11 @@ dependencies {
   // Glance (home-screen widget)
   implementation("androidx.glance:glance-appwidget:1.1.1")
   implementation("androidx.datastore:datastore-preferences:1.1.4")
+
+  // Media3 ExoPlayer for resilient HTTP streaming with cache
+  implementation("androidx.media3:media3-exoplayer:1.4.1")
+  implementation("androidx.media3:media3-datasource:1.4.1")
+  implementation("androidx.media3:media3-database:1.4.1")
 
   debugImplementation("androidx.compose.ui:ui-tooling")
 }

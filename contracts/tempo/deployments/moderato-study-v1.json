@@ -1,0 +1,46 @@
+{
+  "network": {
+    "name": "Tempo Testnet (Moderato)",
+    "chainId": 42431,
+    "rpcUrl": "https://rpc.moderato.tempo.xyz",
+    "explorer": "https://explore.tempo.xyz"
+  },
+  "deployedAt": "2026-02-19T18:57:40Z",
+  "deployer": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+  "script": "script/DeployStudyV1.s.sol",
+  "command": "forge script script/DeployStudyV1.s.sol:DeployStudyV1Script --rpc-url https://rpc.moderato.tempo.xyz --broadcast --slow --gas-estimate-multiplier 100",
+  "contracts": {
+    "studySetRegistryV1": {
+      "address": "0x7fD583d6e9D2F820432455D071617b5C1449c7a4",
+      "deployTx": "0x3faae8972e9a63f915489bdc2fb405cee26f6aa2df50cf648e31918c9815863d",
+      "blockNumber": 5563863,
+      "gasUsed": 5234504,
+      "paymentToken": "0x20C0000000000000000000000000000000000001",
+      "treasury": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+      "operator": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB"
+    },
+    "studyAttemptsV1": {
+      "address": "0x1bd1D9206a1D0ca2447A4Da7d040A440DaFBFC9C",
+      "deployTx": "0x159e9eefc72cb080d9c6eec09c7cfd12cde4fe2d18ce57a854da94ec212c7436",
+      "blockNumber": 5563867,
+      "gasUsed": 2142174,
+      "owner": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB"
+    }
+  },
+  "subgraph": {
+    "studyProgress": {
+      "studySetRegistryV1": {
+        "address": "0x7fD583d6e9D2F820432455D071617b5C1449c7a4",
+        "startBlock": 5563863
+      },
+      "studyAttemptsV1": {
+        "address": "0x1bd1D9206a1D0ca2447A4Da7d040A440DaFBFC9C",
+        "startBlock": 5563867
+      }
+    }
+  },
+  "notes": [
+    "Broadcast output: contracts/tempo/broadcast/DeployStudyV1.s.sol/42431/run-latest.json",
+    "Subgraph manifests were updated via subgraphs/study-progress/scripts/set-addresses.mjs"
+  ]
+}

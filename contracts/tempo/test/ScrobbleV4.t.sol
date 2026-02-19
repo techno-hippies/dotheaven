@@ -107,6 +107,61 @@ contract ScrobbleV4Test is Test {
         sc.registerTracksBatch(_u8(3), _b32(payload), _str("S"), _str("A"), _str("B"), _u32(0));
     }
 
+    function test_registerTracksForUser_fromUser() public {
+        bytes32 payload = keccak256(abi.encode("new", "track", "meta"));
+        bytes32 trackId = keccak256(abi.encode(uint8(3), payload));
+
+        vm.prank(user);
+        sc.registerTracksForUser(
+            user,
+            _u8(3), _b32(payload),
+            _str("New"), _str("Track"), _str("Meta"),
+            _u32(211)
+        );
+
+        assertTrue(sc.isRegistered(trackId));
+        (, , , , , , , uint32 duration) = sc.getTrack(trackId);
+        assertEq(duration, 211);
+    }
+
+    function test_registerTracksForUser_wrongSender_reverts() public {
+        bytes32 payload = keccak256(abi.encode("new", "track", "meta"));
+
+        vm.prank(address(0xBAD));
+        vm.expectRevert(ScrobbleV4.NotUserSender.selector);
+        sc.registerTracksForUser(
+            user,
+            _u8(3), _b32(payload),
+            _str("New"), _str("Track"), _str("Meta"),
+            _u32(211)
+        );
+    }
+
+    function test_registerTracksForUser_idempotent_skipsExisting() public {
+        bytes32 payload = keccak256(abi.encode("repeat", "artist", "album"));
+        bytes32 trackId = keccak256(abi.encode(uint8(3), payload));
+
+        vm.prank(user);
+        sc.registerTracksForUser(
+            user,
+            _u8(3), _b32(payload),
+            _str("Repeat"), _str("Artist"), _str("Album"),
+            _u32(145)
+        );
+
+        vm.prank(user);
+        sc.registerTracksForUser(
+            user,
+            _u8(3), _b32(payload),
+            _str("Repeat"), _str("Artist"), _str("Album"),
+            _u32(999)
+        );
+
+        assertTrue(sc.isRegistered(trackId));
+        (, , , , , , , uint32 duration) = sc.getTrack(trackId);
+        assertEq(duration, 145);
+    }
+
     // ── registerAndScrobbleBatch (user-auth) ────────────────────────────
 
     function test_registerAndScrobble_fromUser() public {

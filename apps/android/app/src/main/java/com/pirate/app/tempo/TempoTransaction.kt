@@ -93,6 +93,25 @@ object TempoTransaction {
     }
 
     /**
+     * Encode the full signed transaction with secp256k1 signature bytes.
+     * Tempo expects secp256k1 signatures in raw 65-byte form: r(32) || s(32) || v(1),
+     * where v is yParity (0/1). There is no type prefix byte for secp256k1.
+     */
+    fun encodeSignedSecp256k1(
+        tx: UnsignedTx,
+        r: ByteArray,
+        s: ByteArray,
+        v: Byte,
+    ): String {
+        val sigBytes = buildSecp256k1Signature(r = r, s = s, v = v)
+        val allFields = fullFields(tx).toMutableList()
+        allFields.add(sigBytes)
+
+        val rlpPayload = rlpEncodeList(allFields)
+        return "0x76" + P256Utils.bytesToHex(rlpPayload)
+    }
+
+    /**
      * Appends sender hint bytes expected by `eth_signRawTransaction` fee payer relays.
      * Format: `<serialized_tx><sender_20_bytes><0xfeefeefeefee>`.
      */
@@ -201,6 +220,39 @@ object TempoTransaction {
     private fun validBeforeField(tx: UnsignedTx): Any = tx.validBeforeSec ?: ByteArray(0)
 
     private fun validAfterField(tx: UnsignedTx): Any = tx.validAfterSec ?: ByteArray(0)
+
+    private fun buildSecp256k1Signature(
+        r: ByteArray,
+        s: ByteArray,
+        v: Byte,
+    ): ByteArray {
+        val r32 = normalizeScalar32(r)
+        val s32 = normalizeScalar32(s)
+        val vNorm = normalizeV(v)
+        return r32 + s32 + byteArrayOf(vNorm)
+    }
+
+    private fun normalizeScalar32(input: ByteArray): ByteArray {
+        require(input.isNotEmpty()) { "secp256k1 scalar is empty" }
+        var start = 0
+        while (start < input.lastIndex && input[start] == 0.toByte()) {
+            start += 1
+        }
+        val unsigned = input.copyOfRange(start, input.size)
+        require(unsigned.size <= 32) { "secp256k1 scalar exceeds 32 bytes" }
+        return if (unsigned.size == 32) unsigned else ByteArray(32 - unsigned.size) + unsigned
+    }
+
+    private fun normalizeV(v: Byte): Byte {
+        val asInt = v.toInt() and 0xFF
+        return when (asInt) {
+            0, 1 -> asInt.toByte()
+            27, 28 -> (asInt - 27).toByte()
+            // EIP-155 style v values can be mapped back to yParity.
+            in 35..Int.MAX_VALUE -> ((asInt - 35) % 2).toByte()
+            else -> throw IllegalArgumentException("invalid secp256k1 v: $asInt")
+        }
+    }
 
     // -- minimal RLP encoder --
 

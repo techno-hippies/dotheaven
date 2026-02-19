@@ -3,6 +3,7 @@ package com.pirate.app.music
 import android.content.Context
 import com.pirate.app.arweave.Ans104DataItem
 import com.pirate.app.profile.TempoNameRecordsApi
+import com.pirate.app.security.LocalSecp256k1Store
 import com.pirate.app.tempo.ContentKeyManager
 import com.pirate.app.tempo.EciesContentCrypto
 import com.pirate.app.tempo.P256Utils
@@ -216,7 +217,7 @@ object UploadedTrackActions {
         error = "Recipient has no published contentPubKey. They must set a primary name and upload once to publish encryption keys.",
       )
 
-    val ownerSessionKey = SessionKeyManager.load(context)?.takeIf {
+    SessionKeyManager.load(context)?.takeIf {
       SessionKeyManager.isValid(it, ownerAddress = ownerAddress)
     } ?: return@withContext UploadedTrackShareResult(
       success = false,
@@ -244,7 +245,8 @@ object UploadedTrackActions {
           .toString()
           .toByteArray(Charsets.UTF_8)
 
-      val signed =
+      val signed = run {
+        val identity = LocalSecp256k1Store.getOrCreateIdentity(context, ownerAddress)
         Ans104DataItem.buildAndSign(
           payload = payload,
           tags =
@@ -257,8 +259,9 @@ object UploadedTrackActions {
               Ans104DataItem.Tag(name = "Grantee", value = recipientAddress),
               Ans104DataItem.Tag(name = "Upload-Source", value = "heaven-android"),
             ),
-          sessionKey = ownerSessionKey,
+          signingKeyPair = identity.keyPair,
         )
+      }
       val envelopeId = Ans104DataItem.uploadSignedDataItem(signed.bytes).trim()
       if (envelopeId.isEmpty()) {
         throw IllegalStateException("Envelope upload returned empty id.")

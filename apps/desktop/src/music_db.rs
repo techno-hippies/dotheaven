@@ -13,6 +13,7 @@ use walkdir::WalkDir;
 mod metadata;
 use metadata::{extract_metadata, format_duration_ms, is_audio_file};
 mod query_ops;
+mod query_settings;
 mod scan_ops;
 
 // =============================================================================

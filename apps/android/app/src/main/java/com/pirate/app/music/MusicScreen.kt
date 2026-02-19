@@ -1,6 +1,7 @@
 package com.pirate.app.music
 
 import android.Manifest
+import android.content.Intent
 import android.content.Context
 import android.database.ContentObserver
 import android.net.Uri
@@ -80,13 +81,18 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
+import com.pirate.app.arweave.ArweaveTurboConfig
+import com.pirate.app.arweave.TurboCreditsApi
 import com.pirate.app.tempo.ContentKeyManager
 import com.pirate.app.tempo.EciesContentCrypto
+import com.pirate.app.tempo.SessionKeyManager
 import com.pirate.app.music.ui.AddToPlaylistSheet
 import com.pirate.app.music.ui.CreatePlaylistSheet
 import com.pirate.app.music.ui.TrackItemRow
 import com.pirate.app.music.ui.TrackMenuSheet
+import com.pirate.app.music.ui.TurboCreditsSheet
 import com.pirate.app.onboarding.OnboardingRpcHelpers
+import com.pirate.app.profile.ProfileMusicApi
 import com.pirate.app.profile.TempoNameRecordsApi
 import com.pirate.app.player.PlayerController
 import com.pirate.app.theme.PiratePalette
@@ -133,6 +139,7 @@ private const val TAG_SHARED = "MusicShared"
 private const val SHARED_REFRESH_TTL_MS = 120_000L
 private const val SHARED_SEEN_PREFS = "pirate_music_shared_seen"
 private const val SHARED_SEEN_KEY_PREFIX = "seen_v1_"
+private const val TURBO_CREDITS_COPY = "Save this song forever on Arweave for ~\$0.03."
 
 private fun resolveReleaseAudioUrl(ref: String?): String? {
   val raw = ref?.trim().orEmpty()
@@ -231,6 +238,8 @@ fun MusicScreen(
   onShowMessage: (String) -> Unit,
   onOpenPlayer: () -> Unit,
   onOpenDrawer: () -> Unit,
+  onOpenSongPage: ((trackId: String, title: String?, artist: String?) -> Unit)? = null,
+  onOpenArtistPage: ((artistName: String) -> Unit)? = null,
   hostActivity: androidx.fragment.app.FragmentActivity? = null,
   tempoAccount: com.pirate.app.tempo.TempoPasskeyManager.PasskeyAccount? = null,
 ) {
@@ -243,6 +252,8 @@ fun MusicScreen(
   var view by rememberSaveable { mutableStateOf(MusicView.Home) }
   var searchQuery by rememberSaveable { mutableStateOf("") }
   var recentPublishedReleases by remember { mutableStateOf<List<AlbumCardModel>>(emptyList()) }
+  var recentPublishedReleasesLoading by remember { mutableStateOf(false) }
+  var recentPublishedReleasesError by remember { mutableStateOf<String?>(null) }
 
   val permission = if (Build.VERSION.SDK_INT >= 33) {
     Manifest.permission.READ_MEDIA_AUDIO
@@ -295,6 +306,10 @@ fun MusicScreen(
   var shareBusy by remember { mutableStateOf(false) }
 
   var uploadBusy by remember { mutableStateOf(false) }
+  var turboCreditsSheetOpen by remember { mutableStateOf(false) }
+  var turboCreditsSheetMessage by remember {
+    mutableStateOf(TURBO_CREDITS_COPY)
+  }
 
   var autoSyncJob by remember { mutableStateOf<Job?>(null) }
 
@@ -309,6 +324,28 @@ fun MusicScreen(
     val a = addr.trim()
     if (a.length <= 10) return a
     return "${a.take(6)}...${a.takeLast(4)}"
+  }
+
+  fun resolveSongTrackId(track: MusicTrack): String? {
+    val bytes32Regex = Regex("^0x[a-fA-F0-9]{64}$")
+    val fromId = track.id.trim()
+    if (bytes32Regex.matches(fromId)) return fromId
+    val fromContentId = track.contentId?.trim().orEmpty()
+    if (bytes32Regex.matches(fromContentId)) return fromContentId
+    return null
+  }
+
+  fun promptTurboTopUp(message: String) {
+    turboCreditsSheetMessage = message
+    turboCreditsSheetOpen = true
+  }
+
+  fun openTurboTopUp() {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(ArweaveTurboConfig.TOP_UP_URL))
+    runCatching { context.startActivity(intent) }
+      .onFailure {
+        onShowMessage("Unable to open browser. Visit ${ArweaveTurboConfig.TOP_UP_URL}")
+      }
   }
 
   fun sharedOwnerLabel(ownerAddress: String): String {
@@ -840,18 +877,25 @@ fun MusicScreen(
 
   LaunchedEffect(view) {
     if (view != MusicView.Home) return@LaunchedEffect
-    recentPublishedReleases =
-      withContext(Dispatchers.IO) {
-        RecentlyPublishedSongsStore
-          .load(context)
-          .map {
+    recentPublishedReleasesLoading = true
+    recentPublishedReleasesError = null
+    runCatching { ProfileMusicApi.fetchLatestPublishedSongs(maxEntries = HOME_NEW_RELEASES_MAX) }
+      .onSuccess { rows ->
+        recentPublishedReleases =
+          rows.map { row ->
             AlbumCardModel(
-              title = it.title,
-              artist = it.artist,
-              audioRef = it.audioCid,
-              coverRef = it.coverCid,
+              title = row.title,
+              artist = row.artist,
+              audioRef = row.pieceCid,
+              coverRef = row.coverCid,
             )
           }
+        recentPublishedReleasesLoading = false
+      }
+      .onFailure { error ->
+        recentPublishedReleases = emptyList()
+        recentPublishedReleasesError = error.message ?: "Failed to load new releases"
+        recentPublishedReleasesLoading = false
       }
   }
 
@@ -946,6 +990,8 @@ fun MusicScreen(
           playlistCount = displayPlaylists.size,
           playlists = displayPlaylists,
           newReleases = mergedNewReleases(recentPublishedReleases),
+          newReleasesLoading = recentPublishedReleasesLoading,
+          newReleasesError = recentPublishedReleasesError,
           onNavigateLibrary = { view = MusicView.Library },
           onNavigateShared = { view = MusicView.Shared },
           onNavigatePlaylists = { view = MusicView.Playlists },
@@ -1273,11 +1319,31 @@ fun MusicScreen(
     }
   }
 
+  fun isTrackDownloaded(track: MusicTrack): Boolean {
+    val key = track.contentId?.trim()?.lowercase().orEmpty()
+    if (key.isBlank()) return false
+    return downloadedTracksByContentId.containsKey(key)
+  }
+
+  val selectedTrackMenuPolicy =
+    selectedTrack?.let { track ->
+      TrackMenuPolicyResolver.resolve(
+        track = track,
+        ownerEthAddress = ownerEthAddress,
+        alreadyDownloaded = isTrackDownloaded(track),
+      )
+    }
+
   TrackMenuSheet(
     open = trackMenuOpen,
     track = selectedTrack,
     onClose = { trackMenuOpen = false },
     onUpload = { t ->
+      val policy = TrackMenuPolicyResolver.resolve(t, ownerEthAddress)
+      if (!policy.canUpload) {
+        onShowMessage("Upload is only available for local tracks")
+        return@TrackMenuSheet
+      }
       if (uploadBusy) {
         onShowMessage("Upload already in progress")
         return@TrackMenuSheet
@@ -1289,7 +1355,7 @@ fun MusicScreen(
 
       uploadBusy = true
       scope.launch {
-        onShowMessage("Uploading...")
+        onShowMessage("Uploading to Load...")
         val result =
           runCatching {
             TrackUploadService.uploadEncrypted(
@@ -1325,6 +1391,11 @@ fun MusicScreen(
       }
     },
     onSaveForever = { t ->
+      val policy = TrackMenuPolicyResolver.resolve(t, ownerEthAddress)
+      if (!policy.canSaveForever) {
+        onShowMessage("This track can't be saved forever")
+        return@TrackMenuSheet
+      }
       if (uploadBusy) {
         onShowMessage("Upload already in progress")
         return@TrackMenuSheet
@@ -1333,36 +1404,56 @@ fun MusicScreen(
         onShowMessage("Sign in to save forever")
         return@TrackMenuSheet
       }
-      if (t.savedForever) {
+      if (!t.permanentRef.isNullOrBlank()) {
         onShowMessage("Already saved forever")
         return@TrackMenuSheet
       }
 
       uploadBusy = true
       scope.launch {
-        if (!t.pieceCid.isNullOrBlank()) {
+        val sessionKey = SessionKeyManager.load(context)?.takeIf {
+          SessionKeyManager.isValid(it, ownerAddress = ownerEthAddress)
+        }
+        if (sessionKey == null) {
           uploadBusy = false
-          val next = tracks.map { tr -> if (tr.id == t.id) tr.copy(savedForever = true) else tr }
-          tracks = next
-          MusicLibrary.saveCachedTracks(context, next)
-          onShowMessage("Marked Saved Forever (already uploaded).")
+          onShowMessage("Session expired. Sign in again to save forever.")
+          return@launch
+        }
+
+        val balanceResult = runCatching { TurboCreditsApi.fetchBalance(sessionKey.address) }
+        val balanceError = balanceResult.exceptionOrNull()
+        if (balanceError != null) {
+          uploadBusy = false
+          if (TurboCreditsApi.isLikelyInsufficientBalanceError(balanceError.message)) {
+            promptTurboTopUp(TURBO_CREDITS_COPY)
+          } else {
+            onShowMessage("Couldn't check Turbo balance. Try again.")
+          }
+          return@launch
+        }
+        val balance = balanceResult.getOrNull()
+        if (balance == null || !balance.hasCredits) {
+          uploadBusy = false
+          promptTurboTopUp(TURBO_CREDITS_COPY)
           return@launch
         }
 
         onShowMessage("Saving Forever...")
         val result =
           runCatching {
-            TrackUploadService.uploadEncrypted(
+            TrackSaveForeverService.saveForever(
               context = context,
               ownerEthAddress = ownerEthAddress,
               track = t,
-              hostActivity = hostActivity,
-              tempoAccount = tempoAccount,
             )
           }
         uploadBusy = false
 
         result.onFailure { err ->
+          if (TurboCreditsApi.isLikelyInsufficientBalanceError(err.message)) {
+            promptTurboTopUp(TURBO_CREDITS_COPY)
+            return@onFailure
+          }
           onShowMessage("Save Forever failed: ${err.message ?: "unknown error"}")
         }
         result.onSuccess { ok ->
@@ -1370,25 +1461,35 @@ fun MusicScreen(
             tracks.map { tr ->
               if (tr.id != t.id) tr
               else {
-                val base =
-                  tr.copy(
-                    contentId = ok.contentId,
-                    pieceCid = ok.pieceCid,
-                    datasetOwner = ok.datasetOwner,
-                    algo = ok.algo,
-                  )
-
-                base.copy(savedForever = true)
+                tr.copy(
+                  contentId = ok.contentId,
+                  datasetOwner = ok.datasetOwner,
+                  algo = ok.algo,
+                  permanentRef = ok.permanentRef,
+                  permanentGatewayUrl = ok.permanentGatewayUrl,
+                  permanentSavedAtMs = ok.permanentSavedAtMs,
+                  savedForever = true,
+                )
               }
             }
           tracks = next
           MusicLibrary.saveCachedTracks(context, next)
 
-          onShowMessage("Upload complete and saved forever.")
+          onShowMessage("Saved forever on Arweave.")
         }
       }
     },
     onDownload = { t ->
+      val policy =
+        TrackMenuPolicyResolver.resolve(
+          track = t,
+          ownerEthAddress = ownerEthAddress,
+          alreadyDownloaded = isTrackDownloaded(t),
+        )
+      if (!policy.canDownload) {
+        onShowMessage("Already on device")
+        return@TrackMenuSheet
+      }
       scope.launch {
         val owner = ownerEthAddress?.trim()
         val result =
@@ -1414,6 +1515,11 @@ fun MusicScreen(
       }
     },
     onShare = { t ->
+      val policy = TrackMenuPolicyResolver.resolve(t, ownerEthAddress)
+      if (!policy.canShare) {
+        onShowMessage("Share is only available for your uploaded tracks")
+        return@TrackMenuSheet
+      }
       if (!isAuthenticated || ownerEthAddress.isNullOrBlank()) {
         onShowMessage("Sign in to share")
         return@TrackMenuSheet
@@ -1426,13 +1532,88 @@ fun MusicScreen(
       addToPlaylistOpen = true
     },
     onAddToQueue = { onShowMessage("Add to queue coming soon") },
+    onGoToSong = { t ->
+      val trackId = resolveSongTrackId(t)
+      if (trackId.isNullOrBlank()) {
+        onShowMessage("Song page unavailable for this track")
+        return@TrackMenuSheet
+      }
+      val navigator = onOpenSongPage
+      if (navigator == null) {
+        onShowMessage("Song view coming soon")
+        return@TrackMenuSheet
+      }
+      navigator(trackId, t.title, t.artist)
+    },
     onGoToAlbum = { onShowMessage("Album view coming soon") },
-    onGoToArtist = { onShowMessage("Artist view coming soon") },
+    onGoToArtist = { t ->
+      val artist = t.artist.trim()
+      if (artist.isBlank() || artist.equals("Unknown Artist", ignoreCase = true)) {
+        onShowMessage("Artist unavailable for this track")
+        return@TrackMenuSheet
+      }
+      val navigator = onOpenArtistPage
+      if (navigator == null) {
+        onShowMessage("Artist view coming soon")
+        return@TrackMenuSheet
+      }
+      navigator(artist)
+    },
+    showUploadAction = selectedTrackMenuPolicy?.canUpload ?: false,
+    showSaveAction = (selectedTrackMenuPolicy?.canSaveForever ?: false) || !selectedTrack?.permanentRef.isNullOrBlank(),
+    showDownloadAction = selectedTrackMenuPolicy?.canDownload ?: false,
+    showShareAction = selectedTrackMenuPolicy?.canShare ?: false,
+    uploadLabel = "Upload to Load",
+    saveActionLabel = "Save Forever",
+    savedActionLabel = "Saved Forever",
+    downloadLabel = "Download from Load",
   )
 
-  // TODO: Playlist sheets need Tempo migration (currently still use PlaylistV1LitAction)
-  // CreatePlaylistSheet(...)
-  // AddToPlaylistSheet(...)
+  CreatePlaylistSheet(
+    open = createPlaylistOpen,
+    isAuthenticated = isAuthenticated,
+    ownerEthAddress = ownerEthAddress,
+    tempoAccount = tempoAccount,
+    onClose = { createPlaylistOpen = false },
+    onShowMessage = onShowMessage,
+    onSuccess = { playlistId, playlistName ->
+      scope.launch {
+        loadPlaylists()
+        if (playlistId.startsWith("0x")) {
+          selectedPlaylistId = playlistId
+          selectedPlaylist = displayPlaylists.firstOrNull { it.id.equals(playlistId, ignoreCase = true) }
+          view = MusicView.PlaylistDetail
+          selectedPlaylist?.let { loadPlaylistDetail(it) }
+        } else {
+          onShowMessage("Playlist \"$playlistName\" created. It may take a moment to index.")
+        }
+      }
+    },
+  )
+
+  AddToPlaylistSheet(
+    open = addToPlaylistOpen,
+    track = selectedTrack,
+    isAuthenticated = isAuthenticated,
+    ownerEthAddress = ownerEthAddress,
+    tempoAccount = tempoAccount,
+    onClose = { addToPlaylistOpen = false },
+    onShowMessage = onShowMessage,
+    onSuccess = { playlistId, _ ->
+      scope.launch {
+        loadPlaylists()
+        if (playlistId.startsWith("0x")) {
+          selectedPlaylistId = playlistId
+          selectedPlaylist = displayPlaylists.firstOrNull { it.id.equals(playlistId, ignoreCase = true) }
+          selectedPlaylist?.let {
+            if (view == MusicView.PlaylistDetail && selectedPlaylistId == it.id) {
+              loadPlaylistDetail(it)
+            }
+          }
+        }
+      }
+    },
+  )
 
   if (shareTrack != null) {
     val activeTrack = shareTrack!!
@@ -1505,6 +1686,16 @@ fun MusicScreen(
       },
     )
   }
+
+  TurboCreditsSheet(
+    open = turboCreditsSheetOpen,
+    message = turboCreditsSheetMessage,
+    onDismiss = { turboCreditsSheetOpen = false },
+    onGetCredits = {
+      turboCreditsSheetOpen = false
+      openTurboTopUp()
+    },
+  )
 }
 
 @Composable
@@ -1515,6 +1706,8 @@ private fun MusicHomeView(
   playlistCount: Int,
   playlists: List<PlaylistDisplayItem>,
   newReleases: List<AlbumCardModel>,
+  newReleasesLoading: Boolean,
+  newReleasesError: String?,
   onNavigateLibrary: () -> Unit,
   onNavigateShared: () -> Unit,
   onNavigatePlaylists: () -> Unit,
@@ -1568,22 +1761,40 @@ private fun MusicHomeView(
       }
     }
 
-    if (newReleases.isNotEmpty()) {
+    if (newReleasesLoading || newReleases.isNotEmpty() || !newReleasesError.isNullOrBlank()) {
       item {
         SectionHeader(title = "New Releases", action = "See all", onAction = { /* TODO */ })
-        LazyRow(
-          contentPadding = PaddingValues(horizontal = 20.dp),
-          horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-          items(newReleases) { item ->
-            val releaseAudioUrl = resolveReleaseAudioUrl(item.audioRef)
-            AlbumCard(
-              title = item.title,
-              artist = item.artist,
-              imageUri = resolveReleaseCoverUrl(item.coverRef),
-              imageFallbackUri = item.coverRef,
-              onClick = if (!releaseAudioUrl.isNullOrBlank()) ({ onPlayRelease(item) }) else null,
+        when {
+          newReleasesLoading && newReleases.isEmpty() -> {
+            Text(
+              "Loading releases...",
+              modifier = Modifier.padding(horizontal = 20.dp),
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+          }
+          !newReleasesError.isNullOrBlank() && newReleases.isEmpty() -> {
+            Text(
+              newReleasesError,
+              modifier = Modifier.padding(horizontal = 20.dp),
+              color = MaterialTheme.colorScheme.error,
+            )
+          }
+          else -> {
+            LazyRow(
+              contentPadding = PaddingValues(horizontal = 20.dp),
+              horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+              items(newReleases) { item ->
+                val releaseAudioUrl = resolveReleaseAudioUrl(item.audioRef)
+                AlbumCard(
+                  title = item.title,
+                  artist = item.artist,
+                  imageUri = resolveReleaseCoverUrl(item.coverRef),
+                  imageFallbackUri = item.coverRef,
+                  onClick = if (!releaseAudioUrl.isNullOrBlank()) ({ onPlayRelease(item) }) else null,
+                )
+              }
+            }
           }
         }
         Spacer(modifier = Modifier.height(28.dp))
@@ -2583,6 +2794,9 @@ private suspend fun runScan(
             pieceCid = null,
             datasetOwner = null,
             algo = null,
+            permanentRef = null,
+            permanentGatewayUrl = null,
+            permanentSavedAtMs = null,
             savedForever = false,
           )
         }
@@ -2593,6 +2807,9 @@ private suspend fun runScan(
           pieceCid = prior.pieceCid,
           datasetOwner = prior.datasetOwner,
           algo = prior.algo,
+          permanentRef = prior.permanentRef,
+          permanentGatewayUrl = prior.permanentGatewayUrl,
+          permanentSavedAtMs = prior.permanentSavedAtMs,
           savedForever = prior.savedForever,
         )
       }

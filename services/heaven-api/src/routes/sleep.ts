@@ -129,7 +129,7 @@ async function pinToFilebase(
 // ============================================================================
 
 interface JwtPayload {
-  pkp: string
+  address: string
   iat: number
   exp: number
 }
@@ -137,11 +137,11 @@ interface JwtPayload {
 app.use('/submit', async (c, next) => {
   const authHeader = c.req.header('Authorization')
 
-  // Dev mode: allow X-User-Pkp header for testing
+  // Dev mode: allow X-User-Address header for testing
   if (c.env.ENVIRONMENT === 'development') {
-    const devPkp = c.req.header('X-User-Pkp')
-    if (devPkp) {
-      c.set('userPkp' as never, devPkp.toLowerCase())
+    const devAddress = c.req.header('X-User-Address')
+    if (devAddress) {
+      c.set('userAddress' as never, devAddress.toLowerCase())
       return next()
     }
   }
@@ -157,8 +157,8 @@ app.use('/submit', async (c, next) => {
       const parts = token.split('.')
       if (parts.length !== 3) throw new Error('Invalid token format')
       const payload = JSON.parse(atob(parts[1])) as JwtPayload
-      if (!payload.pkp) throw new Error('Missing pkp in token')
-      c.set('userPkp' as never, payload.pkp.toLowerCase())
+      if (!payload.address) throw new Error('Missing address in token')
+      c.set('userAddress' as never, payload.address.toLowerCase())
     } else {
       return c.json({ success: false, error: 'Production auth not implemented' }, 501)
     }
@@ -195,8 +195,8 @@ interface SleepSubmitResponse {
 // ============================================================================
 
 app.post('/submit', async (c) => {
-  const userPkp = c.get('userPkp' as never) as string
-  if (!userPkp) {
+  const userAddress = c.get('userAddress' as never) as string
+  if (!userAddress) {
     return c.json({ success: false, error: 'User not authenticated' } as SleepSubmitResponse, 401)
   }
 
@@ -245,7 +245,7 @@ app.post('/submit', async (c) => {
   // Build session JSON
   const sessionData = {
     version: 1,
-    user: userPkp,
+    user: userAddress,
     bedTs: String(bedTs),
     wakeTs: String(wakeTs),
     durationSec,
@@ -257,7 +257,7 @@ app.post('/submit', async (c) => {
   const sessionJson = JSON.stringify(sessionData)
 
   // Generate filename
-  const userPrefix = userPkp.slice(2, 10)
+  const userPrefix = userAddress.slice(2, 10)
   const fileName = `sleep-${userPrefix}-${bedTs}-${now}.json`
 
   // Pin to Filebase
@@ -270,7 +270,7 @@ app.post('/submit', async (c) => {
       sessionJson,
       fileName
     )
-    console.log(`[Sleep] Pinned session for ${userPkp}: ${cid} (${durationSec}s)`)
+    console.log(`[Sleep] Pinned session for ${userAddress}: ${cid} (${durationSec}s)`)
   } catch (err) {
     console.error('[Sleep] Filebase error:', err)
     return c.json({ success: false, error: 'Failed to pin to IPFS' } as SleepSubmitResponse, 500)
@@ -286,7 +286,7 @@ app.post('/submit', async (c) => {
       const result = await createSleepAttestation(
         BASE_SEPOLIA_RELAY_PK,
         BASE_SEPOLIA_RPC,
-        userPkp,
+        userAddress,
         bedTs,
         wakeTs,
         source,

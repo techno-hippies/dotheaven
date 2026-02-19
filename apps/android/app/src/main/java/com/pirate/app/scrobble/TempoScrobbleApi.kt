@@ -59,7 +59,7 @@ object TempoScrobbleApi {
   )
 
   /** `SCROBBLE_V4` from `contracts/tempo/.env` */
-  const val SCROBBLE_V4 = "0x07B8BdE8BaD74DC974F783AA71C7C51d6B37C363"
+  const val SCROBBLE_V4 = "0xe00e82086480E61AaC8d5ad8B05B56A582dD0000"
 
   private const val GAS_LIMIT_SCROBBLE_ONLY = 420_000L
   private const val GAS_LIMIT_REGISTER_AND_SCROBBLE = 900_000L

@@ -5,7 +5,9 @@ This app is a native Rust desktop client using GPUI.
 ## Status
 
 - GPUI currently covers shell/navigation/auth persistence/local library UX.
-- Encrypted upload flow now uses native Rust direct upload to Load's Turbo-compatible offchain endpoint.
+- Auth and signing use Tempo native passkeys and session keys.
+- Content encryption uses client-side ECIES with Tempo P256 passkey keys.
+- Encrypted upload flow uses native Rust direct upload to Load's Turbo-compatible offchain endpoint.
 
 ## Setup
 
@@ -14,9 +16,10 @@ This app is a native Rust desktop client using GPUI.
 Copy `.env.example` to `.env` and configure:
 
 ```bash
-# Required for scrobbling and Lit Actions
-export HEAVEN_LIT_RPC_URL="https://yellowstone-rpc.litprotocol.com"
-export HEAVEN_LIT_NETWORK="naga-dev"  # or naga-test
+# Tempo chain
+export HEAVEN_TEMPO_RPC_URL="https://rpc.moderato.tempo.xyz"
+
+# XMTP messaging
 export HEAVEN_XMTP_ENV="dev"          # dev | production (defaults to dev)
 # Optional: force XMTP inbox nonce when troubleshooting legacy inbox mismatches
 # export HEAVEN_XMTP_NONCE="0"         # auto if unset
@@ -25,16 +28,7 @@ export HEAVEN_XMTP_ENV="dev"          # dev | production (defaults to dev)
 export HEAVEN_LOAD_TURBO_UPLOAD_URL="https://loaded-turbo-api.load.network"
 export HEAVEN_LOAD_TURBO_TOKEN="ethereum"
 export HEAVEN_LOAD_GATEWAY_URL="https://gateway.s3-node-1.load.network"
-
-# Optional: enable user-pays Turbo funding from PKP wallet (Base Sepolia)
-export HEAVEN_LOAD_USER_PAYS_ENABLED="true"
-export HEAVEN_TURBO_FUNDING_PROXY_URL="http://127.0.0.1:8788"
-export HEAVEN_TURBO_FUNDING_TOKEN="base-eth"
-export HEAVEN_BASE_SEPOLIA_RPC_URL="https://base-sepolia-rpc.publicnode.com/"
-export HEAVEN_LOAD_MIN_UPLOAD_CREDIT="0.00000001"
 ```
-
-**Important**: Without Lit Protocol environment variables set, scrobbling will fail with "Missing Lit RPC URL" error. The scrobble hook will fire correctly, but submission will fail due to missing configuration.
 
 ### Running
 
@@ -76,9 +70,8 @@ To keep Rust modules manageable, run the file-size check:
 GPUI uses native Rust code for encrypted upload + registration orchestration.
 
 - Upload target: `POST {HEAVEN_LOAD_TURBO_UPLOAD_URL}/v1/tx/{HEAVEN_LOAD_TURBO_TOKEN}`.
-- Data format: signed ANS-104 DataItem (signed by user PKP through Lit).
+- Data format: signed ANS-104 DataItem (signed via Tempo session key).
 - Retrieval: `GET {HEAVEN_LOAD_GATEWAY_URL}/resolve/{dataitem_id}`.
-- Optional user-pays mode: set `HEAVEN_LOAD_USER_PAYS_ENABLED=true` to require Turbo balance checks before upload and use "Add Funds" to send a PKP-signed Base Sepolia payment + `submitFundTransaction` via funding proxy.
 
 ## Voice Transport Note
 

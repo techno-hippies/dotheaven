@@ -39,7 +39,7 @@ export async function hasPrimaryName(
   }
 }
 
-/** Check if wallet is Celo-verified via VerificationMirror on MegaETH */
+/** Check if wallet is Celo-verified via VerificationMirror on the configured chain */
 export async function isVerified(
   rpcUrl: string,
   mirrorAddress: string,

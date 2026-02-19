@@ -1,0 +1,404 @@
+{
+  "specVersion": "exercise-pack-v2",
+  "trackId": "T0101817440",
+  "language": "es",
+  "sourceRefs": {
+    "lyricsRef": "local:T0101817440/en-lyrics.txt",
+    "geniusRef": "genius:75243"
+  },
+  "generator": {
+    "model": "google/gemini-3-flash-preview",
+    "promptHash": "0x324a10a3ce25df3692fb0609b18e5440a2ab11dfb939fe855a201124802d8ff8",
+    "generatedAt": 1771508773
+  },
+  "lineTags": [
+    {
+      "text": "Steve walks warily down the street",
+      "lang": "en",
+      "difficulty": 2.74,
+      "difficultyLlm": 3,
+      "difficultyLexical": 2.15,
+      "fleschKincaid": 2.48,
+      "top1kRatio": 0.5,
+      "top10kRatio": 0.83,
+      "lineId": "L-002",
+      "lineIndex": 1,
+      "allPositions": [
+        4
+      ]
+    },
+    {
+      "text": "Are you hanging on the edge of your seat?",
+      "lang": "en",
+      "difficulty": 1.92,
+      "difficultyLlm": 2,
+      "difficultyLexical": 1.73,
+      "fleschKincaid": 1.03,
+      "top1kRatio": 0.67,
+      "top10kRatio": 1,
+      "lineId": "L-007",
+      "lineIndex": 6,
+      "allPositions": [
+        9
+      ]
+    },
+    {
+      "text": "Out of the doorway, the bullets rip",
+      "lang": "en",
+      "difficulty": 2.34,
+      "difficultyLlm": 3,
+      "difficultyLexical": 1.97,
+      "fleschKincaid": 2.31,
+      "top1kRatio": 0.57,
+      "top10kRatio": 0.71,
+      "lineId": "L-008",
+      "lineIndex": 7,
+      "allPositions": [
+        10,
+        28,
+        59
+      ]
+    },
+    {
+      "text": "Another one bites the dust",
+      "lang": "en",
+      "difficulty": 2.41,
+      "difficultyLlm": 3,
+      "difficultyLexical": 2.2,
+      "fleschKincaid": 5.24,
+      "top1kRatio": 0.6,
+      "top10kRatio": 0.8,
+      "lineId": "L-010",
+      "lineIndex": 9,
+      "allPositions": [
+        14,
+        15,
+        19,
+        33,
+        34,
+        36,
+        38,
+        46,
+        63,
+        64,
+        68
+      ]
+    },
+    {
+      "text": "And kicked me out on my own",
+      "lang": "en",
+      "difficulty": 1.79,
+      "difficultyLlm": 2,
+      "difficultyLexical": 1.31,
+      "fleschKincaid": 0.63,
+      "top1kRatio": 0.86,
+      "top10kRatio": 0.86,
+      "lineId": "L-017",
+      "lineIndex": 16,
+      "allPositions": [
+        25
+      ]
+    },
+    {
+      "text": "To the sound of the beat",
+      "lang": "en",
+      "difficulty": 1.11,
+      "difficultyLlm": 1,
+      "difficultyLexical": 1.37,
+      "fleschKincaid": -1.45,
+      "top1kRatio": 0.83,
+      "top10kRatio": 1,
+      "lineId": "L-020",
+      "lineIndex": 19,
+      "allPositions": [
+        29
+      ]
+    },
+    {
+      "text": "Another one bites the dust, ow",
+      "lang": "en",
+      "difficulty": 2.81,
+      "difficultyLlm": 3,
+      "difficultyLexical": 2.35,
+      "fleschKincaid": 4.45,
+      "top1kRatio": 0.5,
+      "top10kRatio": 0.67,
+      "lineId": "L-024",
+      "lineIndex": 23,
+      "allPositions": [
+        47
+      ]
+    },
+    {
+      "text": "Another one bites the dust, hey-eh-eh",
+      "lang": "en",
+      "difficulty": 2.86,
+      "difficultyLlm": 3,
+      "difficultyLexical": 2.55,
+      "fleschKincaid": 3.76,
+      "top1kRatio": 0.38,
+      "top10kRatio": 0.88,
+      "lineId": "L-026",
+      "lineIndex": 25,
+      "allPositions": [
+        49
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "id": "sib-001",
+      "type": "say_it_back",
+      "prompt": "",
+      "excerpt": "Steve walks warily down the street",
+      "choices": [],
+      "correctIndex": 0,
+      "difficulty": "medium",
+      "difficultyScore": 2.74,
+      "sourceLineId": "L-002",
+      "excerptLang": "en"
+    },
+    {
+      "id": "tr-001",
+      "type": "translation_mcq",
+      "prompt": "¿Qué letra significa: '¿Estás colgado del borde de tu asiento?'?",
+      "excerpt": "Are you hanging on the edge of your seat?",
+      "sourceLineId": "L-007",
+      "choices": [
+        "And kicked me out on my own",
+        "Out of the doorway, the bullets rip",
+        "Are you hanging on the edge of your seat?",
+        "Steve walks warily down the street"
+      ],
+      "correctIndex": 2,
+      "explanation": "La frase 'hanging on the edge of your seat' es una expresión idiomática que describe estar en suspenso o muy emocionado.",
+      "choiceRationales": [
+        "Esta línea significa que lo echaron a su suerte o por su cuenta.",
+        "Esta línea describe balas saliendo de un portal.",
+        "Esta es la traducción correcta de la expresión sobre estar en el borde del asiento por la emoción.",
+        "Esta línea habla de Steve caminando con cautela por la calle."
+      ],
+      "difficulty": "medium",
+      "difficultyScore": 2.51,
+      "excerptLang": "en"
+    },
+    {
+      "id": "sib-002",
+      "type": "say_it_back",
+      "prompt": "",
+      "excerpt": "Are you hanging on the edge of your seat?",
+      "choices": [],
+      "correctIndex": 0,
+      "difficulty": "easy",
+      "difficultyScore": 1.92,
+      "sourceLineId": "L-007",
+      "excerptLang": "en"
+    },
+    {
+      "id": "tr-002",
+      "type": "translation_mcq",
+      "prompt": "¿Qué letra significa: 'Otro muerde el polvo'?",
+      "excerpt": "Another one bites the dust",
+      "sourceLineId": "L-010",
+      "choices": [
+        "Ain't no sound but the sound of his feet",
+        "Ooh, shut up",
+        "Another one bites the dust",
+        "To the sound of the beat, yeah"
+      ],
+      "correctIndex": 2,
+      "explanation": "'Another one bites the dust' es una expresión en inglés que significa que alguien ha muerto o ha sido derrotado.",
+      "choiceRationales": [
+        "Esta línea dice que no hay más sonido que el de sus pies.",
+        "Esta es una expresión imperativa para pedirle a alguien que se calle.",
+        "Esta es la traducción exacta del título y el estribillo de la canción.",
+        "Esta línea se refiere al sonido del ritmo."
+      ],
+      "difficulty": "easy",
+      "difficultyScore": 2.18,
+      "excerptLang": "en"
+    },
+    {
+      "id": "sib-003",
+      "type": "say_it_back",
+      "prompt": "",
+      "excerpt": "Out of the doorway, the bullets rip",
+      "choices": [],
+      "correctIndex": 0,
+      "difficulty": "easy",
+      "difficultyScore": 2.34,
+      "sourceLineId": "L-008",
+      "excerptLang": "en"
+    },
+    {
+      "id": "tv-001",
+      "type": "trivia_mcq",
+      "prompt": "¿En qué evento histórico se inspiró John Deacon para escribir la letra de esta canción?",
+      "excerpt": "Steve walks warily down the street",
+      "sourceLineId": "L-002",
+      "choices": [
+        "El tiroteo de O.K. Corral",
+        "La Masacre de San Valentín de 1929",
+        "El motín de la prisión de Attica",
+        "El Gran Robo al Tren de 1963"
+      ],
+      "correctIndex": 1,
+      "explanation": "John Deacon confirmó en entrevistas que la letra fue inspirada por un documental sobre la Masacre de San Valentín de 1929, un famoso ataque entre bandas criminales.",
+      "choiceRationales": [
+        "Es un evento del viejo oeste, mientras que la canción se inspiró en un documental sobre gánsteres de 1929.",
+        "Esta es la respuesta correcta según las declaraciones de John Deacon sobre la inspiración de la letra.",
+        "Este evento no tiene relación con la composición de la canción.",
+        "Aunque fue un crimen famoso, no es el evento citado por Deacon como inspiración."
+      ],
+      "difficulty": "medium",
+      "difficultyScore": 2.88,
+      "excerptLang": "en",
+      "source": "genius",
+      "sourceClassification": "accepted"
+    },
+    {
+      "id": "sib-004",
+      "type": "say_it_back",
+      "prompt": "",
+      "excerpt": "Another one bites the dust",
+      "choices": [],
+      "correctIndex": 0,
+      "difficulty": "easy",
+      "difficultyScore": 2.41,
+      "sourceLineId": "L-010",
+      "excerptLang": "en"
+    },
+    {
+      "id": "tr-003",
+      "type": "translation_mcq",
+      "prompt": "¿Qué letra significa: 'Steve camina con cautela por la calle'?",
+      "excerpt": "Steve walks warily down the street",
+      "sourceLineId": "L-002",
+      "choices": [
+        "And kicked me out on my own",
+        "Steve walks warily down the street",
+        "Out of the doorway, the bullets rip",
+        "Ain't no sound but the sound of his feet"
+      ],
+      "correctIndex": 1,
+      "explanation": "'Warily' significa con cautela o precaución, describiendo cómo camina el personaje.",
+      "choiceRationales": [
+        "Esta línea habla de ser expulsado, no de caminar por la calle.",
+        "Esta es la traducción correcta que identifica a Steve caminando con cuidado.",
+        "Esta línea describe una escena de disparos.",
+        "Esta línea describe el silencio, mencionando solo el sonido de los pies."
+      ],
+      "difficulty": "hard",
+      "difficultyScore": 3.43,
+      "excerptLang": "en"
+    },
+    {
+      "id": "sib-005",
+      "type": "say_it_back",
+      "prompt": "",
+      "excerpt": "Another one bites the dust, ow",
+      "choices": [],
+      "correctIndex": 0,
+      "difficulty": "medium",
+      "difficultyScore": 2.81,
+      "sourceLineId": "L-024",
+      "excerptLang": "en"
+    },
+    {
+      "id": "tv-002",
+      "type": "trivia_mcq",
+      "prompt": "¿Por qué el tempo de 110 bpm de esta canción es relevante en el ámbito médico?",
+      "excerpt": "To the sound of the beat",
+      "sourceLineId": "L-020",
+      "choices": [
+        "Es el ritmo cardíaco promedio de un atleta",
+        "Es el ritmo recomendado para realizar compresiones de RCP",
+        "Es la velocidad máxima segura para una cinta de correr",
+        "Es la frecuencia ideal para inducir el sueño"
+      ],
+      "correctIndex": 1,
+      "explanation": "El tempo de 110 bpm es el ritmo ideal recomendado por profesionales médicos para mantener la frecuencia correcta durante las compresiones torácicas de reanimación cardiopulmonar (RCP).",
+      "choiceRationales": [
+        "El ritmo cardíaco de un atleta suele ser mucho más bajo en reposo.",
+        "Esta es la respuesta correcta; el ritmo ayuda a los socorristas a mantener la cadencia en la RCP.",
+        "La velocidad de una cinta de correr no se mide en pulsaciones por minuto de música.",
+        "Un ritmo de 110 bpm es demasiado rápido para ser considerado relajante para dormir."
+      ],
+      "difficulty": "easy",
+      "difficultyScore": 1.6,
+      "excerptLang": "en",
+      "source": "genius",
+      "sourceClassification": "accepted"
+    },
+    {
+      "id": "sib-006",
+      "type": "say_it_back",
+      "prompt": "",
+      "excerpt": "Another one bites the dust, hey-eh-eh",
+      "choices": [],
+      "correctIndex": 0,
+      "difficulty": "medium",
+      "difficultyScore": 2.86,
+      "sourceLineId": "L-026",
+      "excerptLang": "en"
+    },
+    {
+      "id": "tr-004",
+      "type": "translation_mcq",
+      "prompt": "¿Qué letra significa: 'Y me echó a mi suerte'?",
+      "excerpt": "And kicked me out on my own",
+      "sourceLineId": "L-017",
+      "choices": [
+        "And kicked me out on my own",
+        "To the sound of the beat",
+        "Another one bites the dust, ow",
+        "Are you hanging on the edge of your seat?"
+      ],
+      "correctIndex": 0,
+      "explanation": "'Kicked me out' significa expulsar a alguien, y 'on my own' se refiere a estar solo o por cuenta propia.",
+      "choiceRationales": [
+        "Esta es la traducción correcta de ser expulsado y quedar solo.",
+        "Esta línea se refiere simplemente al ritmo de la música.",
+        "Esta es la frase principal sobre morder el polvo con una interjección.",
+        "Esta línea pregunta sobre estar en suspenso en un asiento."
+      ],
+      "difficulty": "medium",
+      "difficultyScore": 2.46,
+      "excerptLang": "en"
+    },
+    {
+      "id": "tv-003",
+      "type": "trivia_mcq",
+      "prompt": "¿Qué artista lanzó una parodia de esta canción titulada 'Another One Rides the Bus' en 1981?",
+      "excerpt": "Another one bites the dust",
+      "sourceLineId": "L-010",
+      "choices": [
+        "Weird Al Yankovic",
+        "Allan Sherman",
+        "Ray Stevens",
+        "Frank Zappa"
+      ],
+      "correctIndex": 0,
+      "explanation": "Weird Al Yankovic es famoso por parodiar este éxito de Queen con su versión 'Another One Rides the Bus', que llegó al puesto #104 en Billboard.",
+      "choiceRationales": [
+        "Esta es la respuesta correcta; Weird Al es el autor de la famosa parodia sobre el autobús.",
+        "Allan Sherman fue un parodista anterior a la época de este lanzamiento de Queen.",
+        "Ray Stevens es conocido por canciones cómicas, pero no por esta parodia de Queen.",
+        "Frank Zappa era un músico satírico, pero no es el autor de esta parodia específica."
+      ],
+      "difficulty": "medium",
+      "difficultyScore": 2.73,
+      "excerptLang": "en",
+      "source": "genius",
+      "sourceClassification": "accepted"
+    }
+  ],
+  "compliance": {
+    "excerptPolicy": "max-one-line-per-question",
+    "attribution": {
+      "track": "Another One Bites the Dust",
+      "artist": "Queen",
+      "geniusSongId": 75243
+    }
+  }
+}

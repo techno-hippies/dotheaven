@@ -8,14 +8,12 @@ contract DeployPlaylistV1Script is Script {
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(deployerPrivateKey);
-        address sponsor = vm.envOr("PLAYLIST_SPONSOR", deployer);
 
         console2.log("=== Deploying PlaylistV1 (Tempo) ===");
         console2.log("Deployer:", deployer);
-        console2.log("Sponsor:", sponsor);
 
         vm.startBroadcast(deployerPrivateKey);
-        PlaylistV1 playlist = new PlaylistV1(sponsor);
+        PlaylistV1 playlist = new PlaylistV1();
         vm.stopBroadcast();
 
         console2.log("PlaylistV1 deployed at:", address(playlist));

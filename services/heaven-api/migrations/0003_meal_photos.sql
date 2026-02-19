@@ -1,7 +1,7 @@
 -- Meal photos table for food tracking
 CREATE TABLE IF NOT EXISTS meal_photos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_pkp TEXT NOT NULL,
+    user_address TEXT NOT NULL,
     photo_cid TEXT NOT NULL,
     analysis_cid TEXT,
     description TEXT,
@@ -15,5 +15,5 @@ CREATE TABLE IF NOT EXISTS meal_photos (
     created_at INTEGER NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_meal_photos_user ON meal_photos(user_pkp);
+CREATE INDEX IF NOT EXISTS idx_meal_photos_user ON meal_photos(user_address);
 CREATE INDEX IF NOT EXISTS idx_meal_photos_captured ON meal_photos(captured_at);

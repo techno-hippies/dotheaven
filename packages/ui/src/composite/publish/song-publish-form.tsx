@@ -63,7 +63,10 @@ export interface SongPublishFormProps {
     ipId: string
     tokenId: string
     audioCid: string
-    instrumentalCid: string
+    instrumentalCid?: string
+    coverCid?: string
+    canvasCid?: string
+    licenseTermsIds?: string[]
   }
   class?: string
 }
@@ -714,6 +717,15 @@ const SuccessStep: Component<{
             <p class="text-[var(--text-muted)]">CID: <span class="text-[var(--text-secondary)]">{r().audioCid}</span></p>
             <Show when={r().instrumentalCid}>
               <p class="text-[var(--text-muted)]">Instrumental: <span class="text-[var(--text-secondary)]">{r().instrumentalCid}</span></p>
+            </Show>
+            <Show when={r().coverCid}>
+              <p class="text-[var(--text-muted)]">Cover: <span class="text-[var(--text-secondary)]">{r().coverCid}</span></p>
+            </Show>
+            <Show when={r().canvasCid}>
+              <p class="text-[var(--text-muted)]">Canvas: <span class="text-[var(--text-secondary)]">{r().canvasCid}</span></p>
+            </Show>
+            <Show when={(r().licenseTermsIds?.length || 0) > 0}>
+              <p class="text-[var(--text-muted)]">License Terms: <span class="text-[var(--text-secondary)]">{r().licenseTermsIds?.join(', ')}</span></p>
             </Show>
           </div>
         )}

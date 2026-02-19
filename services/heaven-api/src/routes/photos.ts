@@ -148,11 +148,11 @@ async function callFalSeedream(
 // ============================================================================
 
 app.use('/*', async (c, next) => {
-  // Dev mode: allow X-User-Pkp header for testing
+  // Dev mode: allow X-User-Address header for testing
   if (c.env.ENVIRONMENT === 'development') {
-    const devPkp = c.req.header('X-User-Pkp')
-    if (devPkp) {
-      c.set('userPkp' as never, devPkp.toLowerCase())
+    const devAddress = c.req.header('X-User-Address')
+    if (devAddress) {
+      c.set('userAddress' as never, devAddress.toLowerCase())
       return next()
     }
   }
@@ -186,9 +186,9 @@ app.use('/*', async (c, next) => {
     try {
       const parts = token.split('.')
       if (parts.length !== 3) throw new Error('Invalid token format')
-      const payload = JSON.parse(atob(parts[1])) as { pkp: string }
-      if (!payload.pkp) throw new Error('Missing pkp in token')
-      c.set('userPkp' as never, payload.pkp.toLowerCase())
+      const payload = JSON.parse(atob(parts[1])) as { address: string }
+      if (!payload.address) throw new Error('Missing address in token')
+      c.set('userAddress' as never, payload.address.toLowerCase())
     } catch {
       return c.json({ success: false, error: 'Invalid token' }, 401)
     }
@@ -205,8 +205,8 @@ app.use('/*', async (c, next) => {
 // ============================================================================
 
 app.post('/pipeline', async (c) => {
-  const userPkp = c.get('userPkp' as never) as string
-  if (!userPkp) {
+  const userAddress = c.get('userAddress' as never) as string
+  if (!userAddress) {
     return c.json({ success: false, error: 'User not authenticated' } as PhotoPipelineResponse, 401)
   }
 
@@ -257,7 +257,7 @@ app.post('/pipeline', async (c) => {
   await c.env.DB.prepare(`
     INSERT INTO photo_jobs (job_id, user_id, status, step, created_at, updated_at)
     VALUES (?, ?, 'processing', 'upload', ?, ?)
-  `).bind(jobId, userPkp, now, now).run()
+  `).bind(jobId, userAddress, now, now).run()
 
   try {
     // Step 1: Sanitize and store originals
@@ -298,7 +298,7 @@ app.post('/pipeline', async (c) => {
       }
 
       // Store in R2_ORIG
-      const origKey = `orig/${userPkp}/${photoId}.jpg`
+      const origKey = `orig/${userAddress}/${photoId}.jpg`
       await c.env.R2_ORIG.put(origKey, sanitizedBuffer, {
         httpMetadata: { contentType: 'image/jpeg' },
       })
@@ -311,7 +311,7 @@ app.post('/pipeline', async (c) => {
           photo_id = excluded.photo_id,
           orig_key = excluded.orig_key,
           created_at = excluded.created_at
-      `).bind(photoId, userPkp, slot, origKey, now).run()
+      `).bind(photoId, userAddress, slot, origKey, now).run()
 
       photoIds.push(photoId)
 
@@ -373,7 +373,7 @@ app.post('/pipeline', async (c) => {
     }
     const gridBuffer = await gridResponse.arrayBuffer()
 
-    const gridKey = `anime/grid/${userPkp}.png`
+    const gridKey = `anime/grid/${userAddress}.png`
     await c.env.R2_ANIME.put(gridKey, gridBuffer, {
       httpMetadata: { contentType: 'image/png' },
     })
@@ -426,7 +426,7 @@ app.post('/pipeline', async (c) => {
     for (let i = 0; i < 4; i++) {
       const trim = quadrants[i]
       const slot = i + 1
-      const tileKey = `anime/tiles/${userPkp}/${slot}.webp`
+      const tileKey = `anime/tiles/${userAddress}/${slot}.webp`
 
       try {
         // Use Images binding to crop and resize
@@ -469,7 +469,7 @@ app.post('/pipeline', async (c) => {
       try {
         for (let i = 0; i < 4; i++) {
           const slot = i + 1
-          const filename = `anime/${userPkp}/${slot}.webp`
+          const filename = `anime/${userAddress}/${slot}.webp`
           const result = await pinToFilebase(
             tileBuffers[i],
             filename,
@@ -513,7 +513,7 @@ app.post('/pipeline', async (c) => {
           tile4_cid = excluded.tile4_cid,
           updated_at = excluded.updated_at
       `).bind(
-        userPkp, gridKey,
+        userAddress, gridKey,
         tileKeys[0], tileKeys[1], tileKeys[2], tileKeys[3],
         tileCids[0], tileCids[1], tileCids[2], tileCids[3],
         updatedNow, updatedNow
@@ -530,12 +530,12 @@ app.post('/pipeline', async (c) => {
           tile3_key = excluded.tile3_key,
           tile4_key = excluded.tile4_key,
           updated_at = excluded.updated_at
-      `).bind(userPkp, gridKey, tileKeys[0], tileKeys[1], tileKeys[2], tileKeys[3], updatedNow, updatedNow).run()
+      `).bind(userAddress, gridKey, tileKeys[0], tileKeys[1], tileKeys[2], tileKeys[3], updatedNow, updatedNow).run()
     }
 
     // Build tile URLs
     const animeTileUrls = tileKeys.map((_, i) =>
-      `${baseUrl}/api/photos/anime/${userPkp}/${i + 1}`
+      `${baseUrl}/api/photos/anime/${userAddress}/${i + 1}`
     )
 
     // Update job as completed
@@ -703,8 +703,8 @@ app.get('/internal/source/:photoId', async (c) => {
 // ============================================================================
 
 app.get('/reveal/:photoId', async (c) => {
-  const viewerPkp = c.get('userPkp' as never) as string
-  if (!viewerPkp) {
+  const viewerAddress = c.get('userAddress' as never) as string
+  if (!viewerAddress) {
     return c.json({ success: false, error: 'User not authenticated' }, 401)
   }
 
@@ -713,7 +713,7 @@ app.get('/reveal/:photoId', async (c) => {
   // Check photo_access for this viewer/photo combination
   const accessRow = await c.env.DB.prepare(`
     SELECT * FROM photo_access WHERE viewer_user_id = ? AND photo_id = ?
-  `).bind(viewerPkp, photoId).first<PhotoAccessRow>()
+  `).bind(viewerAddress, photoId).first<PhotoAccessRow>()
 
   if (!accessRow) {
     return c.json({ success: false, error: 'Not authorized to view this photo' }, 403)
@@ -815,13 +815,13 @@ app.get('/reveal/:photoId', async (c) => {
     const watermarkedBuffer = await resp.arrayBuffer()
 
     // Cache the result
-    const variantKey = `reveal/${photoId}/${viewerPkp}.webp`
+    const variantKey = `reveal/${photoId}/${viewerAddress}.webp`
     await c.env.R2_REVEAL.put(variantKey, watermarkedBuffer, {
       httpMetadata: { contentType: 'image/webp' },
     })
 
     // Store sidecar metadata JSON for attribution tracking
-    const metadataKey = `reveal/meta/${photoId}/${viewerPkp}.json`
+    const metadataKey = `reveal/meta/${photoId}/${viewerAddress}.json`
     const metadata = {
       photoId,
       ownerId: accessRow.owner_user_id,

@@ -32,13 +32,9 @@ fun AuthScreen(
         Text(if (signedIn) "Signed in" else "Not signed in")
         if (signedIn) {
           val addr = state.activeAddress()
-          val tokenId = state.pkpTokenId
-          val pkp = state.pkpPublicKey
           val tempoCred = state.tempoCredentialId
           if (!addr.isNullOrBlank()) Text("Address: ${addr.take(10)}…")
           if (!tempoCred.isNullOrBlank()) Text("Tempo cred: ${tempoCred.take(12)}…")
-          if (!tokenId.isNullOrBlank()) Text("Token: ${tokenId.take(10)}…")
-          if (!pkp.isNullOrBlank()) Text("PKP: ${pkp.take(18)}…")
         }
 
         HorizontalDivider()
@@ -59,23 +55,6 @@ fun AuthScreen(
           singleLine = true,
           enabled = !state.busy,
         )
-        OutlinedTextField(
-          value = state.litNetwork,
-          onValueChange = { onStateChange(state.copy(litNetwork = it)) },
-          label = { Text("Lit network") },
-          modifier = Modifier.fillMaxWidth(),
-          singleLine = true,
-          enabled = !state.busy,
-        )
-        OutlinedTextField(
-          value = state.litRpcUrl,
-          onValueChange = { onStateChange(state.copy(litRpcUrl = it)) },
-          label = { Text("Lit RPC URL") },
-          modifier = Modifier.fillMaxWidth(),
-          singleLine = true,
-          enabled = !state.busy,
-        )
-
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
           Button(
             enabled = !state.busy,

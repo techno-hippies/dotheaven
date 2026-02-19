@@ -7,27 +7,11 @@ impl Render for SettingsView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let auth_state = cx.global::<auth::AuthState>();
         let persisted = auth_state.persisted.as_ref();
-        let addr =
-            persisted.and_then(|a| a.primary_wallet_address().map(|value| value.to_string()));
+        let addr = persisted.and_then(|a| a.wallet_address().map(|value| value.to_string()));
         let auth_provider = persisted
             .map(|a| a.provider_kind().as_str())
             .unwrap_or("none");
-        let lit_compatible = persisted
-            .map(|a| a.has_lit_auth_material())
-            .unwrap_or(false);
         let is_authed = auth_state.is_authenticated();
-
-        let lit_ready = self
-            .service
-            .lock()
-            .map(|svc| svc.is_ready())
-            .unwrap_or(false);
-        let lit_network = self
-            .service
-            .lock()
-            .ok()
-            .and_then(|svc| svc.network_name().map(|s| s.to_string()))
-            .unwrap_or_else(|| "-".to_string());
 
         div()
             .id("settings-root")
@@ -50,11 +34,8 @@ impl Render for SettingsView {
             .child(self.render_appearance_section(cx))
             // ── Developer Tools (collapsible) ──
             .child(self.render_dev_tools_section(
-                lit_ready,
-                &lit_network,
                 addr.as_deref().unwrap_or("N/A"),
                 auth_provider,
-                lit_compatible,
                 cx,
             ))
     }
@@ -212,11 +193,8 @@ impl SettingsView {
 
     fn render_dev_tools_section(
         &self,
-        lit_ready: bool,
-        lit_network: &str,
         addr: &str,
         auth_provider: &str,
-        lit_compatible: bool,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let chevron = if self.show_dev_tools { "▾" } else { "▸" };
@@ -260,37 +238,13 @@ impl SettingsView {
                         .bg(BG_ELEVATED())
                         .border_1()
                         .border_color(BORDER_SUBTLE())
-                        .child(info_line("Lit Ready", if lit_ready { "yes" } else { "no" }))
-                        .child(info_line("Lit Network", lit_network))
                         .child(info_line("Auth Provider", auth_provider))
                         .child(info_line("Auth Wallet", addr))
-                        .child(info_line(
-                            "Lit Compatible",
-                            if lit_compatible { "yes" } else { "no" },
-                        ))
                         .child(
                             div()
                                 .h_flex()
                                 .gap_2()
                                 .flex_wrap()
-                                .child(action_button(
-                                    "Init Lit Context",
-                                    !self.busy && lit_compatible,
-                                    true,
-                                    cx.listener(|this, _, _, cx| this.init_lit_context(cx)),
-                                ))
-                                .child(action_button(
-                                    "Execute Smoke Action",
-                                    !self.busy && lit_ready && lit_compatible,
-                                    false,
-                                    cx.listener(|this, _, _, cx| this.execute_smoke_action(cx)),
-                                ))
-                                .child(action_button(
-                                    "Sign Smoke Payload",
-                                    !self.busy && lit_ready && lit_compatible,
-                                    false,
-                                    cx.listener(|this, _, _, cx| this.sign_smoke_payload(cx)),
-                                ))
                                 .child(action_button(
                                     "Refresh Auth",
                                     !self.busy,
@@ -378,12 +332,6 @@ impl SettingsView {
                                     .child(format!("Error: {error}")),
                             )
                         })
-                        .when_some(self.last_action_response.clone(), |el, resp| {
-                            el.child(result_box("Last executeJs response", &resp))
-                        })
-                        .when_some(self.last_signature.clone(), |el, sig| {
-                            el.child(result_box("Last PKP signature response", &sig))
-                        })
                         .when_some(self.last_storage_response.clone(), |el, resp| {
                             el.child(result_box("Last storage response", &resp))
                         })
@@ -392,7 +340,7 @@ impl SettingsView {
                         })
                         .child(
                             div().text_base().text_color(TEXT_DIM()).child(
-                                "Env: HEAVEN_LIT_RPC_URL, HEAVEN_LOAD_TURBO_UPLOAD_URL, HEAVEN_JACKTRIP_PORT (default 4464).",
+                                "Env: HEAVEN_TEMPO_RPC_URL, HEAVEN_LOAD_TURBO_UPLOAD_URL, HEAVEN_JACKTRIP_PORT (default 4464).",
                             ),
                         ),
                 )

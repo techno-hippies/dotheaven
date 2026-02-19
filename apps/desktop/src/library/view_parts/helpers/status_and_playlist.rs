@@ -4,8 +4,7 @@ use image::imageops::FilterType;
 use std::path::Path;
 
 const PLAYLIST_MODAL_MAX_COVER_BYTES: usize = 5 * 1024 * 1024;
-// The playlist Lit Action supports up to 5MB covers, but embedding large base64 into executeJs
-// params can exceed Lit node/proxy body limits (413). Keep playlist covers small on the client.
+// Keep playlist covers small to avoid payload-too-large (413) errors on upload.
 const PLAYLIST_MODAL_MAX_INLINE_COVER_BYTES: usize = 100 * 1024;
 
 const PLAYLIST_COVER_JPEG_QUALITIES: &[u8] = &[
@@ -67,9 +66,7 @@ pub(in crate::library) fn summarize_status_error(raw: &str) -> String {
         return "This wallet is not authorized yet. Ask the owner to share again, then retry in a few seconds.".to_string();
     }
 
-    if lower.contains("incompatible with current lit decryption context")
-        || lower.contains("encrypted payload decryption failed")
-    {
+    if lower.contains("encrypted payload decryption failed") {
         return "Shared decrypt failed due to an incompatible encrypted payload. Ask the owner to re-upload and share again.".to_string();
     }
 

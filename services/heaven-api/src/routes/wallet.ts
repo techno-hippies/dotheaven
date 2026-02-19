@@ -451,9 +451,9 @@ wallet.post('/register-name', async (c) => {
       const expiresAt = now + 365 * 24 * 60 * 60
       const graceEndsAt = expiresAt + 90 * 24 * 60 * 60
       await c.env.DB.prepare(`
-        INSERT INTO heaven_names (label, label_display, pkp_address, status, registered_at, expires_at, grace_ends_at, created_at, updated_at)
+        INSERT INTO heaven_names (label, label_display, owner_address, status, registered_at, expires_at, grace_ends_at, created_at, updated_at)
         VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?)
-        ON CONFLICT(label) DO UPDATE SET pkp_address = ?, status = 'active', expires_at = ?, grace_ends_at = ?, updated_at = ?
+        ON CONFLICT(label) DO UPDATE SET owner_address = ?, status = 'active', expires_at = ?, grace_ends_at = ?, updated_at = ?
       `).bind(label, label, userAddress.toLowerCase(), now, expiresAt, graceEndsAt, now, now, userAddress.toLowerCase(), expiresAt, graceEndsAt, now).run()
     } catch (dbErr) {
       console.warn('[Wallet] D1 cache sync failed (non-fatal):', dbErr)

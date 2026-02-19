@@ -37,7 +37,7 @@ pub(crate) fn fetch_content_registry_entry(
     call_data.extend_from_slice(&content_id);
 
     let output = eth_call_raw(
-        &megaeth_rpc_url(),
+        &tempo_rpc_url(),
         &content_registry(),
         &to_hex_prefixed(&call_data),
     )?;
@@ -189,26 +189,26 @@ pub(crate) fn fetch_playlist_user_nonce(user_address: &str) -> Result<String, St
         .map_err(|e| format!("Invalid user address ({user_address}): {e}"))?;
 
     let mut call_data = Vec::with_capacity(4 + 32);
-    call_data.extend_from_slice(&keccak256(b"userNonces(address)")[..4]);
+    call_data.extend_from_slice(&keccak256(b"ownerNonces(address)")[..4]);
     let mut user_word = [0u8; 32];
     user_word[12..].copy_from_slice(user.as_slice());
     call_data.extend_from_slice(&user_word);
 
     let output = eth_call_raw(
-        &megaeth_rpc_url(),
+        &tempo_rpc_url(),
         &playlist_v1(),
         &to_hex_prefixed(&call_data),
     )?;
     if output.is_empty() {
-        return Err("PlaylistV1 userNonces returned empty response".to_string());
+        return Err("PlaylistV1 ownerNonces returned empty response".to_string());
     }
 
     let decoded = abi_decode(&[ParamType::Uint(256)], &output)
-        .map_err(|e| format!("Failed decoding PlaylistV1 userNonces response: {e}"))?;
+        .map_err(|e| format!("Failed decoding PlaylistV1 ownerNonces response: {e}"))?;
     match decoded.first() {
         Some(Token::Uint(v)) => Ok(v.to_string()),
         other => Err(format!(
-            "Unexpected PlaylistV1 userNonces response payload: {other:?}"
+            "Unexpected PlaylistV1 ownerNonces response payload: {other:?}"
         )),
     }
 }

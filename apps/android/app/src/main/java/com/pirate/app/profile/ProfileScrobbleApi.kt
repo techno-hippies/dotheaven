@@ -1,6 +1,7 @@
 package com.pirate.app.profile
 
 import com.pirate.app.BuildConfig
+import com.pirate.app.music.CoverRef
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -23,16 +24,14 @@ object ProfileScrobbleApi {
   private const val DEFAULT_TEMPO_SUBGRAPH_ACTIVITY =
     "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo"
   private const val LEGACY_SUBGRAPH_ACTIVITY =
-    "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-activity/14.0.0/gn"
+    "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo"
   private const val DEBUG_DEFAULT_TEMPO_INDEXER_API_EMULATOR = "http://10.0.2.2:42069"
   private const val DEBUG_DEFAULT_TEMPO_INDEXER_API_REVERSE = "http://127.0.0.1:42069"
-  private const val IPFS_GATEWAY = "https://heaven.myfilebase.com/ipfs/"
-
   private val client = OkHttpClient()
   private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
-  fun coverUrl(cid: String, size: Int = 96): String =
-    "${IPFS_GATEWAY}${cid}?img-width=$size&img-height=$size&img-format=webp&img-quality=80"
+  fun coverUrl(cid: String, size: Int = 96): String? =
+    CoverRef.resolveCoverUrl(ref = cid, width = size, height = size, format = "webp", quality = 80)
 
   suspend fun fetchScrobbles(userAddress: String, max: Int = 100): List<ScrobbleRow> = withContext(Dispatchers.IO) {
     val addr = userAddress.trim().lowercase()

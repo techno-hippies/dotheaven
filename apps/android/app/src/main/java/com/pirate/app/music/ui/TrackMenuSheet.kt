@@ -17,6 +17,7 @@ import androidx.compose.material.icons.rounded.AllInclusive
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,8 +46,17 @@ fun TrackMenuSheet(
   onShare: ((MusicTrack) -> Unit)? = null,
   onAddToPlaylist: ((MusicTrack) -> Unit)? = null,
   onAddToQueue: ((MusicTrack) -> Unit)? = null,
+  onGoToSong: ((MusicTrack) -> Unit)? = null,
   onGoToAlbum: ((MusicTrack) -> Unit)? = null,
   onGoToArtist: ((MusicTrack) -> Unit)? = null,
+  showUploadAction: Boolean = true,
+  showSaveAction: Boolean = true,
+  showDownloadAction: Boolean = true,
+  showShareAction: Boolean = true,
+  uploadLabel: String = "Upload",
+  saveActionLabel: String = "Save Forever",
+  savedActionLabel: String = "Saved Forever",
+  downloadLabel: String = "Download",
 ) {
   if (!open || track == null) return
 
@@ -64,13 +74,13 @@ fun TrackMenuSheet(
       HorizontalDivider()
 
       val alreadyUploaded = !track.pieceCid.isNullOrBlank()
-      val isPermanent = alreadyUploaded && track.savedForever
+      val isPermanent = !track.permanentRef.isNullOrBlank()
 
-      if (onUpload != null) {
+      if (onUpload != null && showUploadAction) {
         if (!alreadyUploaded) {
           MenuItemRow(
             icon = { Icon(Icons.Rounded.CloudUpload, contentDescription = null) },
-            label = "Upload",
+            label = uploadLabel,
             onClick = {
               onUpload(track)
               onClose()
@@ -79,37 +89,37 @@ fun TrackMenuSheet(
         }
       }
 
-      if (onSaveForever != null) {
+      if (onSaveForever != null && showSaveAction) {
         if (isPermanent) {
           MenuItemRow(
             icon = { Icon(Icons.Rounded.AllInclusive, contentDescription = null) },
-            label = "Saved Forever",
+            label = savedActionLabel,
             labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
             onClick = { onClose() },
           )
         } else {
           MenuItemRow(
             icon = { Icon(Icons.Rounded.AllInclusive, contentDescription = null) },
-            label = "Save Forever",
+            label = saveActionLabel,
             onClick = {
               onSaveForever(track)
               onClose()
             },
           )
         }
-      } else if (isPermanent) {
+      } else if (isPermanent && showSaveAction) {
         MenuItemRow(
           icon = { Icon(Icons.Rounded.AllInclusive, contentDescription = null) },
-          label = "Saved Forever",
+          label = savedActionLabel,
           labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
           onClick = { onClose() },
         )
       }
 
-      if (onDownload != null && alreadyUploaded) {
+      if (onDownload != null && alreadyUploaded && showDownloadAction) {
         MenuItemRow(
           icon = { Icon(Icons.Rounded.Download, contentDescription = null) },
-          label = "Download",
+          label = downloadLabel,
           onClick = {
             onDownload(track)
             onClose()
@@ -117,7 +127,7 @@ fun TrackMenuSheet(
         )
       }
 
-      if (onShare != null && alreadyUploaded) {
+      if (onShare != null && alreadyUploaded && showShareAction) {
         MenuItemRow(
           icon = { Icon(Icons.Rounded.Share, contentDescription = null) },
           label = "Share",
@@ -156,6 +166,17 @@ fun TrackMenuSheet(
           label = "Go to Album",
           onClick = {
             onGoToAlbum(track)
+            onClose()
+          },
+        )
+      }
+
+      if (onGoToSong != null) {
+        MenuItemRow(
+          icon = { Icon(Icons.Rounded.MusicNote, contentDescription = null) },
+          label = "Go to Song",
+          onClick = {
+            onGoToSong(track)
             onClose()
           },
         )

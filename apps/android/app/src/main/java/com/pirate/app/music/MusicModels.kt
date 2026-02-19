@@ -15,7 +15,11 @@ data class MusicTrack(
   val pieceCid: String? = null,
   val datasetOwner: String? = null,
   val algo: Int? = null,
-  // "Save Forever" is a local preference; upload/register can exist without being marked permanent.
+  // True permanence proof. Save Forever is only complete when permanentRef is set.
+  val permanentRef: String? = null,
+  val permanentGatewayUrl: String? = null,
+  val permanentSavedAtMs: Long? = null,
+  // Legacy local marker from pre-Arweave flow; not authoritative for permanence.
   val savedForever: Boolean = false,
 )
 

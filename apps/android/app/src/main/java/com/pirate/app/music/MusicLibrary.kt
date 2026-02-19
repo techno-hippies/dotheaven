@@ -134,6 +134,9 @@ object MusicLibrary {
           .put("pieceCid", t.pieceCid)
           .put("datasetOwner", t.datasetOwner)
           .put("algo", t.algo)
+          .put("permanentRef", t.permanentRef)
+          .put("permanentGatewayUrl", t.permanentGatewayUrl)
+          .put("permanentSavedAtMs", t.permanentSavedAtMs)
           .put("savedForever", t.savedForever),
       )
     }
@@ -161,6 +164,9 @@ object MusicLibrary {
             pieceCid = obj.optString("pieceCid", "").ifBlank { null },
             datasetOwner = obj.optString("datasetOwner", "").ifBlank { null },
             algo = obj.optInt("algo", -1).takeIf { it >= 0 },
+            permanentRef = obj.optString("permanentRef", "").ifBlank { null },
+            permanentGatewayUrl = obj.optString("permanentGatewayUrl", "").ifBlank { null },
+            permanentSavedAtMs = obj.optLong("permanentSavedAtMs", 0L).takeIf { it > 0L },
             savedForever = obj.optBoolean("savedForever", false),
           ),
         )

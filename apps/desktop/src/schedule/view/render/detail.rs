@@ -117,9 +117,16 @@ impl ScheduleView {
                     ))
                     .child(super::helpers::render_detail_kv(
                         "Price",
-                        format!("{} ETH", booking.price_eth),
+                        format!("${}", booking.price_usd),
                         theme,
                     ))
+                    .when(booking.amount_usd != booking.price_usd, |el| {
+                        el.child(super::helpers::render_detail_kv(
+                            "Escrowed amount",
+                            format!("${}", booking.amount_usd),
+                            theme,
+                        ))
+                    })
                     .child(div().h_flex().gap_2().pt_2().children(action_rows))
                     .when(self.is_in_call(), |el: Div| {
                         el.child(

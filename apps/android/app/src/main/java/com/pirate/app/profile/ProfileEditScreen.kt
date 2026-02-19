@@ -73,8 +73,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.pirate.app.music.CoverRef
-import com.pirate.app.onboarding.OnboardingLitActions
-import com.pirate.app.onboarding.OnboardingRpcHelpers
 import com.pirate.app.onboarding.steps.LANGUAGE_OPTIONS
 import com.pirate.app.onboarding.steps.LocationResult
 import com.pirate.app.onboarding.steps.searchLocations
@@ -256,9 +254,6 @@ fun ProfileEditScreen(
   tempoPubKeyX: String?,
   tempoPubKeyY: String?,
   tempoRpId: String,
-  pkpPublicKey: String?,
-  litNetwork: String,
-  litRpcUrl: String,
   onBack: () -> Unit,
   onSaved: () -> Unit,
 ) {
@@ -316,32 +311,11 @@ fun ProfileEditScreen(
     runCatching {
       withContext(Dispatchers.IO) {
         val profile = ProfileContractApi.fetchProfile(ethAddress) ?: ProfileContractApi.emptyProfile()
-        val name =
-          if (tempoAccount != null) {
-            TempoNameRecordsApi.getPrimaryName(ethAddress)
-          } else {
-            OnboardingRpcHelpers.getPrimaryName(ethAddress)
-          }
-        val node =
-          name?.let {
-            if (tempoAccount != null) TempoNameRecordsApi.computeNode(it)
-            else OnboardingRpcHelpers.computeNode(it)
-          }
-        val avatarRecord =
-          node?.let {
-            if (tempoAccount != null) TempoNameRecordsApi.getTextRecord(it, "avatar")
-            else OnboardingRpcHelpers.getTextRecord(it, "avatar")
-          }
-        val locationRecord =
-          node?.let {
-            if (tempoAccount != null) TempoNameRecordsApi.getTextRecord(it, "heaven.location")
-            else OnboardingRpcHelpers.getTextRecord(it, "heaven.location")
-          }
-        val schoolRecord =
-          node?.let {
-            if (tempoAccount != null) TempoNameRecordsApi.getTextRecord(it, "heaven.school")
-            else OnboardingRpcHelpers.getTextRecord(it, "heaven.school")
-          }
+        val name = TempoNameRecordsApi.getPrimaryName(ethAddress)
+        val node = name?.let { TempoNameRecordsApi.computeNode(it) }
+        val avatarRecord = node?.let { TempoNameRecordsApi.getTextRecord(it, "avatar") }
+        val locationRecord = node?.let { TempoNameRecordsApi.getTextRecord(it, "heaven.location") }
+        val schoolRecord = node?.let { TempoNameRecordsApi.getTextRecord(it, "heaven.school") }
         LoadedProfileContext(
           profile = profile,
           heavenName = name,
@@ -418,13 +392,12 @@ fun ProfileEditScreen(
       TextButton(
         onClick = {
           if (saving) return@TextButton
-          val litPubKey = pkpPublicKey?.trim()?.takeIf { it.isNotEmpty() }
           val activeTempoAccount = tempoAccount
-          if (activeTempoAccount == null && litPubKey.isNullOrBlank()) {
-            error = "Missing profile auth context."
+          if (activeTempoAccount == null) {
+            error = "Tempo passkey account required."
             return@TextButton
           }
-          if (activeTempoAccount != null && !activeTempoAccount.address.equals(ethAddress, ignoreCase = true)) {
+          if (!activeTempoAccount.address.equals(ethAddress, ignoreCase = true)) {
             error = "Active address does not match Tempo passkey account."
             return@TextButton
           }
@@ -437,11 +410,6 @@ fun ProfileEditScreen(
 
             if (avatarDirty) {
               if (!avatarBase64.isNullOrBlank()) {
-                if (activeTempoAccount == null) {
-                  error = "Avatar upload requires Tempo passkey account."
-                  saving = false
-                  return@launch
-                }
                 if (activeSessionKey == null) {
                   Log.d("ProfileEdit", "No session key for avatar upload, authorizing...")
                   val authResult = TempoSessionKeyApi.authorizeSessionKey(
@@ -463,8 +431,9 @@ fun ProfileEditScreen(
                 val uploadResult = withContext(Dispatchers.IO) {
                   val jpegBytes = Base64.decode(avatarBase64, Base64.DEFAULT)
                   ProfileAvatarUploadApi.uploadAvatarJpeg(
+                    appContext = appContext,
+                    ownerEthAddress = activeTempoAccount.address,
                     jpegBytes = jpegBytes,
-                    sessionKey = activeSessionKey!!,
                   )
                 }
                 if (!uploadResult.success || uploadResult.avatarRef.isNullOrBlank()) {
@@ -507,7 +476,7 @@ fun ProfileEditScreen(
             val payload = ProfileContractApi.buildProfileInput(working)
 
             // Ensure session key for silent signing
-            if (activeTempoAccount != null && activeSessionKey == null) {
+            if (activeSessionKey == null) {
               Log.d("ProfileEdit", "No session key, authorizing...")
               val authResult = TempoSessionKeyApi.authorizeSessionKey(
                 activity = activity,
@@ -523,34 +492,15 @@ fun ProfileEditScreen(
               }
             }
 
-            val profileError =
-              when {
-                activeTempoAccount != null -> {
-                  val result =
-                    TempoProfileContractApi.upsertProfile(
-                      activity = activity,
-                      account = activeTempoAccount,
-                      profileInput = payload,
-                      rpId = activeTempoAccount.rpId,
-                      sessionKey = activeSessionKey,
-                    )
-                  if (result.success) null else result.error ?: "Profile update failed"
-                }
-                !litPubKey.isNullOrBlank() -> {
-                  val result = withContext(Dispatchers.IO) {
-                    OnboardingLitActions.setProfile(
-                      appContext = appContext,
-                      userAddress = ethAddress,
-                      profileInput = payload,
-                      pkpPublicKey = litPubKey,
-                      litNetwork = litNetwork,
-                      litRpcUrl = litRpcUrl,
-                    )
-                  }
-                  if (result.success) null else result.error ?: "Profile update failed"
-                }
-                else -> "Missing profile auth context."
-              }
+            val profileResult =
+              TempoProfileContractApi.upsertProfile(
+                activity = activity,
+                account = activeTempoAccount,
+                profileInput = payload,
+                rpId = activeTempoAccount.rpId,
+                sessionKey = activeSessionKey,
+              )
+            val profileError = if (profileResult.success) null else profileResult.error ?: "Profile update failed"
             if (profileError != null) {
               error = profileError
               saving = false
@@ -577,55 +527,15 @@ fun ProfileEditScreen(
 
               if (keys.isNotEmpty()) {
                 val recordResult =
-                  when {
-                    activeTempoAccount != null -> {
-                      TempoNameRecordsApi.setTextRecords(
-                        activity = activity,
-                        account = activeTempoAccount,
-                        node = node,
-                        keys = keys,
-                        values = values,
-                        rpId = activeTempoAccount.rpId,
-                        sessionKey = activeSessionKey,
-                      )
-                    }
-                    !litPubKey.isNullOrBlank() -> {
-                      val result = withContext(Dispatchers.IO) {
-                        if (keys.size == 1) {
-                          OnboardingLitActions.setTextRecord(
-                            appContext = appContext,
-                            node = node,
-                            key = keys[0],
-                            value = values[0],
-                            pkpPublicKey = litPubKey,
-                            litNetwork = litNetwork,
-                            litRpcUrl = litRpcUrl,
-                          )
-                        } else {
-                          OnboardingLitActions.setTextRecords(
-                            appContext = appContext,
-                            node = node,
-                            keys = keys,
-                            values = values,
-                            pkpPublicKey = litPubKey,
-                            litNetwork = litNetwork,
-                            litRpcUrl = litRpcUrl,
-                          )
-                        }
-                      }
-                      TempoRecordsWriteResult(
-                        success = result.success,
-                        txHash = result.txHash,
-                        error = result.error,
-                      )
-                    }
-                    else -> {
-                      TempoRecordsWriteResult(
-                        success = false,
-                        error = "Profile saved, but name records require auth context.",
-                      )
-                    }
-                  }
+                  TempoNameRecordsApi.setTextRecords(
+                    activity = activity,
+                    account = activeTempoAccount,
+                    node = node,
+                    keys = keys,
+                    values = values,
+                    rpId = activeTempoAccount.rpId,
+                    sessionKey = activeSessionKey,
+                  )
                 if (!recordResult.success) {
                   error = "Profile saved, but name records failed to sync: ${recordResult.error ?: "Unknown error"}"
                   saving = false

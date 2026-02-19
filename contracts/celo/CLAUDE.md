@@ -43,7 +43,7 @@ forge verify-contract <ADDRESS> src/SelfProfileVerifier.sol:SelfProfileVerifier 
 - `SELF_HUB` (optional override)
 
 ## Integration Notes
-- MegaETH reads verification state via mirror flows.
+- Tempo reads verification state via mirror flows.
 - If this contract is redeployed, dependent app/action config must be updated.
 
 ## Files You Will Touch Most

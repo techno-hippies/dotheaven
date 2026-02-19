@@ -316,13 +316,6 @@ pub(super) fn upload_cover_to_arweave(
                 .to_string(),
         );
     }
-    let scrobble_v4 = parse_address(&session.scrobble_contract, "scrobble contract address")?;
-    if !contract_supports_set_track_cover_for(&session.rpc_url, scrobble_v4)? {
-        return Err(format!(
-            "Track cover sync unavailable: contract {} does not expose setTrackCoverFor(address,bytes32,string). Deploy upgraded ScrobbleV4 and update HEAVEN_TEMPO_SCROBBLE_V4.",
-            session.scrobble_contract
-        ));
-    }
 
     let source_bytes =
         std::fs::read(cover_path).map_err(|e| format!("Failed reading cover file: {e}"))?;

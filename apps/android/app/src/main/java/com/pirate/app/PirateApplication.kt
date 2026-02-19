@@ -5,6 +5,6 @@ import android.app.Application
 class PirateApplication : Application() {
   override fun onCreate() {
     super.onCreate()
-    // WalletConnect is initialized lazily (WalletConnectBootstrap) to keep cold start light.
+    // App-level setup hooks live here when needed.
   }
 }

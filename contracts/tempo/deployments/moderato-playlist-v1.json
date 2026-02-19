@@ -5,38 +5,34 @@
     "rpcUrl": "https://rpc.moderato.tempo.xyz",
     "explorer": "https://explore.tempo.xyz"
   },
-  "deployedAt": "2026-02-16T17:00:01Z",
+  "deployedAt": "2026-02-19T14:57:08Z",
   "deployer": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
-  "sponsor": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
   "script": "script/DeployPlaylistV1.s.sol",
-  "command": "forge script script/DeployPlaylistV1.s.sol --rpc-url https://rpc.moderato.tempo.xyz --broadcast --slow --gas-estimate-multiplier 100",
+  "command": "forge script script/DeployPlaylistV1.s.sol:DeployPlaylistV1Script --rpc-url https://rpc.moderato.tempo.xyz --broadcast --slow --gas-estimate-multiplier 100",
   "contract": {
     "name": "PlaylistV1",
-    "address": "0xB130B6F86C60680eb98740599484739335C6A525",
-    "deployTx": "0xef563f98f57af4bb46ed558d96435006868a0770ea91f1059d0f02f06a7ccea2",
-    "blockNumber": 5199026,
-    "gasUsed": 5434007,
+    "address": "0xeF6a21324548155630670397DA68318E126510EF",
+    "deployTx": "0x48e3bb885486807ac61eb4dc31efbe9950bf256191fcce9111d59bb8f662a82f",
+    "blockNumber": 5563823,
+    "gasUsed": 4445302,
     "status": true
   },
   "postDeployChecks": {
     "bytecodePresent": true,
-    "owner": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
-    "sponsor": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB"
+    "owner": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB"
   },
   "smokeTest": {
-    "createPlaylistForTx": "0x7e4399f8be3553bd0762736a2f7e6f18f9f7c742a3060a38fd33f00f721e37bf",
-    "createPlaylistForGasUsed": 799853,
-    "setTracksTx": "0xb5d7ca56c10397e815a7f6e7a10ce3f7d502db99afc5f20e05c3a1a7b9adcf4e",
-    "setTracksGasUsed": 45336,
-    "updateMetaTx": "0x15955ecfbb5c34eb2066334fa7c7a4c86cabea0893576102c140ebe835672bae",
-    "updateMetaGasUsed": 40732,
+    "createPlaylistTx": "0x547eb51d63a541b806068685bfa92691191b0116e3ea38642bef76ea68d9f28e",
+    "createPlaylistGasUsed": 1044295,
+    "setTracksTx": "0xb77f4e7775f176455fd63b24157b486de6bed8d435500bf9b07e2ec3c32d7b93",
+    "setTracksGasUsed": 43424,
+    "updateMetaTx": "0x51509e663553915f613577be7a99dd5c678a2c6aeddd04dea28519647dc8b722",
+    "updateMetaGasUsed": 38624,
+    "deletePlaylistTx": "0x81921745e019d946fe855f371275f22eabbd890a643b583f46480739344a5bdd",
+    "deletePlaylistGasUsed": 34549,
     "playlist": {
-      "playlistId": "0x25b7a4df56e83eb2d3bb54a8c4303777906b5b7ee6b49ebff3002688dc2dbd3d",
-      "owner": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
-      "visibility": 1,
-      "exists": true,
-      "version": 3,
-      "trackCount": 2
+      "playlistId": "0xcdbff9f86585941cf7e862f663ca0f827532409b672d97c9a651fc3b530cc90a",
+      "deleted": true
     }
   }
 }
