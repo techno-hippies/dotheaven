@@ -858,6 +858,7 @@ private fun PirateNavHost(
       ScheduleScreen(
         isAuthenticated = isAuthenticated,
         userAddress = activeAddress,
+        tempoAccount = tempoAccount,
         onOpenDrawer = onOpenDrawer,
         onOpenAvailability = {
           navController.navigate(PirateRoute.ScheduleAvailability.route) { launchSingleTop = true }
@@ -881,7 +882,10 @@ private fun PirateNavHost(
       val isAuthenticated = authState.hasAnyCredentials()
       ScheduleAvailabilityScreen(
         isAuthenticated = isAuthenticated,
+        userAddress = activeAddress,
+        tempoAccount = tempoAccount,
         onClose = { navController.popBackStack() },
+        onShowMessage = onShowMessage,
       )
     }
     composable(PirateRoute.Profile.route) {

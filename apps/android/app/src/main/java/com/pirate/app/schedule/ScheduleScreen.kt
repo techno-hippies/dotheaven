@@ -43,8 +43,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.Saver
-import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -56,17 +55,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.pirate.app.theme.PiratePalette
+import com.pirate.app.tempo.SessionKeyManager
+import com.pirate.app.tempo.TempoPasskeyManager
 import com.pirate.app.ui.PirateMobileHeader
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val DEFAULT_BASE_PRICE = "25.00"
 private const val SLOT_DURATION_MINS = 20
-private const val SLOT_GUEST_NULL_SENTINEL = "__NULL_GUEST__"
 
 private enum class BookingStatus {
   Live,
@@ -96,6 +97,7 @@ private data class BookingRow(
 
 private data class SlotRow(
   val id: Int,
+  val slotId: Long? = null,
   val startTimeMillis: Long,
   val durationMinutes: Int,
   val status: SlotStatus,
@@ -103,56 +105,55 @@ private data class SlotRow(
   val priceUsd: String = DEFAULT_BASE_PRICE,
 )
 
-private val slotRowListSaver: Saver<List<SlotRow>, Any> = listSaver(
-  save = { slots -> slots.map(::slotRowToSaveable) },
-  restore = { saved -> saved.mapNotNull(::slotRowFromSaveable) },
-)
-
-private fun slotRowToSaveable(row: SlotRow): List<Any> = listOf(
-  row.id,
-  row.startTimeMillis,
-  row.durationMinutes,
-  row.status.name,
-  row.guestName ?: SLOT_GUEST_NULL_SENTINEL,
-  row.priceUsd,
-)
-
-private fun slotRowFromSaveable(value: Any): SlotRow? {
-  val fields = value as? List<*> ?: return null
-  if (fields.size < 6) return null
-
-  val id = (fields[0] as? Number)?.toInt() ?: return null
-  val startTimeMillis = (fields[1] as? Number)?.toLong() ?: return null
-  val durationMinutes = (fields[2] as? Number)?.toInt() ?: return null
-  val statusName = fields[3] as? String ?: return null
-  val status = SlotStatus.entries.firstOrNull { it.name == statusName } ?: return null
-  val guestRaw = fields[4] as? String ?: SLOT_GUEST_NULL_SENTINEL
-  val guestName = if (guestRaw == SLOT_GUEST_NULL_SENTINEL) null else guestRaw
-  val priceUsd = fields[5] as? String ?: DEFAULT_BASE_PRICE
-
-  return SlotRow(
-    id = id,
-    startTimeMillis = startTimeMillis,
-    durationMinutes = durationMinutes,
-    status = status,
-    guestName = guestName,
-    priceUsd = priceUsd,
-  )
-}
-
 @Composable
 fun ScheduleScreen(
   isAuthenticated: Boolean,
   userAddress: String?,
+  tempoAccount: TempoPasskeyManager.PasskeyAccount?,
   onOpenDrawer: () -> Unit,
   onOpenAvailability: () -> Unit,
   onJoinBooking: (Long) -> Unit,
   onShowMessage: (String) -> Unit,
 ) {
   val context = LocalContext.current
-  var upcomingBookings by remember { mutableStateOf(initialUpcomingBookings()) }
+  val scope = rememberCoroutineScope()
+  var upcomingBookings by remember { mutableStateOf<List<BookingRow>>(emptyList()) }
   var bookingsLoading by remember { mutableStateOf(false) }
   var pendingJoinBookingId by remember { mutableStateOf<Long?>(null) }
+  var pendingCancelBookingId by remember { mutableStateOf<Long?>(null) }
+
+  suspend fun refreshBookings() {
+    if (!isAuthenticated || userAddress.isNullOrBlank()) {
+      bookingsLoading = false
+      upcomingBookings = emptyList()
+      return
+    }
+
+    bookingsLoading = true
+    runCatching {
+      withContext(Dispatchers.IO) {
+        TempoSessionEscrowApi.fetchUpcomingUserBookings(userAddress, maxResults = 20)
+      }
+    }.onSuccess { rows ->
+      upcomingBookings = rows.map { row ->
+        BookingRow(
+          id = row.bookingId,
+          bookingId = row.bookingId,
+          peerName = abbreviateAddress(row.counterpartyAddress),
+          peerAddress = row.counterpartyAddress,
+          startTimeMillis = row.startTimeSec * 1_000L,
+          durationMinutes = row.durationMins,
+          status = if (row.isLive) BookingStatus.Live else BookingStatus.Upcoming,
+          isHost = row.isHost,
+          amountUsd = row.amountUsd,
+        )
+      }
+    }.onFailure { err ->
+      onShowMessage("Failed to load schedule: ${err.message ?: "unknown error"}")
+      upcomingBookings = emptyList()
+    }
+    bookingsLoading = false
+  }
 
   val permissionLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.RequestPermission(),
@@ -168,37 +169,7 @@ fun ScheduleScreen(
   }
 
   LaunchedEffect(isAuthenticated, userAddress) {
-    if (!isAuthenticated || userAddress.isNullOrBlank()) {
-      bookingsLoading = false
-      upcomingBookings = initialUpcomingBookings()
-      return@LaunchedEffect
-    }
-
-    bookingsLoading = true
-    runCatching {
-      withContext(Dispatchers.IO) {
-        TempoSessionEscrowApi.fetchUpcomingUserBookings(userAddress, maxResults = 20)
-      }
-    }.onSuccess { rows ->
-      val mapped = rows.map { row ->
-        BookingRow(
-          id = row.bookingId,
-          bookingId = row.bookingId,
-          peerName = abbreviateAddress(row.counterpartyAddress),
-          peerAddress = row.counterpartyAddress,
-          startTimeMillis = row.startTimeSec * 1_000L,
-          durationMinutes = row.durationMins,
-          status = if (row.isLive) BookingStatus.Live else BookingStatus.Upcoming,
-          isHost = row.isHost,
-          amountUsd = row.amountUsd,
-        )
-      }
-      upcomingBookings = mapped
-    }.onFailure { err ->
-      onShowMessage("Failed to load schedule: ${err.message ?: "unknown error"}")
-      upcomingBookings = emptyList()
-    }
-    bookingsLoading = false
+    refreshBookings()
   }
 
   Column(
@@ -229,6 +200,7 @@ fun ScheduleScreen(
           bookings = upcomingBookings,
           loading = bookingsLoading,
           isAuthenticated = isAuthenticated,
+          cancellingBookingId = pendingCancelBookingId,
           onJoin = join@{ bookingId ->
             val selected = upcomingBookings.firstOrNull { it.id == bookingId } ?: return@join
             val targetBookingId = selected.bookingId ?: selected.id
@@ -248,11 +220,42 @@ fun ScheduleScreen(
           },
           onCancel = cancel@{ bookingId ->
             val booking = upcomingBookings.firstOrNull { it.id == bookingId } ?: return@cancel
-            if (booking.bookingId != null) {
-              onShowMessage("Canceling on-chain bookings is not wired in Android yet.")
+            val chainBookingId = booking.bookingId ?: booking.id
+            if (chainBookingId <= 0L) {
+              upcomingBookings = upcomingBookings.filterNot { it.id == bookingId }
               return@cancel
             }
-            upcomingBookings = upcomingBookings.filterNot { it.id == bookingId }
+
+            if (!isAuthenticated || userAddress.isNullOrBlank() || tempoAccount == null) {
+              onShowMessage("Sign in with Tempo to cancel bookings.")
+              return@cancel
+            }
+
+            val sessionKey = SessionKeyManager.load(context)?.takeIf {
+              SessionKeyManager.isValid(it, ownerAddress = tempoAccount.address)
+            }
+            if (sessionKey == null) {
+              onShowMessage("Missing valid Tempo session key. Please sign in again.")
+              return@cancel
+            }
+
+            pendingCancelBookingId = bookingId
+            scope.launch {
+              val result = TempoSessionEscrowApi.cancelBooking(
+                userAddress = tempoAccount.address,
+                sessionKey = sessionKey,
+                bookingId = chainBookingId,
+                asHost = booking.isHost,
+              )
+
+              if (result.success) {
+                onShowMessage("Cancel submitted: ${abbreviateAddress(result.txHash ?: "")}")
+                refreshBookings()
+              } else {
+                onShowMessage("Cancel failed: ${result.error ?: "unknown error"}")
+              }
+              pendingCancelBookingId = null
+            }
           },
         )
       }
@@ -263,17 +266,66 @@ fun ScheduleScreen(
 @Composable
 fun ScheduleAvailabilityScreen(
   isAuthenticated: Boolean,
+  userAddress: String?,
+  tempoAccount: TempoPasskeyManager.PasskeyAccount?,
   onClose: () -> Unit,
+  onShowMessage: (String) -> Unit,
 ) {
-  var basePrice by rememberSaveable { mutableStateOf(DEFAULT_BASE_PRICE) }
-  var basePriceEdit by rememberSaveable { mutableStateOf(DEFAULT_BASE_PRICE) }
+  val context = LocalContext.current
+  val scope = rememberCoroutineScope()
+  var basePrice by remember { mutableStateOf(DEFAULT_BASE_PRICE) }
+  var basePriceEdit by remember { mutableStateOf(DEFAULT_BASE_PRICE) }
   var editingPrice by rememberSaveable { mutableStateOf(false) }
   var acceptingBookings by rememberSaveable { mutableStateOf(true) }
   var weekOffset by rememberSaveable { mutableStateOf(0) }
   var selectedDayIndex by rememberSaveable { mutableStateOf(todayWeekdayIndex()) }
-  var availabilitySlots by rememberSaveable(stateSaver = slotRowListSaver) {
-    mutableStateOf(initialAvailabilitySlots())
+  var availabilitySlots by remember { mutableStateOf<List<SlotRow>>(emptyList()) }
+  var availabilityLoading by remember { mutableStateOf(false) }
+  var availabilityBusy by remember { mutableStateOf(false) }
+
+  suspend fun refreshAvailability() {
+    if (!isAuthenticated || userAddress.isNullOrBlank()) {
+      availabilitySlots = emptyList()
+      availabilityLoading = false
+      basePrice = DEFAULT_BASE_PRICE
+      if (!editingPrice) basePriceEdit = DEFAULT_BASE_PRICE
+      return
+    }
+
+    availabilityLoading = true
+    runCatching {
+      val slots = withContext(Dispatchers.IO) {
+        TempoSessionEscrowApi.fetchHostAvailabilitySlots(hostAddress = userAddress, maxResults = 300)
+      }
+      val chainBasePrice = withContext(Dispatchers.IO) {
+        TempoSessionEscrowApi.fetchHostBasePriceUsd(userAddress)
+      }
+      slots to chainBasePrice
+    }.onSuccess { (slots, chainBasePrice) ->
+      availabilitySlots = slots.mapIndexed { index, slot ->
+        SlotRow(
+          id = index + 1,
+          slotId = slot.slotId,
+          startTimeMillis = slot.startTimeSec * 1_000L,
+          durationMinutes = slot.durationMins,
+          status = hostSlotStatusToUi(slot.status),
+          priceUsd = slot.priceUsd,
+        )
+      }
+      val resolvedBase = chainBasePrice?.takeIf { it.isNotBlank() } ?: basePrice
+      basePrice = resolvedBase
+      if (!editingPrice) basePriceEdit = resolvedBase
+    }.onFailure { err ->
+      onShowMessage("Failed to load availability: ${err.message ?: "unknown error"}")
+      availabilitySlots = emptyList()
+    }
+    availabilityLoading = false
   }
+
+  LaunchedEffect(isAuthenticated, userAddress) {
+    refreshAvailability()
+  }
+
   val halfHourSlots = remember {
     val list = mutableListOf<Pair<Int, Int>>()
     repeat(48) { index ->
@@ -313,10 +365,46 @@ fun ScheduleAvailabilityScreen(
           basePrice = basePrice,
           editingPrice = editingPrice,
           editValue = basePriceEdit,
+          busy = availabilityBusy || availabilityLoading,
           onEditStart = { editingPrice = true; basePriceEdit = basePrice },
           onPriceChange = { basePriceEdit = it },
           onCancelEdit = { editingPrice = false; basePriceEdit = basePrice },
-          onSavePrice = { basePrice = basePriceEdit.ifBlank { DEFAULT_BASE_PRICE }; editingPrice = false },
+          onSavePrice = {
+            if (!isAuthenticated || userAddress.isNullOrBlank() || tempoAccount == null) {
+              onShowMessage("Sign in with Tempo to set a base price.")
+              return@AvailabilityHeaderCard
+            }
+            val normalizedPrice = normalizePriceInput(basePriceEdit) ?: run {
+              onShowMessage("Enter a valid base price.")
+              return@AvailabilityHeaderCard
+            }
+            val sessionKey = SessionKeyManager.load(context)?.takeIf {
+              SessionKeyManager.isValid(it, ownerAddress = tempoAccount.address)
+            }
+            if (sessionKey == null) {
+              onShowMessage("Missing valid Tempo session key. Please sign in again.")
+              return@AvailabilityHeaderCard
+            }
+
+            availabilityBusy = true
+            scope.launch {
+              val result = TempoSessionEscrowApi.setHostBasePrice(
+                userAddress = tempoAccount.address,
+                sessionKey = sessionKey,
+                priceUsd = normalizedPrice,
+              )
+              if (result.success) {
+                basePrice = normalizedPrice
+                basePriceEdit = normalizedPrice
+                editingPrice = false
+                onShowMessage("Base price updated: ${abbreviateAddress(result.txHash ?: "")}")
+                refreshAvailability()
+              } else {
+                onShowMessage("Base price update failed: ${result.error ?: "unknown error"}")
+              }
+              availabilityBusy = false
+            }
+          },
         )
       }
 
@@ -378,38 +466,71 @@ fun ScheduleAvailabilityScreen(
             val startTime = slotStartMillis(selectedDay, hour, minute)
             val existingSlot = slotByTime[startTime]
             val isBooked = existingSlot?.status == SlotStatus.Booked
-            val disabled = isBooked || existingSlot?.status == SlotStatus.Settled || !acceptingBookings || !isAuthenticated
+            val disabled =
+              availabilityLoading ||
+                availabilityBusy ||
+                isBooked ||
+                existingSlot?.status == SlotStatus.Settled ||
+                existingSlot?.status == SlotStatus.Cancelled ||
+                !acceptingBookings ||
+                !isAuthenticated
 
             AvailabilitySlotCard(
               timeLabel = formatTime(hour, minute),
               status = existingSlot?.status,
               onClick = {
-                val idx = availabilitySlots.indexOfFirst { it.id == existingSlot?.id }
-                if (disabled || existingSlot == null) {
-                  if (!disabled && idx < 0) {
-                    val nextId = (availabilitySlots.maxByOrNull { it.id }?.id ?: 0) + 1
-                    availabilitySlots = availabilitySlots + SlotRow(
-                      id = nextId,
-                      startTimeMillis = startTime,
-                      durationMinutes = SLOT_DURATION_MINS,
-                      status = SlotStatus.Open,
-                      priceUsd = basePrice,
-                    )
-                  }
+                if (disabled) {
                   return@AvailabilitySlotCard
                 }
-                when (existingSlot.status) {
-                  SlotStatus.Open -> {
-                    if (idx >= 0) {
-                      availabilitySlots = availabilitySlots.toMutableList().also { it.removeAt(idx) }
+
+                if (userAddress.isNullOrBlank() || tempoAccount == null) {
+                  onShowMessage("Sign in with Tempo to edit availability.")
+                  return@AvailabilitySlotCard
+                }
+                val sessionKey = SessionKeyManager.load(context)?.takeIf {
+                  SessionKeyManager.isValid(it, ownerAddress = tempoAccount.address)
+                }
+                if (sessionKey == null) {
+                  onShowMessage("Missing valid Tempo session key. Please sign in again.")
+                  return@AvailabilitySlotCard
+                }
+
+                availabilityBusy = true
+                scope.launch {
+                  val result = when {
+                    existingSlot == null -> {
+                      TempoSessionEscrowApi.createSlot(
+                        userAddress = tempoAccount.address,
+                        sessionKey = sessionKey,
+                        startTimeSec = startTime / 1_000L,
+                        durationMins = SLOT_DURATION_MINS,
+                        graceMins = 5,
+                        minOverlapMins = 10,
+                        cancelCutoffMins = 60,
+                      )
                     }
-                  }
-                  SlotStatus.Cancelled -> {
-                    if (idx >= 0) {
-                      availabilitySlots = availabilitySlots.toMutableList().also { it[idx] = existingSlot.copy(status = SlotStatus.Open, guestName = null) }
+
+                    existingSlot.status == SlotStatus.Open && existingSlot.slotId != null -> {
+                      TempoSessionEscrowApi.cancelSlot(
+                        userAddress = tempoAccount.address,
+                        sessionKey = sessionKey,
+                        slotId = existingSlot.slotId,
+                      )
                     }
+
+                    else -> EscrowTxResult(
+                      success = false,
+                      error = "This slot cannot be changed.",
+                    )
                   }
-                  SlotStatus.Booked, SlotStatus.Settled -> {}
+
+                  if (result.success) {
+                    onShowMessage("Availability updated: ${abbreviateAddress(result.txHash ?: "")}")
+                    refreshAvailability()
+                  } else {
+                    onShowMessage("Availability update failed: ${result.error ?: "unknown error"}")
+                  }
+                  availabilityBusy = false
                 }
               },
               enabled = !disabled,
@@ -429,6 +550,7 @@ private fun UpcomingSessionsSection(
   bookings: List<BookingRow>,
   loading: Boolean,
   isAuthenticated: Boolean,
+  cancellingBookingId: Long?,
   onJoin: (Long) -> Unit,
   onCancel: (Long) -> Unit,
 ) {
@@ -456,7 +578,8 @@ private fun UpcomingSessionsSection(
 
   bookings.forEach { booking ->
     val canJoin = isAuthenticated && (booking.status == BookingStatus.Upcoming || booking.status == BookingStatus.Live)
-    val canCancel = isAuthenticated && (booking.status == BookingStatus.Upcoming || booking.status == BookingStatus.Live)
+    val isCancelling = cancellingBookingId == booking.id
+    val canCancel = isAuthenticated && !isCancelling && (booking.status == BookingStatus.Upcoming || booking.status == BookingStatus.Live)
     Card(
       modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
       shape = RoundedCornerShape(12.dp),
@@ -493,7 +616,7 @@ private fun UpcomingSessionsSection(
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
           OutlinedButton(onClick = { onCancel(booking.id) }, enabled = canCancel, modifier = Modifier.weight(1f)) {
-            Text("Cancel")
+            Text(if (isCancelling) "Canceling..." else "Cancel")
           }
           Button(onClick = { onJoin(booking.id) }, enabled = canJoin, modifier = Modifier.weight(1f)) {
             Text(if (booking.status == BookingStatus.Live) "In call" else "Join")
@@ -512,6 +635,7 @@ private fun AvailabilityHeaderCard(
   basePrice: String,
   editingPrice: Boolean,
   editValue: String,
+  busy: Boolean,
   onEditStart: () -> Unit,
   onPriceChange: (String) -> Unit,
   onCancelEdit: () -> Unit,
@@ -526,14 +650,14 @@ private fun AvailabilityHeaderCard(
       Text("Base Price", style = MaterialTheme.typography.bodyLarge, color = PiratePalette.TextMuted)
       if (editingPrice) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          OutlinedTextField(value = editValue, onValueChange = onPriceChange, singleLine = true, label = { Text("aUSD") }, enabled = isAuthenticated, modifier = Modifier.weight(1f))
-          OutlinedButton(onClick = onCancelEdit, enabled = isAuthenticated) { Text("Cancel") }
-          Button(onClick = onSavePrice, enabled = isAuthenticated) { Text("Save") }
+          OutlinedTextField(value = editValue, onValueChange = onPriceChange, singleLine = true, label = { Text("aUSD") }, enabled = isAuthenticated && !busy, modifier = Modifier.weight(1f))
+          OutlinedButton(onClick = onCancelEdit, enabled = isAuthenticated && !busy) { Text("Cancel") }
+          Button(onClick = onSavePrice, enabled = isAuthenticated && !busy) { Text("Save") }
         }
       } else {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
           Text("$$basePrice", style = MaterialTheme.typography.headlineSmall)
-          OutlinedButton(onClick = onEditStart, enabled = isAuthenticated) { Text("Edit") }
+          OutlinedButton(onClick = onEditStart, enabled = isAuthenticated && !busy) { Text("Edit") }
         }
       }
     }
@@ -647,6 +771,21 @@ private fun statusFgColor(status: BookingStatus): Color = when (status) {
   BookingStatus.Cancelled -> Color(0xFFA3A3A3)    // muted
 }
 
+private fun hostSlotStatusToUi(status: HostSlotStatus): SlotStatus = when (status) {
+  HostSlotStatus.Open -> SlotStatus.Open
+  HostSlotStatus.Booked -> SlotStatus.Booked
+  HostSlotStatus.Cancelled -> SlotStatus.Cancelled
+  HostSlotStatus.Settled -> SlotStatus.Settled
+}
+
+private fun normalizePriceInput(value: String): String? {
+  val trimmed = value.trim()
+  if (trimmed.isBlank()) return null
+  val parsed = trimmed.toBigDecimalOrNull() ?: return null
+  if (parsed <= java.math.BigDecimal.ZERO) return null
+  return parsed.setScale(2, java.math.RoundingMode.DOWN).stripTrailingZeros().toPlainString()
+}
+
 private fun formatDateTime(millis: Long): String = SimpleDateFormat("EEE, MMM d • h:mm a", Locale.getDefault()).format(Date(millis))
 private fun formatTime(hour: Int, minute: Int): String { val suffix = if (hour >= 12) "PM" else "AM"; val dh = ((hour + 11) % 12) + 1; return String.format(Locale.getDefault(), "%d:%02d %s", dh, minute, suffix) }
 private fun abbreviateAddress(address: String): String { if (address.length <= 10) return address; return "${address.take(6)}...${address.takeLast(4)}" }
@@ -674,25 +813,4 @@ private fun formatSelectedDay(selectedDay: Long): String = SimpleDateFormat("EEE
 private fun isSameDay(first: Long, second: Long): Boolean {
   val a = Calendar.getInstance().apply { timeInMillis = first }; val b = Calendar.getInstance().apply { timeInMillis = second }
   return a.get(Calendar.YEAR) == b.get(Calendar.YEAR) && a.get(Calendar.MONTH) == b.get(Calendar.MONTH) && a.get(Calendar.DAY_OF_MONTH) == b.get(Calendar.DAY_OF_MONTH)
-}
-
-private fun initialUpcomingBookings(): List<BookingRow> {
-  val now = System.currentTimeMillis()
-  return listOf(
-    BookingRow(id = 1L, peerName = "Ariya", peerAddress = "0xA11C...be77", startTimeMillis = now + 90 * 60 * 1000, durationMinutes = 30, status = BookingStatus.Upcoming, isHost = true, amountUsd = "25.00"),
-    BookingRow(id = 2L, peerName = "Tamsin", peerAddress = "0xD12A...4f22", startTimeMillis = now + 7 * 60 * 60 * 1000, durationMinutes = 60, status = BookingStatus.Live, isHost = false, amountUsd = "40.00"),
-  )
-}
-
-private fun initialAvailabilitySlots(): List<SlotRow> {
-  val now = System.currentTimeMillis(); val today = Calendar.getInstance().apply { timeInMillis = now }
-  return listOf(
-    SlotRow(id = 1, startTimeMillis = slotStartAt(today.clone() as Calendar, 19, 0), durationMinutes = 20, status = SlotStatus.Open, priceUsd = "25.00"),
-    SlotRow(id = 2, startTimeMillis = slotStartAt(today.clone() as Calendar, 21, 0), durationMinutes = 45, status = SlotStatus.Open, priceUsd = "30.00"),
-    SlotRow(id = 3, startTimeMillis = slotStartAt((today.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 2) }, 19, 30), durationMinutes = 20, status = SlotStatus.Booked, guestName = "Ariya", priceUsd = "25.00"),
-  )
-}
-
-private fun slotStartAt(base: Calendar, hour: Int, minute: Int): Long {
-  base.set(Calendar.HOUR_OF_DAY, hour); base.set(Calendar.MINUTE, minute); base.set(Calendar.SECOND, 0); base.set(Calendar.MILLISECOND, 0); return base.timeInMillis
 }
