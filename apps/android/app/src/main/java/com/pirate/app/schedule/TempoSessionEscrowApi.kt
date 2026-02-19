@@ -214,7 +214,9 @@ object TempoSessionEscrowApi {
     val result = ethCall(data) ?: return@withContext null
     val words = splitWords(result)
     if (words.isEmpty()) return@withContext null
-    formatTokenAmount(parseWordUint(words[0]))
+    val raw = parseWordUint(words[0])
+    if (raw <= BigInteger.ZERO) return@withContext null
+    formatTokenAmount(raw)
   }
 
   suspend fun setHostBasePrice(

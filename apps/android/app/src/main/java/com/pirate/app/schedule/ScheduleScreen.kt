@@ -1,6 +1,9 @@
 package com.pirate.app.schedule
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -57,6 +60,7 @@ import androidx.core.content.ContextCompat
 import com.pirate.app.theme.PiratePalette
 import com.pirate.app.tempo.SessionKeyManager
 import com.pirate.app.tempo.TempoPasskeyManager
+import com.pirate.app.tempo.TempoSessionKeyApi
 import com.pirate.app.ui.PirateMobileHeader
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -231,16 +235,18 @@ fun ScheduleScreen(
               return@cancel
             }
 
-            val sessionKey = SessionKeyManager.load(context)?.takeIf {
-              SessionKeyManager.isValid(it, ownerAddress = tempoAccount.address)
-            }
-            if (sessionKey == null) {
-              onShowMessage("Missing valid Tempo session key. Please sign in again.")
-              return@cancel
-            }
-
             pendingCancelBookingId = bookingId
             scope.launch {
+              val sessionKey = ensureScheduleSessionKey(
+                context = context,
+                account = tempoAccount,
+                onShowMessage = onShowMessage,
+              )
+              if (sessionKey == null) {
+                pendingCancelBookingId = null
+                return@launch
+              }
+
               val result = TempoSessionEscrowApi.cancelBooking(
                 userAddress = tempoAccount.address,
                 sessionKey = sessionKey,
@@ -365,7 +371,7 @@ fun ScheduleAvailabilityScreen(
           basePrice = basePrice,
           editingPrice = editingPrice,
           editValue = basePriceEdit,
-          busy = availabilityBusy || availabilityLoading,
+          busy = availabilityBusy,
           onEditStart = { editingPrice = true; basePriceEdit = basePrice },
           onPriceChange = { basePriceEdit = it },
           onCancelEdit = { editingPrice = false; basePriceEdit = basePrice },
@@ -378,16 +384,19 @@ fun ScheduleAvailabilityScreen(
               onShowMessage("Enter a valid base price.")
               return@AvailabilityHeaderCard
             }
-            val sessionKey = SessionKeyManager.load(context)?.takeIf {
-              SessionKeyManager.isValid(it, ownerAddress = tempoAccount.address)
-            }
-            if (sessionKey == null) {
-              onShowMessage("Missing valid Tempo session key. Please sign in again.")
-              return@AvailabilityHeaderCard
-            }
 
             availabilityBusy = true
             scope.launch {
+              val sessionKey = ensureScheduleSessionKey(
+                context = context,
+                account = tempoAccount,
+                onShowMessage = onShowMessage,
+              )
+              if (sessionKey == null) {
+                availabilityBusy = false
+                return@launch
+              }
+
               val result = TempoSessionEscrowApi.setHostBasePrice(
                 userAddress = tempoAccount.address,
                 sessionKey = sessionKey,
@@ -487,16 +496,19 @@ fun ScheduleAvailabilityScreen(
                   onShowMessage("Sign in with Tempo to edit availability.")
                   return@AvailabilitySlotCard
                 }
-                val sessionKey = SessionKeyManager.load(context)?.takeIf {
-                  SessionKeyManager.isValid(it, ownerAddress = tempoAccount.address)
-                }
-                if (sessionKey == null) {
-                  onShowMessage("Missing valid Tempo session key. Please sign in again.")
-                  return@AvailabilitySlotCard
-                }
 
                 availabilityBusy = true
                 scope.launch {
+                  val sessionKey = ensureScheduleSessionKey(
+                    context = context,
+                    account = tempoAccount,
+                    onShowMessage = onShowMessage,
+                  )
+                  if (sessionKey == null) {
+                    availabilityBusy = false
+                    return@launch
+                  }
+
                   val result = when {
                     existingSlot == null -> {
                       TempoSessionEscrowApi.createSlot(
@@ -813,4 +825,46 @@ private fun formatSelectedDay(selectedDay: Long): String = SimpleDateFormat("EEE
 private fun isSameDay(first: Long, second: Long): Boolean {
   val a = Calendar.getInstance().apply { timeInMillis = first }; val b = Calendar.getInstance().apply { timeInMillis = second }
   return a.get(Calendar.YEAR) == b.get(Calendar.YEAR) && a.get(Calendar.MONTH) == b.get(Calendar.MONTH) && a.get(Calendar.DAY_OF_MONTH) == b.get(Calendar.DAY_OF_MONTH)
+}
+
+private fun Context.findActivity(): Activity? {
+  var current: Context? = this
+  while (current is ContextWrapper) {
+    if (current is Activity) return current
+    current = current.baseContext
+  }
+  return null
+}
+
+private suspend fun ensureScheduleSessionKey(
+  context: Context,
+  account: TempoPasskeyManager.PasskeyAccount,
+  onShowMessage: (String) -> Unit,
+): SessionKeyManager.SessionKey? {
+  val existing = SessionKeyManager.load(context)?.takeIf {
+    SessionKeyManager.isValid(it, ownerAddress = account.address)
+  }
+  if (existing != null) return existing
+
+  val activity = context.findActivity()
+  if (activity == null) {
+    onShowMessage("Unable to open passkey prompt in this context.")
+    return null
+  }
+
+  onShowMessage("Authorizing Tempo session key...")
+  val auth = TempoSessionKeyApi.authorizeSessionKey(
+    activity = activity,
+    account = account,
+  )
+  val authorized = auth.sessionKey?.takeIf {
+    auth.success && SessionKeyManager.isValid(it, ownerAddress = account.address)
+  }
+  if (authorized == null) {
+    onShowMessage(auth.error ?: "Session key authorization failed.")
+    return null
+  }
+
+  onShowMessage("Session key ready. Submit again if needed.")
+  return authorized
 }
