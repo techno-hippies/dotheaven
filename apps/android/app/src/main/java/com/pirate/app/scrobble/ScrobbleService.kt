@@ -13,7 +13,6 @@ import com.pirate.app.music.TrackIds
 import com.pirate.app.tempo.SessionKeyManager
 import com.pirate.app.tempo.TempoAccountFactory
 import com.pirate.app.tempo.TempoPasskeyManager
-import com.pirate.app.tempo.TempoSessionKeyApi
 import com.pirate.app.player.PlayerController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,7 +44,6 @@ class ScrobbleService(
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
   private val submitMutex = Mutex()
   private var sessionKey: SessionKeyManager.SessionKey? = null
-  private var sessionAuthBlockedForAddress: String? = null
 
   private val engine =
     ScrobbleEngine { scrobble ->
@@ -145,11 +143,6 @@ class ScrobbleService(
         return
       }
 
-      val normalizedAddress = tempoAccount.address.lowercase()
-      if (sessionAuthBlockedForAddress != null && sessionAuthBlockedForAddress != normalizedAddress) {
-        sessionAuthBlockedForAddress = null
-      }
-
       val input =
         TempoScrobbleInput(
           artist = scrobble.artist,
@@ -198,7 +191,6 @@ class ScrobbleService(
           Log.w(TAG, "Scrobble session submit failed (${result.error}); refreshing session key and retrying once")
           hostActivity?.let { SessionKeyManager.clear(it) }
           sessionKey = null
-          sessionAuthBlockedForAddress = null
           val refreshedSession = ensureSessionKey(tempoAccount)
           if (refreshedSession != null) {
             mediaSyncSession = refreshedSession
@@ -303,46 +295,7 @@ class ScrobbleService(
     }
     // Keep persisted session key when account mismatches; onboarding/account switching
     // can transiently present a different account and should not wipe a valid key.
-
-    val normalizedAddress = account.address.lowercase()
-    if (sessionAuthBlockedForAddress == normalizedAddress) {
-      return null
-    }
-
-    if (BuildConfig.DEBUG) {
-      onShowMessage("Authorize session key for background scrobbling")
-    }
-    val authResult =
-      TempoSessionKeyApi.authorizeSessionKey(
-        activity = hostActivity,
-        account = account,
-        rpId = account.rpId,
-      )
-    if (!authResult.success) {
-      sessionAuthBlockedForAddress = normalizedAddress
-      Log.w(TAG, "Session key authorization failed: ${authResult.error}")
-      if (BuildConfig.DEBUG) {
-        onShowMessage("Scrobble paused: session key auth failed")
-      }
-      return null
-    }
-
-    val authorized = authResult.sessionKey
-    if (!SessionKeyManager.isValid(authorized, ownerAddress = account.address)) {
-      sessionAuthBlockedForAddress = normalizedAddress
-      Log.w(TAG, "Session key authorization returned invalid key")
-      if (BuildConfig.DEBUG) {
-        onShowMessage("Scrobble paused: invalid session key")
-      }
-      return null
-    }
-
-    sessionAuthBlockedForAddress = null
-    sessionKey = authorized
-    if (BuildConfig.DEBUG) {
-      onShowMessage("Background scrobbling enabled")
-    }
-    return authorized
+    return null
   }
 
   private fun shouldRetryPasskeySubmission(error: String?): Boolean {
@@ -541,10 +494,13 @@ class ScrobbleService(
 
     val uploaded =
       runCatching {
+        val ownerAddress = sessionKey.ownerAddress
+          ?: throw IllegalStateException("Session key owner address missing for lyrics upload")
         ArweaveUploadApi.uploadLyrics(
+          context = appContext,
+          ownerEthAddress = ownerAddress,
           trackId = trackId,
           lyricsJson = payload,
-          sessionKey = sessionKey,
         )
       }.onFailure { err ->
         Log.w(TAG, "Scrobble lyrics upload failed trackId=$trackId err=${err.message}")
@@ -565,11 +521,14 @@ class ScrobbleService(
       val payload = runCatching { readCoverPayload(candidate) }.getOrNull() ?: continue
       val uploaded =
         runCatching {
+          val ownerAddress = sessionKey.ownerAddress
+            ?: throw IllegalStateException("Session key owner address missing for cover upload")
           ArweaveUploadApi.uploadCover(
+            context = appContext,
+            ownerEthAddress = ownerAddress,
             coverBytes = payload.bytes,
             filename = payload.filename,
             contentType = payload.contentType,
-            sessionKey = sessionKey,
           )
         }.getOrNull()
       if (uploaded != null) return uploaded.arRef

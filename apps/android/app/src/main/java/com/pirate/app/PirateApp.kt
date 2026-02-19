@@ -1,5 +1,6 @@
 package com.pirate.app
 
+import android.net.Uri
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
@@ -57,13 +58,15 @@ import com.pirate.app.auth.PirateAuthUiState
 import com.pirate.app.chat.ChatScreen
 import com.pirate.app.chat.XmtpChatService
 import com.pirate.app.community.CommunityScreen
-import com.pirate.app.lit.LitAuthContextManager
-import com.pirate.app.lit.LitRust
-import com.pirate.app.lit.PirateAuthConfig
-import com.pirate.app.lit.WalletAuth
+import com.pirate.app.learn.LearnScreen
+import com.pirate.app.music.CoverRef
 import com.pirate.app.music.MusicScreen
+import com.pirate.app.music.MusicTrack
 import com.pirate.app.music.PublishScreen
 import com.pirate.app.player.PlayerController
+import com.pirate.app.identity.VerifyIdentityScreen
+import com.pirate.app.profile.FollowListMode
+import com.pirate.app.profile.FollowListScreen
 import com.pirate.app.profile.ProfileContractApi
 import com.pirate.app.profile.ProfileEditScreen
 import com.pirate.app.profile.ProfileScreen
@@ -74,13 +77,20 @@ import com.pirate.app.scarlett.ScarlettService
 import com.pirate.app.scarlett.ScarlettVoiceBar
 import com.pirate.app.scarlett.VoiceCallState
 import com.pirate.app.scarlett.clearWorkerAuthCache
+import com.pirate.app.schedule.ScheduledSessionCallScreen
+import com.pirate.app.schedule.ScheduledSessionVoiceController
+import com.pirate.app.schedule.ScheduleAvailabilityScreen
 import com.pirate.app.schedule.ScheduleScreen
 import com.pirate.app.scrobble.ScrobbleService
+import com.pirate.app.song.ArtistScreen
+import com.pirate.app.song.SongScreen
 import com.pirate.app.tempo.TempoAccountFactory
 import com.pirate.app.tempo.TempoPasskeyManager
 import com.pirate.app.ui.PirateMiniPlayer
 import com.pirate.app.ui.PirateSideMenuDrawer
 import com.pirate.app.ui.PirateTopBar
+import com.pirate.app.store.NameStoreScreen
+import com.pirate.app.wallet.WalletScreen
 import com.pirate.app.onboarding.OnboardingScreen
 import com.pirate.app.onboarding.OnboardingStep
 import com.pirate.app.onboarding.checkOnboardingStatus
@@ -92,19 +102,45 @@ import kotlinx.coroutines.withContext
 private sealed class PirateRoute(val route: String, val label: String) {
   data object Music : PirateRoute("music", "Music")
   data object Chat : PirateRoute("chat", "Chat")
+  data object Wallet : PirateRoute("wallet", "Wallet")
+  data object NameStore : PirateRoute("name_store", "Store")
   data object Learn : PirateRoute("learn", "Learn")
   data object Schedule : PirateRoute("schedule", "Schedule")
+  data object ScheduleAvailability : PirateRoute("schedule/availability", "Availability")
   data object Rooms : PirateRoute("rooms", "Community")
   data object Profile : PirateRoute("profile", "Profile")
   data object PublicProfile : PirateRoute("profile/public/{address}", "Profile") {
     const val ARG_ADDRESS = "address"
     fun buildRoute(address: String): String = "profile/public/${address.trim()}"
   }
+  data object Song : PirateRoute("song/{trackId}?title={title}&artist={artist}", "Song") {
+    const val ARG_TRACK_ID = "trackId"
+    const val ARG_TITLE = "title"
+    const val ARG_ARTIST = "artist"
+    fun buildRoute(trackId: String, title: String? = null, artist: String? = null): String {
+      val normalizedTrackId = trackId.trim()
+      val titleQuery = Uri.encode(title?.trim().orEmpty())
+      val artistQuery = Uri.encode(artist?.trim().orEmpty())
+      return "song/$normalizedTrackId?title=$titleQuery&artist=$artistQuery"
+    }
+  }
+  data object Artist : PirateRoute("artist/{artistName}", "Artist") {
+    const val ARG_ARTIST_NAME = "artistName"
+    fun buildRoute(artistName: String): String = "artist/${Uri.encode(artistName.trim())}"
+  }
+  data object FollowList : PirateRoute("profile/follow_list/{address}/{mode}", "Follow List") {
+    const val ARG_ADDRESS = "address"
+    const val ARG_MODE = "mode"
+    fun buildRoute(address: String, mode: FollowListMode): String =
+      "profile/follow_list/${address.trim()}/${mode.name}"
+  }
   data object EditProfile : PirateRoute("profile/edit", "Edit Profile")
   data object Player : PirateRoute("player", "Player")
   data object VoiceCall : PirateRoute("voice_call", "Voice Call")
+  data object ScheduledSessionCall : PirateRoute("scheduled_session_call", "Session Call")
   data object Onboarding : PirateRoute("onboarding", "Onboarding")
   data object Publish : PirateRoute("publish", "Publish Song")
+  data object VerifyIdentity : PirateRoute("verify_identity", "Verify Identity")
 }
 
 private suspend fun resolveProfileIdentity(address: String): Pair<String?, String?> = withContext(Dispatchers.IO) {
@@ -173,6 +209,7 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
   val chatService = remember { XmtpChatService(appContext) }
   val scarlettService = remember { ScarlettService(appContext) }
   val voiceController = remember { AgoraVoiceController(appContext) }
+  val scheduledSessionVoiceController = remember { ScheduledSessionVoiceController(appContext) }
 
   var onboardingInitialStep by remember { mutableStateOf(OnboardingStep.NAME) }
 
@@ -180,53 +217,10 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
     val saved = PirateAuthUiState.load(appContext)
     mutableStateOf(
       saved.copy(
-        authServiceBaseUrl = PirateAuthConfig.DEFAULT_AUTH_SERVICE_BASE_URL,
-        passkeyRpId = saved.tempoRpId.ifBlank { PirateAuthConfig.DEFAULT_PASSKEY_RP_ID },
-        litNetwork = PirateAuthConfig.DEFAULT_LIT_NETWORK,
-        litRpcUrl = PirateAuthConfig.DEFAULT_LIT_RPC_URL,
+        passkeyRpId = saved.tempoRpId.ifBlank { TempoPasskeyManager.DEFAULT_RP_ID },
         tempoRpId = saved.tempoRpId.ifBlank { TempoPasskeyManager.DEFAULT_RP_ID },
-        pkpEthAddress = saved.pkpEthAddress ?: saved.tempoAddress,
       ),
     )
-  }
-
-  // Restore Lit auth context from persisted credentials on cold start
-  LaunchedEffect(Unit) {
-    val s = authState
-    if (s.hasLitAuthContextParams()) {
-      runCatching {
-        LitAuthContextManager.ensureFromState(s, forceRefresh = true)
-      }.onFailure { err ->
-        if (LitAuthContextManager.isExpiredAuthChallengeError(err)) {
-          android.util.Log.w("PirateApp", "Saved Lit auth session expired; clearing credentials")
-          runCatching {
-            withContext(Dispatchers.IO) {
-              LitRust.clearAuthContextRaw()
-            }
-          }
-          LitAuthContextManager.invalidateCache()
-          PirateAuthUiState.clear(appContext)
-          authState = authState.copy(
-            busy = false,
-            tempoAddress = null,
-            tempoCredentialId = null,
-            tempoPubKeyX = null,
-            tempoPubKeyY = null,
-            pkpPublicKey = null,
-            pkpEthAddress = null,
-            pkpTokenId = null,
-            authMethodType = null,
-            authMethodId = null,
-            accessToken = null,
-            selfVerified = false,
-            output = "Session expired. Please sign in again.",
-          )
-          snackbarHostState.showSnackbar("Session expired. Please sign in again.")
-        } else {
-          android.util.Log.w("PirateApp", "Failed to restore Lit auth context: ${err.message}")
-        }
-      }
-    }
   }
 
   val scrobbleService =
@@ -254,6 +248,7 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
       scrobbleService.close()
       player.release()
       voiceController.release()
+      scheduledSessionVoiceController.release()
     }
   }
 
@@ -265,6 +260,26 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
   var avatarUri by remember { mutableStateOf<String?>(null) }
   var chatThreadOpen by remember { mutableStateOf(false) }
   var xmtpBootstrapKey by remember { mutableStateOf<String?>(null) }
+
+  suspend fun bootstrapXmtpInbox(address: String, source: String) {
+    val normalizedAddress = address.trim()
+    if (normalizedAddress.isBlank()) return
+    val key = normalizedAddress.lowercase()
+    if (chatService.connected.value) {
+      xmtpBootstrapKey = key
+      return
+    }
+    if (xmtpBootstrapKey == key) return
+    xmtpBootstrapKey = key
+    runCatching {
+      chatService.connect(normalizedAddress)
+    }.onSuccess {
+      xmtpBootstrapKey = key
+    }.onFailure { err ->
+      xmtpBootstrapKey = null
+      android.util.Log.w("PirateApp", "XMTP bootstrap failed ($source): ${err.message}")
+    }
+  }
 
   LaunchedEffect(activeAddress) {
     val addr = activeAddress
@@ -278,7 +293,7 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
 
   // Ensure each authenticated user gets an XMTP inbox as soon as possible,
   // rather than waiting until they first open the chat screen.
-  LaunchedEffect(activeAddress) {
+  LaunchedEffect(isAuthenticated, activeAddress) {
     if (!isAuthenticated) {
       xmtpBootstrapKey = null
       return@LaunchedEffect
@@ -286,43 +301,57 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
     val address = activeAddress
     if (address.isNullOrBlank()) return@LaunchedEffect
 
-    val key = address.lowercase()
-    if (chatService.connected.value || xmtpBootstrapKey == key) return@LaunchedEffect
-    xmtpBootstrapKey = key
-
-    runCatching {
-      chatService.connect(address)
-    }.onFailure { err ->
-      android.util.Log.w("PirateApp", "XMTP bootstrap failed: ${err.message}")
-    }
+    bootstrapXmtpInbox(address = address, source = "auth")
   }
 
   val navBackStackEntry by navController.currentBackStackEntryAsState()
   val currentRoute = navBackStackEntry?.destination?.route
   val showBottomChrome = currentRoute != PirateRoute.Player.route &&
     currentRoute != PirateRoute.VoiceCall.route &&
+    currentRoute != PirateRoute.ScheduledSessionCall.route &&
+    currentRoute != PirateRoute.ScheduleAvailability.route &&
     currentRoute != PirateRoute.Onboarding.route &&
     currentRoute != PirateRoute.Publish.route &&
+    currentRoute != PirateRoute.VerifyIdentity.route &&
     currentRoute != PirateRoute.EditProfile.route &&
+    currentRoute != PirateRoute.Wallet.route &&
+    currentRoute != PirateRoute.NameStore.route &&
     currentRoute != PirateRoute.PublicProfile.route &&
+    currentRoute != PirateRoute.FollowList.route &&
     !(currentRoute == PirateRoute.Chat.route && chatThreadOpen)
   val showTopChrome = currentRoute != PirateRoute.Player.route && currentRoute != PirateRoute.Music.route &&
     currentRoute != PirateRoute.Chat.route && currentRoute != PirateRoute.Learn.route &&
     currentRoute != PirateRoute.Schedule.route && currentRoute != PirateRoute.Rooms.route &&
-    currentRoute != PirateRoute.Profile.route && currentRoute != PirateRoute.PublicProfile.route &&
+    currentRoute != PirateRoute.ScheduleAvailability.route &&
+    currentRoute != PirateRoute.Profile.route && currentRoute != PirateRoute.Wallet.route &&
+    currentRoute != PirateRoute.NameStore.route &&
+    currentRoute != PirateRoute.Song.route &&
+    currentRoute != PirateRoute.Artist.route &&
+    currentRoute != PirateRoute.PublicProfile.route &&
     currentRoute != PirateRoute.EditProfile.route &&
+    currentRoute != PirateRoute.FollowList.route &&
     currentRoute != PirateRoute.VoiceCall.route &&
-    currentRoute != PirateRoute.Onboarding.route && currentRoute != PirateRoute.Publish.route
+    currentRoute != PirateRoute.ScheduledSessionCall.route &&
+    currentRoute != PirateRoute.Onboarding.route &&
+    currentRoute != PirateRoute.Publish.route &&
+    currentRoute != PirateRoute.VerifyIdentity.route
   val currentTitle = when (currentRoute) {
     PirateRoute.Music.route -> "Music"
     PirateRoute.Chat.route -> "Chat"
+    PirateRoute.Wallet.route -> "Wallet"
+    PirateRoute.NameStore.route -> "Store"
+    PirateRoute.Song.route -> "Song"
+    PirateRoute.Artist.route -> "Artist"
     PirateRoute.Learn.route -> "Learn"
     PirateRoute.Schedule.route -> "Schedule"
+    PirateRoute.ScheduleAvailability.route -> "Availability"
     PirateRoute.Rooms.route -> "Community"
     PirateRoute.Profile.route -> "Profile"
     PirateRoute.PublicProfile.route -> "Profile"
     PirateRoute.EditProfile.route -> "Edit Profile"
     PirateRoute.Player.route -> "Now Playing"
+    PirateRoute.ScheduledSessionCall.route -> "Session Call"
+    PirateRoute.VerifyIdentity.route -> "Verify Identity"
     else -> "Heaven"
   }
 
@@ -365,14 +394,8 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
           tempoCredentialId = account.credentialId,
           tempoPubKeyX = account.pubKey.xHex,
           tempoPubKeyY = account.pubKey.yHex,
-          // Transitional alias while unported screens still read pkpEthAddress.
-          pkpEthAddress = account.address,
+          signerType = PirateAuthUiState.SignerType.PASSKEY,
           selfVerified = false,
-          pkpPublicKey = null,
-          pkpTokenId = null,
-          authMethodType = null,
-          authMethodId = null,
-          accessToken = null,
           output = "Tempo account ready: ${account.address.take(10)}...",
         )
       authState = nextState
@@ -424,14 +447,8 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
           tempoCredentialId = account.credentialId,
           tempoPubKeyX = account.pubKey.xHex,
           tempoPubKeyY = account.pubKey.yHex,
-          // Transitional alias while unported screens still read pkpEthAddress.
-          pkpEthAddress = account.address,
+          signerType = PirateAuthUiState.SignerType.PASSKEY,
           selfVerified = false,
-          pkpPublicKey = null,
-          pkpTokenId = null,
-          authMethodType = null,
-          authMethodId = null,
-          accessToken = null,
           output = "Logged in: ${account.address.take(10)}...",
         )
       authState = nextState
@@ -453,13 +470,6 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
     heavenName = null
     avatarUri = null
 
-    runCatching {
-      withContext(Dispatchers.IO) {
-        LitRust.clearAuthContextRaw()
-      }
-    }
-    LitAuthContextManager.invalidateCache()
-
     PirateAuthUiState.clear(appContext)
     authState =
       authState.copy(
@@ -467,87 +477,11 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
         tempoCredentialId = null,
         tempoPubKeyX = null,
         tempoPubKeyY = null,
-        pkpPublicKey = null,
-        pkpEthAddress = null,
-        pkpTokenId = null,
-        authMethodType = null,
-        authMethodId = null,
-        accessToken = null,
+        signerType = null,
         selfVerified = false,
         output = "Logged out.",
       )
     snackbarHostState.showSnackbar("Logged out.")
-  }
-
-  suspend fun doConnectWallet() {
-    val initResult = runCatching {
-      WalletConnectBootstrap.ensureInitialized(activity.application)
-    }
-    initResult.onFailure { err ->
-      authState = authState.copy(busy = false, output = "Wallet initialization failed: ${err.message}")
-      snackbarHostState.showSnackbar("Wallet connection unavailable: ${err.message ?: "init failed"}")
-      return
-    }
-
-    // Show AppKit wallet modal as a dialog fragment
-    val sheet = com.reown.appkit.ui.AppKitSheet()
-    sheet.show(activity.supportFragmentManager, "appkit")
-
-    authState = authState.copy(busy = true, output = "Connecting wallet...")
-    val result = runCatching {
-      WalletAuth.connectAndAuth(
-        litNetwork = authState.litNetwork,
-        litRpcUrl = authState.litRpcUrl,
-      )
-    }
-
-    result.onFailure { err ->
-      authState = authState.copy(busy = false, output = "Wallet failed: ${err.message}")
-      snackbarHostState.showSnackbar("Wallet sign in failed: ${err.message ?: "unknown error"}")
-    }
-
-    result.onSuccess { walletResult ->
-      clearWorkerAuthCache()
-      val derivedEthAddress = com.pirate.app.util.Eth.deriveAddressFromUncompressedPublicKeyHex(walletResult.pkpPublicKey)
-        ?: walletResult.pkpEthAddress
-
-      authState = authState.copy(
-        busy = true,
-        tempoAddress = null,
-        tempoCredentialId = null,
-        tempoPubKeyX = null,
-        tempoPubKeyY = null,
-        pkpPublicKey = walletResult.pkpPublicKey,
-        pkpEthAddress = derivedEthAddress,
-        selfVerified = false,
-        pkpTokenId = walletResult.pkpTokenId,
-        authMethodType = walletResult.authMethodType,
-        authMethodId = walletResult.authMethodId,
-        accessToken = walletResult.accessToken,
-        output = "Creating Lit auth context...",
-      )
-
-      val ctxResult = runCatching {
-        LitAuthContextManager.ensureFromState(authState, forceRefresh = true)
-      }
-
-      ctxResult.onFailure { err ->
-        authState = authState.copy(
-          busy = false,
-          output = "Wallet connected, but Lit auth context failed: ${err.message}",
-        )
-        snackbarHostState.showSnackbar("Wallet sign in succeeded, but Lit auth failed: ${err.message ?: "unknown error"}")
-      }
-
-      ctxResult.onSuccess {
-        authState = authState.copy(
-          busy = false,
-          output = "OK via wallet. PKP=${walletResult.pkpEthAddress.take(10)}... EOA=${walletResult.eoaAddress.take(10)}...",
-        )
-        PirateAuthUiState.save(appContext, authState)
-        snackbarHostState.showSnackbar("Signed in via wallet.")
-      }
-    }
   }
 
   ModalNavigationDrawer(
@@ -559,6 +493,7 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
         ethAddress = activeAddress,
         heavenName = heavenName,
         avatarUri = avatarUri,
+        selfVerified = authState.selfVerified,
         onNavigateProfile = {
           scope.launch {
             closeDrawer()
@@ -569,22 +504,22 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
             }
           }
         },
-        onNavigateMusic = {
+        onNavigateWallet = {
           scope.launch {
             closeDrawer()
-            navController.navigate(PirateRoute.Music.route) { launchSingleTop = true }
+            navController.navigate(PirateRoute.Wallet.route) { launchSingleTop = true }
           }
         },
-        onNavigateSchedule = {
+        onNavigateNameStore = {
           scope.launch {
             closeDrawer()
-            navController.navigate(PirateRoute.Schedule.route) { launchSingleTop = true }
+            navController.navigate(PirateRoute.NameStore.route) { launchSingleTop = true }
           }
         },
-        onNavigateChat = {
+        onNavigateVerifyIdentity = {
           scope.launch {
             closeDrawer()
-            navController.navigate(PirateRoute.Chat.route) { launchSingleTop = true }
+            navController.navigate(PirateRoute.VerifyIdentity.route) { launchSingleTop = true }
           }
         },
         onNavigatePublish = {
@@ -600,12 +535,6 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
           }
         },
         onSignIn = {
-          scope.launch {
-            closeDrawer()
-            doLogin()
-          }
-        },
-        onSwitchAccount = {
           scope.launch {
             closeDrawer()
             doLogin()
@@ -698,11 +627,11 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
         onRegister = { scope.launch { doRegister() } },
         onLogin = { scope.launch { doLogin() } },
         onLogout = { scope.launch { doLogout() } },
-        onConnectWallet = { scope.launch { doConnectWallet() } },
         player = player,
         chatService = chatService,
         scarlettService = scarlettService,
         voiceController = voiceController,
+        scheduledSessionVoiceController = scheduledSessionVoiceController,
         onOpenDrawer = { scope.launch { openDrawer() } },
         onShowMessage = { msg ->
           scope.launch {
@@ -747,11 +676,11 @@ private fun PirateNavHost(
   onRegister: () -> Unit,
   onLogin: () -> Unit,
   onLogout: () -> Unit,
-  onConnectWallet: () -> Unit,
   player: PlayerController,
   chatService: XmtpChatService,
   scarlettService: ScarlettService,
   voiceController: AgoraVoiceController,
+  scheduledSessionVoiceController: ScheduledSessionVoiceController,
   onOpenDrawer: () -> Unit,
   onShowMessage: (String) -> Unit,
   onRefreshProfileIdentity: () -> Unit,
@@ -797,6 +726,14 @@ private fun PirateNavHost(
           navController.navigate(PirateRoute.Player.route) { launchSingleTop = true }
         },
         onOpenDrawer = onOpenDrawer,
+        onOpenSongPage = { trackId, title, artist ->
+          navController.navigate(
+            PirateRoute.Song.buildRoute(trackId = trackId, title = title, artist = artist),
+          ) { launchSingleTop = true }
+        },
+        onOpenArtistPage = { artistName ->
+          navController.navigate(PirateRoute.Artist.buildRoute(artistName)) { launchSingleTop = true }
+        },
         hostActivity = activity,
         tempoAccount = tempoAccount,
       )
@@ -817,10 +754,94 @@ private fun PirateNavHost(
         onThreadVisibilityChange = onChatThreadVisibilityChange,
       )
     }
+    composable(PirateRoute.Wallet.route) {
+      val isAuthenticated = authState.hasAnyCredentials()
+      WalletScreen(
+        isAuthenticated = isAuthenticated,
+        walletAddress = activeAddress,
+        onClose = { navController.popBackStack() },
+        onShowMessage = onShowMessage,
+      )
+    }
+    composable(PirateRoute.NameStore.route) {
+      val isAuthenticated = authState.hasAnyCredentials()
+      NameStoreScreen(
+        activity = activity,
+        isAuthenticated = isAuthenticated,
+        account = tempoAccount,
+        onClose = { navController.popBackStack() },
+        onShowMessage = onShowMessage,
+      )
+    }
     composable(PirateRoute.Learn.route) {
-      Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Coming soon", color = Color(0xFFA3A3A3))
-      }
+      val isAuthenticated = authState.hasAnyCredentials()
+      LearnScreen(
+        isAuthenticated = isAuthenticated,
+        userAddress = activeAddress,
+        onOpenDrawer = onOpenDrawer,
+        onShowMessage = onShowMessage,
+        onOpenSong = { trackId ->
+          navController.navigate(PirateRoute.Song.buildRoute(trackId = trackId)) { launchSingleTop = true }
+        },
+      )
+    }
+    composable(
+      route = PirateRoute.Song.route,
+      arguments = listOf(
+        navArgument(PirateRoute.Song.ARG_TRACK_ID) { type = NavType.StringType },
+        navArgument(PirateRoute.Song.ARG_TITLE) {
+          type = NavType.StringType
+          nullable = true
+          defaultValue = ""
+        },
+        navArgument(PirateRoute.Song.ARG_ARTIST) {
+          type = NavType.StringType
+          nullable = true
+          defaultValue = ""
+        },
+      ),
+    ) { backStackEntry ->
+      val trackId = backStackEntry.arguments?.getString(PirateRoute.Song.ARG_TRACK_ID).orEmpty()
+      val title = backStackEntry.arguments?.getString(PirateRoute.Song.ARG_TITLE)?.takeIf { it.isNotBlank() }
+      val artist = backStackEntry.arguments?.getString(PirateRoute.Song.ARG_ARTIST)?.takeIf { it.isNotBlank() }
+      val isAuthenticated = authState.hasAnyCredentials()
+      SongScreen(
+        trackId = trackId,
+        initialTitle = title,
+        initialArtist = artist,
+        isAuthenticated = isAuthenticated,
+        userAddress = activeAddress,
+        onBack = { navController.popBackStack() },
+        onOpenArtist = { artistName ->
+          navController.navigate(PirateRoute.Artist.buildRoute(artistName)) { launchSingleTop = true }
+        },
+        onOpenProfile = { address ->
+          navController.navigate(PirateRoute.PublicProfile.buildRoute(address)) { launchSingleTop = true }
+        },
+        onShowMessage = onShowMessage,
+      )
+    }
+    composable(
+      route = PirateRoute.Artist.route,
+      arguments = listOf(navArgument(PirateRoute.Artist.ARG_ARTIST_NAME) { type = NavType.StringType }),
+    ) { backStackEntry ->
+      val artistName = backStackEntry.arguments?.getString(PirateRoute.Artist.ARG_ARTIST_NAME).orEmpty().trim()
+      ArtistScreen(
+        artistName = artistName,
+        onBack = { navController.popBackStack() },
+        onOpenSong = { trackId, title, artist ->
+          navController.navigate(
+            PirateRoute.Song.buildRoute(
+              trackId = trackId,
+              title = title,
+              artist = artist ?: artistName,
+            ),
+          ) { launchSingleTop = true }
+        },
+        onOpenProfile = { address ->
+          navController.navigate(PirateRoute.PublicProfile.buildRoute(address)) { launchSingleTop = true }
+        },
+      )
     }
     composable(PirateRoute.Rooms.route) {
       CommunityScreen(
@@ -836,7 +857,31 @@ private fun PirateNavHost(
       val isAuthenticated = authState.hasAnyCredentials()
       ScheduleScreen(
         isAuthenticated = isAuthenticated,
+        userAddress = activeAddress,
         onOpenDrawer = onOpenDrawer,
+        onOpenAvailability = {
+          navController.navigate(PirateRoute.ScheduleAvailability.route) { launchSingleTop = true }
+        },
+        onJoinBooking = { bookingId ->
+          val wallet = activeAddress
+          if (wallet.isNullOrBlank()) {
+            onShowMessage("Sign in to join this session.")
+            return@ScheduleScreen
+          }
+          scheduledSessionVoiceController.startSession(
+            bookingId = bookingId,
+            userAddress = wallet,
+          )
+          navController.navigate(PirateRoute.ScheduledSessionCall.route) { launchSingleTop = true }
+        },
+        onShowMessage = onShowMessage,
+      )
+    }
+    composable(PirateRoute.ScheduleAvailability.route) {
+      val isAuthenticated = authState.hasAnyCredentials()
+      ScheduleAvailabilityScreen(
+        isAuthenticated = isAuthenticated,
+        onClose = { navController.popBackStack() },
       )
     }
     composable(PirateRoute.Profile.route) {
@@ -847,6 +892,7 @@ private fun PirateNavHost(
         avatarUri = avatarUri,
         isAuthenticated = isAuthenticated,
         busy = authState.busy,
+        selfVerified = authState.selfVerified,
         onRegister = onRegister,
         onLogin = onLogin,
         onLogout = onLogout,
@@ -855,10 +901,44 @@ private fun PirateNavHost(
         onEditProfile = {
           navController.navigate(PirateRoute.EditProfile.route) { launchSingleTop = true }
         },
+        activity = activity,
+        tempoAccount = tempoAccount,
         viewerEthAddress = activeAddress,
-        pkpPublicKey = authState.pkpPublicKey,
-        litNetwork = authState.litNetwork,
-        litRpcUrl = authState.litRpcUrl,
+        onPlayPublishedSong = { song ->
+          val audioUrl = CoverRef.resolveCoverUrl(song.pieceCid, width = null, height = null, format = null, quality = null)
+          if (audioUrl.isNullOrBlank()) {
+            onShowMessage("No audio available for this track")
+            return@ProfileScreen
+          }
+          val coverUrl = CoverRef.resolveCoverUrl(song.coverCid, width = 192, height = 192, format = "webp", quality = 80)
+          val track = MusicTrack(
+            id = song.contentId,
+            title = song.title.ifBlank { "Unknown Track" },
+            artist = song.artist.ifBlank { "Unknown Artist" },
+            album = song.album,
+            durationSec = song.durationSec,
+            uri = audioUrl,
+            filename = song.title.ifBlank { "track" },
+            artworkUri = coverUrl,
+            contentId = song.contentId,
+            pieceCid = song.pieceCid,
+          )
+          player.playTrack(track, listOf(track))
+        },
+        onOpenSong = { trackId, title, artist ->
+          navController.navigate(
+            PirateRoute.Song.buildRoute(trackId = trackId, title = title, artist = artist),
+          ) { launchSingleTop = true }
+        },
+        onOpenArtist = { artistName ->
+          navController.navigate(PirateRoute.Artist.buildRoute(artistName)) { launchSingleTop = true }
+        },
+        onViewProfile = { address ->
+          navController.navigate(PirateRoute.PublicProfile.buildRoute(address)) { launchSingleTop = true }
+        },
+        onNavigateFollowList = { mode, address ->
+          navController.navigate(PirateRoute.FollowList.buildRoute(address, mode)) { launchSingleTop = true }
+        },
       )
     }
     composable(
@@ -894,6 +974,11 @@ private fun PirateNavHost(
         avatarUri = targetAvatarUri,
         isAuthenticated = isAuthenticated,
         busy = authState.busy,
+        selfVerified =
+          authState.selfVerified &&
+            activeAddress != null &&
+            targetAddress != null &&
+            activeAddress.equals(targetAddress, ignoreCase = true),
         onRegister = onRegister,
         onLogin = onLogin,
         onLogout = {},
@@ -923,17 +1008,70 @@ private fun PirateNavHost(
             }
           }
         },
+        activity = activity,
+        tempoAccount = tempoAccount,
         viewerEthAddress = activeAddress,
-        pkpPublicKey = authState.pkpPublicKey,
-        litNetwork = authState.litNetwork,
-        litRpcUrl = authState.litRpcUrl,
+        onPlayPublishedSong = { song ->
+          val audioUrl = CoverRef.resolveCoverUrl(song.pieceCid, width = null, height = null, format = null, quality = null)
+          if (audioUrl.isNullOrBlank()) {
+            onShowMessage("No audio available for this track")
+            return@ProfileScreen
+          }
+          val coverUrl = CoverRef.resolveCoverUrl(song.coverCid, width = 192, height = 192, format = "webp", quality = 80)
+          val track = MusicTrack(
+            id = song.contentId,
+            title = song.title.ifBlank { "Unknown Track" },
+            artist = song.artist.ifBlank { "Unknown Artist" },
+            album = song.album,
+            durationSec = song.durationSec,
+            uri = audioUrl,
+            filename = song.title.ifBlank { "track" },
+            artworkUri = coverUrl,
+            contentId = song.contentId,
+            pieceCid = song.pieceCid,
+          )
+          player.playTrack(track, listOf(track))
+        },
+        onOpenSong = { trackId, title, artist ->
+          navController.navigate(
+            PirateRoute.Song.buildRoute(trackId = trackId, title = title, artist = artist),
+          ) { launchSingleTop = true }
+        },
+        onOpenArtist = { artistName ->
+          navController.navigate(PirateRoute.Artist.buildRoute(artistName)) { launchSingleTop = true }
+        },
+        onViewProfile = { address ->
+          navController.navigate(PirateRoute.PublicProfile.buildRoute(address)) { launchSingleTop = true }
+        },
+        onNavigateFollowList = { mode, address ->
+          navController.navigate(PirateRoute.FollowList.buildRoute(address, mode)) { launchSingleTop = true }
+        },
+      )
+    }
+    composable(
+      route = PirateRoute.FollowList.route,
+      arguments = listOf(
+        navArgument(PirateRoute.FollowList.ARG_ADDRESS) { type = NavType.StringType },
+        navArgument(PirateRoute.FollowList.ARG_MODE) { type = NavType.StringType },
+      ),
+    ) { backStackEntry ->
+      val address = backStackEntry.arguments?.getString(PirateRoute.FollowList.ARG_ADDRESS).orEmpty().trim()
+      val modeName = backStackEntry.arguments?.getString(PirateRoute.FollowList.ARG_MODE).orEmpty()
+      val mode = runCatching { FollowListMode.valueOf(modeName) }.getOrDefault(FollowListMode.Following)
+      FollowListScreen(
+        mode = mode,
+        ethAddress = address,
+        onClose = { navController.popBackStack() },
+        onMemberClick = { memberAddress ->
+          navController.navigate(PirateRoute.PublicProfile.buildRoute(memberAddress)) { launchSingleTop = true }
+        },
       )
     }
     composable(PirateRoute.EditProfile.route) {
       val address = activeAddress
-      if (!authState.hasAnyCredentials() || address.isNullOrBlank()) {
+      if (!authState.hasTempoCredentials() || address.isNullOrBlank()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-          Text("Sign in to edit your profile", color = Color(0xFFA3A3A3))
+          Text("Sign in with Tempo passkey to edit your profile", color = Color(0xFFA3A3A3))
         }
       } else {
         ProfileEditScreen(
@@ -944,9 +1082,6 @@ private fun PirateNavHost(
           tempoPubKeyX = authState.tempoPubKeyX,
           tempoPubKeyY = authState.tempoPubKeyY,
           tempoRpId = authState.tempoRpId.ifBlank { TempoPasskeyManager.DEFAULT_RP_ID },
-          pkpPublicKey = authState.pkpPublicKey,
-          litNetwork = authState.litNetwork,
-          litRpcUrl = authState.litRpcUrl,
           onBack = { navController.popBackStack() },
           onSaved = {
             onRefreshProfileIdentity()
@@ -976,13 +1111,27 @@ private fun PirateNavHost(
     ) {
       OnboardingScreen(
         activity = activity,
-        pkpEthAddress = authState.pkpEthAddress ?: "",
+        userEthAddress = activeAddress.orEmpty(),
         tempoAddress = authState.tempoAddress,
         tempoCredentialId = authState.tempoCredentialId,
         tempoPubKeyX = authState.tempoPubKeyX,
         tempoPubKeyY = authState.tempoPubKeyY,
         tempoRpId = authState.tempoRpId.ifBlank { TempoPasskeyManager.DEFAULT_RP_ID },
         initialStep = onboardingInitialStep,
+        onEnsureMessagingInbox = {
+          val address = activeAddress
+          if (!address.isNullOrBlank()) {
+            scope.launch {
+              runCatching {
+                if (!chatService.connected.value) {
+                  chatService.connect(address)
+                }
+              }.onFailure { err ->
+                android.util.Log.w("PirateApp", "XMTP bootstrap failed (onboarding): ${err.message}")
+              }
+            }
+          }
+        },
         onComplete = {
           onRefreshProfileIdentity()
           navController.navigate(PirateRoute.Music.route) {
@@ -990,6 +1139,35 @@ private fun PirateNavHost(
             launchSingleTop = true
           }
         },
+      )
+    }
+    composable(
+      route = PirateRoute.VerifyIdentity.route,
+      enterTransition = {
+        slideInVertically(
+          animationSpec = tween(durationMillis = 220),
+          initialOffsetY = { fullHeight -> fullHeight },
+        )
+      },
+      popExitTransition = {
+        slideOutVertically(
+          animationSpec = tween(durationMillis = 200),
+          targetOffsetY = { fullHeight -> fullHeight },
+        )
+      },
+    ) {
+      val isAuthenticated = authState.hasAnyCredentials()
+      VerifyIdentityScreen(
+        authState = authState,
+        ownerAddress = authState.activeAddress(),
+        isAuthenticated = isAuthenticated,
+        onSelfVerifiedChange = { verified ->
+          if (authState.selfVerified != verified) {
+            onAuthStateChange(authState.copy(selfVerified = verified))
+          }
+        },
+        onClose = { navController.popBackStack() },
+        onShowMessage = onShowMessage,
       )
     }
     composable(
@@ -1010,7 +1188,7 @@ private fun PirateNavHost(
       val isAuthenticated = authState.hasAnyCredentials()
       PublishScreen(
         authState = authState,
-        pkpEthAddress = authState.activeAddress(),
+        ownerAddress = authState.activeAddress(),
         heavenName = heavenName,
         isAuthenticated = isAuthenticated,
         onSelfVerifiedChange = { verified ->
@@ -1066,6 +1244,26 @@ private fun PirateNavHost(
     ) {
       ScarlettCallScreen(
         controller = voiceController,
+        onMinimize = { navController.popBackStack() },
+      )
+    }
+    composable(
+      route = PirateRoute.ScheduledSessionCall.route,
+      enterTransition = {
+        slideInVertically(
+          animationSpec = tween(durationMillis = 220),
+          initialOffsetY = { fullHeight -> fullHeight },
+        )
+      },
+      popExitTransition = {
+        slideOutVertically(
+          animationSpec = tween(durationMillis = 200),
+          targetOffsetY = { fullHeight -> fullHeight },
+        )
+      },
+    ) {
+      ScheduledSessionCallScreen(
+        controller = scheduledSessionVoiceController,
         onMinimize = { navController.popBackStack() },
       )
     }

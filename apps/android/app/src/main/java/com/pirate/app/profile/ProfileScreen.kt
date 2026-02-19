@@ -61,12 +61,16 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.fragment.app.FragmentActivity
 import coil.compose.AsyncImage
 import com.pirate.app.music.CoverRef
 import com.pirate.app.music.OnChainPlaylist
 import com.pirate.app.music.OnChainPlaylistsApi
 import com.pirate.app.onboarding.OnboardingRpcHelpers
+import com.pirate.app.tempo.SessionKeyManager
+import com.pirate.app.tempo.TempoPasskeyManager
 import com.pirate.app.theme.PiratePalette
+import com.pirate.app.ui.VerifiedSealBadge
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -101,16 +105,21 @@ fun ProfileScreen(
   avatarUri: String?,
   isAuthenticated: Boolean,
   busy: Boolean,
+  selfVerified: Boolean = false,
   onRegister: () -> Unit,
   onLogin: () -> Unit,
   onLogout: () -> Unit = {},
   onBack: (() -> Unit)? = null,
   onMessage: ((String) -> Unit)? = null,
   onEditProfile: (() -> Unit)? = null,
+  activity: FragmentActivity? = null,
+  tempoAccount: TempoPasskeyManager.PasskeyAccount? = null,
   viewerEthAddress: String? = ethAddress,
-  pkpPublicKey: String? = null,
-  litNetwork: String = "naga-dev",
-  litRpcUrl: String = "https://yellowstone-rpc.litprotocol.com",
+  onPlayPublishedSong: ((PublishedSongRow) -> Unit)? = null,
+  onOpenSong: ((trackId: String, title: String?, artist: String?) -> Unit)? = null,
+  onOpenArtist: ((String) -> Unit)? = null,
+  onViewProfile: ((String) -> Unit)? = null,
+  onNavigateFollowList: ((FollowListMode, String) -> Unit)? = null,
 ) {
   if (!isAuthenticated || ethAddress.isNullOrBlank()) {
     Column(
@@ -139,17 +148,21 @@ fun ProfileScreen(
   val tabs = ProfileTab.entries
   val appContext = LocalContext.current.applicationContext
   val scope = rememberCoroutineScope()
-  val canFollow = remember(viewerEthAddress, ethAddress, pkpPublicKey) {
-    !viewerEthAddress.isNullOrBlank() &&
-      !ethAddress.isNullOrBlank() &&
-      !viewerEthAddress.equals(ethAddress, ignoreCase = true) &&
-      !pkpPublicKey.isNullOrBlank()
-  }
+  val hasTargetAddress = !ethAddress.isNullOrBlank()
   val isOwnProfile = remember(viewerEthAddress, ethAddress) {
     !viewerEthAddress.isNullOrBlank() &&
       !ethAddress.isNullOrBlank() &&
       viewerEthAddress.equals(ethAddress, ignoreCase = true)
   }
+  val hasFollowContract = OnboardingRpcHelpers.hasFollowContract()
+  val canFollow = !isOwnProfile &&
+    hasTargetAddress &&
+    !viewerEthAddress.isNullOrBlank() &&
+    activity != null &&
+    tempoAccount != null &&
+    tempoAccount.address.equals(viewerEthAddress, ignoreCase = true) &&
+    hasFollowContract
+  val canMessage = !isOwnProfile && hasTargetAddress && onMessage != null
 
   // Follow counts
   var followerCount by remember { mutableIntStateOf(0) }
@@ -170,6 +183,12 @@ fun ProfileScreen(
   // Playlist state
   var playlists by remember { mutableStateOf<List<OnChainPlaylist>>(emptyList()) }
   var playlistsLoading by remember { mutableStateOf(true) }
+  var playlistsError by remember { mutableStateOf<String?>(null) }
+
+  // Published songs state
+  var publishedSongs by remember { mutableStateOf<List<PublishedSongRow>>(emptyList()) }
+  var publishedSongsLoading by remember { mutableStateOf(true) }
+  var publishedSongsError by remember { mutableStateOf<String?>(null) }
 
   // Contract profile (all ProfileV2-supported fields)
   var contractProfile by remember { mutableStateOf<ContractProfileData?>(null) }
@@ -178,6 +197,8 @@ fun ProfileScreen(
   var contractRetryKey by remember { mutableIntStateOf(0) }
   var locationRecord by remember { mutableStateOf<String?>(null) }
   var schoolRecord by remember { mutableStateOf<String?>(null) }
+
+  // Follow list sheet
 
   // Settings sheet
   var showSettings by remember { mutableStateOf(false) }
@@ -205,7 +226,7 @@ fun ProfileScreen(
   }
 
   // Fetch follow state for viewer -> profile target
-  LaunchedEffect(viewerEthAddress, ethAddress) {
+  LaunchedEffect(viewerEthAddress, ethAddress, canFollow) {
     followError = null
     if (!canFollow) {
       serverFollowing = false
@@ -237,9 +258,25 @@ fun ProfileScreen(
   // Fetch playlists
   LaunchedEffect(ethAddress) {
     playlistsLoading = true
+    playlistsError = null
     runCatching { OnChainPlaylistsApi.fetchUserPlaylists(ethAddress) }
       .onSuccess { playlists = it; playlistsLoading = false }
-      .onFailure { playlistsLoading = false }
+      .onFailure {
+        playlistsError = it.message ?: "Failed to load playlists"
+        playlistsLoading = false
+      }
+  }
+
+  // Fetch published songs from content entries for this profile owner
+  LaunchedEffect(ethAddress) {
+    publishedSongsLoading = true
+    publishedSongsError = null
+    runCatching { ProfileMusicApi.fetchPublishedSongs(ethAddress) }
+      .onSuccess { publishedSongs = it; publishedSongsLoading = false }
+      .onFailure {
+        publishedSongsError = it.message ?: "Failed to load published songs"
+        publishedSongsLoading = false
+      }
   }
 
   // Fetch full contract profile for About/Edit
@@ -266,12 +303,8 @@ fun ProfileScreen(
     }
     val node = TempoNameRecordsApi.computeNode(heavenName)
     withContext(Dispatchers.IO) {
-      locationRecord =
-        TempoNameRecordsApi.getTextRecord(node, "heaven.location")
-          ?: OnboardingRpcHelpers.getTextRecord(node, "heaven.location")
-      schoolRecord =
-        TempoNameRecordsApi.getTextRecord(node, "heaven.school")
-          ?: OnboardingRpcHelpers.getTextRecord(node, "heaven.school")
+      locationRecord = TempoNameRecordsApi.getTextRecord(node, "heaven.location")
+      schoolRecord = TempoNameRecordsApi.getTextRecord(node, "heaven.school")
     }
   }
 
@@ -342,23 +375,32 @@ fun ProfileScreen(
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
       ) {
-        FollowStat("$followerCount", "followers")
-        FollowStat("$followingCount", "following")
+        FollowStat("$followerCount", "followers") { ethAddress?.let { onNavigateFollowList?.invoke(FollowListMode.Followers, it) } }
+        FollowStat("$followingCount", "following") { ethAddress?.let { onNavigateFollowList?.invoke(FollowListMode.Following, it) } }
       }
     }
 
     Spacer(Modifier.height(10.dp))
 
     if (profileName != null) {
-      Text(
-        profileName,
+      Row(
         modifier = Modifier.padding(horizontal = 20.dp),
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onBackground,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        Text(
+          profileName,
+          modifier = Modifier.weight(1f, fill = false),
+          style = MaterialTheme.typography.titleLarge,
+          fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.onBackground,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+        if (selfVerified) {
+          VerifiedSealBadge(size = 18.dp)
+        }
+      }
       Text(
         handleText,
         modifier = Modifier.padding(horizontal = 20.dp),
@@ -368,15 +410,24 @@ fun ProfileScreen(
         overflow = TextOverflow.Ellipsis,
       )
     } else {
-      Text(
-        handleText,
+      Row(
         modifier = Modifier.padding(horizontal = 20.dp),
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onBackground,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        Text(
+          handleText,
+          modifier = Modifier.weight(1f, fill = false),
+          style = MaterialTheme.typography.titleLarge,
+          fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.onBackground,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+        if (selfVerified) {
+          VerifiedSealBadge(size = 18.dp)
+        }
+      }
     }
 
     if (isOwnProfile && onEditProfile != null) {
@@ -389,69 +440,86 @@ fun ProfileScreen(
       }
     }
 
-    if (canFollow) {
+    if (!isOwnProfile && hasTargetAddress) {
       Spacer(Modifier.height(10.dp))
       Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
       ) {
         Button(
-          modifier = if (onMessage != null && !ethAddress.isNullOrBlank()) Modifier.weight(1f) else Modifier.fillMaxWidth(),
+          modifier = if (canMessage) Modifier.weight(1f) else Modifier.fillMaxWidth(),
           onClick = {
-            if (followBusy) return@Button
-            val viewer = viewerEthAddress
-            val pubkey = pkpPublicKey
-            if (viewer.isNullOrBlank() || pubkey.isNullOrBlank()) {
-              followError = "Missing follow auth context"
+            followError = null
+            val target = ethAddress
+            val activeActivity = activity
+            val account = tempoAccount
+            if (!canFollow || target.isNullOrBlank() || activeActivity == null || account == null) {
+              followError = if (!hasFollowContract) "Follow contract not configured" else "Follow unavailable"
               return@Button
             }
-            if (!followStateLoaded) return@Button
-            val targetFollowing = !effectiveFollowing
+
+            val nextFollowing = !effectiveFollowing
+            val previousFollowers = followerCount
+            val previousFollowing = effectiveFollowing
+
             followBusy = true
-            followError = null
-            pendingFollowTarget = targetFollowing
-            optimisticFollowing = targetFollowing
-            val action = if (targetFollowing) "follow" else "unfollow"
+            pendingFollowTarget = nextFollowing
+            optimisticFollowing = nextFollowing
+            if (nextFollowing != previousFollowing) {
+              followerCount = (previousFollowers + if (nextFollowing) 1 else -1).coerceAtLeast(0)
+            }
+
             scope.launch {
-              val result = FollowLitAction.toggleFollow(
-                appContext = appContext,
-                targetAddress = ethAddress!!,
-                action = action,
-                userPkpPublicKey = pubkey,
-                userEthAddress = viewer,
-                litNetwork = litNetwork,
-                litRpcUrl = litRpcUrl,
-              )
-              if (result.success) {
-                serverFollowing = targetFollowing
+              val loadedSessionKey = SessionKeyManager.load(appContext)
+              val activeSessionKey = loadedSessionKey?.takeIf {
+                SessionKeyManager.isValid(it, ownerAddress = account.address) &&
+                  it.keyAuthorization?.isNotEmpty() == true
+              }
+
+              val result = if (nextFollowing) {
+                TempoFollowContractApi.follow(
+                  activity = activeActivity,
+                  account = account,
+                  targetAddress = target,
+                  rpId = account.rpId,
+                  sessionKey = activeSessionKey,
+                )
+              } else {
+                TempoFollowContractApi.unfollow(
+                  activity = activeActivity,
+                  account = account,
+                  targetAddress = target,
+                  rpId = account.rpId,
+                  sessionKey = activeSessionKey,
+                )
+              }
+
+              if (!result.success) {
+                followerCount = previousFollowers
+                serverFollowing = previousFollowing
                 optimisticFollowing = null
                 pendingFollowTarget = null
-                followerCount = (followerCount + if (targetFollowing) 1 else -1).coerceAtLeast(0)
+                followError = result.error ?: "Follow transaction failed"
                 followBusy = false
-                runCatching {
-                  withContext(Dispatchers.IO) {
-                    OnboardingRpcHelpers.getFollowCounts(ethAddress)
-                  }
-                }.onSuccess { (followers, following) ->
+                followStateLoaded = true
+                return@launch
+              }
+
+              serverFollowing = nextFollowing
+              optimisticFollowing = null
+              pendingFollowTarget = null
+              runCatching { OnboardingRpcHelpers.getFollowCounts(target) }
+                .onSuccess { (followers, following) ->
                   followerCount = followers
                   followingCount = following
                 }
-              } else {
-                followError = result.error ?: "Follow action failed"
-                optimisticFollowing = null
-                pendingFollowTarget = null
-                runCatching {
-                  withContext(Dispatchers.IO) {
-                    OnboardingRpcHelpers.getFollowState(viewer, ethAddress)
-                  }
-                }.onSuccess { remote ->
-                  serverFollowing = remote
-                }
-                followBusy = false
-              }
+              runCatching { OnboardingRpcHelpers.getFollowState(account.address, target) }
+                .onSuccess { latestFollowing -> serverFollowing = latestFollowing }
+              followBusy = false
+              followStateLoaded = true
             }
           },
-          enabled = !followBusy && followStateLoaded,
+          enabled = canFollow && !followBusy && followStateLoaded,
         ) {
           Text(
             when {
@@ -463,10 +531,10 @@ fun ProfileScreen(
             },
           )
         }
-        if (onMessage != null && !ethAddress.isNullOrBlank()) {
+        if (canMessage) {
           OutlinedButton(
             modifier = Modifier.weight(1f),
-            onClick = { onMessage(ethAddress) },
+            onClick = { onMessage?.invoke(ethAddress!!) },
             enabled = !followBusy,
           ) {
             Text("Message")
@@ -518,10 +586,24 @@ fun ProfileScreen(
 
     // Tab content
     when (tabs[selectedTab]) {
-      ProfileTab.Music -> PlaylistsPanel(playlists, playlistsLoading)
-      ProfileTab.Scrobbles -> ScrobblesPanel(scrobbles, scrobblesLoading, scrobblesError) {
-        scrobbleRetryKey++
-      }
+      ProfileTab.Music -> MusicPanel(
+        publishedSongs = publishedSongs,
+        publishedSongsLoading = publishedSongsLoading,
+        publishedSongsError = publishedSongsError,
+        playlists = playlists,
+        playlistsLoading = playlistsLoading,
+        playlistsError = playlistsError,
+        onPlaySong = onPlayPublishedSong,
+        onOpenSong = onOpenSong,
+        onOpenArtist = onOpenArtist,
+      )
+      ProfileTab.Scrobbles -> ScrobblesPanel(
+        scrobbles = scrobbles,
+        loading = scrobblesLoading,
+        error = scrobblesError,
+        onOpenSong = onOpenSong,
+        onOpenArtist = onOpenArtist,
+      ) { scrobbleRetryKey++ }
       ProfileTab.Schedule -> EmptyTabPanel("Schedule")
       ProfileTab.About -> AboutPanel(
         profile = contractProfile,
@@ -545,6 +627,7 @@ fun ProfileScreen(
       onLogout = onLogout,
     )
   }
+
 }
 
 // ── Settings Sheet ──
@@ -642,6 +725,8 @@ private fun ScrobblesPanel(
   scrobbles: List<ScrobbleRow>,
   loading: Boolean,
   error: String?,
+  onOpenSong: ((trackId: String, title: String?, artist: String?) -> Unit)? = null,
+  onOpenArtist: ((String) -> Unit)? = null,
   onRetry: () -> Unit,
 ) {
   when {
@@ -651,7 +736,11 @@ private fun ScrobblesPanel(
     else -> {
       LazyColumn(modifier = Modifier.fillMaxSize()) {
         itemsIndexed(scrobbles, key = { i, s -> "${s.playedAtSec}:${s.trackId ?: i}" }) { _, scrobble ->
-          ScrobbleRowItem(scrobble)
+          ScrobbleRowItem(
+            scrobble = scrobble,
+            onOpenSong = onOpenSong,
+            onOpenArtist = onOpenArtist,
+          )
         }
       }
     }
@@ -659,46 +748,185 @@ private fun ScrobblesPanel(
 }
 
 @Composable
-private fun ScrobbleRowItem(scrobble: ScrobbleRow) {
+private fun ScrobbleRowItem(
+  scrobble: ScrobbleRow,
+  onOpenSong: ((trackId: String, title: String?, artist: String?) -> Unit)? = null,
+  onOpenArtist: ((String) -> Unit)? = null,
+) {
+  val songClickable = onOpenSong != null && !scrobble.trackId.isNullOrBlank()
+  val artistClickable = onOpenArtist != null && scrobble.artist.isNotBlank()
   Row(
-    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).height(72.dp),
+    modifier = Modifier
+      .fillMaxWidth()
+      .height(72.dp)
+      .clickable(enabled = songClickable) {
+        val trackId = scrobble.trackId
+        if (!trackId.isNullOrBlank()) onOpenSong?.invoke(trackId, scrobble.title, scrobble.artist)
+      }
+      .padding(horizontal = 16.dp),
     verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(12.dp),
   ) {
-    if (scrobble.coverCid != null) {
-      AsyncImage(
-        model = ProfileScrobbleApi.coverUrl(scrobble.coverCid),
-        contentDescription = null,
-        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)),
-        contentScale = ContentScale.Crop,
-      )
-    } else {
-      Surface(modifier = Modifier.size(48.dp), shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-        Box(contentAlignment = Alignment.Center) { Icon(Icons.Rounded.MusicNote, "Cover", modifier = Modifier.size(24.dp), tint = PiratePalette.TextMuted) }
+    Box(
+      modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+      contentAlignment = Alignment.Center,
+    ) {
+      if (scrobble.coverCid != null) {
+        AsyncImage(
+          model = ProfileScrobbleApi.coverUrl(scrobble.coverCid),
+          contentDescription = "Album art",
+          modifier = Modifier.fillMaxSize(),
+          contentScale = ContentScale.Crop,
+        )
+      } else {
+        Icon(Icons.Rounded.MusicNote, contentDescription = null, modifier = Modifier.size(20.dp), tint = PiratePalette.TextMuted)
       }
     }
-
-    Spacer(Modifier.width(12.dp))
 
     Column(modifier = Modifier.weight(1f)) {
       Text(scrobble.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onBackground)
-      Text("${scrobble.artist} · ${scrobble.playedAgo}", style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, color = PiratePalette.TextMuted)
+      Text(
+        "${scrobble.artist} · ${scrobble.playedAgo}",
+        style = MaterialTheme.typography.bodyLarge,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        color = PiratePalette.TextMuted,
+        modifier = Modifier.clickable(enabled = artistClickable) { onOpenArtist?.invoke(scrobble.artist) },
+      )
     }
   }
 }
 
-// ── Playlists (Music tab) ──
+// ── Music tab (published songs first, then playlists) ──
 
 @Composable
-private fun PlaylistsPanel(playlists: List<OnChainPlaylist>, loading: Boolean) {
+private fun MusicPanel(
+  publishedSongs: List<PublishedSongRow>,
+  publishedSongsLoading: Boolean,
+  publishedSongsError: String?,
+  playlists: List<OnChainPlaylist>,
+  playlistsLoading: Boolean,
+  playlistsError: String?,
+  onPlaySong: ((PublishedSongRow) -> Unit)? = null,
+  onOpenSong: ((trackId: String, title: String?, artist: String?) -> Unit)? = null,
+  onOpenArtist: ((String) -> Unit)? = null,
+) {
   when {
-    loading -> CenteredStatus { CircularProgressIndicator(Modifier.size(32.dp)); Spacer(Modifier.height(12.dp)); Text("Loading playlists...", color = PiratePalette.TextMuted) }
-    playlists.isEmpty() -> CenteredStatus { Text("No playlists yet.", color = PiratePalette.TextMuted) }
+    publishedSongsLoading || playlistsLoading ->
+      CenteredStatus {
+        CircularProgressIndicator(Modifier.size(32.dp))
+        Spacer(Modifier.height(12.dp))
+        Text("Loading music...", color = PiratePalette.TextMuted)
+      }
+    publishedSongs.isEmpty() && playlists.isEmpty() && (!publishedSongsError.isNullOrBlank() || !playlistsError.isNullOrBlank()) ->
+      CenteredStatus {
+        Text(
+          publishedSongsError ?: playlistsError ?: "Failed to load music",
+          color = MaterialTheme.colorScheme.error,
+        )
+      }
+    publishedSongs.isEmpty() && playlists.isEmpty() ->
+      CenteredStatus { Text("No published songs or playlists yet.", color = PiratePalette.TextMuted) }
     else -> {
       LazyColumn(modifier = Modifier.fillMaxSize()) {
-        itemsIndexed(playlists, key = { _, p -> p.id }) { _, playlist ->
-          PlaylistRowItem(playlist)
+        if (publishedSongs.isNotEmpty()) {
+          itemsIndexed(publishedSongs, key = { _, song -> song.contentId }) { _, song ->
+            PublishedSongRowItem(
+              song = song,
+              onPlay = onPlaySong,
+              onOpenSong = onOpenSong,
+              onOpenArtist = onOpenArtist,
+            )
+          }
+        }
+        if (playlists.isNotEmpty()) {
+          item { MusicSectionHeader("Playlists") }
+          itemsIndexed(playlists, key = { _, playlist -> playlist.id }) { _, playlist ->
+            PlaylistRowItem(playlist)
+          }
+        }
+        if (!publishedSongsError.isNullOrBlank() || !playlistsError.isNullOrBlank()) {
+          item {
+            Text(
+              publishedSongsError ?: playlistsError ?: "",
+              modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+              color = MaterialTheme.colorScheme.error,
+              style = MaterialTheme.typography.bodySmall,
+            )
+          }
         }
       }
+    }
+  }
+}
+
+@Composable
+private fun MusicSectionHeader(title: String) {
+  Text(
+    title,
+    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 14.dp, bottom = 4.dp),
+    style = MaterialTheme.typography.labelLarge,
+    fontWeight = FontWeight.SemiBold,
+    color = PiratePalette.TextMuted,
+  )
+}
+
+@Composable
+private fun PublishedSongRowItem(
+  song: PublishedSongRow,
+  onPlay: ((PublishedSongRow) -> Unit)? = null,
+  onOpenSong: ((trackId: String, title: String?, artist: String?) -> Unit)? = null,
+  onOpenArtist: ((String) -> Unit)? = null,
+) {
+  val trackId = song.trackId.trim()
+  val songClickable = onOpenSong != null && trackId.isNotBlank()
+  val artistName = song.artist.ifBlank { "Unknown Artist" }
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .height(72.dp)
+      .clickable { onPlay?.invoke(song) }
+      .padding(horizontal = 16.dp),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(12.dp),
+  ) {
+    Box(
+      modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+      contentAlignment = Alignment.Center,
+    ) {
+      if (!song.coverCid.isNullOrBlank()) {
+        AsyncImage(
+          model = ProfileScrobbleApi.coverUrl(song.coverCid, 96),
+          contentDescription = "Album art",
+          modifier = Modifier.fillMaxSize(),
+          contentScale = ContentScale.Crop,
+        )
+      } else {
+        Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = PiratePalette.TextMuted, modifier = Modifier.size(20.dp))
+      }
+    }
+    Column(modifier = Modifier.weight(1f)) {
+      Text(
+        song.title.ifBlank { "Unknown Track" },
+        style = MaterialTheme.typography.bodyLarge,
+        fontWeight = FontWeight.Medium,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        color = MaterialTheme.colorScheme.onBackground,
+        modifier = Modifier.clickable(enabled = songClickable) {
+          onOpenSong?.invoke(trackId, song.title, song.artist)
+        },
+      )
+      Text(
+        artistName,
+        style = MaterialTheme.typography.bodyLarge,
+        color = PiratePalette.TextMuted,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.clickable(enabled = onOpenArtist != null && artistName.isNotBlank()) {
+          onOpenArtist?.invoke(artistName)
+        },
+      )
     }
   }
 }
@@ -901,8 +1129,12 @@ private fun CenteredStatus(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun FollowStat(count: String, label: String) {
-  Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+private fun FollowStat(count: String, label: String, onClick: (() -> Unit)? = null) {
+  Row(
+    modifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(4.dp),
+  ) {
     Text(count, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
     Text(label, style = MaterialTheme.typography.bodyLarge, color = PiratePalette.TextMuted)
   }

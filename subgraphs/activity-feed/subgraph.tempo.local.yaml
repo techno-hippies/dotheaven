@@ -38,3 +38,53 @@ dataSources:
         - event: TrackUpdated(indexed bytes32,indexed bytes32)
           handler: handleTrackUpdatedV4
       file: ./src/scrobble-v4.ts
+  - kind: ethereum
+    name: ContentRegistry
+    network: moderato
+    source:
+      address: "0x2A3beA895AE5bb4415c436155cbA15a97ACc2C77"
+      abi: ContentRegistry
+      startBlock: 5199678
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - ContentEntry
+        - AccessGrant
+      abis:
+        - name: ContentRegistry
+          file: ./abis/ContentRegistry.json
+      eventHandlers:
+        - event: ContentRegistered(indexed bytes32,indexed bytes32,indexed address,address,bytes)
+          handler: handleContentRegistered
+        - event: AccessGranted(indexed bytes32,indexed address)
+          handler: handleAccessGranted
+        - event: AccessRevoked(indexed bytes32,indexed address)
+          handler: handleAccessRevoked
+        - event: ContentDeactivated(indexed bytes32)
+          handler: handleContentDeactivated
+      file: ./src/content.ts
+  - kind: ethereum
+    name: FollowV1
+    network: moderato
+    source:
+      address: "0x153DbEcA0CEF8563649cf475a687D14997D2c403"
+      abi: FollowV1
+      startBlock: 5556047
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Follow
+        - UserFollowStats
+      abis:
+        - name: FollowV1
+          file: ./abis/FollowV1.json
+      eventHandlers:
+        - event: Followed(indexed address,indexed address)
+          handler: handleFollowed
+        - event: Unfollowed(indexed address,indexed address)
+          handler: handleUnfollowed
+      file: ./src/follow.ts
