@@ -1,9 +1,9 @@
 package com.pirate.app.song
 
-import com.pirate.app.BuildConfig
 import com.pirate.app.music.SongPublishService
 import com.pirate.app.scrobble.TempoScrobbleApi
 import com.pirate.app.util.HttpClients
+import com.pirate.app.util.tempoMusicSocialSubgraphUrls
 import java.net.URI
 import java.math.BigInteger
 import java.text.Normalizer
@@ -25,8 +25,6 @@ import org.web3j.crypto.Hash
 import org.json.JSONArray
 import org.json.JSONObject
 
-private const val DEFAULT_MUSIC_SOCIAL_SUBGRAPH =
-  "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-music-social-tempo/1.0.0/gn"
 private const val TEMPO_RPC_URL = "https://rpc.moderato.tempo.xyz"
 private val ADDRESS_REGEX = Regex("^0x[a-fA-F0-9]{40}$")
 private val BYTES32_REGEX = Regex("^0x[a-fA-F0-9]{64}$")
@@ -646,11 +644,7 @@ object SongArtistApi {
   }
 
   private fun musicSocialSubgraphUrls(): List<String> {
-    val fromMusicSocial = BuildConfig.TEMPO_MUSIC_SOCIAL_SUBGRAPH_URL.trim().removeSuffix("/")
-    val urls = ArrayList<String>(2)
-    if (fromMusicSocial.isNotBlank()) urls.add(fromMusicSocial)
-    urls.add(DEFAULT_MUSIC_SOCIAL_SUBGRAPH)
-    return urls
+    return tempoMusicSocialSubgraphUrls()
       .distinct()
       .filterNot(::isLikelyLocalSubgraphUrl)
   }

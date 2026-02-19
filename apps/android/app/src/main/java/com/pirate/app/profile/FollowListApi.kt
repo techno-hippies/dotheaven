@@ -1,8 +1,10 @@
 package com.pirate.app.profile
 
-import com.pirate.app.BuildConfig
 import com.pirate.app.music.CoverRef
 import com.pirate.app.onboarding.OnboardingRpcHelpers
+import com.pirate.app.util.shortAddress
+import com.pirate.app.util.tempoMusicSocialSubgraphUrls
+import com.pirate.app.util.tempoProfilesSubgraphUrls
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -22,13 +24,6 @@ data class FollowListMember(
 )
 
 object FollowListApi {
-
-  private const val DEFAULT_TEMPO_SUBGRAPH_MUSIC_SOCIAL =
-    "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-music-social-tempo/1.0.0/gn"
-
-  private const val DEFAULT_TEMPO_SUBGRAPH_PROFILES =
-    "https://graph.dotheaven.org/subgraphs/name/dotheaven/profiles-tempo"
-
   private val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
   private val http = OkHttpClient()
 
@@ -134,7 +129,7 @@ object FollowListApi {
       val displayName = profile?.first?.trim()?.takeIf { it.isNotBlank() }
       val name = resolvedName
         ?: displayName
-        ?: shortAddr(addr)
+        ?: shortAddress(addr, minLengthToShorten = 14)
       val photoUri = profile?.second?.trim()?.takeIf { it.isNotBlank() }
       val avatarUrl = photoUri?.let {
         CoverRef.resolveCoverUrl(ref = it, width = null, height = null, format = null, quality = null)
@@ -192,24 +187,8 @@ object FollowListApi {
     }
   }
 
-  private fun musicSocialSubgraphUrls(): List<String> {
-    val fromMusicSocial = runCatching { BuildConfig.TEMPO_MUSIC_SOCIAL_SUBGRAPH_URL }.getOrDefault("")
-    return listOfNotNull(
-      fromMusicSocial.takeIf { it.isNotBlank() },
-      DEFAULT_TEMPO_SUBGRAPH_MUSIC_SOCIAL,
-    ).distinct()
-  }
+  private fun musicSocialSubgraphUrls(): List<String> = tempoMusicSocialSubgraphUrls()
 
-  private fun profilesSubgraphUrls(): List<String> {
-    val fromConfig = runCatching { BuildConfig.TEMPO_PROFILES_SUBGRAPH_URL }.getOrDefault("")
-    return listOfNotNull(
-      fromConfig.takeIf { it.isNotBlank() },
-      DEFAULT_TEMPO_SUBGRAPH_PROFILES,
-    ).distinct()
-  }
+  private fun profilesSubgraphUrls(): List<String> = tempoProfilesSubgraphUrls()
 
-  private fun shortAddr(addr: String): String {
-    if (addr.length <= 14) return addr
-    return "${addr.take(6)}...${addr.takeLast(4)}"
-  }
 }

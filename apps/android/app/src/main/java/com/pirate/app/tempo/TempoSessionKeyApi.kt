@@ -2,6 +2,7 @@ package com.pirate.app.tempo
 
 import android.app.Activity
 import android.util.Log
+import com.pirate.app.util.shortAddress
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -59,7 +60,7 @@ object TempoSessionKeyApi {
             it.keyAuthorization?.isNotEmpty() == true
         }
       if (existing != null) {
-        Log.d(TAG, "Session key already active for ${shortAddress(account.address)}")
+        Log.d(TAG, "Session key already active for ${shortAddress(account.address, minLengthToShorten = 10)}")
         return@withLock TempoSessionAuthorizationResult(success = true, sessionKey = existing)
       }
 
@@ -340,11 +341,6 @@ object TempoSessionKeyApi {
   private fun buildTraceId(address: String): String {
     val suffix = address.removePrefix("0x").takeLast(6).ifBlank { "unknown" }
     return "$suffix-${UUID.randomUUID().toString().take(8)}"
-  }
-
-  private fun shortAddress(address: String): String {
-    if (address.length <= 10) return address
-    return "${address.take(6)}...${address.takeLast(4)}"
   }
 
   private fun saturatingAdd(a: Long, b: Long): Long =

@@ -144,7 +144,7 @@ object MediaStoreAudioDownloads {
     val safeArtist = artist.trim().ifBlank { "Unknown Artist" }
     val ext = sourceFile.extension.trim().lowercase()
     val displayName = buildDisplayName(preferredName, ext)
-    val normalizedMime = mimeType?.trim()?.ifBlank { null } ?: extToMime(ext)
+    val normalizedMime = mimeType?.trim()?.ifBlank { null } ?: audioMimeFromExtension(ext)
 
     val values =
       ContentValues().apply {
@@ -201,15 +201,4 @@ object MediaStoreAudioDownloads {
     return if (stem.lowercase().endsWith(suffix)) stem else "$stem$suffix"
   }
 
-  private fun extToMime(ext: String): String? {
-    return when (ext.trim().lowercase()) {
-      "mp3" -> "audio/mpeg"
-      "flac" -> "audio/flac"
-      "wav" -> "audio/wav"
-      "aac" -> "audio/aac"
-      "ogg" -> "audio/ogg"
-      "m4a", "mp4" -> "audio/mp4"
-      else -> null
-    }
-  }
 }

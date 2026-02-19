@@ -97,6 +97,7 @@ import com.pirate.app.profile.TempoNameRecordsApi
 import com.pirate.app.player.PlayerController
 import com.pirate.app.theme.PiratePalette
 import com.pirate.app.ui.PirateMobileHeader
+import com.pirate.app.util.shortAddress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -171,6 +172,27 @@ private fun resolveReleaseCoverUrl(ref: String?): String? {
   if (raw.startsWith("file://")) return raw
   if (raw.startsWith("http://") || raw.startsWith("https://")) return raw
   return null
+}
+
+private fun sharedPlaylistCoverUrl(coverCid: String?): String? {
+  return CoverRef.resolveCoverUrl(coverCid, width = 140, height = 140, format = "webp", quality = 80)
+}
+
+private fun sharedCloudTrackToRowTrack(track: SharedCloudTrack): MusicTrack {
+  return MusicTrack(
+    id = track.contentId.ifBlank { track.trackId },
+    title = track.title,
+    artist = track.artist,
+    album = track.album,
+    durationSec = track.durationSec,
+    uri = "",
+    filename = "",
+    artworkUri = sharedPlaylistCoverUrl(track.coverCid),
+    contentId = track.contentId,
+    pieceCid = track.pieceCid,
+    datasetOwner = track.datasetOwner,
+    algo = track.algo,
+  )
 }
 
 private data class CachedSharedAudio(
@@ -320,12 +342,6 @@ fun MusicScreen(
   val sharedItemIds = remember(sharedPlaylists, sharedTracks) { computeSharedItemIds(sharedPlaylists, sharedTracks) }
   val sharedUnreadCount = remember(sharedItemIds, sharedSeenItemIds) { sharedItemIds.count { !sharedSeenItemIds.contains(it) } }
 
-  fun shortAddr(addr: String): String {
-    val a = addr.trim()
-    if (a.length <= 10) return a
-    return "${a.take(6)}...${a.takeLast(4)}"
-  }
-
   fun resolveSongTrackId(track: MusicTrack): String? {
     val bytes32Regex = Regex("^0x[a-fA-F0-9]{64}$")
     val fromId = track.id.trim()
@@ -351,7 +367,7 @@ fun MusicScreen(
   fun sharedOwnerLabel(ownerAddress: String): String {
     val key = ownerAddress.trim().lowercase()
     if (key.isBlank()) return "unknown"
-    return sharedOwnerLabels[key] ?: shortAddr(key)
+    return sharedOwnerLabels[key] ?: shortAddress(key, minLengthToShorten = 10)
   }
 
   fun buildSharedTrackForPlayer(
@@ -408,7 +424,7 @@ fun MusicScreen(
       file = existing,
       uri = Uri.fromFile(existing).toString(),
       filename = existing.name,
-      mimeType = extToMime(existing.extension),
+      mimeType = audioMimeFromExtension(existing.extension),
     )
   }
 
@@ -466,7 +482,7 @@ fun MusicScreen(
       file = cacheFile,
       uri = Uri.fromFile(cacheFile).toString(),
       filename = cacheFile.name,
-      mimeType = extToMime(ext),
+      mimeType = audioMimeFromExtension(ext),
     )
   }
 
@@ -924,7 +940,7 @@ fun MusicScreen(
 
     for (owner in owners) {
       if (sharedOwnerLabels.containsKey(owner)) continue
-      sharedOwnerLabels[owner] = shortAddr(owner)
+      sharedOwnerLabels[owner] = shortAddress(owner, minLengthToShorten = 10)
       val handle =
         runCatching {
           withContext(Dispatchers.IO) {
@@ -1668,7 +1684,7 @@ fun MusicScreen(
               }
               shareTrack = null
               shareRecipientInput = ""
-              val target = result.recipientAddress?.let { shortAddr(it) } ?: "recipient"
+              val target = result.recipientAddress?.let { shortAddress(it, minLengthToShorten = 10) } ?: "recipient"
               onShowMessage("Shared with $target")
             }
           },
@@ -2248,27 +2264,6 @@ private fun SharedView(
       )
     }
 
-    fun coverUrl(coverCid: String?): String? {
-      return CoverRef.resolveCoverUrl(coverCid, width = 140, height = 140, format = "webp", quality = 80)
-    }
-
-    fun toRowTrack(t: SharedCloudTrack): MusicTrack {
-      return MusicTrack(
-        id = t.contentId.ifBlank { t.trackId },
-        title = t.title,
-        artist = t.artist,
-        album = t.album,
-        durationSec = t.durationSec,
-        uri = "",
-        filename = "",
-        artworkUri = coverUrl(t.coverCid),
-        contentId = t.contentId,
-        pieceCid = t.pieceCid,
-        datasetOwner = t.datasetOwner,
-        algo = t.algo,
-      )
-    }
-
     if (total == 0) {
       // Avoid flashing an empty state while the initial request is still loading.
       if (!loading) {
@@ -2294,7 +2289,7 @@ private fun SharedView(
         items(sharedPlaylists, key = { it.id }) { share ->
           SharedPlaylistRow(
             share = share,
-            coverUrl = coverUrl(share.playlist.coverCid),
+            coverUrl = sharedPlaylistCoverUrl(share.playlist.coverCid),
             ownerLabel = ownerLabelFor(share.owner),
             onClick = { onOpenPlaylist(share) },
           )
@@ -2314,7 +2309,7 @@ private fun SharedView(
         }
 
         items(sharedTracks, key = { it.contentId.ifBlank { it.trackId } }) { t ->
-          val rowTrack = toRowTrack(t)
+          val rowTrack = sharedCloudTrackToRowTrack(t)
           TrackItemRow(
             track = rowTrack,
             isActive = false,
@@ -2409,27 +2404,6 @@ private fun SharedPlaylistDetailView(
     return
   }
 
-  fun coverUrl(coverCid: String?): String? {
-    return CoverRef.resolveCoverUrl(coverCid, width = 140, height = 140, format = "webp", quality = 80)
-  }
-
-  fun toRowTrack(t: SharedCloudTrack): MusicTrack {
-    return MusicTrack(
-      id = t.contentId.ifBlank { t.trackId },
-      title = t.title,
-      artist = t.artist,
-      album = t.album,
-      durationSec = t.durationSec,
-      uri = "",
-      filename = "",
-      artworkUri = coverUrl(t.coverCid),
-      contentId = t.contentId,
-      pieceCid = t.pieceCid,
-      datasetOwner = t.datasetOwner,
-      algo = t.algo,
-    )
-  }
-
   Column(modifier = Modifier.fillMaxSize()) {
     Row(
       modifier = Modifier
@@ -2444,7 +2418,7 @@ private fun SharedPlaylistDetailView(
         shape = MaterialTheme.shapes.large,
       ) {
         Box(contentAlignment = androidx.compose.ui.Alignment.Center) {
-          val url = coverUrl(pl.coverCid)
+          val url = sharedPlaylistCoverUrl(pl.coverCid)
           if (!url.isNullOrBlank()) {
             AsyncImage(
               model = url,
@@ -2508,7 +2482,7 @@ private fun SharedPlaylistDetailView(
       contentPadding = PaddingValues(bottom = 12.dp),
     ) {
       items(tracks, key = { it.contentId.ifBlank { it.trackId } }) { t ->
-        val rowTrack = toRowTrack(t)
+        val rowTrack = sharedCloudTrackToRowTrack(t)
         val id = rowTrack.id
         TrackItemRow(
           track = rowTrack,
@@ -2711,32 +2685,6 @@ private fun PlaylistRow(
       )
     }
 
-  }
-}
-
-private fun mimeToExt(mimeType: String?): String {
-  val m = mimeType?.trim()?.lowercase().orEmpty()
-  return when (m) {
-    "audio/mpeg", "audio/mp3" -> "mp3"
-    "audio/flac" -> "flac"
-    "audio/wav", "audio/x-wav", "audio/wave" -> "wav"
-    "audio/aac" -> "aac"
-    "audio/ogg" -> "ogg"
-    "audio/mp4", "audio/m4a" -> "m4a"
-    else -> "bin"
-  }
-}
-
-private fun extToMime(ext: String?): String? {
-  val e = ext?.trim()?.lowercase().orEmpty()
-  return when (e) {
-    "mp3" -> "audio/mpeg"
-    "flac" -> "audio/flac"
-    "wav" -> "audio/wav"
-    "aac" -> "audio/aac"
-    "ogg" -> "audio/ogg"
-    "m4a", "mp4" -> "audio/mp4"
-    else -> null
   }
 }
 

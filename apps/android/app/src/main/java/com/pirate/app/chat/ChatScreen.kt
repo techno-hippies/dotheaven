@@ -64,13 +64,14 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import com.pirate.app.music.CoverRef
 import com.pirate.app.scarlett.AgoraVoiceController
 import com.pirate.app.scarlett.ScarlettMessage
 import com.pirate.app.scarlett.ScarlettService
 import com.pirate.app.scarlett.VoiceCallState
 import com.pirate.app.theme.PiratePalette
 import com.pirate.app.ui.PirateMobileHeader
+import com.pirate.app.util.abbreviateAddress
+import com.pirate.app.util.resolveAvatarUrl
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -1902,28 +1903,10 @@ private fun looksLikeEthereumAddress(value: String): Boolean {
   return trimmed.drop(2).all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }
 }
 
-private fun resolveAvatarUrl(avatarUri: String?): String? {
-  return CoverRef.resolveCoverUrl(
-    ref = avatarUri,
-    width = null,
-    height = null,
-    format = null,
-    quality = null,
-  )
-}
-
 private fun avatarInitial(displayName: String): String {
   val normalized = displayName.trim()
   if (normalized.isBlank()) return "?"
   return normalized.take(1).uppercase()
-}
-
-private fun abbreviateAddress(address: String): String {
-  if (address.length <= 12) return address
-  if (address.startsWith("0x") && address.length >= 10) {
-    return "${address.take(6)}...${address.takeLast(4)}"
-  }
-  return "${address.take(8)}...${address.takeLast(4)}"
 }
 
 private fun formatTimestamp(ms: Long): String {

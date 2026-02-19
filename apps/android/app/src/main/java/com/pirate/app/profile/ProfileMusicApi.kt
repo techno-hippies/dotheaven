@@ -1,7 +1,7 @@
 package com.pirate.app.profile
 
-import com.pirate.app.BuildConfig
 import com.pirate.app.song.SongArtistApi
+import com.pirate.app.util.tempoMusicSocialSubgraphUrls
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -24,9 +24,6 @@ data class PublishedSongRow(
 )
 
 object ProfileMusicApi {
-  private const val DEFAULT_TEMPO_SUBGRAPH_MUSIC_SOCIAL =
-    "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-music-social-tempo/1.0.0/gn"
-
   private val client = OkHttpClient()
   private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
@@ -114,13 +111,7 @@ object ProfileMusicApi {
     val publishedAtSec: Long,
   )
 
-  private fun musicSocialSubgraphUrls(): List<String> {
-    val fromMusicSocial = BuildConfig.TEMPO_MUSIC_SOCIAL_SUBGRAPH_URL.trim().removeSuffix("/")
-    val urls = ArrayList<String>(2)
-    if (fromMusicSocial.isNotBlank()) urls.add(fromMusicSocial)
-    urls.add(DEFAULT_TEMPO_SUBGRAPH_MUSIC_SOCIAL)
-    return urls.distinct()
-  }
+  private fun musicSocialSubgraphUrls(): List<String> = tempoMusicSocialSubgraphUrls()
 
   private fun isSubgraphAvailabilityError(error: Throwable?): Boolean {
     val msg = error?.message?.lowercase().orEmpty()

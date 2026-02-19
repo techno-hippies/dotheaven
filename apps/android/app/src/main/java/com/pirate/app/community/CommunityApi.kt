@@ -1,7 +1,7 @@
 package com.pirate.app.community
 
-import com.pirate.app.BuildConfig
 import com.pirate.app.onboarding.steps.LANGUAGE_OPTIONS
+import com.pirate.app.util.tempoProfilesSubgraphUrls
 import java.math.BigInteger
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -62,8 +62,6 @@ private data class BoundingBoxE6(
 )
 
 object CommunityApi {
-  private const val DEFAULT_TEMPO_SUBGRAPH_PROFILES =
-    "https://graph.dotheaven.org/subgraphs/name/dotheaven/profiles-tempo"
   private const val ZERO_HASH =
     "0x0000000000000000000000000000000000000000000000000000000000000000"
   private const val EARTH_RADIUS_KM = 6371.0088
@@ -377,11 +375,5 @@ object CommunityApi {
     throw IllegalStateException("Profiles query failed: all subgraph endpoints unreachable")
   }
 
-  private fun profileSubgraphUrls(): List<String> {
-    val fromBuildConfig = BuildConfig.TEMPO_PROFILES_SUBGRAPH_URL.trim().removeSuffix("/")
-    val urls = ArrayList<String>(2)
-    if (fromBuildConfig.isNotBlank()) urls.add(fromBuildConfig)
-    urls.add(DEFAULT_TEMPO_SUBGRAPH_PROFILES)
-    return urls.distinct()
-  }
+  private fun profileSubgraphUrls(): List<String> = tempoProfilesSubgraphUrls()
 }

@@ -63,7 +63,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import coil.compose.AsyncImage
-import com.pirate.app.music.CoverRef
 import com.pirate.app.music.OnChainPlaylist
 import com.pirate.app.music.OnChainPlaylistsApi
 import com.pirate.app.onboarding.OnboardingRpcHelpers
@@ -71,6 +70,8 @@ import com.pirate.app.tempo.SessionKeyManager
 import com.pirate.app.tempo.TempoPasskeyManager
 import com.pirate.app.theme.PiratePalette
 import com.pirate.app.ui.VerifiedSealBadge
+import com.pirate.app.util.resolveAvatarUrl
+import com.pirate.app.util.shortAddress
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -85,16 +86,6 @@ private enum class ProfileTab(val label: String) {
   Scrobbles("Scrobbles"),
   Schedule("Schedule"),
   About("About"),
-}
-
-private fun resolveAvatarUrl(avatarUri: String?): String? {
-  return CoverRef.resolveCoverUrl(
-    ref = avatarUri,
-    width = null,
-    height = null,
-    format = null,
-    quality = null,
-  )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -203,7 +194,7 @@ fun ProfileScreen(
   // Settings sheet
   var showSettings by remember { mutableStateOf(false) }
 
-  val handleText = heavenName ?: shortAddr(ethAddress)
+  val handleText = heavenName ?: shortAddress(ethAddress, minLengthToShorten = 14)
   val profileName = contractProfile
     ?.displayName
     ?.trim()
@@ -1138,9 +1129,4 @@ private fun FollowStat(count: String, label: String, onClick: (() -> Unit)? = nu
     Text(count, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
     Text(label, style = MaterialTheme.typography.bodyLarge, color = PiratePalette.TextMuted)
   }
-}
-
-private fun shortAddr(addr: String): String {
-  if (addr.length <= 14) return addr
-  return "${addr.take(6)}...${addr.takeLast(4)}"
 }

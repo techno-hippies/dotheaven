@@ -62,6 +62,7 @@ import com.pirate.app.tempo.SessionKeyManager
 import com.pirate.app.tempo.TempoPasskeyManager
 import com.pirate.app.tempo.TempoSessionKeyApi
 import com.pirate.app.ui.PirateMobileHeader
+import com.pirate.app.util.shortAddress
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -143,7 +144,7 @@ fun ScheduleScreen(
         BookingRow(
           id = row.bookingId,
           bookingId = row.bookingId,
-          peerName = abbreviateAddress(row.counterpartyAddress),
+          peerName = shortAddress(row.counterpartyAddress, minLengthToShorten = 10),
           peerAddress = row.counterpartyAddress,
           startTimeMillis = row.startTimeSec * 1_000L,
           durationMinutes = row.durationMins,
@@ -256,7 +257,7 @@ fun ScheduleScreen(
 
               if (result.success) {
                 val fundingPath = if (result.usedSelfPayFallback) "self-pay fallback" else "sponsored"
-                onShowMessage("Cancel submitted ($fundingPath): ${abbreviateAddress(result.txHash ?: "")}")
+                onShowMessage("Cancel submitted ($fundingPath): ${shortAddress(result.txHash ?: "", minLengthToShorten = 10)}")
                 refreshBookings()
               } else {
                 onShowMessage("Cancel failed: ${result.error ?: "unknown error"}")
@@ -409,7 +410,7 @@ fun ScheduleAvailabilityScreen(
                 basePriceEdit = normalizedPrice
                 editingPrice = false
                 val fundingPath = if (result.usedSelfPayFallback) "self-pay fallback" else "sponsored"
-                onShowMessage("Base price updated ($fundingPath): ${abbreviateAddress(result.txHash ?: "")}")
+                onShowMessage("Base price updated ($fundingPath): ${shortAddress(result.txHash ?: "", minLengthToShorten = 10)}")
                 refreshAvailability()
               } else {
                 onShowMessage("Base price update failed: ${result.error ?: "unknown error"}")
@@ -541,7 +542,7 @@ fun ScheduleAvailabilityScreen(
 
                   if (result.success) {
                     val fundingPath = if (result.usedSelfPayFallback) "self-pay fallback" else "sponsored"
-                    onShowMessage("Availability updated ($fundingPath): ${abbreviateAddress(result.txHash ?: "")}")
+                    onShowMessage("Availability updated ($fundingPath): ${shortAddress(result.txHash ?: "", minLengthToShorten = 10)}")
                     refreshAvailability()
                   } else {
                     onShowMessage("Availability update failed: ${result.error ?: "unknown error"}")
@@ -812,7 +813,6 @@ private fun normalizePriceInput(value: String): String? {
 
 private fun formatDateTime(millis: Long): String = SimpleDateFormat("EEE, MMM d • h:mm a", Locale.getDefault()).format(Date(millis))
 private fun formatTime(hour: Int, minute: Int): String { val suffix = if (hour >= 12) "PM" else "AM"; val dh = ((hour + 11) % 12) + 1; return String.format(Locale.getDefault(), "%d:%02d %s", dh, minute, suffix) }
-private fun abbreviateAddress(address: String): String { if (address.length <= 10) return address; return "${address.take(6)}...${address.takeLast(4)}" }
 
 private fun slotStartMillis(selectedDay: Long, hour: Int, minute: Int): Long {
   val cal = Calendar.getInstance(); cal.timeInMillis = selectedDay; cal.set(Calendar.HOUR_OF_DAY, hour); cal.set(Calendar.MINUTE, minute); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0); return cal.timeInMillis

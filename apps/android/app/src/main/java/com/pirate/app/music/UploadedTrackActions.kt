@@ -131,7 +131,7 @@ object UploadedTrackActions {
           title = track.title,
           artist = track.artist,
           album = track.album,
-          mimeType = extToMime(ext),
+          mimeType = audioMimeFromExtension(ext),
           preferredName = preferredName,
         )
       runCatching { tmp.delete() }
@@ -144,7 +144,7 @@ object UploadedTrackActions {
           artist = track.artist,
           album = track.album,
           filename = tmp.name,
-          mimeType = extToMime(ext),
+          mimeType = audioMimeFromExtension(ext),
           pieceCid = pieceCid,
           datasetOwner = track.datasetOwner,
           algo = track.algo,
@@ -460,15 +460,4 @@ object UploadedTrackActions {
     }
   }
 
-  private fun extToMime(ext: String): String? {
-    return when (ext.trim().lowercase()) {
-      "mp3" -> "audio/mpeg"
-      "flac" -> "audio/flac"
-      "wav" -> "audio/wav"
-      "aac" -> "audio/aac"
-      "ogg" -> "audio/ogg"
-      "m4a", "mp4" -> "audio/mp4"
-      else -> null
-    }
-  }
 }

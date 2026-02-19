@@ -1,9 +1,9 @@
 package com.pirate.app.profile
 
-import com.pirate.app.BuildConfig
 import com.pirate.app.onboarding.OnboardingRpcHelpers
 import com.pirate.app.tempo.TempoClient
 import com.pirate.app.onboarding.steps.LANGUAGE_OPTIONS
+import com.pirate.app.util.tempoProfilesSubgraphUrls
 import java.math.BigInteger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -62,8 +62,6 @@ data class ContractProfileData(
 )
 
 object ProfileContractApi {
-  private const val DEFAULT_TEMPO_SUBGRAPH_PROFILES =
-    "https://graph.dotheaven.org/subgraphs/name/dotheaven/profiles-tempo"
   const val ZERO_HASH =
     "0x0000000000000000000000000000000000000000000000000000000000000000"
 
@@ -578,13 +576,7 @@ object ProfileContractApi {
     throw IllegalStateException("Profiles query failed: all subgraph endpoints unreachable")
   }
 
-  private fun profileSubgraphUrls(): List<String> {
-    val fromBuildConfig = BuildConfig.TEMPO_PROFILES_SUBGRAPH_URL.trim().removeSuffix("/")
-    val urls = ArrayList<String>(2)
-    if (fromBuildConfig.isNotBlank()) urls.add(fromBuildConfig)
-    urls.add(DEFAULT_TEMPO_SUBGRAPH_PROFILES)
-    return urls.distinct()
-  }
+  private fun profileSubgraphUrls(): List<String> = tempoProfilesSubgraphUrls()
 
   private fun decodeProfileTuple(hex: String): ContractProfileData? {
     if (hex.length < 64) return null

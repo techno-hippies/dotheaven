@@ -1,9 +1,24 @@
 package com.pirate.app.util
 
-fun shortAddress(address: String, prefixChars: Int = 6, suffixChars: Int = 4): String {
+fun shortAddress(
+  address: String,
+  prefixChars: Int = 6,
+  suffixChars: Int = 4,
+  minLengthToShorten: Int = prefixChars + suffixChars + 2,
+): String {
   val raw = address.trim()
-  if (raw.length <= prefixChars + suffixChars + 2) return raw
+  if (raw.length <= minLengthToShorten) return raw
   return "${raw.take(prefixChars)}...${raw.takeLast(suffixChars)}"
+}
+
+fun abbreviateAddress(address: String): String {
+  val raw = address.trim()
+  if (raw.length <= 12) return raw
+  return if (raw.startsWith("0x", ignoreCase = true) && raw.length >= 10) {
+    shortAddress(raw, prefixChars = 6, suffixChars = 4, minLengthToShorten = 12)
+  } else {
+    shortAddress(raw, prefixChars = 8, suffixChars = 4, minLengthToShorten = 12)
+  }
 }
 
 fun formatTimeAgoShort(timestampSec: Long, nowSec: Long = System.currentTimeMillis() / 1_000L): String {

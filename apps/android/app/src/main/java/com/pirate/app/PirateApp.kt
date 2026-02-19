@@ -69,6 +69,7 @@ import com.pirate.app.profile.FollowListMode
 import com.pirate.app.profile.FollowListScreen
 import com.pirate.app.profile.ProfileContractApi
 import com.pirate.app.profile.ProfileEditScreen
+import com.pirate.app.profile.PublishedSongRow
 import com.pirate.app.profile.ProfileScreen
 import com.pirate.app.profile.TempoNameRecordsApi
 import com.pirate.app.scarlett.AgoraVoiceController
@@ -707,6 +708,42 @@ private fun PirateNavHost(
     )
   }
 
+  val openSongRoute: (String, String?, String?) -> Unit = { trackId, title, artist ->
+    navController.navigate(
+      PirateRoute.Song.buildRoute(trackId = trackId, title = title, artist = artist),
+    ) { launchSingleTop = true }
+  }
+  val openArtistRoute: (String) -> Unit = { artistName ->
+    navController.navigate(PirateRoute.Artist.buildRoute(artistName)) { launchSingleTop = true }
+  }
+  val openPublicProfileRoute: (String) -> Unit = { address ->
+    navController.navigate(PirateRoute.PublicProfile.buildRoute(address)) { launchSingleTop = true }
+  }
+  val openFollowListRoute: (FollowListMode, String) -> Unit = { mode, address ->
+    navController.navigate(PirateRoute.FollowList.buildRoute(address, mode)) { launchSingleTop = true }
+  }
+  val playPublishedSong: (PublishedSongRow) -> Unit = { song ->
+    val audioUrl = CoverRef.resolveCoverUrl(song.pieceCid, width = null, height = null, format = null, quality = null)
+    if (audioUrl.isNullOrBlank()) {
+      onShowMessage("No audio available for this track")
+    } else {
+      val coverUrl = CoverRef.resolveCoverUrl(song.coverCid, width = 192, height = 192, format = "webp", quality = 80)
+      val track = MusicTrack(
+        id = song.contentId,
+        title = song.title.ifBlank { "Unknown Track" },
+        artist = song.artist.ifBlank { "Unknown Artist" },
+        album = song.album,
+        durationSec = song.durationSec,
+        uri = audioUrl,
+        filename = song.title.ifBlank { "track" },
+        artworkUri = coverUrl,
+        contentId = song.contentId,
+        pieceCid = song.pieceCid,
+      )
+      player.playTrack(track, listOf(track))
+    }
+  }
+
   NavHost(
     navController = navController,
     startDestination = PirateRoute.Music.route,
@@ -910,41 +947,11 @@ private fun PirateNavHost(
         activity = activity,
         tempoAccount = tempoAccount,
         viewerEthAddress = activeAddress,
-        onPlayPublishedSong = { song ->
-          val audioUrl = CoverRef.resolveCoverUrl(song.pieceCid, width = null, height = null, format = null, quality = null)
-          if (audioUrl.isNullOrBlank()) {
-            onShowMessage("No audio available for this track")
-            return@ProfileScreen
-          }
-          val coverUrl = CoverRef.resolveCoverUrl(song.coverCid, width = 192, height = 192, format = "webp", quality = 80)
-          val track = MusicTrack(
-            id = song.contentId,
-            title = song.title.ifBlank { "Unknown Track" },
-            artist = song.artist.ifBlank { "Unknown Artist" },
-            album = song.album,
-            durationSec = song.durationSec,
-            uri = audioUrl,
-            filename = song.title.ifBlank { "track" },
-            artworkUri = coverUrl,
-            contentId = song.contentId,
-            pieceCid = song.pieceCid,
-          )
-          player.playTrack(track, listOf(track))
-        },
-        onOpenSong = { trackId, title, artist ->
-          navController.navigate(
-            PirateRoute.Song.buildRoute(trackId = trackId, title = title, artist = artist),
-          ) { launchSingleTop = true }
-        },
-        onOpenArtist = { artistName ->
-          navController.navigate(PirateRoute.Artist.buildRoute(artistName)) { launchSingleTop = true }
-        },
-        onViewProfile = { address ->
-          navController.navigate(PirateRoute.PublicProfile.buildRoute(address)) { launchSingleTop = true }
-        },
-        onNavigateFollowList = { mode, address ->
-          navController.navigate(PirateRoute.FollowList.buildRoute(address, mode)) { launchSingleTop = true }
-        },
+        onPlayPublishedSong = playPublishedSong,
+        onOpenSong = openSongRoute,
+        onOpenArtist = openArtistRoute,
+        onViewProfile = openPublicProfileRoute,
+        onNavigateFollowList = openFollowListRoute,
       )
     }
     composable(
@@ -1017,41 +1024,11 @@ private fun PirateNavHost(
         activity = activity,
         tempoAccount = tempoAccount,
         viewerEthAddress = activeAddress,
-        onPlayPublishedSong = { song ->
-          val audioUrl = CoverRef.resolveCoverUrl(song.pieceCid, width = null, height = null, format = null, quality = null)
-          if (audioUrl.isNullOrBlank()) {
-            onShowMessage("No audio available for this track")
-            return@ProfileScreen
-          }
-          val coverUrl = CoverRef.resolveCoverUrl(song.coverCid, width = 192, height = 192, format = "webp", quality = 80)
-          val track = MusicTrack(
-            id = song.contentId,
-            title = song.title.ifBlank { "Unknown Track" },
-            artist = song.artist.ifBlank { "Unknown Artist" },
-            album = song.album,
-            durationSec = song.durationSec,
-            uri = audioUrl,
-            filename = song.title.ifBlank { "track" },
-            artworkUri = coverUrl,
-            contentId = song.contentId,
-            pieceCid = song.pieceCid,
-          )
-          player.playTrack(track, listOf(track))
-        },
-        onOpenSong = { trackId, title, artist ->
-          navController.navigate(
-            PirateRoute.Song.buildRoute(trackId = trackId, title = title, artist = artist),
-          ) { launchSingleTop = true }
-        },
-        onOpenArtist = { artistName ->
-          navController.navigate(PirateRoute.Artist.buildRoute(artistName)) { launchSingleTop = true }
-        },
-        onViewProfile = { address ->
-          navController.navigate(PirateRoute.PublicProfile.buildRoute(address)) { launchSingleTop = true }
-        },
-        onNavigateFollowList = { mode, address ->
-          navController.navigate(PirateRoute.FollowList.buildRoute(address, mode)) { launchSingleTop = true }
-        },
+        onPlayPublishedSong = playPublishedSong,
+        onOpenSong = openSongRoute,
+        onOpenArtist = openArtistRoute,
+        onViewProfile = openPublicProfileRoute,
+        onNavigateFollowList = openFollowListRoute,
       )
     }
     composable(

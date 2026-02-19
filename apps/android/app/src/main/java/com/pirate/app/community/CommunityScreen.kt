@@ -60,6 +60,7 @@ import coil.compose.AsyncImage
 import com.pirate.app.onboarding.OnboardingRpcHelpers
 import com.pirate.app.onboarding.steps.LANGUAGE_OPTIONS
 import com.pirate.app.profile.TempoNameRecordsApi
+import com.pirate.app.util.shortAddress
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.CancellationException
@@ -609,8 +610,6 @@ private fun LanguageDropdown(
     }
   }
 }
-
-private fun shortAddress(addr: String): String = "${addr.take(6)}...${addr.takeLast(4)}"
 
 private fun distanceLabel(distanceKm: Double): String {
   return if (distanceKm < 1.0) "<1 km away" else "${distanceKm.roundToInt()} km away"

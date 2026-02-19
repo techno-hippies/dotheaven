@@ -72,7 +72,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.pirate.app.music.CoverRef
 import com.pirate.app.onboarding.steps.LANGUAGE_OPTIONS
 import com.pirate.app.onboarding.steps.LocationResult
 import com.pirate.app.onboarding.steps.searchLocations
@@ -80,6 +79,7 @@ import com.pirate.app.tempo.SessionKeyManager
 import com.pirate.app.tempo.TempoAccountFactory
 import com.pirate.app.tempo.TempoSessionKeyApi
 import com.pirate.app.theme.PiratePalette
+import com.pirate.app.util.resolveAvatarUrl
 import java.io.ByteArrayOutputStream
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
@@ -146,16 +146,6 @@ private fun countryLabel(code: String): String {
   val normalized = code.trim().uppercase()
   if (normalized.isBlank()) return "Not specified"
   return countryOptions.firstOrNull { it.code == normalized }?.label ?: normalized
-}
-
-private fun resolveAvatarUrl(avatarUri: String?): String? {
-  return CoverRef.resolveCoverUrl(
-    ref = avatarUri,
-    width = null,
-    height = null,
-    format = null,
-    quality = null,
-  )
 }
 
 private fun processAvatarImage(context: android.content.Context, uri: Uri): Pair<Bitmap, String> {

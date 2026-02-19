@@ -34,22 +34,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.pirate.app.music.CoverRef
-
-private fun resolveAvatarUrl(avatarUri: String?): String? {
-  return CoverRef.resolveCoverUrl(
-    ref = avatarUri,
-    width = null,
-    height = null,
-    format = null,
-    quality = null,
-  )
-}
-
-private fun shortAddr(addr: String): String {
-  if (addr.length <= 14) return addr
-  return "${addr.take(6)}...${addr.takeLast(4)}"
-}
+import com.pirate.app.util.resolveAvatarUrl
+import com.pirate.app.util.shortAddress
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -118,7 +104,7 @@ fun PirateSideMenuDrawer(
               horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
               Text(
-                heavenName ?: shortAddr(ethAddress),
+                heavenName ?: shortAddress(ethAddress, minLengthToShorten = 14),
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.bodyLarge,
               )
