@@ -431,7 +431,6 @@ fun ChatScreen(
           query = newDmAddress,
           submitBusy = newDmBusy,
           submitError = newDmError,
-          recents = dmRecentSuggestions,
           directorySuggestions = dmVisibleDirectorySuggestions,
           directoryBusy = dmDirectoryBusy,
           directoryError = dmDirectoryError,
@@ -829,7 +828,6 @@ private fun NewConversationScreen(
   query: String,
   submitBusy: Boolean,
   submitError: String?,
-  recents: List<DmSuggestion>,
   directorySuggestions: List<DmSuggestion>,
   directoryBusy: Boolean,
   directoryError: String?,
@@ -854,7 +852,7 @@ private fun NewConversationScreen(
       modifier = Modifier
         .fillMaxWidth()
         .padding(horizontal = 16.dp, vertical = 8.dp),
-      placeholder = { Text("Search display name or enter name.heaven / name.pirate") },
+      placeholder = { Text("Search users") },
       singleLine = true,
       enabled = !submitBusy,
       keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
@@ -897,36 +895,6 @@ private fun NewConversationScreen(
             headlineContent = { Text("Message \"$queryTrimmed\"") },
             supportingContent = { Text("Exact name.heaven / name.pirate or wallet address") },
             modifier = Modifier.clickable(enabled = !submitBusy, onClick = onSubmit),
-          )
-          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        }
-      }
-
-      item(key = "recents-label") {
-        Text(
-          text = "Recents",
-          style = MaterialTheme.typography.labelLarge,
-          modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-        )
-      }
-
-      if (recents.isEmpty()) {
-        item(key = "recents-empty") {
-          Text(
-            text = "No recent DMs yet",
-            color = PiratePalette.TextMuted,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-          )
-        }
-      } else {
-        items(
-          items = recents,
-          key = { "recent-${it.inputValue.lowercase()}" },
-        ) { suggestion ->
-          DmSuggestionRow(
-            suggestion = suggestion,
-            enabled = !submitBusy,
-            onClick = { onOpenSuggestion(suggestion.inputValue) },
           )
           HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
@@ -1019,7 +987,7 @@ private fun NewGroupMembersScreen(
         value = query,
         onValueChange = onQueryChange,
         modifier = Modifier.weight(1f),
-        placeholder = { Text("Search display name or enter name.heaven / name.pirate") },
+        placeholder = { Text("Search users") },
         singleLine = true,
         enabled = !busy,
         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
