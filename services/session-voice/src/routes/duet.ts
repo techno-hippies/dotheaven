@@ -1302,25 +1302,37 @@ duetRoutes.get('/:id/broadcast', async (c) => {
 	        <div class="actions">
 	          <button class="btn" id="shareBtn">Start App Audio Share</button>
 	          <button class="btn alt" id="startBtn">Start Mic Broadcast</button>
+          <button class="btn alt" id="cameraBtn">Start Camera</button>
+          <button class="btn alt" id="screenVideoBtn">Share Screen + Audio</button>
           <button class="btn good" id="toneBtn">Start Test Tone</button>
+          <button class="btn stop" id="stopVideoBtn" disabled>Stop Video</button>
           <button class="btn stop" id="stopBtn" disabled>Stop</button>
         </div>
-        <div id="message" class="notice"></div>
-        <div id="error" class="notice err" style="margin-top:10px;display:none;"></div>
-      </section>
-	      <aside class="card">
-	        <div class="field">
-	          <label class="label" for="micSelect">Mic source for “Start Mic Broadcast”</label>
+	        <div id="message" class="notice"></div>
+	        <div id="error" class="notice err" style="margin-top:10px;display:none;"></div>
+        <div id="localPreview" class="diag" style="margin-top:10px;min-height:180px;">Local preview appears here when video is live.</div>
+	      </section>
+		      <aside class="card">
+		        <div class="field">
+		          <label class="label" for="micSelect">Mic source for “Start Mic Broadcast”</label>
           <div class="row-inline">
             <select id="micSelect"></select>
             <button class="btn alt small" id="refreshMicsBtn" type="button">Refresh</button>
           </div>
-	          <p class="muted tiny" id="micHint">Choose your microphone source here.</p>
-	        </div>
-	        <h3>Detected devices</h3>
-	        <div id="diag" class="diag">Loading microphone devices…</div>
-      </aside>
-    </div>
+		          <p class="muted tiny" id="micHint">Choose your microphone source here.</p>
+		        </div>
+          <div class="field">
+            <label class="label" for="camSelect">Camera source</label>
+            <div class="row-inline">
+              <select id="camSelect"></select>
+              <button class="btn alt small" id="refreshCamsBtn" type="button">Refresh</button>
+            </div>
+            <p class="muted tiny" id="camHint">Choose your camera source here.</p>
+          </div>
+		        <h3>Detected devices</h3>
+		        <div id="diag" class="diag">Loading microphone devices…</div>
+	      </aside>
+	    </div>
     <div class="card" style="margin-top:12px;">
       <p class="muted" style="margin:0;">If app audio capture has no audio track, choose <strong>Entire Screen</strong> and enable <strong>Share audio</strong> in the browser picker.</p>
     </div>
@@ -1329,38 +1341,85 @@ duetRoutes.get('/:id/broadcast', async (c) => {
     const roomId = ${JSON.stringify(escapedRoomId)};
     const bridgeTicket = ${JSON.stringify(bridgeTicket)};
     const appId = ${JSON.stringify(appId)};
-    const shareBtn = document.getElementById('shareBtn');
-    const startBtn = document.getElementById('startBtn');
-    const toneBtn = document.getElementById('toneBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const statePill = document.getElementById('statePill');
-    const message = document.getElementById('message');
-    const error = document.getElementById('error');
-    const diag = document.getElementById('diag');
-    const micSelect = document.getElementById('micSelect');
-    const refreshMicsBtn = document.getElementById('refreshMicsBtn');
-    const micHint = document.getElementById('micHint');
-    const MIC_DEVICE_STORAGE_KEY = 'heaven_duet_mic_device_id';
-    const HEARTBEAT_INTERVAL_MS = 5000;
-    let client = null;
-    let audioTrack = null;
-    let broadcastMode = '';
-    let heartbeatTimer = null;
-    let toneContext = null;
+	    const shareBtn = document.getElementById('shareBtn');
+	    const startBtn = document.getElementById('startBtn');
+    const cameraBtn = document.getElementById('cameraBtn');
+    const screenVideoBtn = document.getElementById('screenVideoBtn');
+	    const toneBtn = document.getElementById('toneBtn');
+    const stopVideoBtn = document.getElementById('stopVideoBtn');
+	    const stopBtn = document.getElementById('stopBtn');
+	    const statePill = document.getElementById('statePill');
+	    const message = document.getElementById('message');
+	    const error = document.getElementById('error');
+    const localPreview = document.getElementById('localPreview');
+	    const diag = document.getElementById('diag');
+	    const micSelect = document.getElementById('micSelect');
+	    const refreshMicsBtn = document.getElementById('refreshMicsBtn');
+	    const micHint = document.getElementById('micHint');
+    const camSelect = document.getElementById('camSelect');
+    const refreshCamsBtn = document.getElementById('refreshCamsBtn');
+    const camHint = document.getElementById('camHint');
+	    const MIC_DEVICE_STORAGE_KEY = 'heaven_duet_mic_device_id';
+    const CAM_DEVICE_STORAGE_KEY = 'heaven_duet_cam_device_id';
+	    const HEARTBEAT_INTERVAL_MS = 5000;
+	    let client = null;
+	    let audioTrack = null;
+    let videoTrack = null;
+    let videoSource = '';
+    let stateBaseLabel = 'Ready';
+    let stateVariant = '';
+	    let broadcastMode = '';
+	    let heartbeatTimer = null;
+	    let toneContext = null;
     let toneOscillator = null;
     let sharedMediaStream = null;
-    let selectedMicDeviceId = '';
-    let selectedMicLabel = 'Default';
-    let jacktripSourceDetected = false;
+    // True only when the currently published audio track is from getDisplayMedia().
+    let audioSourcedFromDisplay = false;
+    let screenFallbackAudioMode = 'mic';
+	    let selectedMicDeviceId = '';
+	    let selectedMicLabel = 'Default';
+    let selectedCamDeviceId = '';
+    let selectedCamLabel = 'Default';
+	    let jacktripSourceDetected = false;
 
-    function setState(label, variant = '') {
-      statePill.textContent = label;
-      statePill.className = 'pill' + (variant ? ' ' + variant : '');
+    function renderStateLabel() {
+      const withVideo = !!videoTrack && stateBaseLabel.startsWith('Live');
+      statePill.textContent = withVideo ? (stateBaseLabel + ' + Video') : stateBaseLabel;
+      statePill.className = 'pill' + (stateVariant ? ' ' + stateVariant : '');
     }
-    function setError(text) {
-      if (!text) {
-        error.style.display = 'none';
-        error.textContent = '';
+	    function setState(label, variant = '') {
+      stateBaseLabel = label;
+      stateVariant = variant;
+      renderStateLabel();
+	    }
+    function liveLabelForMode(mode) {
+      if (mode === 'share') return 'Live · App Audio';
+      if (mode === 'screen') return 'Live · Screen Share';
+      if (mode === 'tone') return 'Live · Test Tone';
+      return 'Live · Microphone';
+    }
+    function updateLiveStateLabel() {
+      setState(liveLabelForMode(broadcastMode), 'live');
+    }
+    function refreshVideoButtons() {
+      stopVideoBtn.disabled = !videoTrack;
+    }
+    function clearLocalPreview() {
+      if (!localPreview) return;
+      localPreview.style.transform = 'none';
+      localPreview.innerHTML = '';
+      localPreview.textContent = 'Local preview appears here when video is live.';
+    }
+    function showLocalPreview() {
+      if (!localPreview || !videoTrack) return;
+      localPreview.innerHTML = '';
+      localPreview.style.transform = videoSource === 'camera' ? 'scaleX(-1)' : 'none';
+      videoTrack.play('localPreview');
+    }
+	    function setError(text) {
+	      if (!text) {
+	        error.style.display = 'none';
+	        error.textContent = '';
         return;
       }
       error.style.display = 'flex';
@@ -1432,21 +1491,28 @@ duetRoutes.get('/:id/broadcast', async (c) => {
 	        heartbeatTimer = null;
 	      }
     }
-    async function sendHeartbeat(status = 'live', mode = broadcastMode) {
-      if (!bridgeTicket) return;
-      try {
-        await fetch('/duet/' + roomId + '/broadcast/heartbeat', {
+	    async function sendHeartbeat(status = 'live', mode = broadcastMode) {
+	      if (!bridgeTicket) return;
+	      try {
+	        await fetch('/duet/' + roomId + '/broadcast/heartbeat', {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
             'authorization': 'Bearer ' + bridgeTicket,
           },
-          body: JSON.stringify({ status, mode }),
-        });
-      } catch (e) {
-        console.warn('broadcast heartbeat failed', e);
-      }
-    }
+	          body: JSON.stringify({
+              status,
+              mode,
+              media: {
+                audio: !!audioTrack,
+                video: !!videoTrack,
+              },
+            }),
+	        });
+	      } catch (e) {
+	        console.warn('broadcast heartbeat failed', e);
+	      }
+	    }
     function startHeartbeatLoop() {
       stopHeartbeatLoop();
       heartbeatTimer = setInterval(() => {
@@ -1490,13 +1556,58 @@ duetRoutes.get('/:id/broadcast', async (c) => {
         localStorage.setItem(MIC_DEVICE_STORAGE_KEY, selectedMicDeviceId);
       } else {
         localStorage.removeItem(MIC_DEVICE_STORAGE_KEY);
-      }
+	      }
 	      micHint.textContent = 'Selected source: ' + selectedMicLabel;
 	    }
-
-    async function writeDeviceDiagnostics() {
+    function findPreferredCameraIndex(cams, savedDeviceId) {
+      if (savedDeviceId) {
+        const savedIdx = cams.findIndex((c) => c.deviceId === savedDeviceId);
+        if (savedIdx >= 0) return savedIdx;
+      }
+      return 0;
+    }
+    function setSelectedCamFromSelect() {
+      const idx = camSelect.selectedIndex;
+      selectedCamDeviceId = camSelect.value || '';
+      selectedCamLabel = idx >= 0 ? (camSelect.options[idx].textContent || 'Default') : 'Default';
+      if (selectedCamDeviceId) {
+        localStorage.setItem(CAM_DEVICE_STORAGE_KEY, selectedCamDeviceId);
+      } else {
+        localStorage.removeItem(CAM_DEVICE_STORAGE_KEY);
+      }
+      camHint.textContent = 'Selected camera: ' + selectedCamLabel;
+    }
+    async function writeCameraDiagnostics() {
       try {
-        const mics = await AgoraRTC.getMicrophones();
+        const cams = await AgoraRTC.getCameras();
+        if (!cams || cams.length === 0) {
+          camSelect.innerHTML = '<option value="">No camera devices found</option>';
+          camSelect.disabled = true;
+          selectedCamDeviceId = '';
+          selectedCamLabel = 'None';
+          camHint.textContent = 'No camera devices were detected.';
+          return;
+        }
+        camSelect.disabled = false;
+        camSelect.innerHTML = '';
+        const savedDeviceId = localStorage.getItem(CAM_DEVICE_STORAGE_KEY) || '';
+        const preferredIdx = findPreferredCameraIndex(cams, savedDeviceId);
+        cams.forEach((c, idx) => {
+          const opt = document.createElement('option');
+          opt.value = c.deviceId || '';
+          opt.textContent = (idx + 1) + '. ' + (c.label || '(unlabeled camera)');
+          if (idx === preferredIdx) opt.selected = true;
+          camSelect.appendChild(opt);
+        });
+        setSelectedCamFromSelect();
+      } catch (e) {
+        camHint.textContent = 'Could not enumerate cameras: ' + errText(e);
+      }
+    }
+
+	    async function writeDeviceDiagnostics() {
+	      try {
+	        const mics = await AgoraRTC.getMicrophones();
         if (!mics || mics.length === 0) {
           micSelect.innerHTML = '<option value="">No microphone devices found</option>';
           micSelect.disabled = true;
@@ -1525,10 +1636,11 @@ duetRoutes.get('/:id/broadcast', async (c) => {
 	        diag.textContent = mics.map((m, idx) =>
 	          (idx + 1) + '. ' + (m.label || '(unlabeled device)')
 	        ).join('\\n');
-      } catch (e) {
-        diag.textContent = 'Could not enumerate microphones: ' + errText(e);
-      }
-    }
+	      } catch (e) {
+	        diag.textContent = 'Could not enumerate microphones: ' + errText(e);
+	      }
+      await writeCameraDiagnostics();
+	    }
 
 	    async function fetchBridgeToken() {
 	      const res = await fetch('/duet/' + roomId + '/bridge/token', {
@@ -1554,6 +1666,111 @@ duetRoutes.get('/:id/broadcast', async (c) => {
 	      return body;
 	    }
 
+    function stopAndClearSharedMediaStream() {
+      if (sharedMediaStream) {
+        try {
+          sharedMediaStream.getTracks().forEach((t) => t.stop());
+        } catch (_) {}
+      }
+      sharedMediaStream = null;
+      audioSourcedFromDisplay = false;
+    }
+    function stopStreamTracks(stream) {
+      if (!stream) return;
+      try {
+        stream.getTracks().forEach((t) => t.stop());
+      } catch (_) {}
+    }
+    function closeTrack(track) {
+      if (!track) return;
+      try {
+        track.stop();
+        track.close();
+      } catch (_) {}
+    }
+    function attachVideoTrackEndedHandlers(track, source) {
+      if (!track || typeof track.on !== 'function') return;
+      track.on('track-ended', () => {
+        if (track !== videoTrack) return;
+        if (source === 'screen') {
+          void handleScreenShareEnded();
+        } else {
+          void stopVideoOnly('Camera stream ended.');
+        }
+      });
+    }
+    async function stopVideoOnly(endedMessage = '') {
+      if (!videoTrack) return;
+      const currentVideo = videoTrack;
+      const source = videoSource;
+      videoTrack = null;
+      videoSource = '';
+      refreshVideoButtons();
+      renderStateLabel();
+      clearLocalPreview();
+      if (client) {
+        try {
+          await client.unpublish([currentVideo]);
+        } catch (_) {}
+      }
+      try {
+        currentVideo.stop();
+        currentVideo.close();
+      } catch (_) {}
+      if (source === 'screen' && sharedMediaStream) {
+        try {
+          sharedMediaStream.getVideoTracks().forEach((t) => t.stop());
+          if (!audioSourcedFromDisplay) {
+            stopAndClearSharedMediaStream();
+          }
+        } catch (_) {}
+      }
+      if (endedMessage) {
+        setMessage(endedMessage, true);
+      }
+      if (client && audioTrack) {
+        await sendHeartbeat('live', broadcastMode);
+      }
+    }
+    async function handleScreenShareEnded() {
+      const hadDisplayAudio = audioSourcedFromDisplay;
+      await stopVideoOnly(hadDisplayAudio ? '' : 'Screen share ended.');
+      if (!hadDisplayAudio) {
+        if (broadcastMode === 'screen') {
+          broadcastMode = screenFallbackAudioMode || 'mic';
+        }
+        updateLiveStateLabel();
+        return;
+      }
+
+      try {
+        const nextAudioTrack = await createMicTrackOrFallback(false);
+        screenFallbackAudioMode = broadcastMode;
+        const previousAudio = audioTrack;
+        if (client && nextAudioTrack) {
+          await client.publish([nextAudioTrack]);
+        }
+        if (previousAudio && client) {
+          try {
+            await client.unpublish([previousAudio]);
+          } catch (_) {}
+        }
+        closeTrack(previousAudio);
+        audioTrack = nextAudioTrack;
+        stopAndClearSharedMediaStream();
+        updateLiveStateLabel();
+        const fallbackLabel = broadcastMode === 'tone'
+          ? 'test tone'
+          : ('microphone audio (' + selectedMicLabel + ')');
+        setMessage('Screen share ended. Switched to ' + fallbackLabel + '.', true);
+        await sendHeartbeat('live', broadcastMode);
+      } catch (e) {
+        await stopBroadcast(true);
+        setState('Stopped', 'idle');
+        setMessage('Screen share ended and microphone fallback failed. Broadcast stopped.', true);
+        setError(errDetails(e));
+      }
+    }
     async function createToneTrack() {
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if (!Ctx) throw new Error('AudioContext unsupported');
@@ -1575,11 +1792,11 @@ duetRoutes.get('/:id/broadcast', async (c) => {
       broadcastMode = 'tone';
       return AgoraRTC.createCustomAudioTrack({ mediaStreamTrack: mediaTrack });
     }
-
     async function createSharedAudioTrack() {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
         throw new Error('display_capture_unsupported');
       }
+      stopAndClearSharedMediaStream();
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
         audio: {
@@ -1591,19 +1808,16 @@ duetRoutes.get('/:id/broadcast', async (c) => {
 
       const audioTracks = stream.getAudioTracks();
       if (!audioTracks || audioTracks.length === 0) {
-        stream.getTracks().forEach((t) => t.stop());
-        sharedMediaStream = null;
+        stopAndClearSharedMediaStream();
         setMessage('Display share did not provide system audio. Falling back to selected microphone source.', true);
         return createMicTrackOrFallback(false);
       }
 
       stream.getVideoTracks().forEach((t) => t.stop());
-
       const mediaTrack = audioTracks[0];
       broadcastMode = 'share';
       return AgoraRTC.createCustomAudioTrack({ mediaStreamTrack: mediaTrack });
     }
-
     async function createMicTrackOrFallback(preferTone) {
       if (preferTone) {
         return createToneTrack();
@@ -1620,60 +1834,170 @@ duetRoutes.get('/:id/broadcast', async (c) => {
         return createToneTrack();
       }
     }
-
-	    async function joinAndPublish(mode) {
-	      const creds = await fetchBridgeToken();
-	      if (!creds.agora_broadcaster_token || !creds.agora_channel) {
-	        const err = new Error('invalid_bridge_credentials');
-	        err.name = 'bridge_credentials_error';
-	        err.debug = {
-	          roomId,
-	          has_channel: !!creds.agora_channel,
-	          has_token: !!creds.agora_broadcaster_token,
-	        };
-	        throw err;
-	      }
-
-	      client = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' });
-	      await client.setClientRole('host');
-	      try {
-	        setMessage('Joining Agora...');
-	        await client.join(appId, creds.agora_channel, creds.agora_broadcaster_token, creds.agora_broadcaster_uid);
-	      } catch (e) {
-	        try {
-	          e.debug = {
-	            roomId,
-	            mode,
-	            appId,
-	            agora_channel: creds.agora_channel,
-	            agora_uid: creds.agora_broadcaster_uid,
-	            token_len: String(creds.agora_broadcaster_token || '').length,
-	            sdk_version: AgoraRTC && AgoraRTC.VERSION ? String(AgoraRTC.VERSION) : undefined,
-	            ua: navigator && navigator.userAgent ? String(navigator.userAgent) : undefined,
-	          };
-	        } catch (_) {}
-	        throw e;
-	      }
-	      if (mode === 'share') {
-	        audioTrack = await createSharedAudioTrack();
-	      } else {
-	        audioTrack = await createMicTrackOrFallback(mode === 'tone');
+    async function createCameraVideoTrack() {
+      const options = { encoderConfig: '720p_2' };
+      if (selectedCamDeviceId) {
+        options.cameraId = selectedCamDeviceId;
       }
-      await client.publish([audioTrack]);
+      const track = await AgoraRTC.createCameraVideoTrack(options);
+      videoSource = 'camera';
+      attachVideoTrackEndedHandlers(track, 'camera');
+      return track;
+    }
+    async function createSharedScreenTracks() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        throw new Error('display_capture_unsupported');
+      }
+      if (!AgoraRTC.createCustomVideoTrack || !AgoraRTC.createCustomAudioTrack) {
+        throw new Error('custom_track_unsupported');
+      }
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: {
+          systemAudio: 'include',
+          suppressLocalAudioPlayback: false,
+        },
+      });
+
+      const videoMediaTrack = stream.getVideoTracks()[0];
+      if (!videoMediaTrack) {
+        stopStreamTracks(stream);
+        throw new Error('display_video_track_missing');
+      }
+      const nextVideoTrack = AgoraRTC.createCustomVideoTrack({ mediaStreamTrack: videoMediaTrack });
+      attachVideoTrackEndedHandlers(nextVideoTrack, 'screen');
+      videoMediaTrack.onended = () => {
+        if (nextVideoTrack === videoTrack) {
+          void handleScreenShareEnded();
+        }
+      };
+
+      let nextAudioTrack = null;
+      let fallbackAudioMode = 'mic';
+      let hasDisplayAudio = false;
+      const displayAudioTrack = stream.getAudioTracks()[0];
+      if (displayAudioTrack) {
+        nextAudioTrack = AgoraRTC.createCustomAudioTrack({ mediaStreamTrack: displayAudioTrack });
+        hasDisplayAudio = true;
+        fallbackAudioMode = 'screen';
+      } else {
+        setMessage('System audio unavailable for screen share. Falling back to microphone audio.', true);
+        nextAudioTrack = await createMicTrackOrFallback(false);
+        fallbackAudioMode = broadcastMode || 'mic';
+      }
+      return {
+        audio: nextAudioTrack,
+        video: nextVideoTrack,
+        stream,
+        hasDisplayAudio,
+        fallbackAudioMode,
+      };
+    }
+    async function ensureAudioLiveForVideoStart() {
+      if (client && audioTrack) return true;
+      const started = await startBroadcast('mic');
+      if (started && client && audioTrack) return true;
+      setMessage('Audio is required before video. Start Mic Broadcast first or allow microphone access.', true);
+      return false;
     }
 
-	    async function startBroadcast(mode = 'mic') {
-	      setError('');
-	      setMessage('Requesting bridge credentials...');
-	      setState('Starting…', 'idle');
-	      shareBtn.disabled = true;
-	      startBtn.disabled = true;
-	      toneBtn.disabled = true;
-	      try {
-	        await joinAndPublish(mode);
+    async function joinAndPublish(mode) {
+      const creds = await fetchBridgeToken();
+      if (!creds.agora_broadcaster_token || !creds.agora_channel) {
+        const err = new Error('invalid_bridge_credentials');
+        err.name = 'bridge_credentials_error';
+        err.debug = {
+          roomId,
+          has_channel: !!creds.agora_channel,
+          has_token: !!creds.agora_broadcaster_token,
+        };
+        throw err;
+      }
+
+      client = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' });
+      await client.setClientRole('host');
+      try {
+        setMessage('Joining Agora...');
+        await client.join(appId, creds.agora_channel, creds.agora_broadcaster_token, creds.agora_broadcaster_uid);
+      } catch (e) {
+        try {
+          e.debug = {
+            roomId,
+            mode,
+            appId,
+            agora_channel: creds.agora_channel,
+            agora_uid: creds.agora_broadcaster_uid,
+            token_len: String(creds.agora_broadcaster_token || '').length,
+            sdk_version: AgoraRTC && AgoraRTC.VERSION ? String(AgoraRTC.VERSION) : undefined,
+            ua: navigator && navigator.userAgent ? String(navigator.userAgent) : undefined,
+          };
+        } catch (_) {}
+        throw e;
+      }
+
+      let tracks = [];
+      if (mode === 'share') {
+        videoTrack = null;
+        videoSource = '';
+        screenFallbackAudioMode = 'mic';
+        clearLocalPreview();
+        audioTrack = await createSharedAudioTrack();
+      } else if (mode === 'camera') {
+        audioTrack = await createMicTrackOrFallback(false);
+        screenFallbackAudioMode = broadcastMode;
+        videoTrack = await createCameraVideoTrack();
+      } else if (mode === 'screen_video') {
+        const screenTracks = await createSharedScreenTracks();
+        audioTrack = screenTracks.audio;
+        videoTrack = screenTracks.video;
+        sharedMediaStream = screenTracks.stream;
+        audioSourcedFromDisplay = !!screenTracks.hasDisplayAudio;
+        videoSource = 'screen';
+        broadcastMode = 'screen';
+        screenFallbackAudioMode = screenTracks.fallbackAudioMode || 'mic';
+      } else {
+        videoTrack = null;
+        videoSource = '';
+        screenFallbackAudioMode = 'mic';
+        clearLocalPreview();
+        audioTrack = await createMicTrackOrFallback(mode === 'tone');
+      }
+
+      tracks = [audioTrack];
+      if (videoTrack) {
+        tracks.push(videoTrack);
+      }
+      await client.publish(tracks);
+      refreshVideoButtons();
+      if (videoTrack) {
+        showLocalPreview();
+      }
+    }
+
+    async function startBroadcast(mode = 'mic') {
+      if (client && audioTrack) return true;
+
+      setError('');
+      setMessage('Requesting bridge credentials...');
+      setState('Starting…', 'idle');
+      shareBtn.disabled = true;
+      startBtn.disabled = true;
+      cameraBtn.disabled = true;
+      screenVideoBtn.disabled = true;
+      toneBtn.disabled = true;
+      stopVideoBtn.disabled = true;
+      try {
+        await joinAndPublish(mode);
         if (broadcastMode === 'share') {
           setState('Live · App Audio', 'live');
           setMessage('Shared audio is live.');
+        } else if (broadcastMode === 'screen') {
+          setState('Live · Screen Share', 'live');
+          if (audioSourcedFromDisplay) {
+            setMessage('Screen share + audio is live.');
+          } else {
+            setMessage('Screen video is live with microphone audio fallback.', true);
+          }
         } else if (broadcastMode === 'tone') {
           setState('Live · Test Tone', 'live');
           setMessage('Test tone is live. Audience on /watch should now hear a sine tone.');
@@ -1683,17 +2007,122 @@ duetRoutes.get('/:id/broadcast', async (c) => {
         }
         await sendHeartbeat('live', broadcastMode);
         startHeartbeatLoop();
-	        stopBtn.disabled = false;
-	      } catch (e) {
-	        console.error('broadcast start failed', e);
-	        setError(errDetails(e));
-	        await stopBroadcast(true);
-	        if (!message.textContent) {
-	          setMessage('Could not start broadcast.', true);
-	        }
-	        shareBtn.disabled = false;
+        stopBtn.disabled = false;
+        cameraBtn.disabled = false;
+        screenVideoBtn.disabled = false;
+        refreshVideoButtons();
+        return true;
+      } catch (e) {
+        console.error('broadcast start failed', e);
+        setError(errDetails(e));
+        await stopBroadcast(true);
+        if (!message.textContent) {
+          setMessage('Could not start broadcast.', true);
+        }
+        shareBtn.disabled = false;
         startBtn.disabled = false;
+        cameraBtn.disabled = false;
+        screenVideoBtn.disabled = false;
         toneBtn.disabled = false;
+        stopVideoBtn.disabled = true;
+        return false;
+      }
+    }
+
+    async function startCameraVideo() {
+      setError('');
+      const hasAudio = await ensureAudioLiveForVideoStart();
+      if (!hasAudio || !client || !audioTrack) return;
+
+      cameraBtn.disabled = true;
+      screenVideoBtn.disabled = true;
+      try {
+        await stopVideoOnly();
+        videoTrack = await createCameraVideoTrack();
+        await client.publish([videoTrack]);
+        showLocalPreview();
+        updateLiveStateLabel();
+        refreshVideoButtons();
+        setMessage('Camera video is live using: ' + selectedCamLabel + '.');
+        await sendHeartbeat('live', broadcastMode);
+      } catch (e) {
+        setError(errDetails(e));
+        setMessage('Could not start camera video.', true);
+      } finally {
+        cameraBtn.disabled = false;
+        screenVideoBtn.disabled = false;
+      }
+    }
+
+    async function startScreenVideo() {
+      setError('');
+      const hasAudio = await ensureAudioLiveForVideoStart();
+      if (!hasAudio || !client || !audioTrack) return;
+
+      cameraBtn.disabled = true;
+      screenVideoBtn.disabled = true;
+      const previousAudio = audioTrack;
+      const previousVideo = videoTrack;
+      const previousVideoSource = videoSource;
+      const previousMode = broadcastMode;
+      const previousSharedMediaStream = sharedMediaStream;
+      const previousAudioSourcedFromDisplay = audioSourcedFromDisplay;
+      let screenTracks = null;
+      try {
+        screenTracks = await createSharedScreenTracks();
+        await client.publish([screenTracks.audio, screenTracks.video]);
+        if (previousVideo || previousAudio) {
+          try {
+            await client.unpublish([...(previousVideo ? [previousVideo] : []), ...(previousAudio ? [previousAudio] : [])]);
+          } catch (_) {}
+        }
+        closeTrack(previousVideo);
+        closeTrack(previousAudio);
+        if (previousSharedMediaStream && previousSharedMediaStream !== screenTracks.stream) {
+          stopStreamTracks(previousSharedMediaStream);
+        }
+        audioTrack = screenTracks.audio;
+        videoTrack = screenTracks.video;
+        sharedMediaStream = screenTracks.stream;
+        audioSourcedFromDisplay = !!screenTracks.hasDisplayAudio;
+        videoSource = 'screen';
+        broadcastMode = 'screen';
+        screenFallbackAudioMode = screenTracks.fallbackAudioMode || 'mic';
+        showLocalPreview();
+        updateLiveStateLabel();
+        refreshVideoButtons();
+        if (audioSourcedFromDisplay) {
+          setMessage('Screen share + audio is live.');
+        } else {
+          setMessage('Screen video is live with microphone audio fallback.', true);
+        }
+        await sendHeartbeat('live', broadcastMode);
+      } catch (e) {
+        if (screenTracks) {
+          try {
+            await client.unpublish([...(screenTracks.video ? [screenTracks.video] : []), ...(screenTracks.audio ? [screenTracks.audio] : [])]);
+          } catch (_) {}
+          closeTrack(screenTracks.video);
+          closeTrack(screenTracks.audio);
+          stopStreamTracks(screenTracks.stream);
+        }
+        audioTrack = previousAudio;
+        videoTrack = previousVideo;
+        videoSource = previousVideoSource;
+        broadcastMode = previousMode;
+        sharedMediaStream = previousSharedMediaStream;
+        audioSourcedFromDisplay = previousAudioSourcedFromDisplay;
+        if (videoTrack) {
+          showLocalPreview();
+        } else {
+          clearLocalPreview();
+        }
+        refreshVideoButtons();
+        setMessage('Could not start screen share video.', true);
+        setError(errDetails(e));
+      } finally {
+        cameraBtn.disabled = false;
+        screenVideoBtn.disabled = false;
       }
     }
 
@@ -1701,6 +2130,20 @@ duetRoutes.get('/:id/broadcast', async (c) => {
       const previousMode = broadcastMode || undefined;
       stopHeartbeatLoop();
       try {
+        if (videoTrack && client) {
+          try {
+            await client.unpublish([videoTrack]);
+          } catch (_) {}
+        }
+        if (videoTrack) {
+          try {
+            videoTrack.stop();
+            videoTrack.close();
+          } catch (_) {}
+          videoTrack = null;
+          videoSource = '';
+          clearLocalPreview();
+        }
         if (audioTrack && client) {
           await client.unpublish([audioTrack]);
         }
@@ -1709,10 +2152,7 @@ duetRoutes.get('/:id/broadcast', async (c) => {
           audioTrack.close();
           audioTrack = null;
         }
-        if (sharedMediaStream) {
-          sharedMediaStream.getTracks().forEach((t) => t.stop());
-          sharedMediaStream = null;
-        }
+        stopAndClearSharedMediaStream();
         if (toneOscillator) {
           toneOscillator.stop();
           toneOscillator.disconnect();
@@ -1727,6 +2167,7 @@ duetRoutes.get('/:id/broadcast', async (c) => {
           client = null;
         }
         broadcastMode = '';
+        screenFallbackAudioMode = 'mic';
         if (previousMode) {
           await sendHeartbeat('stopped', previousMode);
         }
@@ -1738,41 +2179,105 @@ duetRoutes.get('/:id/broadcast', async (c) => {
         setError(errText(e));
       } finally {
         stopBtn.disabled = true;
+        stopVideoBtn.disabled = true;
         shareBtn.disabled = false;
         startBtn.disabled = false;
+        cameraBtn.disabled = false;
+        screenVideoBtn.disabled = false;
         toneBtn.disabled = false;
+        renderStateLabel();
       }
     }
 
-    shareBtn.addEventListener('click', () => startBroadcast('share'));
-    startBtn.addEventListener('click', () => startBroadcast('mic'));
-    toneBtn.addEventListener('click', () => startBroadcast('tone'));
-    stopBtn.addEventListener('click', stopBroadcast);
+    shareBtn.addEventListener('click', () => { void startBroadcast('share'); });
+    startBtn.addEventListener('click', () => { void startBroadcast('mic'); });
+    cameraBtn.addEventListener('click', () => { void startCameraVideo(); });
+    screenVideoBtn.addEventListener('click', () => { void startScreenVideo(); });
+    toneBtn.addEventListener('click', () => { void startBroadcast('tone'); });
+    stopVideoBtn.addEventListener('click', () => {
+      void (async () => {
+        const wasScreen = broadcastMode === 'screen';
+        const hadDisplayAudio = wasScreen && audioSourcedFromDisplay;
+        await stopVideoOnly(hadDisplayAudio ? '' : 'Video stopped.');
+        if (wasScreen && hadDisplayAudio) {
+          try {
+            const nextAudioTrack = await createMicTrackOrFallback(false);
+            screenFallbackAudioMode = broadcastMode;
+            const previousAudio = audioTrack;
+            if (client && nextAudioTrack) {
+              await client.publish([nextAudioTrack]);
+            }
+            if (previousAudio && client) {
+              try {
+                await client.unpublish([previousAudio]);
+              } catch (_) {}
+            }
+            closeTrack(previousAudio);
+            audioTrack = nextAudioTrack;
+            stopAndClearSharedMediaStream();
+            const fallbackLabel = broadcastMode === 'tone'
+              ? 'test tone'
+              : ('microphone audio (' + selectedMicLabel + ')');
+            setMessage('Video stopped. Switched to ' + fallbackLabel + '.', true);
+            await sendHeartbeat('live', broadcastMode);
+          } catch (e) {
+            await stopBroadcast(true);
+            setState('Stopped', 'idle');
+            setMessage('Video stopped and fallback audio failed. Broadcast stopped.', true);
+            setError(errDetails(e));
+            refreshVideoButtons();
+            return;
+          }
+        } else if (wasScreen) {
+          broadcastMode = screenFallbackAudioMode || 'mic';
+          await sendHeartbeat('live', broadcastMode);
+        }
+        updateLiveStateLabel();
+        refreshVideoButtons();
+      })();
+    });
+    stopBtn.addEventListener('click', () => { void stopBroadcast(); });
     micSelect.addEventListener('change', () => {
       setSelectedMicFromSelect();
       setMessage('Mic source updated.');
       setError('');
     });
+    camSelect.addEventListener('change', () => {
+      setSelectedCamFromSelect();
+      setMessage('Camera source updated.');
+      setError('');
+    });
     refreshMicsBtn.addEventListener('click', () => {
       void writeDeviceDiagnostics();
+    });
+    refreshCamsBtn.addEventListener('click', () => {
+      void writeCameraDiagnostics();
     });
     window.addEventListener('beforeunload', () => { void stopBroadcast(); });
 
     if (!${JSON.stringify(hasBridgeTicket)}) {
       shareBtn.disabled = true;
       startBtn.disabled = true;
+      cameraBtn.disabled = true;
+      screenVideoBtn.disabled = true;
       toneBtn.disabled = true;
+      stopVideoBtn.disabled = true;
       setState('Blocked', 'error');
       setMessage('Missing bridge ticket in URL.', true);
     } else if (!${JSON.stringify(appConfigured)}) {
       shareBtn.disabled = true;
       startBtn.disabled = true;
+      cameraBtn.disabled = true;
+      screenVideoBtn.disabled = true;
       toneBtn.disabled = true;
+      stopVideoBtn.disabled = true;
       setState('Blocked', 'error');
       setMessage('Agora app is not configured on this worker.', true);
 	    } else {
 	      setState('Ready');
-	      setMessage('Ready. Start App Audio Share or Start Mic Broadcast.');
+	      setMessage('Ready. Start App Audio Share, Mic Broadcast, or Camera.');
+        clearLocalPreview();
+        refreshVideoButtons();
 	      void writeDeviceDiagnostics();
 	    }
 	  </script>
