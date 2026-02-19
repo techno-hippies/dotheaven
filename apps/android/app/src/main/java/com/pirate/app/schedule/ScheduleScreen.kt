@@ -865,6 +865,6 @@ private suspend fun ensureScheduleSessionKey(
     return null
   }
 
-  onShowMessage("Session key ready. Submit again if needed.")
+  onShowMessage("Session key authorized.")
   return authorized
 }
