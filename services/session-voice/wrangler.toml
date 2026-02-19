@@ -24,6 +24,7 @@ new_classes = ["DuetRoomDO"]
 
 [vars]
 ENVIRONMENT = "development"
+SESSION_ESCROW_MODE = "live"
 RPC_URL = "https://rpc.moderato.tempo.xyz"
 ESCROW_ADDRESS = "0xb1E233221FB25c65090A75cc60Df5164A2eA4B98"
 REGISTRY_ADDRESS = "0xA111c5cA16752B09fF16B3B8B24BA55a8486aB23"

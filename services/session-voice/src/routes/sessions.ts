@@ -69,6 +69,10 @@ export function validateAttestationWindow(
   return { ok: true }
 }
 
+function isSessionEscrowMock(env: Env): boolean {
+  return (env.SESSION_ESCROW_MODE ?? 'live') === 'mock'
+}
+
 /** Auth middleware for session endpoints (skip attest) */
 async function requireAuth(c: any, env: Env): Promise<string | null> {
   const auth = c.req.header('authorization')
@@ -105,7 +109,7 @@ sessionRoutes.post('/join', async (c) => {
     return c.json({ error: 'invalid booking_id' }, 400)
   }
 
-  const isMock = c.env.ENVIRONMENT === 'development'
+  const isMock = isSessionEscrowMock(c.env)
 
   // Get booking from contract
   const booking = await getBooking(c.env.RPC_URL, c.env.ESCROW_ADDRESS, bookingId, isMock)
@@ -291,7 +295,7 @@ sessionRoutes.post('/:id/attest', async (c) => {
     return c.json({ error: 'invalid booking_id' }, 400)
   }
 
-  const isMock = c.env.ENVIRONMENT === 'development'
+  const isMock = isSessionEscrowMock(c.env)
 
   const booking = await getBooking(c.env.RPC_URL, c.env.ESCROW_ADDRESS, bookingId, isMock)
   if (!booking) {
