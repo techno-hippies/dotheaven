@@ -1,0 +1,26 @@
+{
+  "name": "@heaven/web-new",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bunx --bun vite",
+    "dev:web": "bunx --bun vite",
+    "build": "bunx --bun vite build",
+    "build:web": "bunx --bun vite build",
+    "preview": "bunx --bun vite preview",
+    "check": "bunx tsc --noEmit",
+    "storybook": "storybook dev -p 6007",
+    "build-storybook": "storybook build"
+  },
+  "dependencies": {
+    "solid-js": "^1.9.3"
+  },
+  "devDependencies": {
+    "storybook": "^10.1.4",
+    "storybook-solidjs-vite": "^10.0.9",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.6",
+    "vite-plugin-solid": "^2.10.2"
+  }
+}

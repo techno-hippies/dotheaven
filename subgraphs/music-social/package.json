@@ -1,0 +1,24 @@
+{
+  "name": "music-social-subgraph",
+  "version": "3.0.0",
+  "description": "Tempo music-social subgraph for tracks/scrobbles, content access, and follows — dotheaven",
+  "scripts": {
+    "codegen": "graph codegen",
+    "build": "graph codegen && graph build",
+    "build:tempo": "graph codegen subgraph.tempo.yaml && graph build subgraph.tempo.yaml",
+    "build:tempo:local": "graph codegen subgraph.tempo.local.yaml && graph build subgraph.tempo.local.yaml",
+    "deploy": "graph deploy music-social --node https://api.studio.thegraph.com/deploy/",
+    "create-local": "graph create --node http://localhost:8020/ music-social",
+    "remove-local": "graph remove --node http://localhost:8020/ music-social",
+    "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 music-social",
+    "create:tempo:local": "graph create --node http://localhost:8020/ dotheaven/music-social-tempo",
+    "remove:tempo:local": "graph remove --node http://localhost:8020/ dotheaven/music-social-tempo",
+    "deploy:tempo:local": "graph deploy --version-label ${VERSION_LABEL:-local} --node http://localhost:8020/ --ipfs http://localhost:5001 dotheaven/music-social-tempo subgraph.tempo.local.yaml",
+    "auth": "graph auth"
+  },
+  "keywords": ["the-graph", "tempo", "music", "social", "scrobble", "follow", "content"],
+  "devDependencies": {
+    "@graphprotocol/graph-cli": "^0.98.1",
+    "@graphprotocol/graph-ts": "^0.35.1"
+  }
+}

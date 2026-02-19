@@ -10,15 +10,25 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults
@@ -33,13 +43,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import com.pirate.app.music.CoverRef
 import com.pirate.app.theme.PiratePalette
 import com.pirate.app.ui.PirateMobileHeader
 import com.pirate.app.util.formatTimeAgoShort
 import com.pirate.app.util.shortAddress
+import java.util.Locale
 
 enum class ArtistTab(val label: String) {
   Songs("Songs"),
@@ -56,6 +71,7 @@ fun ArtistScreen(
 ) {
   var selectedTab by remember { mutableIntStateOf(0) }
   var refreshKey by remember { mutableIntStateOf(0) }
+  var refreshMenuExpanded by remember { mutableStateOf(false) }
 
   var loading by remember { mutableStateOf(true) }
   var loadError by remember { mutableStateOf<String?>(null) }
@@ -91,8 +107,22 @@ fun ArtistScreen(
       title = artistName,
       onBackPress = onBack,
       rightSlot = {
-        OutlinedButton(onClick = { refreshKey += 1 }) {
-          Text("Refresh")
+        Box {
+          IconButton(onClick = { refreshMenuExpanded = true }) {
+            Icon(Icons.Rounded.MoreVert, contentDescription = "More")
+          }
+          DropdownMenu(
+            expanded = refreshMenuExpanded,
+            onDismissRequest = { refreshMenuExpanded = false },
+          ) {
+            DropdownMenuItem(
+              text = { Text("Refresh") },
+              onClick = {
+                refreshMenuExpanded = false
+                refreshKey += 1
+              },
+            )
+          }
         }
       },
     )
@@ -173,23 +203,57 @@ private fun ArtistHeroCard(
         .padding(14.dp),
       verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-      Text(
-        artistName,
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.SemiBold,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        val leadCover = tracks.firstOrNull()?.coverCid
+        val coverUrl = CoverRef.resolveCoverUrl(ref = leadCover, width = 144, height = 144, format = null, quality = null)
+        if (!coverUrl.isNullOrBlank()) {
+          AsyncImage(
+            model = coverUrl,
+            contentDescription = "Artist image",
+            modifier = Modifier.size(72.dp).clip(CircleShape),
+            contentScale = ContentScale.Crop,
+          )
+        } else {
+          Surface(
+            modifier = Modifier.size(72.dp),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+          ) {
+            Box(contentAlignment = Alignment.Center) {
+              Text(
+                artistName.take(1).uppercase(Locale.US),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+              )
+            }
+          }
+        }
+
+        androidx.compose.foundation.layout.Spacer(Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+          Text(
+            artistName,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+          Text(
+            "Recent activity: ${scrobbles.size} scrobbles",
+            style = MaterialTheme.typography.bodyMedium,
+            color = PiratePalette.TextMuted,
+          )
+        }
+      }
+
       Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         ArtistStatPill(label = "Tracks", value = tracks.size.toString())
         ArtistStatPill(label = "Listeners", value = listeners.size.toString())
         ArtistStatPill(label = "Scrobbles", value = totalScrobbles.toString())
       }
-      Text(
-        text = "Recent activity: ${scrobbles.size} scrobbles",
-        style = MaterialTheme.typography.bodyMedium,
-        color = PiratePalette.TextMuted,
-      )
     }
   }
 }
@@ -322,7 +386,7 @@ private fun ArtistScrobblesPanel(
     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 20.dp),
     verticalArrangement = Arrangement.spacedBy(8.dp),
   ) {
-    itemsIndexed(rows, key = { idx, row -> "${row.trackId}:${row.userAddress}:${idx}" }) { _, row ->
+    itemsIndexed(rows, key = { idx, row -> "${row.trackId}:${row.userAddress}:$idx" }) { _, row ->
       Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),

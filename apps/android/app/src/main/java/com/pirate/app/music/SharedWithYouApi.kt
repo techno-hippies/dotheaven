@@ -1,6 +1,7 @@
 package com.pirate.app.music
 
 import android.util.Log
+import com.pirate.app.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -24,7 +25,7 @@ import org.web3j.abi.datatypes.generated.Uint8
  * Shared-with-you data layer (Tempo subgraphs via graph.dotheaven.org).
  *
  * Semantics:
- * - Tracks: activity subgraph AccessGrant → ContentEntry (contentId/pieceCid/datasetOwner/algo)
+ * - Tracks: music-social subgraph AccessGrant → ContentEntry (contentId/pieceCid/datasetOwner/algo)
  * - Playlists: playlists subgraph PlaylistShare → (playlistId + tracksHash + version snapshot)
  *
  * Notes:
@@ -35,14 +36,20 @@ object SharedWithYouApi {
   private const val TAG = "SharedWithYouApi"
   private const val TEMPO_RPC = "https://rpc.moderato.tempo.xyz"
   private const val SCROBBLE_V4 = "0xe00e82086480E61AaC8d5ad8B05B56A582dD0000"
-  private const val SUBGRAPH_ACTIVITY =
-    "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo"
+  private const val DEFAULT_SUBGRAPH_MUSIC_SOCIAL =
+    "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-music-social-tempo/1.0.0/gn"
 
   private const val SUBGRAPH_PLAYLISTS =
     "https://graph.dotheaven.org/subgraphs/name/dotheaven/playlist-feed-tempo"
 
   private val client = OkHttpClient()
   private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+
+  private fun musicSocialSubgraphUrl(): String {
+    val fromMusicSocial = BuildConfig.TEMPO_MUSIC_SOCIAL_SUBGRAPH_URL.trim()
+    if (fromMusicSocial.isNotBlank()) return fromMusicSocial
+    return DEFAULT_SUBGRAPH_MUSIC_SOCIAL
+  }
 
   suspend fun fetchSharedTracks(granteeAddress: String, maxEntries: Int = 100): List<SharedCloudTrack> = withContext(Dispatchers.IO) {
     val addr = granteeAddress.trim().lowercase()
@@ -69,7 +76,7 @@ object SharedWithYouApi {
       }
     """.trimIndent()
 
-    val json = postQuery(SUBGRAPH_ACTIVITY, query)
+    val json = postQuery(musicSocialSubgraphUrl(), query)
     val grants = json.optJSONObject("data")?.optJSONArray("accessGrants") ?: JSONArray()
     if (grants.length() == 0) return@withContext emptyList()
 
@@ -381,7 +388,7 @@ object SharedWithYouApi {
         }
       """.trimIndent()
 
-      val json = postQuery(SUBGRAPH_ACTIVITY, query)
+      val json = postQuery(musicSocialSubgraphUrl(), query)
       val tracks = json.optJSONObject("data")?.optJSONArray("tracks") ?: JSONArray()
       val missingCoverMetaHashes = LinkedHashSet<String>()
       for (j in 0 until tracks.length()) {
@@ -416,7 +423,7 @@ object SharedWithYouApi {
             }
           }
         """.trimIndent()
-        val coverJson = postQuery(SUBGRAPH_ACTIVITY, coverQuery)
+        val coverJson = postQuery(musicSocialSubgraphUrl(), coverQuery)
         val coverTracks = coverJson.optJSONObject("data")?.optJSONArray("tracks") ?: JSONArray()
         if (coverTracks.length() > 0) {
           val coverByMeta = HashMap<String, String>(coverTracks.length())
@@ -576,7 +583,7 @@ object SharedWithYouApi {
         }
       """.trimIndent()
 
-      val json = postQuery(SUBGRAPH_ACTIVITY, query)
+      val json = postQuery(musicSocialSubgraphUrl(), query)
       val rows = json.optJSONObject("data")?.optJSONArray("contentEntries") ?: JSONArray()
       for (j in 0 until rows.length()) {
         val row = rows.optJSONObject(j) ?: continue
@@ -625,7 +632,7 @@ object SharedWithYouApi {
       }
     """.trimIndent()
 
-    val json = postQuery(SUBGRAPH_ACTIVITY, query)
+    val json = postQuery(musicSocialSubgraphUrl(), query)
     val grants = json.optJSONObject("data")?.optJSONArray("accessGrants") ?: JSONArray()
     if (grants.length() == 0) {
       return@withContext GrantedContentIndexes(

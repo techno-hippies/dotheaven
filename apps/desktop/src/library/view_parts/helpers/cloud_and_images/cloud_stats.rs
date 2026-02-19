@@ -10,7 +10,7 @@ pub(in crate::library) fn fetch_artist_cloud_stats(
         escaped_artist
     );
     let payload = http_post_json(
-        &subgraph_activity_url(),
+        &subgraph_music_social_url(),
         serde_json::json!({ "query": query }),
     )?;
     let rows = payload
@@ -75,7 +75,7 @@ pub(in crate::library) fn fetch_album_cloud_stats(
         where_clause
     );
     let payload = http_post_json(
-        &subgraph_activity_url(),
+        &subgraph_music_social_url(),
         serde_json::json!({ "query": query }),
     )?;
     let rows = payload

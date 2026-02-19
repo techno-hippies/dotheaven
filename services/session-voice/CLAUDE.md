@@ -40,7 +40,8 @@ bun run test:e2e:local
 Useful paid-flow variants:
 
 ```bash
-DUET_TEST_PAYER_PRIVATE_KEY=0x... bun run test:e2e:local:duet:openx402
+DUET_TEST_PAYER_PRIVATE_KEY=0x... bun run test:duet:self
+SESSION_VOICE_URL=https://... DUET_REMOTE_WATCH_URL=https://.../duet/<roomId>/watch DUET_TEST_PAYER_PRIVATE_KEY=0x... bun run test:duet:self:remote
 DUET_TEST_PAYER_PRIVATE_KEY=0x... bun run test:e2e:local:duet:onchain
 DUET_TEST_FACILITATOR_PRIVATE_KEY=0x... bun run dev:duet:onchain
 ```
@@ -48,7 +49,6 @@ DUET_TEST_FACILITATOR_PRIVATE_KEY=0x... bun run dev:duet:onchain
 ## Facilitator Wiring
 - `X402_FACILITATOR_MODE=mock`: no on-chain settlement.
 - `X402_FACILITATOR_MODE=self`: preferred; calls our Rust facilitator.
-- `X402_FACILITATOR_MODE=cdp`: external facilitator compatibility path.
 
 ## Required Secrets (Cloudflare)
 - `AGORA_APP_ID`

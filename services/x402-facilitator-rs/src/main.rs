@@ -88,7 +88,7 @@ async fn root() -> impl IntoResponse {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CdpLikePaymentRequirements {
+struct LegacyPaymentRequirements {
     scheme: Option<String>,
     network: String,
     asset: String,
@@ -103,10 +103,10 @@ struct CdpLikePaymentRequirements {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CdpLikeSettleRequest {
+struct LegacySettleRequest {
     x402_version: Option<u8>,
     payment_payload: Value,
-    payment_requirements: CdpLikePaymentRequirements,
+    payment_requirements: LegacyPaymentRequirements,
 }
 
 fn normalize_resource_to_url(raw: &str) -> Result<Url, url::ParseError> {
@@ -121,7 +121,7 @@ fn normalize_resource_to_url(raw: &str) -> Result<Url, url::ParseError> {
     Url::parse(&format!("http://localhost{path}"))
 }
 
-fn to_token_amount_string(req: &CdpLikePaymentRequirements) -> Option<String> {
+fn to_token_amount_string(req: &LegacyPaymentRequirements) -> Option<String> {
     req.max_amount_required
         .clone()
         .or_else(|| req.amount.clone())
@@ -175,7 +175,7 @@ fn coerce_payment_payload(raw: Value) -> Result<PaymentPayload, String> {
         .map_err(|e| format!("invalid paymentPayload: {e}"))
 }
 
-fn map_cdp_like_to_x402(req: CdpLikeSettleRequest) -> Result<VerifyRequest, String> {
+fn map_legacy_settle_to_x402(req: LegacySettleRequest) -> Result<VerifyRequest, String> {
     let x402_version = req.x402_version.unwrap_or(1);
     let payment_payload: PaymentPayload = coerce_payment_payload(req.payment_payload)?;
 
@@ -236,11 +236,11 @@ async fn post_settle(
         };
     }
 
-    // Fallback: accept the "CDP-ish" schema session-voice uses today.
-    let cdp_like = match serde_json::from_value::<CdpLikeSettleRequest>(body) {
+    // Fallback: accept the legacy settle schema session-voice currently sends.
+    let legacy = match serde_json::from_value::<LegacySettleRequest>(body) {
         Ok(v) => v,
         Err(err) => {
-            warn!(error = %err, "failed to parse settle request as CDP-like schema");
+            warn!(error = %err, "failed to parse settle request as legacy schema");
             return (
                 StatusCode::UNPROCESSABLE_ENTITY,
                 Json(json!({ "error": { "code": "invalid_request_parse", "message": err.to_string() } })),
@@ -249,10 +249,10 @@ async fn post_settle(
         }
     };
 
-    let mapped = match map_cdp_like_to_x402(cdp_like) {
+    let mapped = match map_legacy_settle_to_x402(legacy) {
         Ok(v) => v,
         Err(message) => {
-            warn!(error = %message, "failed to map CDP-like settle request into x402-rs schema");
+            warn!(error = %message, "failed to map legacy settle request into x402-rs schema");
             let mut code = message.clone();
             if code.len() > 160 {
                 code.truncate(160);
@@ -268,7 +268,7 @@ async fn post_settle(
     match facilitator.settle(&mapped).await {
         Ok(res) => (StatusCode::OK, Json(json!(res))).into_response(),
         Err(error) => {
-            warn!(error = ?error, "settlement failed (mapped CDP-like schema)");
+            warn!(error = ?error, "settlement failed (mapped legacy schema)");
             error.into_response()
         }
     }

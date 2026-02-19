@@ -8,7 +8,7 @@
 
 ## Goals
 1. Playlist owners can delete playlists from the playlist detail view.
-2. "Shared With Me" works cross-device by discovering grants from the activity subgraph.
+2. "Shared With Me" works cross-device by discovering grants from the music-social subgraph.
 3. Keep the incremental path open for playlist sharing (share code + batch grant + playable UX).
 
 ## Non-Goals (For v1)
@@ -31,7 +31,7 @@
 
 ## Phase 2: Subgraph-Backed "Shared With Me"
 **UX**
-- Refresh pulls from the activity subgraph (`accessGrants(where: { grantee: me, granted: true })`).
+- Refresh pulls from the music-social subgraph (`accessGrants(where: { grantee: me, granted: true })`).
 - Merge with local `shared_grants.json` for optimistic/offline UX (subgraph indexing lag).
 
 **Implementation Notes**

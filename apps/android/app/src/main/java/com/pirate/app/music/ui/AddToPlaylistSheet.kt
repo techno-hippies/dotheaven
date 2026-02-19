@@ -1,5 +1,6 @@
 package com.pirate.app.music.ui
 
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -44,6 +45,7 @@ import com.pirate.app.music.TempoPlaylistApi
 import com.pirate.app.music.TrackIds
 import com.pirate.app.tempo.SessionKeyManager
 import com.pirate.app.tempo.TempoPasskeyManager
+import com.pirate.app.tempo.TempoSessionKeyApi
 import kotlinx.coroutines.launch
 
 private const val IPFS_GATEWAY = "https://heaven.myfilebase.com/ipfs/"
@@ -56,6 +58,7 @@ fun AddToPlaylistSheet(
   isAuthenticated: Boolean,
   ownerEthAddress: String?,
   tempoAccount: TempoPasskeyManager.PasskeyAccount?,
+  hostActivity: FragmentActivity?,
   onClose: () -> Unit,
   onShowMessage: (String) -> Unit,
   onSuccess: (playlistId: String, playlistName: String) -> Unit,
@@ -70,6 +73,37 @@ fun AddToPlaylistSheet(
   var playlists by remember { mutableStateOf<List<PlaylistDisplayItem>>(emptyList()) }
   var showCreate by remember { mutableStateOf(false) }
   var newName by remember { mutableStateOf("") }
+
+  suspend fun resolveSessionKey(
+    owner: String,
+    failureMessage: String,
+  ): SessionKeyManager.SessionKey? {
+    val loaded =
+      SessionKeyManager.load(context)?.takeIf {
+        SessionKeyManager.isValid(it, ownerAddress = owner) &&
+          it.keyAuthorization?.isNotEmpty() == true
+      }
+    if (loaded != null) return loaded
+
+    val activity = hostActivity
+    val account = tempoAccount
+    if (activity == null || account == null) {
+      onShowMessage(failureMessage)
+      return null
+    }
+    onShowMessage("Authorizing session key...")
+    val auth = TempoSessionKeyApi.authorizeSessionKey(activity = activity, account = account)
+    val authorized =
+      auth.sessionKey?.takeIf {
+        auth.success &&
+          SessionKeyManager.isValid(it, ownerAddress = owner) &&
+          it.keyAuthorization?.isNotEmpty() == true
+      }
+    if (authorized != null) return authorized
+
+    onShowMessage(auth.error ?: failureMessage)
+    return null
+  }
 
   suspend fun loadPlaylists() {
     loading = true
@@ -133,11 +167,11 @@ fun AddToPlaylistSheet(
                 val owner = ownerEthAddress?.trim()?.lowercase().orEmpty()
                 if (isAuthenticated && owner.isNotBlank() && tempoAccount != null) {
                   val sessionKey =
-                    SessionKeyManager.load(context)?.takeIf {
-                      SessionKeyManager.isValid(it, ownerAddress = owner)
-                    }
+                    resolveSessionKey(
+                      owner = owner,
+                      failureMessage = "Session expired. Sign in again to create playlists.",
+                    )
                   if (sessionKey == null) {
-                    onShowMessage("Session expired. Sign in again to create playlists.")
                     mutating = false
                     return@launch
                   }
@@ -164,7 +198,8 @@ fun AddToPlaylistSheet(
                   }
 
                   val resolvedId = resolveCreatedPlaylistId(owner, name, createResult.playlistId)
-                  onShowMessage("Added to $name")
+                  val createFundingPath = if (createResult.usedSelfPayFallback) "self-pay fallback" else "sponsored"
+                  onShowMessage("Added to $name ($createFundingPath)")
                   onSuccess(
                     resolvedId ?: "pending:${System.currentTimeMillis()}",
                     name,
@@ -225,11 +260,11 @@ fun AddToPlaylistSheet(
                   }
 
                   val sessionKey =
-                    SessionKeyManager.load(context)?.takeIf {
-                      SessionKeyManager.isValid(it, ownerAddress = owner)
-                    }
+                    resolveSessionKey(
+                      owner = owner,
+                      failureMessage = "Session expired. Sign in again to update playlists.",
+                    )
                   if (sessionKey == null) {
-                    onShowMessage("Session expired. Sign in again to update playlists.")
                     mutating = false
                     return@launch
                   }
@@ -279,7 +314,8 @@ fun AddToPlaylistSheet(
                     return@launch
                   }
 
-                  onShowMessage("Added to ${pl.name}")
+                  val updateFundingPath = if (result.usedSelfPayFallback) "self-pay fallback" else "sponsored"
+                  onShowMessage("Added to ${pl.name} ($updateFundingPath)")
                   onSuccess(pl.id, pl.name)
                 }
                 showCreate = false

@@ -1,4 +1,4 @@
-//! Social feed — fetches posts from dotheaven-activity subgraph,
+//! Social feed — fetches posts from dotheaven music-social subgraph,
 //! resolves IPFS metadata, and renders a scrollable post list.
 
 use gpui::*;

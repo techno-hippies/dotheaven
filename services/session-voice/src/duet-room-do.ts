@@ -130,7 +130,7 @@ interface SettleMarker {
   segment_id?: string
   pay_to?: string
   amount?: string
-  facilitator?: 'mock' | 'cdp' | 'self'
+  facilitator?: 'mock' | 'self'
   transaction_hash?: string
 }
 

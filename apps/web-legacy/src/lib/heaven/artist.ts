@@ -4,7 +4,7 @@
  */
 
 import type { Track } from '@heaven/ui'
-import { SUBGRAPH_ACTIVITY } from '@heaven/core'
+import { SUBGRAPH_MUSIC_SOCIAL } from '@heaven/core'
 import { resolveCoverUrl } from './cover-ref'
 
 // ── Config ──────────────────────────────────────────────────────────
@@ -96,7 +96,7 @@ export async function fetchRecordingArtists(
 // ── Subgraph: find tracks by artist name ────────────────────────────
 
 /**
- * Query the activity subgraph for tracks matching an artist name,
+ * Query the music-social subgraph for tracks matching an artist name,
  * along with scrobble counts and listener stats.
  */
 export async function fetchArtistTracks(
@@ -157,7 +157,7 @@ async function fetchArtistRanking(artistName: string): Promise<{ ranking: number
         scrobbles { id }
       }
     }`
-    const res = await fetch(SUBGRAPH_ACTIVITY, {
+    const res = await fetch(SUBGRAPH_MUSIC_SOCIAL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),
@@ -270,7 +270,7 @@ async function queryArtistTracks(params: { where: string; limit: number }): Prom
     }
   }`
 
-  const res = await fetch(SUBGRAPH_ACTIVITY, {
+  const res = await fetch(SUBGRAPH_MUSIC_SOCIAL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),

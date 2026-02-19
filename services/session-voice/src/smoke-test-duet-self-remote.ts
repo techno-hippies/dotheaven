@@ -1,10 +1,10 @@
 /**
- * Smoke test: remote duet room + real x402 payment flow (CDP facilitator).
+ * Smoke test: remote duet room + real x402 payment flow (self facilitator).
  *
  * This script targets an already-live remote room, so no host auth token is needed.
  *
  * Usage:
- *   bun src/smoke-test-duet-cdp-remote.ts
+ *   bun src/smoke-test-duet-self-remote.ts
  *
  * Required env:
  *   - SESSION_VOICE_URL (e.g. https://session-voice....workers.dev)
@@ -113,7 +113,7 @@ function parseWatchUrl(raw: string): { origin: string; roomId: string } | null {
 }
 
 async function main() {
-  console.log('\n═══ Duet Remote CDP x402 Smoke Test ═══')
+  console.log('\n═══ Duet Remote Self x402 Smoke Test ═══')
   console.log(`Worker: ${BASE_URL}`)
   console.log(`Room:   ${ROOM_ID}`)
   console.log(`Payer:  ${payer.address.toLowerCase()}`)
@@ -141,7 +141,7 @@ async function main() {
   assert(typeof enterPaid.data?.agora_viewer_token === 'string', 'agora_viewer_token present')
 
   const paymentResponse = decodePaymentResponse(enterPaid.headers)
-  assert(paymentResponse?.facilitator === 'cdp', 'facilitator is cdp')
+  assert(paymentResponse?.facilitator === 'self', 'facilitator is self')
 
   console.log('\n── 4. Entitlement Re-Enter (No Repay) ──')
   const entitledReenter = await api(
@@ -151,7 +151,7 @@ async function main() {
   )
   assert(entitledReenter.status === 200, `POST /duet/:id/public-enter entitled wallet → ${entitledReenter.status}`)
 
-  console.log('\n═══ Duet remote CDP x402 smoke test passed ═══\n')
+  console.log('\n═══ Duet remote self x402 smoke test passed ═══\n')
 }
 
 await main()

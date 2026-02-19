@@ -1,5 +1,6 @@
 package com.pirate.app.music.ui
 
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,6 +32,7 @@ import com.pirate.app.music.OnChainPlaylistsApi
 import com.pirate.app.music.TempoPlaylistApi
 import com.pirate.app.tempo.SessionKeyManager
 import com.pirate.app.tempo.TempoPasskeyManager
+import com.pirate.app.tempo.TempoSessionKeyApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -41,9 +43,10 @@ fun CreatePlaylistSheet(
   isAuthenticated: Boolean,
   ownerEthAddress: String?,
   tempoAccount: TempoPasskeyManager.PasskeyAccount?,
+  hostActivity: FragmentActivity?,
   onClose: () -> Unit,
   onShowMessage: (String) -> Unit,
-  onSuccess: (playlistId: String, playlistName: String) -> Unit,
+  onSuccess: (playlistId: String, playlistName: String, successMessage: String) -> Unit,
 ) {
   if (!open) return
 
@@ -97,15 +100,37 @@ fun CreatePlaylistSheet(
               busy = true
               val owner = ownerEthAddress?.trim()?.lowercase().orEmpty()
               if (isAuthenticated && owner.isNotBlank() && tempoAccount != null) {
-                val sessionKey =
+                val loaded =
                   SessionKeyManager.load(context)?.takeIf {
-                    SessionKeyManager.isValid(it, ownerAddress = owner)
+                    SessionKeyManager.isValid(it, ownerAddress = owner) &&
+                      it.keyAuthorization?.isNotEmpty() == true
                   }
-                if (sessionKey == null) {
-                  onShowMessage("Session expired. Sign in again to create playlists.")
-                  busy = false
-                  return@launch
-                }
+                val sessionKey =
+                  loaded
+                    ?: run {
+                      val activity = hostActivity
+                      if (activity == null) {
+                        onShowMessage("Session expired. Sign in again to create playlists.")
+                        busy = false
+                        return@launch
+                      }
+                      onShowMessage("Authorizing session key...")
+                      val auth = TempoSessionKeyApi.authorizeSessionKey(activity = activity, account = tempoAccount)
+                      val authorized =
+                        auth.sessionKey?.takeIf {
+                          auth.success &&
+                            SessionKeyManager.isValid(it, ownerAddress = owner) &&
+                            it.keyAuthorization?.isNotEmpty() == true
+                        }
+                      if (authorized == null) {
+                        onShowMessage(
+                          auth.error ?: "Session key authorization failed. Sign in again to create playlists.",
+                        )
+                        busy = false
+                        return@launch
+                      }
+                      authorized
+                    }
 
                 val result =
                   TempoPlaylistApi.createPlaylist(
@@ -123,15 +148,17 @@ fun CreatePlaylistSheet(
                 }
 
                 val resolvedId = resolveCreatedPlaylistId(owner, trimmed, result.playlistId)
-                onShowMessage("Created $trimmed")
+                val fundingPath = if (result.usedSelfPayFallback) "self-pay fallback" else "sponsored"
+                val successMessage = "Created $trimmed ($fundingPath)"
                 onSuccess(
                   resolvedId ?: "pending:${System.currentTimeMillis()}",
                   trimmed,
+                  successMessage,
                 )
               } else {
                 val created = LocalPlaylistsStore.createLocalPlaylist(context, trimmed, initialTrack = null)
-                onShowMessage("Created ${created.name}")
-                onSuccess(created.id, created.name)
+                val successMessage = "Created ${created.name}"
+                onSuccess(created.id, created.name, successMessage)
               }
               busy = false
               onClose()

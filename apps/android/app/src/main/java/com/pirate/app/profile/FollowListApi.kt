@@ -23,14 +23,10 @@ data class FollowListMember(
 
 object FollowListApi {
 
-  private const val DEFAULT_TEMPO_SUBGRAPH_ACTIVITY =
-    "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo"
-  private const val LEGACY_SUBGRAPH_ACTIVITY =
-    "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo"
+  private const val DEFAULT_TEMPO_SUBGRAPH_MUSIC_SOCIAL =
+    "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-music-social-tempo/1.0.0/gn"
 
   private const val DEFAULT_TEMPO_SUBGRAPH_PROFILES =
-    "https://graph.dotheaven.org/subgraphs/name/dotheaven/profiles-tempo"
-  private const val LEGACY_SUBGRAPH_PROFILES =
     "https://graph.dotheaven.org/subgraphs/name/dotheaven/profiles-tempo"
 
   private val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
@@ -58,7 +54,7 @@ object FollowListApi {
       }
     """.trimIndent()
 
-    val follows = queryActivitySubgraph(query)
+    val follows = queryMusicSocialSubgraph(query)
     val addresses = follows.map { it.first }
     resolveMembers(addresses, follows)
   }
@@ -85,14 +81,14 @@ object FollowListApi {
       }
     """.trimIndent()
 
-    val follows = queryActivitySubgraph(query)
+    val follows = queryMusicSocialSubgraph(query)
     val addresses = follows.map { it.first }
     resolveMembers(addresses, follows)
   }
 
   /** Returns list of (address, blockTimestamp) pairs. */
-  private fun queryActivitySubgraph(query: String): List<Pair<String, Long>> {
-    val urls = activitySubgraphUrls()
+  private fun queryMusicSocialSubgraph(query: String): List<Pair<String, Long>> {
+    val urls = musicSocialSubgraphUrls()
     for (url in urls) {
       val result = runCatching { postGraphQL(url, query) }.getOrNull() ?: continue
       val data = result.optJSONObject("data") ?: continue
@@ -196,12 +192,11 @@ object FollowListApi {
     }
   }
 
-  private fun activitySubgraphUrls(): List<String> {
-    val fromConfig = runCatching { BuildConfig.TEMPO_SCROBBLE_SUBGRAPH_URL }.getOrDefault("")
+  private fun musicSocialSubgraphUrls(): List<String> {
+    val fromMusicSocial = runCatching { BuildConfig.TEMPO_MUSIC_SOCIAL_SUBGRAPH_URL }.getOrDefault("")
     return listOfNotNull(
-      fromConfig.takeIf { it.isNotBlank() },
-      DEFAULT_TEMPO_SUBGRAPH_ACTIVITY,
-      LEGACY_SUBGRAPH_ACTIVITY,
+      fromMusicSocial.takeIf { it.isNotBlank() },
+      DEFAULT_TEMPO_SUBGRAPH_MUSIC_SOCIAL,
     ).distinct()
   }
 
@@ -210,7 +205,6 @@ object FollowListApi {
     return listOfNotNull(
       fromConfig.takeIf { it.isNotBlank() },
       DEFAULT_TEMPO_SUBGRAPH_PROFILES,
-      LEGACY_SUBGRAPH_PROFILES,
     ).distinct()
   }
 

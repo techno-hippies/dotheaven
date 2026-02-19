@@ -1,6 +1,7 @@
 package com.pirate.app.profile
 
 import com.pirate.app.BuildConfig
+import com.pirate.app.song.SongArtistApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -23,10 +24,8 @@ data class PublishedSongRow(
 )
 
 object ProfileMusicApi {
-  private const val DEFAULT_TEMPO_SUBGRAPH_ACTIVITY =
-    "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo"
-  private const val LEGACY_SUBGRAPH_ACTIVITY =
-    "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo"
+  private const val DEFAULT_TEMPO_SUBGRAPH_MUSIC_SOCIAL =
+    "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-music-social-tempo/1.0.0/gn"
 
   private val client = OkHttpClient()
   private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -41,12 +40,17 @@ object ProfileMusicApi {
     fetchPublishedSongsInternal(ownerAddress = null, maxEntries = maxEntries)
   }
 
-  private fun fetchPublishedSongsInternal(ownerAddress: String?, maxEntries: Int): List<PublishedSongRow> {
+  private suspend fun fetchPublishedSongsInternal(ownerAddress: String?, maxEntries: Int): List<PublishedSongRow> {
     var sawSuccessfulEmpty = false
     var subgraphError: Throwable? = null
-    for (subgraphUrl in activitySubgraphUrls()) {
+    for (subgraphUrl in musicSocialSubgraphUrls()) {
       try {
-        val rows = fetchFromSubgraph(subgraphUrl, ownerAddress, maxEntries)
+        val rows =
+          if (ownerAddress.isNullOrBlank()) {
+            fetchLatestFromSubgraph(subgraphUrl, maxEntries)
+          } else {
+            fetchPublishedByOwnerFromSubgraph(subgraphUrl, ownerAddress, maxEntries)
+          }
         if (rows.isNotEmpty()) return rows
         sawSuccessfulEmpty = true
       } catch (error: Throwable) {
@@ -54,7 +58,27 @@ object ProfileMusicApi {
       }
     }
 
+    if (ownerAddress.isNullOrBlank()) {
+      val chainRows = runCatching { SongArtistApi.fetchLatestTracksFromChain(maxEntries = maxEntries) }.getOrNull().orEmpty()
+      if (chainRows.isNotEmpty()) {
+        return chainRows.map { row ->
+          PublishedSongRow(
+            contentId = row.trackId,
+            trackId = row.trackId,
+            title = row.title,
+            artist = row.artist,
+            album = row.album,
+            pieceCid = null,
+            coverCid = row.coverCid,
+            durationSec = row.durationSec,
+            publishedAtSec = row.registeredAtSec,
+          )
+        }
+      }
+    }
+
     if (sawSuccessfulEmpty) return emptyList()
+    if (subgraphError != null && ownerAddress.isNullOrBlank() && isSubgraphAvailabilityError(subgraphError)) return emptyList()
     if (subgraphError != null) throw subgraphError
     return emptyList()
   }
@@ -74,25 +98,48 @@ object ProfileMusicApi {
     val durationSec: Int,
   )
 
-  private fun activitySubgraphUrls(): List<String> {
-    val fromBuildConfig = BuildConfig.TEMPO_SCROBBLE_SUBGRAPH_URL.trim().removeSuffix("/")
-    val urls = ArrayList<String>(3)
-    if (fromBuildConfig.isNotBlank()) urls.add(fromBuildConfig)
-    urls.add(DEFAULT_TEMPO_SUBGRAPH_ACTIVITY)
-    urls.add(LEGACY_SUBGRAPH_ACTIVITY)
+  private data class LatestTrackRow(
+    val trackId: String,
+    val title: String,
+    val artist: String,
+    val album: String,
+    val coverCid: String?,
+    val durationSec: Int,
+    val registeredAtSec: Long,
+  )
+
+  private data class ContentPointer(
+    val contentId: String,
+    val pieceCid: String?,
+    val publishedAtSec: Long,
+  )
+
+  private fun musicSocialSubgraphUrls(): List<String> {
+    val fromMusicSocial = BuildConfig.TEMPO_MUSIC_SOCIAL_SUBGRAPH_URL.trim().removeSuffix("/")
+    val urls = ArrayList<String>(2)
+    if (fromMusicSocial.isNotBlank()) urls.add(fromMusicSocial)
+    urls.add(DEFAULT_TEMPO_SUBGRAPH_MUSIC_SOCIAL)
     return urls.distinct()
   }
 
-  private fun fetchFromSubgraph(
+  private fun isSubgraphAvailabilityError(error: Throwable?): Boolean {
+    val msg = error?.message?.lowercase().orEmpty()
+    if (msg.isBlank()) return false
+    return msg.contains("subgraph query failed: 530") ||
+      msg.contains("subgraph query failed: 52") ||
+      msg.contains("origin dns") ||
+      msg.contains("cloudflare")
+  }
+
+  private fun fetchPublishedByOwnerFromSubgraph(
     subgraphUrl: String,
-    ownerAddress: String?,
+    ownerAddress: String,
     maxEntries: Int,
   ): List<PublishedSongRow> {
-    val ownerFilter = ownerAddress?.takeIf { it.isNotBlank() }?.let { """owner: "$it",""" }.orEmpty()
     val contentQuery = """
       {
         contentEntries(
-          where: { $ownerFilter active: true }
+          where: { owner: "$ownerAddress", active: true }
           orderBy: createdAt
           orderDirection: desc
           first: $maxEntries
@@ -141,6 +188,114 @@ object ProfileMusicApi {
           publishedAtSec = entry.publishedAtSec,
         ),
       )
+    }
+    return out
+  }
+
+  private fun fetchLatestFromSubgraph(subgraphUrl: String, maxEntries: Int): List<PublishedSongRow> {
+    val tracksQuery = """
+      {
+        tracks(
+          where: { kind: 2 }
+          orderBy: registeredAt
+          orderDirection: desc
+          first: $maxEntries
+        ) {
+          id
+          title
+          artist
+          album
+          coverCid
+          durationSec
+          registeredAt
+        }
+      }
+    """.trimIndent()
+
+    val tracksJson = postQuery(subgraphUrl, tracksQuery)
+    val tracks = tracksJson.optJSONObject("data")?.optJSONArray("tracks") ?: JSONArray()
+    if (tracks.length() == 0) return emptyList()
+
+    val latestTracks = ArrayList<LatestTrackRow>(tracks.length())
+    val trackIds = LinkedHashSet<String>(tracks.length())
+    for (i in 0 until tracks.length()) {
+      val row = tracks.optJSONObject(i) ?: continue
+      val trackId = row.optString("id", "").trim().lowercase()
+      if (trackId.isEmpty()) continue
+      if (!trackIds.add(trackId)) continue
+      val coverCid = row.optString("coverCid", "").trim().ifBlank { null }?.takeIf { isValidCid(it) }
+      val registeredAt = row.optString("registeredAt", "0").trim().toLongOrNull() ?: row.optLong("registeredAt", 0L)
+      latestTracks.add(
+        LatestTrackRow(
+          trackId = trackId,
+          title = row.optString("title", "").trim(),
+          artist = row.optString("artist", "").trim(),
+          album = row.optString("album", "").trim(),
+          coverCid = coverCid,
+          durationSec = row.optInt("durationSec", 0),
+          registeredAtSec = registeredAt,
+        ),
+      )
+    }
+    if (latestTracks.isEmpty()) return emptyList()
+
+    val contentByTrack = fetchLatestContentPointersByTrack(subgraphUrl, trackIds.toList())
+
+    val out = ArrayList<PublishedSongRow>(latestTracks.size)
+    for (track in latestTracks) {
+      val content = contentByTrack[track.trackId]
+      out.add(
+        PublishedSongRow(
+          contentId = content?.contentId ?: track.trackId,
+          trackId = track.trackId,
+          title = track.title.ifBlank { track.trackId.take(14) },
+          artist = track.artist.ifBlank { "Unknown Artist" },
+          album = track.album,
+          pieceCid = content?.pieceCid,
+          coverCid = track.coverCid,
+          durationSec = track.durationSec,
+          publishedAtSec = content?.publishedAtSec ?: track.registeredAtSec,
+        ),
+      )
+    }
+    return out
+  }
+
+  private fun fetchLatestContentPointersByTrack(subgraphUrl: String, trackIds: List<String>): Map<String, ContentPointer> {
+    if (trackIds.isEmpty()) return emptyMap()
+    val out = HashMap<String, ContentPointer>(trackIds.size)
+    val chunkSize = 100
+    for (start in trackIds.indices step chunkSize) {
+      val chunk = trackIds.subList(start, minOf(start + chunkSize, trackIds.size))
+      val quoted = chunk.joinToString(",") { "\"${it.replace("\"", "\\\"")}\"" }
+      val query = """
+        {
+          contentEntries(
+            where: { trackId_in: [$quoted], active: true }
+            orderBy: createdAt
+            orderDirection: desc
+            first: 1000
+          ) {
+            id
+            trackId
+            pieceCid
+            createdAt
+          }
+        }
+      """.trimIndent()
+
+      // Keep release cards visible even if pieceCid lookup fails for this chunk.
+      val json = runCatching { postQuery(subgraphUrl, query) }.getOrNull() ?: continue
+      val entries = json.optJSONObject("data")?.optJSONArray("contentEntries") ?: JSONArray()
+      for (i in 0 until entries.length()) {
+        val obj = entries.optJSONObject(i) ?: continue
+        val trackId = obj.optString("trackId", "").trim().lowercase()
+        if (trackId.isEmpty() || out.containsKey(trackId)) continue
+        val contentId = obj.optString("id", "").trim().lowercase().ifBlank { trackId }
+        val pieceCid = decodeBytesUtf8(obj.optString("pieceCid", "").trim()).ifBlank { null }
+        val createdAt = obj.optString("createdAt", "0").trim().toLongOrNull() ?: obj.optLong("createdAt", 0L)
+        out[trackId] = ContentPointer(contentId = contentId, pieceCid = pieceCid, publishedAtSec = createdAt)
+      }
     }
     return out
   }

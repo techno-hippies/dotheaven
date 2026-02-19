@@ -3,19 +3,21 @@
   "private": true,
   "packageManager": "bun@1.3.8",
   "workspaces": [
-    "apps/web",
+    "apps/web-new",
     "packages/core",
     "packages/i18n",
     "packages/platform",
     "packages/ui"
   ],
   "scripts": {
-    "dev": "bun run --cwd apps/web dev",
-    "dev:web": "bun run --cwd apps/web dev:web",
-    "build": "bun run --cwd apps/web build",
-    "build:web": "bun run --cwd apps/web build:web",
-    "check": "bun run --cwd apps/web check && bun run --cwd packages/core check && bun run --cwd packages/i18n check && bun run --cwd packages/platform check && bun run --cwd packages/ui check",
+    "dev": "bun run --cwd apps/web-new dev",
+    "dev:web": "bun run --cwd apps/web-new dev:web",
+    "build": "bun run --cwd apps/web-new build",
+    "build:web": "bun run --cwd apps/web-new build:web",
+    "check": "bun run --cwd apps/web-new check && bun run --cwd packages/core check && bun run --cwd packages/i18n check && bun run --cwd packages/platform check && bun run --cwd packages/ui check",
     "storybook": "bun run --cwd packages/ui storybook",
-    "build:storybook": "bun run --cwd packages/ui build-storybook"
+    "build:storybook": "bun run --cwd packages/ui build-storybook",
+    "storybook:web-new": "bun run --cwd apps/web-new storybook",
+    "build:storybook:web-new": "bun run --cwd apps/web-new build-storybook"
   }
 }

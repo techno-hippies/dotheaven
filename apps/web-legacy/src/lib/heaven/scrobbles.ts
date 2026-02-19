@@ -1,5 +1,5 @@
 import type { Track } from '@heaven/ui'
-import { MEGAETH_RPC, SCROBBLE_V3, SCROBBLE_V4, SUBGRAPH_ACTIVITY } from '@heaven/core'
+import { MEGAETH_RPC, SCROBBLE_V3, SCROBBLE_V4, SUBGRAPH_MUSIC_SOCIAL } from '@heaven/core'
 import { payloadToMbid } from './artist'
 import { resolveCoverUrl } from './cover-ref'
 
@@ -47,7 +47,7 @@ interface ScrobbleGQL {
 // ── Fetch ──────────────────────────────────────────────────────────
 
 /**
- * Fetch scrobble history for a user from the activity subgraph.
+ * Fetch scrobble history for a user from the music-social subgraph.
  * Track metadata is resolved on-chain via getTrack() (V4, fallback V3).
  */
 export async function fetchScrobbleEntries(
@@ -77,7 +77,7 @@ export async function fetchScrobbleEntries(
     }
   }`
 
-  const res = await fetch(SUBGRAPH_ACTIVITY, {
+  const res = await fetch(SUBGRAPH_MUSIC_SOCIAL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),
@@ -251,7 +251,7 @@ export interface UploadedContentEntry {
 
 /**
  * Fetch all content uploaded by a user, with track metadata.
- * Queries content-feed subgraph for ownership, activity-feed for title/artist.
+ * Queries content-feed subgraph for ownership, music-social for title/artist.
  */
 export async function fetchUploadedContent(
   userAddress: string,
@@ -275,12 +275,12 @@ export async function fetchUploadedContent(
     }
   }`
 
-  const contentRes = await fetch(SUBGRAPH_ACTIVITY, {
+  const contentRes = await fetch(SUBGRAPH_MUSIC_SOCIAL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query: contentQuery }),
   })
-  if (!contentRes.ok) throw new Error(`Activity subgraph query failed: ${contentRes.status}`)
+  if (!contentRes.ok) throw new Error(`Music-social subgraph query failed: ${contentRes.status}`)
   const contentJson = await contentRes.json()
   const entries: Array<{
     id: string
@@ -293,7 +293,7 @@ export async function fetchUploadedContent(
 
   if (entries.length === 0) return []
 
-  // Step 2: Get track metadata from activity-feed subgraph
+  // Step 2: Get track metadata from music-social subgraph
   const trackIds = [...new Set(entries.map((e) => e.trackId))]
   const trackQuery = `{
     tracks(where: { id_in: [${trackIds.map((id) => `"${id}"`).join(',')}] }) {
@@ -306,7 +306,7 @@ export async function fetchUploadedContent(
     }
   }`
 
-  const trackRes = await fetch(SUBGRAPH_ACTIVITY, {
+  const trackRes = await fetch(SUBGRAPH_MUSIC_SOCIAL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query: trackQuery }),
@@ -399,12 +399,12 @@ export async function fetchSharedContent(
     }
   }`
 
-  const grantRes = await fetch(SUBGRAPH_ACTIVITY, {
+  const grantRes = await fetch(SUBGRAPH_MUSIC_SOCIAL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query: grantQuery }),
   })
-  if (!grantRes.ok) throw new Error(`Activity subgraph query failed: ${grantRes.status}`)
+  if (!grantRes.ok) throw new Error(`Music-social subgraph query failed: ${grantRes.status}`)
   const grantJson = await grantRes.json()
   const grants: Array<{
     updatedAt: string
@@ -437,7 +437,7 @@ export async function fetchSharedContent(
 
   if (entries.length === 0) return []
 
-  // Get track metadata from activity-feed subgraph
+  // Get track metadata from music-social subgraph
   const trackIds = [...new Set(entries.map((e) => e.content.trackId))]
   const trackQuery = `{
     tracks(where: { id_in: [${trackIds.map((id) => `"${id}"`).join(',')}] }) {
@@ -450,7 +450,7 @@ export async function fetchSharedContent(
     }
   }`
 
-  const trackRes = await fetch(SUBGRAPH_ACTIVITY, {
+  const trackRes = await fetch(SUBGRAPH_MUSIC_SOCIAL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query: trackQuery }),

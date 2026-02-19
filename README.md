@@ -12,7 +12,7 @@ Mobile is native-first:
 
 | Platform | Stack | Directory | Status |
 |---|---|---|---|
-| Web | SolidJS + Vite + Tailwind | `apps/web` | Active |
+| Web | SolidJS + Vite + Tailwind | `apps/web-new` | Active |
 | Desktop (Linux/macOS/Windows) | Rust + GPUI | `apps/desktop` | Active |
 | Android | Kotlin + Jetpack Compose | `apps/android` | Active |
 | iOS | Swift (planned) | Not in repo yet | Planned |
@@ -148,6 +148,7 @@ JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew installDebug
 
 ## Notes
 
-- Root web scripts are in `package.json` and target `apps/web`.
+- Root web scripts are in `package.json` and target `apps/web-new`.
 - GPUI desktop environment/config notes are in `apps/desktop/README.md`.
 - Android build notes are in `apps/android/README.md`.
+- Graph Node + Cloudflare tunnel ops and `530/1033` prevention runbook are in `services/graph-node-tempo/README.md`.

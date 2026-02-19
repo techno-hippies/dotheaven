@@ -26,12 +26,12 @@ This starts:
 The stack includes a small local RPC shim (`rpc-shim.ts`) between Graph Node and Tempo RPC.
 It patches Tempo `0x76` transaction objects to include `value: "0x0"` when missing, which avoids Graph Node decode failures.
 
-## Deploy Tempo activity subgraph
+## Deploy Tempo music-social subgraph
 
 From repo root:
 
 ```bash
-cd subgraphs/activity-feed
+cd subgraphs/music-social
 bun run build:tempo:local
 bun run create:tempo:local || true
 bun run deploy:tempo:local
@@ -40,13 +40,13 @@ bun run deploy:tempo:local
 Optional explicit version label:
 
 ```bash
-cd subgraphs/activity-feed
+cd subgraphs/music-social
 VERSION_LABEL=local-$(date +%Y%m%d-%H%M%S) bun run deploy:tempo:local
 ```
 
 Subgraph URL:
 
-`http://localhost:8000/subgraphs/name/dotheaven/activity-feed-tempo`
+`http://localhost:8000/subgraphs/name/dotheaven/music-social-tempo`
 
 ## Expose GraphQL with Cloudflare Tunnel (quick, no dashboard)
 
@@ -58,7 +58,7 @@ Keep `5001` and `8020` private (local/SSH-forward only).
 
 This prints a temporary public URL like:
 
-`https://<random>.trycloudflare.com/subgraphs/name/dotheaven/activity-feed-tempo`
+`https://<random>.trycloudflare.com/subgraphs/name/dotheaven/music-social-tempo`
 
 ## Stable Cloudflare Tunnel (named + your domain)
 
@@ -78,4 +78,63 @@ Then copy `cloudflared.config.example.yml` to `~/.cloudflared/config.yml`, repla
 
 Then your endpoint is:
 
-`https://graph.<your-domain>/subgraphs/name/dotheaven/activity-feed-tempo`
+`https://graph.<your-domain>/subgraphs/name/dotheaven/music-social-tempo`
+
+## Preventing 530 / 1033 outages (named tunnel)
+
+Cloudflare `530` with body `error code: 1033` means the hostname route exists, but no active tunnel connector is attached.
+
+### 1) Run cloudflared as a persistent user service
+
+Create `~/.config/systemd/user/cloudflared-heaven-graph.service`:
+
+```ini
+[Unit]
+Description=Cloudflared tunnel for graph.<your-domain>
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/home/<user>/.local/bin/cloudflared tunnel --config /home/<user>/.cloudflared/config.yml run heaven-graph
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=default.target
+```
+
+Enable and start:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now cloudflared-heaven-graph.service
+systemctl --user status cloudflared-heaven-graph.service --no-pager
+```
+
+### 2) Verify tunnel + GraphQL in one minute
+
+```bash
+cloudflared tunnel info heaven-graph
+curl -sS -i -H 'content-type: application/json' \
+  --data '{"query":"{__typename}"}' \
+  https://graph.<your-domain>/subgraphs/name/dotheaven/music-social-tempo
+```
+
+Healthy state:
+- `cloudflared tunnel info` shows at least one `CONNECTOR ID`.
+- GraphQL endpoint returns HTTP `200` and JSON (not `530`).
+
+### 3) If you see `530` again
+
+Run in this order:
+
+```bash
+systemctl --user restart cloudflared-heaven-graph.service
+systemctl --user status cloudflared-heaven-graph.service --no-pager
+journalctl --user -u cloudflared-heaven-graph.service -n 120 --no-pager
+cloudflared tunnel info heaven-graph
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+```
+
+If the tunnel is connected but queries still fail, the issue is likely in Graph Node/subgraph deployment rather than Cloudflare routing.

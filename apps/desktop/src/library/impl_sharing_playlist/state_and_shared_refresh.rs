@@ -152,7 +152,7 @@ impl LibraryView {
                     "{{ accessGrants(where: {{ grantee: \"{gql_grantee}\", granted: true }}, orderBy: updatedAt, orderDirection: desc, first: {limit}) {{ updatedAt grantee granted content {{ id owner pieceCid trackId }} }} }}"
                 );
                 let payload = http_post_json(
-                    &subgraph_activity_url(),
+                    &subgraph_music_social_url(),
                     serde_json::json!({
                         "query": query,
                     }),

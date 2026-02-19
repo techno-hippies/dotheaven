@@ -2,24 +2,41 @@ package com.pirate.app.song
 
 import com.pirate.app.BuildConfig
 import com.pirate.app.music.SongPublishService
+import com.pirate.app.scrobble.TempoScrobbleApi
 import com.pirate.app.util.HttpClients
+import java.net.URI
+import java.math.BigInteger
+import java.text.Normalizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.web3j.abi.FunctionEncoder
+import org.web3j.abi.FunctionReturnDecoder
+import org.web3j.abi.TypeReference
+import org.web3j.abi.datatypes.Function
+import org.web3j.abi.datatypes.Utf8String
+import org.web3j.abi.datatypes.generated.Bytes32
+import org.web3j.abi.datatypes.generated.Uint32
+import org.web3j.abi.datatypes.generated.Uint64
+import org.web3j.abi.datatypes.generated.Uint8
+import org.web3j.crypto.Hash
 import org.json.JSONArray
 import org.json.JSONObject
 
-private const val DEFAULT_ACTIVITY_SUBGRAPH =
-  "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo"
-private const val LEGACY_ACTIVITY_SUBGRAPH =
-  "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo"
+private const val DEFAULT_MUSIC_SOCIAL_SUBGRAPH =
+  "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-music-social-tempo/1.0.0/gn"
+private const val TEMPO_RPC_URL = "https://rpc.moderato.tempo.xyz"
 private val ADDRESS_REGEX = Regex("^0x[a-fA-F0-9]{40}$")
 private val BYTES32_REGEX = Regex("^0x[a-fA-F0-9]{64}$")
 private val GRAPHQL_CONTROL_CHARS_REGEX = Regex("[\\u0000-\\u001F\\u007F]")
 private const val TRACK_LISTENER_PAGE_SIZE = 1_000
 private const val TRACK_LISTENER_MAX_SCAN = 10_000
+private val TRACK_REGISTERED_TOPIC = Hash.sha3String("TrackRegistered(bytes32,uint8,bytes32,bytes32,uint64,uint32)")
+private const val TRACK_KIND_IPID_TOPIC = "0x0000000000000000000000000000000000000000000000000000000000000002"
+private const val CHAIN_TRACK_SCAN_WINDOW_BLOCKS = 350_000L
+private const val CHAIN_TRACK_SCAN_CHUNK_BLOCKS = 20_000L
 
 data class SongStats(
   val trackId: String,
@@ -29,6 +46,7 @@ data class SongStats(
   val coverCid: String?,
   val scrobbleCountTotal: Long,
   val scrobbleCountVerified: Long,
+  val durationSec: Int = 0,
   val registeredAtSec: Long,
 )
 
@@ -83,6 +101,16 @@ data class StudySetGenerateResult(
   val error: String?,
 )
 
+private data class ChainTrackMeta(
+  val trackId: String,
+  val title: String,
+  val artist: String,
+  val album: String,
+  val coverCid: String?,
+  val durationSec: Int,
+  val registeredAtSec: Long,
+)
+
 object SongArtistApi {
   private val client = HttpClients.Api
   private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -92,7 +120,7 @@ object SongArtistApi {
 
     var sawSuccessfulEmpty = false
     var lastError: Throwable? = null
-    for (subgraphUrl in activitySubgraphUrls()) {
+    for (subgraphUrl in musicSocialSubgraphUrls()) {
       try {
         val row = fetchSongStatsFromSubgraph(subgraphUrl, normalizedTrackId)
         if (row != null) return@withContext row
@@ -102,7 +130,10 @@ object SongArtistApi {
       }
     }
 
+    fetchSongStatsFromChain(normalizedTrackId)?.let { return@withContext it }
+
     if (sawSuccessfulEmpty) return@withContext null
+    if (lastError != null && isSubgraphAvailabilityError(lastError)) return@withContext null
     if (lastError != null) throw lastError
     null
   }
@@ -113,7 +144,7 @@ object SongArtistApi {
 
     var sawSuccessfulEmpty = false
     var lastError: Throwable? = null
-    for (subgraphUrl in activitySubgraphUrls()) {
+    for (subgraphUrl in musicSocialSubgraphUrls()) {
       try {
         val rows = fetchSongTopListenersFromSubgraph(subgraphUrl, normalizedTrackId, first)
         if (rows.isNotEmpty()) return@withContext rows
@@ -124,6 +155,7 @@ object SongArtistApi {
     }
 
     if (sawSuccessfulEmpty) return@withContext emptyList()
+    if (lastError != null && isSubgraphAvailabilityError(lastError)) return@withContext emptyList()
     if (lastError != null) throw lastError
     emptyList()
   }
@@ -134,7 +166,7 @@ object SongArtistApi {
 
     var sawSuccessfulEmpty = false
     var lastError: Throwable? = null
-    for (subgraphUrl in activitySubgraphUrls()) {
+    for (subgraphUrl in musicSocialSubgraphUrls()) {
       try {
         val rows = fetchSongRecentScrobblesFromSubgraph(subgraphUrl, normalizedTrackId, first)
         if (rows.isNotEmpty()) return@withContext rows
@@ -145,6 +177,7 @@ object SongArtistApi {
     }
 
     if (sawSuccessfulEmpty) return@withContext emptyList()
+    if (lastError != null && isSubgraphAvailabilityError(lastError)) return@withContext emptyList()
     if (lastError != null) throw lastError
     emptyList()
   }
@@ -156,7 +189,7 @@ object SongArtistApi {
 
     var sawSuccessfulEmpty = false
     var lastError: Throwable? = null
-    for (subgraphUrl in activitySubgraphUrls()) {
+    for (subgraphUrl in musicSocialSubgraphUrls()) {
       try {
         val rows = fetchArtistTopTracksFromSubgraph(subgraphUrl, artist, first)
         if (rows.isNotEmpty()) return@withContext rows
@@ -166,7 +199,13 @@ object SongArtistApi {
       }
     }
 
+    if (lastError != null) {
+      val fallback = fetchArtistTopTracksFromChain(artist, first)
+      if (fallback.isNotEmpty()) return@withContext fallback
+    }
+
     if (sawSuccessfulEmpty) return@withContext emptyList()
+    if (lastError != null && isSubgraphAvailabilityError(lastError)) return@withContext emptyList()
     if (lastError != null) throw lastError
     emptyList()
   }
@@ -178,9 +217,9 @@ object SongArtistApi {
 
     var sawSuccessfulEmpty = false
     var lastError: Throwable? = null
-    for (subgraphUrl in activitySubgraphUrls()) {
+    for (subgraphUrl in musicSocialSubgraphUrls()) {
       try {
-        val rows = fetchArtistTopListenersFromSubgraph(subgraphUrl, artist.lowercase(), first)
+        val rows = fetchArtistTopListenersFromSubgraph(subgraphUrl, artist, first)
         if (rows.isNotEmpty()) return@withContext rows
         sawSuccessfulEmpty = true
       } catch (error: Throwable) {
@@ -189,6 +228,7 @@ object SongArtistApi {
     }
 
     if (sawSuccessfulEmpty) return@withContext emptyList()
+    if (lastError != null && isSubgraphAvailabilityError(lastError)) return@withContext emptyList()
     if (lastError != null) throw lastError
     emptyList()
   }
@@ -200,7 +240,7 @@ object SongArtistApi {
 
     var sawSuccessfulEmpty = false
     var lastError: Throwable? = null
-    for (subgraphUrl in activitySubgraphUrls()) {
+    for (subgraphUrl in musicSocialSubgraphUrls()) {
       try {
         val rows = fetchArtistRecentScrobblesFromSubgraph(subgraphUrl, artist, first)
         if (rows.isNotEmpty()) return@withContext rows
@@ -211,8 +251,32 @@ object SongArtistApi {
     }
 
     if (sawSuccessfulEmpty) return@withContext emptyList()
+    if (lastError != null && isSubgraphAvailabilityError(lastError)) return@withContext emptyList()
     if (lastError != null) throw lastError
     emptyList()
+  }
+
+  suspend fun fetchLatestTracksFromChain(maxEntries: Int = 100): List<SongStats> = withContext(Dispatchers.IO) {
+    val first = maxEntries.coerceIn(1, 200)
+    val trackIds = fetchRecentRegisteredTrackIdsFromChain(first)
+    if (trackIds.isEmpty()) return@withContext emptyList()
+    val meta = fetchTrackMetaFromChain(trackIds)
+    if (meta.isEmpty()) return@withContext emptyList()
+    meta.values
+      .sortedByDescending { it.registeredAtSec }
+      .take(first)
+      .map {
+        SongStats(
+          trackId = it.trackId,
+          title = it.title.ifBlank { it.trackId.take(14) },
+          artist = it.artist.ifBlank { "Unknown Artist" },
+          album = it.album,
+          coverCid = it.coverCid,
+          scrobbleCountTotal = 0L,
+          scrobbleCountVerified = 0L,
+          registeredAtSec = it.registeredAtSec,
+        )
+      }
   }
 
   suspend fun fetchStudySetStatus(trackId: String, language: String): StudySetStatus = withContext(Dispatchers.IO) {
@@ -316,7 +380,7 @@ object SongArtistApi {
   private fun fetchSongStatsFromSubgraph(subgraphUrl: String, trackId: String): SongStats? {
     val query = """
       {
-        tracks(where: { id_in: [\"$trackId\"] }, first: 1) {
+        tracks(where: { id_in: ["$trackId"] }, first: 1) {
           id
           title
           artist
@@ -352,7 +416,7 @@ object SongArtistApi {
       val query = """
         {
           scrobbles(
-            where: { track: \"$trackId\" }
+            where: { track: "$trackId" }
             orderBy: timestamp
             orderDirection: desc
             first: $pageSize
@@ -396,7 +460,7 @@ object SongArtistApi {
     val query = """
       {
         scrobbles(
-          where: { track: \"$trackId\" }
+          where: { track: "$trackId" }
           orderBy: timestamp
           orderDirection: desc
           first: $maxEntries
@@ -425,11 +489,11 @@ object SongArtistApi {
   }
 
   private fun fetchArtistTopTracksFromSubgraph(subgraphUrl: String, artistName: String, maxEntries: Int): List<ArtistTrackRow> {
-    val escapedArtist = escapeGraphQL(artistName)
+    val targetNorm = normalizeArtistName(artistName)
     val query = """
-      {
+      query ArtistTopTracks(${"$"}artist: String!) {
         tracks(
-          where: { artist_contains_nocase: \"$escapedArtist\" }
+          where: { artist_contains_nocase: ${"$"}artist }
           orderBy: scrobbleCountTotal
           orderDirection: desc
           first: $maxEntries
@@ -442,21 +506,24 @@ object SongArtistApi {
           scrobbleCountTotal
           scrobbleCountVerified
         }
-      }
+    }
     """.trimIndent()
 
-    val json = postQuery(subgraphUrl, query)
+    val variables = JSONObject().put("artist", artistName)
+    val json = postQuery(subgraphUrl, query, variables)
     val items = json.optJSONObject("data")?.optJSONArray("tracks") ?: JSONArray()
     val rows = ArrayList<ArtistTrackRow>(items.length())
 
     for (i in 0 until items.length()) {
       val row = items.optJSONObject(i) ?: continue
       val trackId = normalizeBytes32(row.optString("id", "")) ?: continue
+      val rowArtist = row.optString("artist", "").trim()
+      if (!artistMatchesTarget(rowArtist, targetNorm)) continue
       rows.add(
         ArtistTrackRow(
           trackId = trackId,
           title = row.optString("title", "").trim().ifBlank { "Unknown Track" },
-          artist = row.optString("artist", "").trim().ifBlank { "Unknown Artist" },
+          artist = rowArtist.ifBlank { "Unknown Artist" },
           album = row.optString("album", "").trim(),
           coverCid = row.optString("coverCid", "").trim().ifBlank { null },
           scrobbleCountTotal = row.optString("scrobbleCountTotal", "0").trim().toLongOrNull() ?: 0L,
@@ -468,48 +535,56 @@ object SongArtistApi {
     return rows
   }
 
-  private fun fetchArtistTopListenersFromSubgraph(subgraphUrl: String, artistKey: String, maxEntries: Int): List<ArtistListenerRow> {
-    val escapedKey = escapeGraphQL(artistKey)
+  private fun fetchArtistTopListenersFromSubgraph(subgraphUrl: String, artistName: String, maxEntries: Int): List<ArtistListenerRow> {
+    val targetNorm = normalizeArtistName(artistName)
     val query = """
-      {
-        userArtistStats(
-          where: { artistKey: \"$escapedKey\" }
-          orderBy: scrobbleCount
+      query ArtistTopListeners(${"$"}artist: String!) {
+        scrobbles(
+          where: { track_: { artist_contains_nocase: ${"$"}artist } }
+          orderBy: timestamp
           orderDirection: desc
-          first: $maxEntries
+          first: ${TRACK_LISTENER_MAX_SCAN}
         ) {
           user
-          scrobbleCount
-          lastScrobbleAt
+          timestamp
+          track {
+            artist
+          }
         }
       }
     """.trimIndent()
 
-    val json = postQuery(subgraphUrl, query)
-    val items = json.optJSONObject("data")?.optJSONArray("userArtistStats") ?: JSONArray()
-    val out = ArrayList<ArtistListenerRow>(items.length())
+    val variables = JSONObject().put("artist", artistName)
+    val json = postQuery(subgraphUrl, query, variables)
+    val items = json.optJSONObject("data")?.optJSONArray("scrobbles") ?: JSONArray()
+    val byUser = LinkedHashMap<String, Pair<Long, Long>>()
 
     for (i in 0 until items.length()) {
       val row = items.optJSONObject(i) ?: continue
       val user = normalizeAddress(row.optString("user", "")) ?: continue
-      out.add(
-        ArtistListenerRow(
-          userAddress = user,
-          scrobbleCount = row.optString("scrobbleCount", "0").trim().toLongOrNull() ?: 0L,
-          lastScrobbleAtSec = row.optString("lastScrobbleAt", "0").trim().toLongOrNull() ?: 0L,
-        ),
-      )
+      val last = row.optString("timestamp", "0").trim().toLongOrNull() ?: 0L
+      val trackArtist = row.optJSONObject("track")?.optString("artist", "").orEmpty()
+      if (!artistMatchesTarget(trackArtist, targetNorm)) continue
+      val prev = byUser[user]
+      if (prev == null) {
+        byUser[user] = 1L to last
+      } else {
+        byUser[user] = (prev.first + 1L) to maxOf(prev.second, last)
+      }
     }
 
-    return out
+    return byUser.entries
+      .map { ArtistListenerRow(userAddress = it.key, scrobbleCount = it.value.first, lastScrobbleAtSec = it.value.second) }
+      .sortedWith(compareByDescending<ArtistListenerRow> { it.scrobbleCount }.thenBy { it.userAddress })
+      .take(maxEntries)
   }
 
   private fun fetchArtistRecentScrobblesFromSubgraph(subgraphUrl: String, artistName: String, maxEntries: Int): List<ArtistScrobbleRow> {
-    val escapedArtist = escapeGraphQL(artistName)
+    val targetNorm = normalizeArtistName(artistName)
     val query = """
-      {
+      query ArtistRecentScrobbles(${"$"}artist: String!) {
         scrobbles(
-          where: { track_: { artist_contains_nocase: \"$escapedArtist\" } }
+          where: { track_: { artist_contains_nocase: ${"$"}artist } }
           orderBy: timestamp
           orderDirection: desc
           first: $maxEntries
@@ -519,12 +594,14 @@ object SongArtistApi {
           track {
             id
             title
+            artist
           }
         }
-      }
+    }
     """.trimIndent()
 
-    val json = postQuery(subgraphUrl, query)
+    val variables = JSONObject().put("artist", artistName)
+    val json = postQuery(subgraphUrl, query, variables)
     val items = json.optJSONObject("data")?.optJSONArray("scrobbles") ?: JSONArray()
     val out = ArrayList<ArtistScrobbleRow>(items.length())
 
@@ -534,6 +611,8 @@ object SongArtistApi {
       val timestamp = row.optString("timestamp", "0").trim().toLongOrNull() ?: 0L
       val track = row.optJSONObject("track")
       val trackId = normalizeBytes32(track?.optString("id", "").orEmpty()) ?: continue
+      val trackArtist = track?.optString("artist", "").orEmpty()
+      if (!artistMatchesTarget(trackArtist, targetNorm)) continue
       val title = track?.optString("title", "").orEmpty().trim().ifBlank { "Unknown Track" }
       out.add(
         ArtistScrobbleRow(
@@ -548,8 +627,10 @@ object SongArtistApi {
     return out
   }
 
-  private fun postQuery(subgraphUrl: String, query: String): JSONObject {
-    val body = JSONObject().put("query", query).toString().toRequestBody(jsonMediaType)
+  private fun postQuery(subgraphUrl: String, query: String, variables: JSONObject? = null): JSONObject {
+    val payload = JSONObject().put("query", query)
+    if (variables != null) payload.put("variables", variables)
+    val body = payload.toString().toRequestBody(jsonMediaType)
     val req = Request.Builder().url(subgraphUrl).post(body).build()
     return client.newCall(req).execute().use { res ->
       if (!res.isSuccessful) throw IllegalStateException("Subgraph query failed: ${res.code}")
@@ -564,13 +645,225 @@ object SongArtistApi {
     }
   }
 
-  private fun activitySubgraphUrls(): List<String> {
-    val fromBuildConfig = BuildConfig.TEMPO_SCROBBLE_SUBGRAPH_URL.trim().removeSuffix("/")
-    val urls = ArrayList<String>(3)
-    if (fromBuildConfig.isNotBlank()) urls.add(fromBuildConfig)
-    urls.add(DEFAULT_ACTIVITY_SUBGRAPH)
-    urls.add(LEGACY_ACTIVITY_SUBGRAPH)
-    return urls.distinct()
+  private fun musicSocialSubgraphUrls(): List<String> {
+    val fromMusicSocial = BuildConfig.TEMPO_MUSIC_SOCIAL_SUBGRAPH_URL.trim().removeSuffix("/")
+    val urls = ArrayList<String>(2)
+    if (fromMusicSocial.isNotBlank()) urls.add(fromMusicSocial)
+    urls.add(DEFAULT_MUSIC_SOCIAL_SUBGRAPH)
+    return urls
+      .distinct()
+      .filterNot(::isLikelyLocalSubgraphUrl)
+  }
+
+  private fun isLikelyLocalSubgraphUrl(url: String): Boolean {
+    val host = runCatching { URI(url).host.orEmpty().lowercase() }.getOrDefault("")
+    if (host.isBlank()) return false
+    if (host == "localhost" || host == "10.0.2.2" || host == "127.0.0.1") return true
+    if (host.startsWith("192.168.") || host.startsWith("10.")) return true
+    if (host.startsWith("172.")) {
+      val second = host.split(".").getOrNull(1)?.toIntOrNull()
+      if (second != null && second in 16..31) return true
+    }
+    return false
+  }
+
+  private fun isSubgraphAvailabilityError(error: Throwable?): Boolean {
+    val msg = error?.message?.lowercase().orEmpty()
+    if (msg.isBlank()) return false
+    return msg.contains("subgraph query failed: 530") ||
+      msg.contains("subgraph query failed: 52") ||
+      msg.contains("origin dns") ||
+      msg.contains("cloudflare")
+  }
+
+  private fun fetchSongStatsFromChain(trackId: String): SongStats? {
+    val meta = getTrackMetaFromChain(trackId) ?: return null
+    return SongStats(
+      trackId = meta.trackId,
+      title = meta.title.ifBlank { meta.trackId.take(14) },
+      artist = meta.artist.ifBlank { "Unknown Artist" },
+      album = meta.album,
+      coverCid = meta.coverCid,
+      scrobbleCountTotal = 0L,
+      scrobbleCountVerified = 0L,
+      registeredAtSec = meta.registeredAtSec,
+    )
+  }
+
+  private fun fetchArtistTopTracksFromChain(artistName: String, maxEntries: Int): List<ArtistTrackRow> {
+    val targetNorm = normalizeArtistName(artistName)
+    if (targetNorm.isBlank()) return emptyList()
+    val candidateLimit = (maxEntries * 40).coerceIn(maxEntries, 1200)
+    val trackIds = fetchRecentRegisteredTrackIdsFromChain(candidateLimit)
+    if (trackIds.isEmpty()) return emptyList()
+    val metaByTrack = fetchTrackMetaFromChain(trackIds)
+    if (metaByTrack.isEmpty()) return emptyList()
+    return metaByTrack.values
+      .asSequence()
+      .filter { artistMatchesTarget(it.artist, targetNorm) }
+      .sortedByDescending { it.registeredAtSec }
+      .take(maxEntries)
+      .map {
+        ArtistTrackRow(
+          trackId = it.trackId,
+          title = it.title.ifBlank { it.trackId.take(14) },
+          artist = it.artist.ifBlank { "Unknown Artist" },
+          album = it.album,
+          coverCid = it.coverCid,
+          scrobbleCountTotal = 0L,
+          scrobbleCountVerified = 0L,
+        )
+      }
+      .toList()
+  }
+
+  private fun fetchRecentRegisteredTrackIdsFromChain(maxEntries: Int): List<String> {
+    if (maxEntries <= 0) return emptyList()
+    val latestBlock = runCatching { ethBlockNumber() }.getOrElse { return emptyList() }
+    val minBlock = (latestBlock - CHAIN_TRACK_SCAN_WINDOW_BLOCKS).coerceAtLeast(0L)
+    val out = LinkedHashSet<String>(maxEntries)
+
+    var toBlock = latestBlock
+    while (toBlock >= minBlock && out.size < maxEntries) {
+      val fromBlock = maxOf(minBlock, toBlock - CHAIN_TRACK_SCAN_CHUNK_BLOCKS + 1)
+      val logs =
+        runCatching {
+          ethGetLogs(
+            address = TempoScrobbleApi.SCROBBLE_V4,
+            fromBlock = fromBlock,
+            toBlock = toBlock,
+            topics =
+              JSONArray()
+                .put(TRACK_REGISTERED_TOPIC)
+                .put(JSONObject.NULL)
+                .put(TRACK_KIND_IPID_TOPIC),
+          )
+        }.getOrNull() ?: JSONArray()
+
+      for (i in logs.length() - 1 downTo 0) {
+        val log = logs.optJSONObject(i) ?: continue
+        val topics = log.optJSONArray("topics") ?: continue
+        val trackId = normalizeBytes32(topics.optString(1, "")) ?: continue
+        out.add(trackId)
+        if (out.size >= maxEntries) break
+      }
+
+      if (fromBlock == 0L) break
+      toBlock = fromBlock - 1
+    }
+
+    return out.toList()
+  }
+
+  private fun fetchTrackMetaFromChain(trackIds: List<String>): Map<String, ChainTrackMeta> {
+    if (trackIds.isEmpty()) return emptyMap()
+    val out = LinkedHashMap<String, ChainTrackMeta>(trackIds.size)
+    for (raw in trackIds) {
+      val trackId = normalizeBytes32(raw) ?: continue
+      if (out.containsKey(trackId)) continue
+      val meta = getTrackMetaFromChain(trackId) ?: continue
+      out[trackId] = meta
+    }
+    return out
+  }
+
+  private fun getTrackMetaFromChain(trackId: String): ChainTrackMeta? {
+    val normalizedTrackId = normalizeBytes32(trackId) ?: return null
+    val bytes = runCatching { hexToBytes(normalizedTrackId) }.getOrNull() ?: return null
+    if (bytes.size != 32) return null
+
+    val outputs =
+      listOf(
+        object : TypeReference<Utf8String>() {},
+        object : TypeReference<Utf8String>() {},
+        object : TypeReference<Utf8String>() {},
+        object : TypeReference<Uint8>() {},
+        object : TypeReference<Bytes32>() {},
+        object : TypeReference<Uint64>() {},
+        object : TypeReference<Utf8String>() {},
+        object : TypeReference<Uint32>() {},
+      )
+
+    val function = Function("getTrack", listOf(Bytes32(bytes)), outputs)
+    val callData = FunctionEncoder.encode(function)
+    val result = runCatching { ethCall(TempoScrobbleApi.SCROBBLE_V4, callData) }.getOrNull().orEmpty()
+    if (!result.startsWith("0x") || result.length <= 2) return null
+    val decoded = runCatching { FunctionReturnDecoder.decode(result, function.outputParameters) }.getOrNull() ?: return null
+    if (decoded.size < 8) return null
+
+    val title = (decoded.getOrNull(0) as? Utf8String)?.value?.trim().orEmpty()
+    val artist = (decoded.getOrNull(1) as? Utf8String)?.value?.trim().orEmpty()
+    val album = (decoded.getOrNull(2) as? Utf8String)?.value?.trim().orEmpty()
+    val registeredAtSec = (decoded.getOrNull(5) as? Uint64)?.value?.toLong() ?: 0L
+    val coverCid = (decoded.getOrNull(6) as? Utf8String)?.value?.trim().orEmpty().ifBlank { null }
+    val durationSec = (decoded.getOrNull(7) as? Uint32)?.value?.toInt() ?: 0
+
+    return ChainTrackMeta(
+      trackId = normalizedTrackId,
+      title = title,
+      artist = artist,
+      album = album,
+      coverCid = coverCid,
+      durationSec = durationSec,
+      registeredAtSec = registeredAtSec,
+    )
+  }
+
+  private fun ethBlockNumber(): Long {
+    val json = postRpc("eth_blockNumber", JSONArray())
+    return parseHexLong(json.optString("result", "0x0"))
+  }
+
+  private fun ethGetLogs(
+    address: String,
+    fromBlock: Long,
+    toBlock: Long,
+    topics: JSONArray,
+  ): JSONArray {
+    val filter =
+      JSONObject()
+        .put("address", address)
+        .put("fromBlock", hexQuantity(fromBlock))
+        .put("toBlock", hexQuantity(toBlock))
+        .put("topics", topics)
+    val json = postRpc("eth_getLogs", JSONArray().put(filter))
+    return json.optJSONArray("result") ?: JSONArray()
+  }
+
+  private fun ethCall(to: String, data: String): String {
+    val call =
+      JSONObject()
+        .put("to", to)
+        .put("data", data)
+    val json = postRpc("eth_call", JSONArray().put(call).put("latest"))
+    return json.optString("result", "0x")
+  }
+
+  private fun postRpc(method: String, params: JSONArray): JSONObject {
+    val payload =
+      JSONObject()
+        .put("jsonrpc", "2.0")
+        .put("id", 1)
+        .put("method", method)
+        .put("params", params)
+    val req = Request.Builder().url(TEMPO_RPC_URL).post(payload.toString().toRequestBody(jsonMediaType)).build()
+    return client.newCall(req).execute().use { res ->
+      if (!res.isSuccessful) throw IllegalStateException("RPC failed: ${res.code}")
+      val json = JSONObject(res.body?.string().orEmpty())
+      val err = json.optJSONObject("error")
+      if (err != null) throw IllegalStateException(err.optString("message", err.toString()))
+      json
+    }
+  }
+
+  private fun parseHexLong(value: String): Long {
+    val clean = value.trim().removePrefix("0x").ifBlank { "0" }
+    return runCatching { BigInteger(clean, 16).toLong() }.getOrDefault(0L)
+  }
+
+  private fun hexQuantity(value: Long): String {
+    if (value <= 0L) return "0x0"
+    return "0x" + value.toString(16)
   }
 
   private fun normalizeAddress(raw: String): String? {
@@ -588,6 +881,97 @@ object SongArtistApi {
   private fun escapeGraphQL(value: String): String {
     val sanitized = GRAPHQL_CONTROL_CHARS_REGEX.replace(value, " ")
     return sanitized.replace("\\", "\\\\").replace("\"", "\\\"")
+  }
+
+  private fun normalizeArtistName(name: String): String {
+    val folded = Normalizer.normalize(name, Normalizer.Form.NFKD)
+      .replace(Regex("[\\u0300-\\u036f]"), "")
+    return folded
+      .lowercase()
+      .replace("$", "s")
+      .replace("&", " and ")
+      .replace(Regex("\\bfeat\\.?\\b|\\bft\\.?\\b|\\bfeaturing\\b"), " feat ")
+      .replace(Regex("[^a-z0-9]+"), " ")
+      .trim()
+      .replace(Regex("\\s+"), " ")
+  }
+
+  private fun splitArtistNames(name: String): List<String> {
+    val unified = name
+      .lowercase()
+      .replace(Regex("\\bfeat\\.?\\b|\\bft\\.?\\b|\\bfeaturing\\b"), "|")
+      .replace(Regex("\\bstarring\\b"), "|")
+      .replace("&", "|")
+      .replace("+", "|")
+      .replace(Regex("\\bx\\b"), "|")
+      .replace(Regex("\\band\\b"), "|")
+      .replace(Regex("\\bwith\\b"), "|")
+      .replace("/", "|")
+      .replace(",", "|")
+    return unified
+      .split("|")
+      .map { normalizeArtistName(it) }
+      .filter { it.isNotBlank() }
+  }
+
+  private fun normalizeArtistVariants(name: String): Set<String> {
+    val base = normalizeArtistName(name)
+    if (base.isBlank()) return emptySet()
+    val variants = linkedSetOf(base)
+
+    val noParens = base.replace(Regex("\\s*\\([^)]*\\)\\s*"), " ").replace(Regex("\\s+"), " ").trim()
+    if (noParens.isNotBlank() && noParens != base) variants.add(noParens)
+
+    if (base.startsWith("the ")) {
+      variants.add(base.removePrefix("the ").trim())
+    }
+    if (base.endsWith(" the")) {
+      val noTrail = base.removeSuffix(" the").trim()
+      if (noTrail.isNotBlank()) {
+        variants.add(noTrail)
+        variants.add("the $noTrail")
+      }
+    }
+    return variants
+  }
+
+  private fun wordContains(haystack: String, needle: String): Boolean {
+    if (haystack.isBlank() || needle.isBlank()) return false
+    return " $haystack ".contains(" $needle ")
+  }
+
+  private fun artistMatchesTarget(artistField: String, targetNorm: String): Boolean {
+    if (targetNorm.isBlank()) return false
+    val targetVariants = normalizeArtistVariants(targetNorm)
+    val fieldVariants = normalizeArtistVariants(artistField)
+
+    for (fieldVariant in fieldVariants) {
+      for (targetVariant in targetVariants) {
+        if (fieldVariant == targetVariant) return true
+        if (wordContains(fieldVariant, targetVariant)) return true
+        if (wordContains(targetVariant, fieldVariant)) return true
+      }
+    }
+
+    for (part in splitArtistNames(artistField)) {
+      for (targetVariant in targetVariants) {
+        if (part == targetVariant) return true
+        if (wordContains(part, targetVariant)) return true
+      }
+    }
+    return false
+  }
+
+  private fun hexToBytes(hex0x: String): ByteArray {
+    val hex = hex0x.removePrefix("0x")
+    if (hex.length % 2 != 0) throw IllegalArgumentException("Odd hex length")
+    val out = ByteArray(hex.length / 2)
+    var i = 0
+    while (i < hex.length) {
+      out[i / 2] = hex.substring(i, i + 2).toInt(16).toByte()
+      i += 2
+    }
+    return out
   }
 
   private fun encodeUrlComponent(value: String): String {

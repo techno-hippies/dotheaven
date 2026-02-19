@@ -2,8 +2,8 @@ use super::FeedPost;
 use crate::shared::ipfs;
 use serde::Deserialize;
 
-const ACTIVITY_SUBGRAPH: &str =
-    "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo";
+const MUSIC_SOCIAL_SUBGRAPH: &str =
+    "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-music-social-tempo/1.0.0/gn";
 
 #[derive(Debug, Deserialize)]
 struct SubgraphResponse {
@@ -63,7 +63,7 @@ pub(super) async fn fetch_posts() -> Result<Vec<FeedPost>, String> {
         }"#;
 
         let body = serde_json::json!({ "query": query });
-        let resp: SubgraphResponse = ureq::post(ACTIVITY_SUBGRAPH)
+        let resp: SubgraphResponse = ureq::post(MUSIC_SOCIAL_SUBGRAPH)
             .send_json(&body)
             .map_err(|e| format!("Request failed: {}", e))?
             .body_mut()

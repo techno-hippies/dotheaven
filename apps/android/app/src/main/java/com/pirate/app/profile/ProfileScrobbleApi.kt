@@ -21,10 +21,8 @@ data class ScrobbleRow(
 )
 
 object ProfileScrobbleApi {
-  private const val DEFAULT_TEMPO_SUBGRAPH_ACTIVITY =
-    "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo"
-  private const val LEGACY_SUBGRAPH_ACTIVITY =
-    "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo"
+  private const val DEFAULT_TEMPO_SUBGRAPH_MUSIC_SOCIAL =
+    "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-music-social-tempo/1.0.0/gn"
   private const val DEBUG_DEFAULT_TEMPO_INDEXER_API_EMULATOR = "http://10.0.2.2:42069"
   private const val DEBUG_DEFAULT_TEMPO_INDEXER_API_REVERSE = "http://127.0.0.1:42069"
   private val client = OkHttpClient()
@@ -39,7 +37,7 @@ object ProfileScrobbleApi {
 
     var sawSuccessfulEmpty = false
     var subgraphError: Throwable? = null
-    for (subgraphUrl in subgraphActivityUrls()) {
+    for (subgraphUrl in musicSocialSubgraphUrls()) {
       try {
         val rows = fetchFromSubgraph(subgraphUrl, addr, max)
         if (rows.isNotEmpty()) return@withContext rows
@@ -74,12 +72,11 @@ object ProfileScrobbleApi {
     emptyList()
   }
 
-  private fun subgraphActivityUrls(): List<String> {
-    val fromBuildConfig = BuildConfig.TEMPO_SCROBBLE_SUBGRAPH_URL.trim().removeSuffix("/")
-    val urls = ArrayList<String>(3)
-    if (fromBuildConfig.isNotBlank()) urls.add(fromBuildConfig)
-    urls.add(DEFAULT_TEMPO_SUBGRAPH_ACTIVITY)
-    urls.add(LEGACY_SUBGRAPH_ACTIVITY)
+  private fun musicSocialSubgraphUrls(): List<String> {
+    val fromMusicSocial = runCatching { BuildConfig.TEMPO_MUSIC_SOCIAL_SUBGRAPH_URL }.getOrDefault("").trim().removeSuffix("/")
+    val urls = ArrayList<String>(2)
+    if (fromMusicSocial.isNotBlank()) urls.add(fromMusicSocial)
+    urls.add(DEFAULT_TEMPO_SUBGRAPH_MUSIC_SOCIAL)
     return urls.distinct()
   }
 

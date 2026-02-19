@@ -255,7 +255,8 @@ fun ScheduleScreen(
               )
 
               if (result.success) {
-                onShowMessage("Cancel submitted: ${abbreviateAddress(result.txHash ?: "")}")
+                val fundingPath = if (result.usedSelfPayFallback) "self-pay fallback" else "sponsored"
+                onShowMessage("Cancel submitted ($fundingPath): ${abbreviateAddress(result.txHash ?: "")}")
                 refreshBookings()
               } else {
                 onShowMessage("Cancel failed: ${result.error ?: "unknown error"}")
@@ -279,8 +280,8 @@ fun ScheduleAvailabilityScreen(
 ) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
-  var basePrice by remember { mutableStateOf(DEFAULT_BASE_PRICE) }
-  var basePriceEdit by remember { mutableStateOf(DEFAULT_BASE_PRICE) }
+  var basePrice by remember { mutableStateOf<String?>(null) }
+  var basePriceEdit by remember { mutableStateOf("") }
   var editingPrice by rememberSaveable { mutableStateOf(false) }
   var acceptingBookings by rememberSaveable { mutableStateOf(true) }
   var weekOffset by rememberSaveable { mutableStateOf(0) }
@@ -318,7 +319,7 @@ fun ScheduleAvailabilityScreen(
           priceUsd = slot.priceUsd,
         )
       }
-      val resolvedBase = chainBasePrice?.takeIf { it.isNotBlank() } ?: basePrice
+      val resolvedBase = chainBasePrice?.takeIf { it.isNotBlank() } ?: basePrice ?: DEFAULT_BASE_PRICE
       basePrice = resolvedBase
       if (!editingPrice) basePriceEdit = resolvedBase
     }.onFailure { err ->
@@ -371,10 +372,11 @@ fun ScheduleAvailabilityScreen(
           basePrice = basePrice,
           editingPrice = editingPrice,
           editValue = basePriceEdit,
+          loading = availabilityLoading && basePrice == null && !editingPrice,
           busy = availabilityBusy,
-          onEditStart = { editingPrice = true; basePriceEdit = basePrice },
+          onEditStart = { editingPrice = true; basePriceEdit = basePrice ?: DEFAULT_BASE_PRICE },
           onPriceChange = { basePriceEdit = it },
-          onCancelEdit = { editingPrice = false; basePriceEdit = basePrice },
+          onCancelEdit = { editingPrice = false; basePriceEdit = basePrice ?: DEFAULT_BASE_PRICE },
           onSavePrice = {
             if (!isAuthenticated || userAddress.isNullOrBlank() || tempoAccount == null) {
               onShowMessage("Sign in with Tempo to set a base price.")
@@ -406,7 +408,8 @@ fun ScheduleAvailabilityScreen(
                 basePrice = normalizedPrice
                 basePriceEdit = normalizedPrice
                 editingPrice = false
-                onShowMessage("Base price updated: ${abbreviateAddress(result.txHash ?: "")}")
+                val fundingPath = if (result.usedSelfPayFallback) "self-pay fallback" else "sponsored"
+                onShowMessage("Base price updated ($fundingPath): ${abbreviateAddress(result.txHash ?: "")}")
                 refreshAvailability()
               } else {
                 onShowMessage("Base price update failed: ${result.error ?: "unknown error"}")
@@ -537,7 +540,8 @@ fun ScheduleAvailabilityScreen(
                   }
 
                   if (result.success) {
-                    onShowMessage("Availability updated: ${abbreviateAddress(result.txHash ?: "")}")
+                    val fundingPath = if (result.usedSelfPayFallback) "self-pay fallback" else "sponsored"
+                    onShowMessage("Availability updated ($fundingPath): ${abbreviateAddress(result.txHash ?: "")}")
                     refreshAvailability()
                   } else {
                     onShowMessage("Availability update failed: ${result.error ?: "unknown error"}")
@@ -644,9 +648,10 @@ private fun UpcomingSessionsSection(
 @Composable
 private fun AvailabilityHeaderCard(
   isAuthenticated: Boolean,
-  basePrice: String,
+  basePrice: String?,
   editingPrice: Boolean,
   editValue: String,
+  loading: Boolean,
   busy: Boolean,
   onEditStart: () -> Unit,
   onPriceChange: (String) -> Unit,
@@ -668,8 +673,15 @@ private fun AvailabilityHeaderCard(
         }
       } else {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-          Text("$$basePrice", style = MaterialTheme.typography.headlineSmall)
-          OutlinedButton(onClick = onEditStart, enabled = isAuthenticated && !busy) { Text("Edit") }
+          if (loading) {
+            Text("Loading...", style = MaterialTheme.typography.headlineSmall, color = PiratePalette.TextMuted)
+          } else {
+            Text("$${basePrice ?: DEFAULT_BASE_PRICE}", style = MaterialTheme.typography.headlineSmall)
+          }
+          OutlinedButton(
+            onClick = onEditStart,
+            enabled = isAuthenticated && !busy && !loading,
+          ) { Text("Edit") }
         }
       }
     }

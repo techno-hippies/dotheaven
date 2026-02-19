@@ -115,12 +115,12 @@ pub(in crate::library) fn resolver_url() -> String {
         .to_string()
 }
 
-pub(in crate::library) fn subgraph_activity_url() -> String {
-    env::var("HEAVEN_SUBGRAPH_ACTIVITY_URL")
+pub(in crate::library) fn subgraph_music_social_url() -> String {
+    env::var("HEAVEN_SUBGRAPH_MUSIC_SOCIAL_URL")
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| DEFAULT_SUBGRAPH_ACTIVITY_URL.to_string())
+        .unwrap_or_else(|| DEFAULT_SUBGRAPH_MUSIC_SOCIAL_URL.to_string())
 }
 
 pub(in crate::library) fn http_get_json(url: &str) -> Result<Value, String> {

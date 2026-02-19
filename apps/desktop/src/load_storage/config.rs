@@ -11,8 +11,8 @@ pub(super) const DEFAULT_TEMPO_RPC_URL: &str = "https://rpc.moderato.tempo.xyz";
 pub(super) const DEFAULT_PLAYLIST_V1: &str = "0xeF6a21324548155630670397DA68318E126510EF";
 pub(super) const DEFAULT_PLAYLIST_SHARE_V1: &str = "0x1912cEa18eAFC17cd0f21F58fCF87E699Be512Aa";
 pub(super) const DEFAULT_SCROBBLE_V4: &str = "0xe00e82086480E61AaC8d5ad8B05B56A582dD0000";
-pub(super) const DEFAULT_SUBGRAPH_ACTIVITY: &str =
-    "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo";
+pub(super) const DEFAULT_SUBGRAPH_MUSIC_SOCIAL: &str =
+    "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-music-social-tempo/1.0.0/gn";
 pub(super) const DEFAULT_SUBGRAPH_PLAYLISTS: &str =
     "https://graph.dotheaven.org/subgraphs/name/dotheaven/playlist-feed-tempo";
 pub(super) const BASE_SEPOLIA_CHAIN_ID: u64 = 84532;

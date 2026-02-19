@@ -64,8 +64,6 @@ data class ContractProfileData(
 object ProfileContractApi {
   private const val DEFAULT_TEMPO_SUBGRAPH_PROFILES =
     "https://graph.dotheaven.org/subgraphs/name/dotheaven/profiles-tempo"
-  private const val LEGACY_SUBGRAPH_PROFILES =
-    "https://graph.dotheaven.org/subgraphs/name/dotheaven/profiles-tempo"
   const val ZERO_HASH =
     "0x0000000000000000000000000000000000000000000000000000000000000000"
 
@@ -582,10 +580,9 @@ object ProfileContractApi {
 
   private fun profileSubgraphUrls(): List<String> {
     val fromBuildConfig = BuildConfig.TEMPO_PROFILES_SUBGRAPH_URL.trim().removeSuffix("/")
-    val urls = ArrayList<String>(3)
+    val urls = ArrayList<String>(2)
     if (fromBuildConfig.isNotBlank()) urls.add(fromBuildConfig)
     urls.add(DEFAULT_TEMPO_SUBGRAPH_PROFILES)
-    urls.add(LEGACY_SUBGRAPH_PROFILES)
     return urls.distinct()
   }
 

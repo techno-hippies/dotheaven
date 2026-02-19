@@ -7,6 +7,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import org.bouncycastle.jcajce.provider.digest.Keccak
 import java.io.ByteArrayOutputStream
+import java.math.BigInteger
 import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.KeyStore
@@ -29,6 +30,12 @@ object SessionKeyManager {
   private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
   private const val KEY_ALIAS_PREFIX = "tempo_session_p256_v1_"
   private const val P256_SIGNATURE_ALGO = "SHA256withECDSA"
+  // NIST P-256 group order for low-S normalization.
+  private val P256_ORDER = BigInteger(
+    "FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551",
+    16,
+  )
+  private val P256_HALF_ORDER = P256_ORDER.shiftRight(1)
 
   private data class RawRlp(val encoded: ByteArray)
 
@@ -82,16 +89,22 @@ object SessionKeyManager {
   /**
    * Build the KeyAuthorization digest that the root passkey signs.
    *
-   * digest = keccak256(rlp([chain_id, key_type, key_id, expiry, limits]))
+   * digest = keccak256(rlp(authorization_tuple))
+   * where authorization_tuple = [chain_id, key_type, key_id, expiry?]
    */
   fun buildKeyAuthDigest(sessionKey: SessionKey): ByteArray {
-    return Keccak.Digest256().digest(rlpEncodeList(buildKeyAuthorizationFields(sessionKey)))
+    return Keccak.Digest256().digest(rlpEncodeList(buildKeyAuthorizationTuple(sessionKey)))
   }
 
   /**
    * Build SignedKeyAuthorization bytes to include in tx.key_authorization.
    *
-   * Spec shape: rlp([chain_id, key_type, key_id, expiry, limits?, signature])
+   * Spec shape:
+   * rlp([
+   *   [chain_id, key_type, key_id, expiry?, limits?],
+   *   signature
+   * ])
+   *
    * where signature is a PrimitiveSignature blob.
    */
   fun buildSignedKeyAuthorization(
@@ -107,9 +120,8 @@ object SessionKeyManager {
       assertion.pubKey.x +
       assertion.pubKey.y
 
-    val fields = buildKeyAuthorizationFields(sessionKey).toMutableList()
-    fields.add(signature)
-    return rlpEncodeList(fields)
+    val authorizationTuple = buildKeyAuthorizationTuple(sessionKey)
+    return rlpEncodeList(listOf(authorizationTuple, signature))
   }
 
   /**
@@ -125,19 +137,20 @@ object SessionKeyManager {
     v: Byte,
   ): ByteArray {
     val signature = buildSecp256k1Signature(r = r, s = s, v = v)
-    val fields = buildKeyAuthorizationFields(sessionKey).toMutableList()
-    fields.add(signature)
-    return rlpEncodeList(fields)
+    val authorizationTuple = buildKeyAuthorizationTuple(sessionKey)
+    return rlpEncodeList(listOf(authorizationTuple, signature))
   }
 
-  private fun buildKeyAuthorizationFields(sessionKey: SessionKey): List<Any> {
-    return listOf(
+  private fun buildKeyAuthorizationTuple(sessionKey: SessionKey): List<Any> {
+    val tuple = mutableListOf<Any>(
       TempoClient.CHAIN_ID, // chain_id
       1L, // key_type: 1 = P256
       P256Utils.hexToBytes(sessionKey.address), // key_id
-      sessionKey.expiresAt, // expiry
-      // limits omitted (None)
     )
+    if (sessionKey.expiresAt > 0L) {
+      tuple.add(sessionKey.expiresAt) // expiry
+    }
+    return tuple
   }
 
   /**
@@ -256,6 +269,21 @@ object SessionKeyManager {
     prefs(context).edit().clear().apply()
   }
 
+  /**
+   * Best-effort cleanup for a generated-but-never-persisted alias.
+   * If the alias is currently persisted, clear persisted metadata as well.
+   */
+  fun deleteAlias(activity: Activity, alias: String) = deleteAlias(activity as Context, alias)
+
+  fun deleteAlias(context: Context, alias: String) {
+    if (alias.isBlank()) return
+    runCatching { deleteKeystoreAlias(alias) }
+    val persistedAlias = prefs(context).getString("keystore_alias", null)
+    if (persistedAlias == alias) {
+      prefs(context).edit().clear().apply()
+    }
+  }
+
   // -- Keystore helpers --
 
   private fun generateKeystoreP256(alias: String): KeyPair {
@@ -350,7 +378,9 @@ object SessionKeyManager {
       }
     }
 
-    return toFixed(r) to toFixed(s)
+    val rFixed = toFixed(r)
+    val sFixed = normalizeP256LowS(toFixed(s))
+    return rFixed to sFixed
   }
 
   private fun bigIntToUnsigned(bytes: ByteArray): ByteArray {
@@ -360,6 +390,17 @@ object SessionKeyManager {
       start += 1
     }
     return bytes.copyOfRange(start, bytes.size)
+  }
+
+  private fun normalizeP256LowS(s: ByteArray): ByteArray {
+    val sValue = BigInteger(1, s)
+    val normalized = if (sValue > P256_HALF_ORDER) P256_ORDER.subtract(sValue) else sValue
+    val unsigned = bigIntToUnsigned(normalized.toByteArray())
+    return if (unsigned.size >= 32) {
+      unsigned.copyOfRange(unsigned.size - 32, unsigned.size)
+    } else {
+      ByteArray(32 - unsigned.size) + unsigned
+    }
   }
 
   // -- RLP helpers --

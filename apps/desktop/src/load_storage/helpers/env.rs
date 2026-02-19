@@ -50,12 +50,12 @@ pub(crate) fn tempo_rpc_url() -> String {
         .unwrap_or_else(|| DEFAULT_TEMPO_RPC_URL.to_string())
 }
 
-pub(crate) fn subgraph_activity_url() -> String {
-    std::env::var("HEAVEN_SUBGRAPH_ACTIVITY_URL")
+pub(crate) fn subgraph_music_social_url() -> String {
+    std::env::var("HEAVEN_SUBGRAPH_MUSIC_SOCIAL_URL")
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| DEFAULT_SUBGRAPH_ACTIVITY.to_string())
+        .unwrap_or_else(|| DEFAULT_SUBGRAPH_MUSIC_SOCIAL.to_string())
 }
 
 pub(crate) fn subgraph_playlists_url() -> String {

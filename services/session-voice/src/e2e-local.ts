@@ -6,9 +6,7 @@
  * Usage:
  *   bun src/e2e-local.ts
  *   bun src/e2e-local.ts --full
- *   bun src/e2e-local.ts --duet-cdp
  *   bun src/e2e-local.ts --duet-onchain
- *   bun src/e2e-local.ts --duet-openx402
  *   bun src/e2e-local.ts --duet-onchain --serve
  *
  * Onchain/self mode:
@@ -59,28 +57,23 @@ const CHILD_ENV = {
   SESSION_VOICE_URL: BASE_URL,
 };
 
-const DUET_CDP_ONLY = process.argv.includes("--duet-cdp");
-const DUET_OPENX402 = process.argv.includes("--duet-openx402");
 const ENV_FACILITATOR_MODE =
   (LOCAL_ENV.X402_FACILITATOR_MODE || process.env.X402_FACILITATOR_MODE || "mock").trim();
+
+if (ENV_FACILITATOR_MODE !== "mock" && ENV_FACILITATOR_MODE !== "self") {
+  throw new Error(`Unsupported X402_FACILITATOR_MODE: ${ENV_FACILITATOR_MODE}`);
+}
 
 // If you're explicitly running in "self" facilitator mode (our own settlement service),
 // default to an on-chain (real settlement) duet test run.
 const AUTO_ONCHAIN =
   ENV_FACILITATOR_MODE === "self"
-  && !DUET_CDP_ONLY
-  && !DUET_OPENX402
   && !process.argv.includes("--duet-onchain");
 const DUET_ONCHAIN = process.argv.includes("--duet-onchain") || AUTO_ONCHAIN;
-const DUET_REAL_ONLY = DUET_CDP_ONLY || DUET_ONCHAIN || DUET_OPENX402;
-
-const facilitatorMode = DUET_CDP_ONLY
-  ? "cdp"
-  : (DUET_OPENX402
-    ? "cdp"
-    : (DUET_ONCHAIN
-      ? (ENV_FACILITATOR_MODE === "self" ? "self" : "cdp")
-      : ENV_FACILITATOR_MODE));
+const DUET_REAL_ONLY = DUET_ONCHAIN;
+const facilitatorMode: "mock" | "self" = DUET_ONCHAIN
+  ? "self"
+  : (ENV_FACILITATOR_MODE === "self" ? "self" : "mock");
 
 const CORE_TESTS = [
   "src/smoke-test.ts",
@@ -99,20 +92,12 @@ const FULL_TESTS = [
   "src/smoke-test-concurrent.ts",
 ];
 
-const DUET_CDP_TESTS = [
-  "src/smoke-test-duet-cdp.ts",
-];
-
 const DUET_SELF_TESTS = [
   "src/smoke-test-duet-self.ts",
 ];
 
-const DUET_REAL_TESTS = facilitatorMode === "self"
-  ? DUET_SELF_TESTS
-  : DUET_CDP_TESTS;
-
 const selectedBase = DUET_REAL_ONLY
-  ? DUET_REAL_TESTS
+  ? DUET_SELF_TESTS
   : (FULL ? FULL_TESTS : CORE_TESTS);
 
 const TESTS = WITH_BROADCAST
@@ -142,8 +127,7 @@ const envFacilitatorBaseUrl =
 const requestedFacilitatorBaseUrl =
   DUET_ONCHAIN
     ? (envFacilitatorBaseUrl || localFacilitatorBaseUrl)
-    : (envFacilitatorBaseUrl
-      || (DUET_OPENX402 ? "https://facilitator.openx402.ai" : "https://api.cdp.coinbase.com/platform/v2/x402"));
+    : envFacilitatorBaseUrl;
 
 WRANGLER_LOCAL_VARS.X402_FACILITATOR_BASE_URL = requestedFacilitatorBaseUrl;
 
@@ -156,53 +140,6 @@ if (facilitatorAuthToken) WRANGLER_LOCAL_VARS.X402_FACILITATOR_AUTH_TOKEN = faci
 if (DUET_ONCHAIN && facilitatorAuthToken) {
   // The local facilitator process reads FACILITATOR_AUTH_TOKEN (or X402_FACILITATOR_AUTH_TOKEN).
   CHILD_ENV.LOCAL_FACILITATOR_AUTH_TOKEN = facilitatorAuthToken;
-}
-
-function facilitatorRequiresAuthToken(baseUrl: string): boolean {
-  try {
-    const u = new URL(baseUrl);
-    return u.hostname.endsWith("coinbase.com") && u.pathname.includes("/platform/v2/x402");
-  } catch {
-    return false;
-  }
-}
-
-async function preflightOpenX402Gas(): Promise<void> {
-  let supported: any = null;
-  try {
-    supported = await fetch("https://facilitator.openx402.ai/supported").then((r) => r.json());
-  } catch {
-    // If the facilitator is unreachable, the smoke test will fail anyway; don't throw here.
-    return;
-  }
-
-  const signer = supported?.signers?.["eip155:*"]?.[0];
-  if (!signer || typeof signer !== "string" || !/^0x[a-fA-F0-9]{40}$/.test(signer)) return;
-
-  try {
-    const rpcRes = await fetch("https://base-sepolia-rpc.publicnode.com/", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "eth_getBalance",
-        params: [signer, "latest"],
-      }),
-    }).then((r) => r.json());
-
-    const hex = rpcRes?.result;
-    if (typeof hex !== "string" || !hex.startsWith("0x")) return;
-    const wei = BigInt(hex);
-    if (wei === 0n) {
-      throw new Error(
-        `OpenX402 facilitator signer has 0 ETH on Base Sepolia (${signer}). Settlement will fail until they fund gas.`,
-      );
-    }
-  } catch (e) {
-    if (e instanceof Error && e.message.includes("0 ETH on Base Sepolia")) throw e;
-    // Ignore RPC issues; smoke test will fail and surface details.
-  }
 }
 
 function buildWranglerVarArgs(vars: Record<string, string>): string[] {
@@ -281,16 +218,16 @@ async function stopWorker(worker: Bun.Subprocess): Promise<void> {
 async function main() {
   console.log("[e2e] Starting local e2e run");
   console.log(`[e2e] Base URL: ${BASE_URL}`);
-  console.log(`[e2e] Mode: ${DUET_ONCHAIN ? "duet-onchain" : (DUET_OPENX402 ? "duet-openx402" : (DUET_CDP_ONLY ? "duet-cdp" : (FULL ? "full" : "core")))}`);
+  console.log(`[e2e] Mode: ${DUET_ONCHAIN ? "duet-onchain" : (FULL ? "full" : "core")}`);
   if (AUTO_ONCHAIN) console.log("[e2e] Auto: duet-onchain enabled because X402_FACILITATOR_MODE=self");
   if (DUET_REAL_ONLY) console.log(`[e2e] Facilitator mode: ${facilitatorMode}`);
   if (SERVE) console.log("[e2e] Serve: enabled (no tests will run; press Ctrl+C to stop)");
 
   if (DUET_REAL_ONLY) {
-    if (facilitatorRequiresAuthToken(requestedFacilitatorBaseUrl) && !facilitatorAuthToken) {
-      throw new Error("X402_FACILITATOR_AUTH_TOKEN is required for duet payment tests with Coinbase CDP");
+    if (!requestedFacilitatorBaseUrl) {
+      throw new Error("X402_FACILITATOR_BASE_URL is required for duet payment tests with X402_FACILITATOR_MODE=self");
     }
-    if (facilitatorMode === "self" && !facilitatorAuthToken) {
+    if (!facilitatorAuthToken) {
       throw new Error("X402_FACILITATOR_AUTH_TOKEN is required for duet payment tests with X402_FACILITATOR_MODE=self");
     }
 
@@ -308,15 +245,6 @@ async function main() {
         throw new Error("DUET_TEST_PAYER_PRIVATE_KEY (or X402_EVM_PRIVATE_KEY / EVM_PRIVATE_KEY / PRIVATE_KEY) is required for duet payment smoke tests");
       }
     }
-  }
-
-  if (DUET_OPENX402 && !CHILD_ENV.DUET_TEST_SPLIT_ADDRESS && !SERVE) {
-    // OpenX402 enforces payTo whitelisting. Default to the facilitator signer so tests work out-of-the-box.
-    // Override with DUET_TEST_SPLIT_ADDRESS to test your own registered receiver address.
-    CHILD_ENV.DUET_TEST_SPLIT_ADDRESS = "0x97316fa4730bc7d3b295234f8e4d04a0a4c093e8";
-  }
-  if (DUET_OPENX402 && !SERVE) {
-    await preflightOpenX402Gas();
   }
 
   runChecked(

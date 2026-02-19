@@ -316,6 +316,8 @@ fun PirateApp(activity: androidx.fragment.app.FragmentActivity) {
     currentRoute != PirateRoute.EditProfile.route &&
     currentRoute != PirateRoute.Wallet.route &&
     currentRoute != PirateRoute.NameStore.route &&
+    currentRoute != PirateRoute.Song.route &&
+    currentRoute != PirateRoute.Artist.route &&
     currentRoute != PirateRoute.PublicProfile.route &&
     currentRoute != PirateRoute.FollowList.route &&
     !(currentRoute == PirateRoute.Chat.route && chatThreadOpen)

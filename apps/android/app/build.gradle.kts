@@ -21,11 +21,12 @@ android {
       ?: ""
     buildConfigField("String", "TEMPO_SCROBBLE_API", "\"$tempoScrobbleApi\"")
 
-    val tempoScrobbleSubgraphUrl = (project.findProperty("TEMPO_SCROBBLE_SUBGRAPH_URL") as String?)
-      ?.replace("\"", "\\\"")
-      ?.trim()
-      ?: "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo"
-    buildConfigField("String", "TEMPO_SCROBBLE_SUBGRAPH_URL", "\"$tempoScrobbleSubgraphUrl\"")
+    val tempoMusicSocialSubgraphUrl =
+      (project.findProperty("TEMPO_MUSIC_SOCIAL_SUBGRAPH_URL") as String?)
+        ?.replace("\"", "\\\"")
+        ?.trim()
+        ?: "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-music-social-tempo/1.0.0/gn"
+    buildConfigField("String", "TEMPO_MUSIC_SOCIAL_SUBGRAPH_URL", "\"$tempoMusicSocialSubgraphUrl\"")
 
     val tempoProfilesSubgraphUrl = (project.findProperty("TEMPO_PROFILES_SUBGRAPH_URL") as String?)
       ?.replace("\"", "\\\"")

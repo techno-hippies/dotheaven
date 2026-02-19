@@ -1,0 +1,88 @@
+# Tempo music-social schema (tracks/scrobbles, publishing/access, follows)
+
+type Track @entity(immutable: false) {
+  id: ID!
+  title: String!
+  artist: String!
+  album: String!
+  kind: Int!
+  payload: Bytes!
+  metaHash: Bytes!
+  coverCid: String
+  lyricsRef: String
+  durationSec: Int
+  scrobbleCountTotal: BigInt!
+  scrobbleCountVerified: BigInt!
+  registeredAt: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+  scrobbles: [Scrobble!]! @derivedFrom(field: "track")
+}
+
+type Scrobble @entity(immutable: true) {
+  id: ID!
+  user: Bytes!
+  track: Track!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type UserListeningStats @entity(immutable: false) {
+  id: ID!
+  user: Bytes!
+  totalScrobbles: BigInt!
+  lastScrobbleAt: BigInt!
+  topArtist: String!
+  topArtistScrobbleCount: BigInt!
+  updatedAtBlock: BigInt!
+}
+
+type UserArtistStats @entity(immutable: false) {
+  id: ID!
+  user: Bytes!
+  artistKey: String!
+  artist: String!
+  scrobbleCount: BigInt!
+  lastScrobbleAt: BigInt!
+  updatedAtBlock: BigInt!
+}
+
+type ContentEntry @entity(immutable: false) {
+  id: ID!
+  trackId: Bytes!
+  owner: Bytes!
+  datasetOwner: Bytes!
+  pieceCid: Bytes!
+  algo: Int!
+  active: Boolean!
+  createdAt: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+  accessGrants: [AccessGrant!]! @derivedFrom(field: "content")
+}
+
+type AccessGrant @entity(immutable: false) {
+  id: ID!
+  content: ContentEntry!
+  grantee: Bytes!
+  granted: Boolean!
+  updatedAt: BigInt!
+  blockNumber: BigInt!
+}
+
+type Follow @entity(immutable: false) {
+  id: ID!
+  follower: Bytes!
+  followee: Bytes!
+  active: Boolean!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type UserFollowStats @entity(immutable: false) {
+  id: ID!
+  followerCount: Int!
+  followingCount: Int!
+}

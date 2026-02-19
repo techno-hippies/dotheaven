@@ -493,7 +493,7 @@ export async function publishSong(
 
   // ── Step 8: Register on ContentRegistry (MegaETH) for subgraph ────
   // Uses MegaETH-only Lit Action (skips Base mirror which isn't needed for published songs).
-  // This creates a ContentRegistered event that the dotheaven-activity subgraph
+  // This creates a ContentRegistered event that the dotheaven music-social subgraph
   // indexes, making the song appear in the library across devices.
   if (CONTENT_REGISTER_MEGAETH_V1_CID) {
     try {

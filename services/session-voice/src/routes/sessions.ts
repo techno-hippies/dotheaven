@@ -22,13 +22,59 @@ import { JOIN_WINDOW_BEFORE_MINUTES, ROOM_CAPACITY_BOOKED } from '../config'
 
 export const sessionRoutes = new Hono<{ Bindings: Env }>()
 
-type AttestationOutcomeStr = 'completed' | 'no-show-host' | 'no-show-guest'
+export type AttestationOutcomeStr = 'completed' | 'no-show-host' | 'no-show-guest'
 
 interface AttestationWindows {
   noShowEarliest: number
   noShowLatest: number
   completedEarliest: number
   completedLatest: number
+}
+
+type AttestParticipantRow = {
+  joined_at_epoch: number
+  left_at_epoch: number | null
+}
+
+export type SessionAttestNoopReason =
+  | 'booking_not_found'
+  | 'already_settled'
+  | 'not_due_yet'
+  | 'window_missed'
+
+type SessionAttestMode = 'http' | 'scheduler'
+
+interface RunAttestationOptions {
+  mode: SessionAttestMode
+  forceOutcome?: string | null
+  now?: number
+}
+
+export type SessionAttestationResult =
+  | {
+      kind: 'submitted'
+      outcome: AttestationOutcomeStr
+      txHash: `0x${string}`
+      metricsHash: `0x${string}`
+    }
+  | {
+      kind: 'noop'
+      reason: SessionAttestNoopReason
+      detail?: string
+    }
+  | {
+      kind: 'error'
+      status: number
+      error: string
+    }
+
+export interface SessionAttestationSweepSummary {
+  scanned: number
+  submitted: number
+  noop: number
+  failed: number
+  noopReasons: Record<string, number>
+  failures: Array<{ bookingId: string; error: string }>
 }
 
 export function getAttestationWindows(slot: {
@@ -69,6 +115,89 @@ export function validateAttestationWindow(
   return { ok: true }
 }
 
+function parseBookingId(bookingIdStr: string): bigint | null {
+  if (!/^\d+$/.test(bookingIdStr)) return null
+  try {
+    return BigInt(bookingIdStr)
+  } catch {
+    return null
+  }
+}
+
+function isAttestationOutcomeStr(value: string): value is AttestationOutcomeStr {
+  return value === 'completed' || value === 'no-show-host' || value === 'no-show-guest'
+}
+
+function mapOutcomeToEnum(outcome: AttestationOutcomeStr): Outcome {
+  switch (outcome) {
+    case 'completed':
+      return Outcome.Completed
+    case 'no-show-host':
+      return Outcome.NoShowHost
+    case 'no-show-guest':
+      return Outcome.NoShowGuest
+  }
+}
+
+function bookingStatusLabel(status: BookingStatus): string {
+  return BookingStatus[status] ?? `Unknown(${status})`
+}
+
+export function classifyAttestationTimingForScheduler(
+  error: string,
+): 'not_due_yet' | 'window_missed' | null {
+  if (error === 'grace_not_over' || error === 'overlap_not_met') return 'not_due_yet'
+  if (error === 'no_show_too_late' || error === 'completed_too_late') return 'window_missed'
+  return null
+}
+
+export function isIdempotentAttestationError(error: string): boolean {
+  const normalized = error.toLowerCase()
+  return (
+    normalized.includes('expected booked') ||
+    normalized.includes('status is not booked') ||
+    normalized.includes('booking status') ||
+    normalized.includes('already attested')
+  )
+}
+
+function deriveOutcomeFromPresence(
+  slot: {
+    startTime: number
+    durationMins: number
+    minOverlapMins: number
+  },
+  hostP: AttestParticipantRow | null,
+  guestP: AttestParticipantRow | null,
+  now: number,
+): AttestationOutcomeStr {
+  const endTime = slot.startTime + slot.durationMins * 60
+  if (hostP && guestP) {
+    const hostEnd = hostP.left_at_epoch ?? now
+    const guestEnd = guestP.left_at_epoch ?? now
+    const overlapStart = Math.max(hostP.joined_at_epoch, guestP.joined_at_epoch)
+    const overlapEnd = Math.min(hostEnd, guestEnd)
+    const overlapSeconds = Math.max(0, overlapEnd - overlapStart)
+    const minOverlapSeconds = slot.minOverlapMins * 60
+
+    if (overlapSeconds >= minOverlapSeconds) return 'completed'
+    if (hostEnd < guestEnd && hostEnd < endTime) return 'no-show-host'
+    return 'no-show-guest'
+  }
+  if (!hostP) return 'no-show-host'
+  return 'no-show-guest'
+}
+
+async function getParticipant(
+  env: Env,
+  roomId: string,
+  wallet: string,
+): Promise<AttestParticipantRow | null> {
+  return env.DB.prepare(
+    'SELECT joined_at_epoch, left_at_epoch FROM room_participants WHERE room_id = ? AND wallet = ?',
+  ).bind(roomId, wallet).first<AttestParticipantRow>()
+}
+
 function isSessionEscrowMock(env: Env): boolean {
   return (env.SESSION_ESCROW_MODE ?? 'live') === 'mock'
 }
@@ -79,6 +208,191 @@ async function requireAuth(c: any, env: Env): Promise<string | null> {
   if (!auth?.startsWith('Bearer ')) return null
   const payload = await verifyJWT(auth.slice(7), env.JWT_SECRET)
   return payload?.sub ?? null
+}
+
+export async function runSessionAttestation(
+  env: Env,
+  bookingIdStrRaw: string,
+  options: RunAttestationOptions,
+): Promise<SessionAttestationResult> {
+  const bookingIdStr = bookingIdStrRaw.trim()
+  const bookingId = parseBookingId(bookingIdStr)
+  if (bookingId === null) {
+    return { kind: 'error', status: 400, error: 'invalid booking_id' }
+  }
+  if (!env.ORACLE_PRIVATE_KEY) {
+    return { kind: 'error', status: 503, error: 'oracle key not configured' }
+  }
+
+  const isMock = isSessionEscrowMock(env)
+  const booking = await getBooking(env.RPC_URL, env.ESCROW_ADDRESS, bookingId, isMock)
+  if (!booking) {
+    if (options.mode === 'scheduler') {
+      return { kind: 'noop', reason: 'booking_not_found' }
+    }
+    return { kind: 'error', status: 404, error: 'booking not found' }
+  }
+
+  if (booking.status !== BookingStatus.Booked) {
+    if (options.mode === 'scheduler') {
+      return {
+        kind: 'noop',
+        reason: 'already_settled',
+        detail: `booking status is ${bookingStatusLabel(booking.status)}`,
+      }
+    }
+    return {
+      kind: 'error',
+      status: 400,
+      error: `booking status is ${bookingStatusLabel(booking.status)}, expected Booked`,
+    }
+  }
+
+  const slot = await getSlot(env.RPC_URL, env.ESCROW_ADDRESS, booking.slotId, isMock)
+  if (!slot) {
+    return { kind: 'error', status: 404, error: 'slot not found' }
+  }
+
+  if (options.forceOutcome && !isAttestationOutcomeStr(options.forceOutcome)) {
+    return { kind: 'error', status: 400, error: 'invalid force_outcome' }
+  }
+
+  if (options.forceOutcome && options.mode === 'http' && env.ENVIRONMENT !== 'development') {
+    return { kind: 'error', status: 400, error: 'force_outcome not allowed in production' }
+  }
+
+  const now = options.now ?? Math.floor(Date.now() / 1000)
+  const roomId = `booked-${bookingIdStr}`
+  const hostP = await getParticipant(env, roomId, slot.host.toLowerCase())
+  const guestP = await getParticipant(env, roomId, booking.guest.toLowerCase())
+
+  const outcomeStr =
+    options.forceOutcome && isAttestationOutcomeStr(options.forceOutcome)
+      ? options.forceOutcome
+      : deriveOutcomeFromPresence(slot, hostP, guestP, now)
+
+  if (!options.forceOutcome) {
+    const windows = getAttestationWindows(slot)
+    const timing = validateAttestationWindow(outcomeStr, now, windows)
+    if (!timing.ok) {
+      if (options.mode === 'scheduler') {
+        const classification = classifyAttestationTimingForScheduler(timing.error)
+        if (classification === 'not_due_yet') {
+          return { kind: 'noop', reason: 'not_due_yet', detail: timing.error }
+        }
+        if (classification === 'window_missed') {
+          return { kind: 'noop', reason: 'window_missed', detail: timing.error }
+        }
+      }
+      return { kind: 'error', status: 400, error: timing.error }
+    }
+  }
+
+  const hostJoinedAt = hostP?.joined_at_epoch ?? 0
+  const hostLeftAt = hostP?.left_at_epoch ?? now
+  const guestJoinedAt = guestP?.joined_at_epoch ?? 0
+  const guestLeftAt = guestP?.left_at_epoch ?? now
+
+  let overlapSeconds = 0
+  if (hostP && guestP) {
+    const overlapStart = Math.max(hostJoinedAt, guestJoinedAt)
+    const overlapEnd = Math.min(hostLeftAt, guestLeftAt)
+    overlapSeconds = Math.max(0, overlapEnd - overlapStart)
+  }
+
+  const metricsHash = computeMetricsHash(bookingIdStr, {
+    hostJoinedAt,
+    hostLeftAt,
+    guestJoinedAt,
+    guestLeftAt,
+    overlapSeconds,
+  })
+
+  const result = await attestOutcome(
+    env.RPC_URL,
+    env.ESCROW_ADDRESS,
+    Number(env.CHAIN_ID),
+    env.ORACLE_PRIVATE_KEY,
+    bookingId,
+    mapOutcomeToEnum(outcomeStr),
+    metricsHash,
+    isMock,
+  )
+
+  if ('error' in result) {
+    if (options.mode === 'scheduler' && isIdempotentAttestationError(result.error)) {
+      return { kind: 'noop', reason: 'already_settled', detail: result.error }
+    }
+    return { kind: 'error', status: 500, error: result.error }
+  }
+
+  return {
+    kind: 'submitted',
+    outcome: outcomeStr,
+    txHash: result.txHash,
+    metricsHash,
+  }
+}
+
+function bumpCounter(map: Record<string, number>, key: string): void {
+  map[key] = (map[key] ?? 0) + 1
+}
+
+export async function runSessionAttestationSweep(
+  env: Env,
+  opts: { limit?: number; lookbackSeconds?: number; now?: number } = {},
+): Promise<SessionAttestationSweepSummary> {
+  const limit = Math.max(1, Math.min(opts.limit ?? 200, 1000))
+  const now = opts.now ?? Math.floor(Date.now() / 1000)
+  const lookbackSeconds = Math.max(60, opts.lookbackSeconds ?? 7 * 24 * 60 * 60)
+  const cutoffEpoch = now - lookbackSeconds
+  const summary: SessionAttestationSweepSummary = {
+    scanned: 0,
+    submitted: 0,
+    noop: 0,
+    failed: 0,
+    noopReasons: {},
+    failures: [],
+  }
+
+  const rows = await env.DB.prepare(
+    `SELECT DISTINCT CAST(r.booking_id AS TEXT) AS booking_id
+     FROM rooms r
+     JOIN room_participants p ON p.room_id = r.room_id
+     WHERE r.room_type = 'booked'
+       AND r.booking_id IS NOT NULL
+       AND p.joined_at_epoch >= ?
+     ORDER BY r.booking_id DESC
+     LIMIT ?`,
+  ).bind(cutoffEpoch, limit).all<{ booking_id: string }>()
+
+  for (const row of rows.results ?? []) {
+    const bookingIdStr = row.booking_id
+    summary.scanned += 1
+
+    const attempt = await runSessionAttestation(env, bookingIdStr, {
+      mode: 'scheduler',
+      now,
+    })
+
+    if (attempt.kind === 'submitted') {
+      summary.submitted += 1
+      continue
+    }
+
+    if (attempt.kind === 'noop') {
+      summary.noop += 1
+      bumpCounter(summary.noopReasons, attempt.reason)
+      continue
+    }
+
+    summary.failed += 1
+    if (summary.failures.length < 20) {
+      summary.failures.push({ bookingId: bookingIdStr, error: attempt.error })
+    }
+  }
+
+  return summary
 }
 
 /**
@@ -283,142 +597,25 @@ sessionRoutes.post('/:id/attest', async (c) => {
     return c.json({ error: 'oracle key not configured' }, 503)
   }
 
-  const bookingIdStr = c.req.param('id').trim()
-  if (!/^\d+$/.test(bookingIdStr)) {
-    return c.json({ error: 'invalid booking_id' }, 400)
-  }
-
-  let bookingId: bigint
-  try {
-    bookingId = BigInt(bookingIdStr)
-  } catch {
-    return c.json({ error: 'invalid booking_id' }, 400)
-  }
-
-  const isMock = isSessionEscrowMock(c.env)
-
-  const booking = await getBooking(c.env.RPC_URL, c.env.ESCROW_ADDRESS, bookingId, isMock)
-  if (!booking) {
-    return c.json({ error: 'booking not found' }, 404)
-  }
-
-  if (booking.status !== BookingStatus.Booked) {
-    return c.json({ error: `booking status is ${BookingStatus[booking.status]}, expected Booked` }, 400)
-  }
-
-  const slot = await getSlot(c.env.RPC_URL, c.env.ESCROW_ADDRESS, booking.slotId, isMock)
-  if (!slot) {
-    return c.json({ error: 'slot not found' }, 404)
-  }
-
-  // Fix #1: force_outcome only in development
+  const bookingIdStr = c.req.param('id')
   const forceOutcome = c.req.query('force_outcome')
-  if (forceOutcome && c.env.ENVIRONMENT !== 'development') {
-    return c.json({ error: 'force_outcome not allowed in production' }, 400)
-  }
-
-  // Get participation records
-  const roomId = `booked-${bookingIdStr}`
-  const hostP = await c.env.DB.prepare(
-    'SELECT joined_at_epoch, left_at_epoch FROM room_participants WHERE room_id = ? AND wallet = ?',
-  ).bind(roomId, slot.host.toLowerCase()).first<{ joined_at_epoch: number; left_at_epoch: number | null }>()
-
-  const guestP = await c.env.DB.prepare(
-    'SELECT joined_at_epoch, left_at_epoch FROM room_participants WHERE room_id = ? AND wallet = ?',
-  ).bind(roomId, booking.guest.toLowerCase()).first<{ joined_at_epoch: number; left_at_epoch: number | null }>()
-
-  let outcomeStr: AttestationOutcomeStr | null = null
-
-  if (forceOutcome) {
-    if (!['completed', 'no-show-host', 'no-show-guest'].includes(forceOutcome)) {
-      return c.json({ error: 'invalid force_outcome' }, 400)
-    }
-    outcomeStr = forceOutcome as AttestationOutcomeStr
-  } else {
-    const now = Math.floor(Date.now() / 1000)
-    const windows = getAttestationWindows(slot)
-    const endTime = slot.startTime + slot.durationMins * 60
-
-    if (hostP && guestP) {
-      // Fix #7: Check minimum overlap threshold from slot
-      const hostEnd = hostP.left_at_epoch ?? now
-      const guestEnd = guestP.left_at_epoch ?? now
-      const overlapStart = Math.max(hostP.joined_at_epoch, guestP.joined_at_epoch)
-      const overlapEnd = Math.min(hostEnd, guestEnd)
-      const overlapSeconds = Math.max(0, overlapEnd - overlapStart)
-      const minOverlapSeconds = slot.minOverlapMins * 60
-
-      if (overlapSeconds >= minOverlapSeconds) {
-        outcomeStr = 'completed'
-      } else {
-        // Both joined but insufficient overlap — determine who caused it
-        // If host left early (before guest left and before end time), blame host
-        if (hostEnd < guestEnd && hostEnd < endTime) {
-          outcomeStr = 'no-show-host'
-        } else {
-          outcomeStr = 'no-show-guest'
-        }
-      }
-    } else if (!hostP) {
-      outcomeStr = 'no-show-host'
-    } else {
-      outcomeStr = 'no-show-guest'
-    }
-
-    const timing = validateAttestationWindow(outcomeStr, now, windows)
-    if (!timing.ok) {
-      return c.json({ error: timing.error }, 400)
-    }
-  }
-
-  let outcome: Outcome
-  switch (outcomeStr) {
-    case 'completed': outcome = Outcome.Completed; break
-    case 'no-show-host': outcome = Outcome.NoShowHost; break
-    case 'no-show-guest': outcome = Outcome.NoShowGuest; break
-    default: return c.json({ error: 'invalid outcome' }, 400)
-  }
-
-  // Compute metrics hash
-  const now = Math.floor(Date.now() / 1000)
-  const hostJoinedAt = hostP?.joined_at_epoch ?? 0
-  const hostLeftAt = hostP?.left_at_epoch ?? now
-  const guestJoinedAt = guestP?.joined_at_epoch ?? 0
-  const guestLeftAt = guestP?.left_at_epoch ?? now
-
-  let overlapSeconds = 0
-  if (hostP && guestP) {
-    const overlapStart = Math.max(hostJoinedAt, guestJoinedAt)
-    const overlapEnd = Math.min(hostLeftAt, guestLeftAt)
-    overlapSeconds = Math.max(0, overlapEnd - overlapStart)
-  }
-
-  const metricsHash = computeMetricsHash(bookingIdStr, {
-    hostJoinedAt,
-    hostLeftAt,
-    guestJoinedAt,
-    guestLeftAt,
-    overlapSeconds,
+  const attestation = await runSessionAttestation(c.env, bookingIdStr, {
+    mode: 'http',
+    forceOutcome,
   })
 
-  console.log(`[session/attest] booking=${bookingIdStr} outcome=${outcomeStr} metricsHash=${metricsHash}`)
-
-  const result = await attestOutcome(
-    c.env.RPC_URL,
-    c.env.ESCROW_ADDRESS,
-    Number(c.env.CHAIN_ID),
-    c.env.ORACLE_PRIVATE_KEY,
-    bookingId,
-    outcome,
-    metricsHash,
-    isMock,
-  )
-
-  if ('error' in result) {
-    console.error(`[session/attest] failed: ${result.error}`)
-    return c.json({ error: result.error }, 500)
+  if (attestation.kind === 'submitted') {
+    console.log(
+      `[session/attest] booking=${bookingIdStr.trim()} outcome=${attestation.outcome} metricsHash=${attestation.metricsHash}`,
+    )
+    console.log(`[session/attest] success tx=${attestation.txHash}`)
+    return c.json({ outcome: attestation.outcome, tx_hash: attestation.txHash })
   }
 
-  console.log(`[session/attest] success tx=${result.txHash}`)
-  return c.json({ outcome: outcomeStr, tx_hash: result.txHash })
+  if (attestation.kind === 'noop') {
+    return c.json({ error: attestation.reason, detail: attestation.detail }, 409)
+  }
+
+  console.error(`[session/attest] failed: ${attestation.error}`)
+  return c.json({ error: attestation.error }, attestation.status as any)
 })

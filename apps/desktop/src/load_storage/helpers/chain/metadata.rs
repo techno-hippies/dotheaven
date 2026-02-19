@@ -9,7 +9,7 @@ pub(crate) fn fetch_track_id_for_content_subgraph(
     );
 
     let payload = http_post_json(
-        &subgraph_activity_url(),
+        &subgraph_music_social_url(),
         json!({
             "query": query,
         }),
@@ -38,7 +38,7 @@ pub(crate) fn fetch_track_metadata_subgraph(
         "{{ tracks(where: {{ id_in: [\"{track_id}\"] }}, first: 1) {{ id title artist album }} }}"
     );
     let payload = http_post_json(
-        &subgraph_activity_url(),
+        &subgraph_music_social_url(),
         json!({
             "query": query,
         }),

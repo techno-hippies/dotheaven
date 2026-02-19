@@ -15,7 +15,7 @@ export interface PaymentRequirement {
 export type SettleResult =
   | {
       ok: true
-      facilitator: 'mock' | 'cdp' | 'self'
+      facilitator: 'mock' | 'self'
       payer?: string
       transactionHash?: string
       raw?: unknown
@@ -36,8 +36,6 @@ interface PaymentSignatureClaims {
   resource?: string
 }
 
-const DEFAULT_CDP_BASE_URL = 'https://api.cdp.coinbase.com/platform/v2/x402'
-
 export async function settlePaymentWithFacilitator(
   env: Env,
   paymentSignatureRaw: string,
@@ -47,8 +45,8 @@ export async function settlePaymentWithFacilitator(
   if (mode === 'mock') {
     return settleMock(paymentSignatureRaw, requirement)
   }
-  if (mode === 'cdp' || mode === 'self') {
-    return settleWithCdp(env, paymentSignatureRaw, requirement, mode)
+  if (mode === 'self') {
+    return settleWithFacilitator(env, paymentSignatureRaw, requirement)
   }
   return { ok: false, reason: 'unsupported_facilitator_mode' }
 }
@@ -76,31 +74,28 @@ function settleMock(paymentSignatureRaw: string, requirement: PaymentRequirement
   }
 }
 
-async function settleWithCdp(
+async function settleWithFacilitator(
   env: Env,
   paymentSignatureRaw: string,
   requirement: PaymentRequirement,
-  facilitatorMode: 'cdp' | 'self',
 ): Promise<SettleResult> {
   const paymentPayload = tryParseBase64Json(paymentSignatureRaw) ?? tryParseJson(paymentSignatureRaw)
   if (!paymentPayload) return { ok: false, reason: 'invalid_payment_signature_format' }
 
-  const baseUrl = (env.X402_FACILITATOR_BASE_URL || DEFAULT_CDP_BASE_URL).replace(/\/+$/, '')
+  const baseUrl = (env.X402_FACILITATOR_BASE_URL || '').trim().replace(/\/+$/, '')
+  if (!baseUrl) return { ok: false, reason: 'facilitator_base_url_not_configured' }
+
   const authToken = (env.X402_FACILITATOR_AUTH_TOKEN || '').trim() || undefined
-  if (isCoinbaseCdpBaseUrl(baseUrl) && !authToken) {
-    // CDP requires a developer auth token. Some other public facilitators do not.
+  if (!authToken) {
     return { ok: false, reason: 'facilitator_auth_not_configured' }
   }
 
   const paymentRequirements = {
     scheme: requirement.scheme,
-    network: toFacilitatorNetwork(requirement.network, baseUrl),
+    network: requirement.network,
     asset: requirement.asset,
     payTo: requirement.payTo,
     resource: requirement.resource,
-    // For compatibility across facilitators:
-    // - Coinbase CDP expects `maxAmountRequired`
-    // - OpenX402 / standard x402 facilitators expect `amount`
     amount: requirement.amount,
     maxAmountRequired: requirement.amount,
     maxTimeoutSeconds: 60 * 60,
@@ -176,30 +171,11 @@ async function settleWithCdp(
 
   return {
     ok: true,
-    facilitator: facilitatorMode,
+    facilitator: 'self',
     payer: payer?.toLowerCase(),
     transactionHash,
     raw: payload,
   }
-}
-
-function isCoinbaseCdpBaseUrl(baseUrl: string): boolean {
-  try {
-    const u = new URL(baseUrl)
-    return u.hostname.endsWith('coinbase.com') && u.pathname.includes('/platform/v2/x402')
-  } catch {
-    return false
-  }
-}
-
-function toFacilitatorNetwork(network: NetworkId, baseUrl: string): string {
-  // Coinbase CDP historically used legacy identifiers in the `network` field.
-  // Most public facilitators (including OpenX402) use CAIP-2 (`eip155:...`).
-  if (isCoinbaseCdpBaseUrl(baseUrl)) {
-    if (network === 'eip155:8453') return 'base'
-    if (network === 'eip155:84532') return 'base-sepolia'
-  }
-  return network
 }
 
 function readFacilitatorError(payload: any): string | null {

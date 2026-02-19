@@ -29,8 +29,8 @@ const MAX_TRENDING_ROOMS: usize = 10;
 const MAX_NEW_RELEASES: usize = 10;
 const MAX_TOP_SONGS: usize = 10;
 
-const DEFAULT_SUBGRAPH_ACTIVITY_URL: &str =
-    "https://graph.dotheaven.org/subgraphs/name/dotheaven/activity-feed-tempo";
+const DEFAULT_SUBGRAPH_MUSIC_SOCIAL_URL: &str =
+    "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-music-social-tempo/1.0.0/gn";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TopSongsMode {
@@ -915,22 +915,22 @@ fn seed_trending_rooms() -> Vec<TrendingRoom> {
     .collect()
 }
 
-fn subgraph_activity_url() -> String {
-    env::var("HEAVEN_SUBGRAPH_ACTIVITY_URL")
+fn subgraph_music_social_url() -> String {
+    env::var("HEAVEN_SUBGRAPH_MUSIC_SOCIAL_URL")
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| DEFAULT_SUBGRAPH_ACTIVITY_URL.to_string())
+        .unwrap_or_else(|| DEFAULT_SUBGRAPH_MUSIC_SOCIAL_URL.to_string())
 }
 
 fn fetch_latest_tracks(max_entries: usize) -> Result<Vec<ReleaseRow>, String> {
-    let subgraph_url = subgraph_activity_url();
+    let subgraph_url = subgraph_music_social_url();
     let query = format!(
         "{{ tracks(where: {{ kind: 2 }}, first: {max_entries}, orderBy: registeredAt, orderDirection: desc) {{ id title artist album coverCid registeredAt }} }}"
     );
     let response = http_post_json(&subgraph_url, serde_json::json!({ "query": query }))?;
     if let Some(errors) = response.get("errors") {
-        return Err(format!("Activity subgraph error: {errors}"));
+        return Err(format!("Music-social subgraph error: {errors}"));
     }
 
     let rows = response
@@ -970,7 +970,7 @@ fn fetch_latest_tracks(max_entries: usize) -> Result<Vec<ReleaseRow>, String> {
 }
 
 fn fetch_top_songs(mode: TopSongsMode, max_entries: usize) -> Result<Vec<TopSongRow>, String> {
-    let subgraph_url = subgraph_activity_url();
+    let subgraph_url = subgraph_music_social_url();
     let order_by = match mode {
         TopSongsMode::All => "scrobbleCountTotal",
         TopSongsMode::Verified => "scrobbleCountVerified",
@@ -988,7 +988,7 @@ fn fetch_top_songs(mode: TopSongsMode, max_entries: usize) -> Result<Vec<TopSong
 
     let response = http_post_json(&subgraph_url, serde_json::json!({ "query": query }))?;
     if let Some(errors) = response.get("errors") {
-        return Err(format!("Activity subgraph error: {errors}"));
+        return Err(format!("Music-social subgraph error: {errors}"));
     }
 
     let rows = response

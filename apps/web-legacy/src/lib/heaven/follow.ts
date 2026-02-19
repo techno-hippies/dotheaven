@@ -7,7 +7,7 @@
  */
 
 import { createPublicClient, http, parseAbi, type Address } from 'viem'
-import { FOLLOW_V1, SUBGRAPH_ACTIVITY, SUBGRAPH_PROFILES } from '@heaven/core'
+import { FOLLOW_V1, SUBGRAPH_MUSIC_SOCIAL, SUBGRAPH_PROFILES } from '@heaven/core'
 import { megaTestnetV2 } from '../chains'
 import { getLitClient } from '../lit/client'
 import { FOLLOW_V1_CID } from '../lit/action-cids'
@@ -146,7 +146,7 @@ export async function fetchFollowers(
     }
   }`
 
-  const res = await fetch(SUBGRAPH_ACTIVITY, {
+  const res = await fetch(SUBGRAPH_MUSIC_SOCIAL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),
@@ -186,7 +186,7 @@ export async function fetchFollowing(
     }
   }`
 
-  const res = await fetch(SUBGRAPH_ACTIVITY, {
+  const res = await fetch(SUBGRAPH_MUSIC_SOCIAL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),

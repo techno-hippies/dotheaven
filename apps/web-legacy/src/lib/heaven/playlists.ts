@@ -1,5 +1,5 @@
 import type { Track } from '@heaven/ui'
-import { MEGAETH_RPC, PLAYLIST_V1, SCROBBLE_V3, SCROBBLE_V4, SUBGRAPH_ACTIVITY, SUBGRAPH_PLAYLISTS } from '@heaven/core'
+import { MEGAETH_RPC, PLAYLIST_V1, SCROBBLE_V3, SCROBBLE_V4, SUBGRAPH_MUSIC_SOCIAL, SUBGRAPH_PLAYLISTS } from '@heaven/core'
 import { encodeAbiParameters, keccak256 } from 'viem'
 import { getCoverCache, getCoverCacheById } from '../cover-cache'
 import { payloadToMbid } from './artist'
@@ -457,7 +457,7 @@ async function batchGetTracks(trackIds: string[]): Promise<Map<string, TrackMeta
   }`
 
   try {
-    const res = await fetch(SUBGRAPH_ACTIVITY, {
+    const res = await fetch(SUBGRAPH_MUSIC_SOCIAL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),
@@ -532,7 +532,7 @@ async function batchGetTracks(trackIds: string[]): Promise<Map<string, TrackMeta
           coverCid
         }
       }`
-      const res = await fetch(SUBGRAPH_ACTIVITY, {
+      const res = await fetch(SUBGRAPH_MUSIC_SOCIAL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: coverQuery }),
@@ -661,7 +661,7 @@ async function buildOwnerContentByMetaHash(ownerAddress: string): Promise<Map<st
     }
   }`
 
-  const res = await fetch(SUBGRAPH_ACTIVITY, {
+  const res = await fetch(SUBGRAPH_MUSIC_SOCIAL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),
@@ -824,7 +824,7 @@ async function batchGetContentMeta(trackIds: string[], contentOwner?: string): P
   }`
 
   try {
-    const res = await fetch(SUBGRAPH_ACTIVITY, {
+    const res = await fetch(SUBGRAPH_MUSIC_SOCIAL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),

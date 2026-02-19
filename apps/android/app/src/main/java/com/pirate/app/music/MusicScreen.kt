@@ -1574,9 +1574,10 @@ fun MusicScreen(
     isAuthenticated = isAuthenticated,
     ownerEthAddress = ownerEthAddress,
     tempoAccount = tempoAccount,
+    hostActivity = hostActivity,
     onClose = { createPlaylistOpen = false },
     onShowMessage = onShowMessage,
-    onSuccess = { playlistId, playlistName ->
+    onSuccess = { playlistId, _, successMessage ->
       scope.launch {
         loadPlaylists()
         if (playlistId.startsWith("0x")) {
@@ -1584,9 +1585,8 @@ fun MusicScreen(
           selectedPlaylist = displayPlaylists.firstOrNull { it.id.equals(playlistId, ignoreCase = true) }
           view = MusicView.PlaylistDetail
           selectedPlaylist?.let { loadPlaylistDetail(it) }
-        } else {
-          onShowMessage("Playlist \"$playlistName\" created. It may take a moment to index.")
         }
+        onShowMessage(successMessage)
       }
     },
   )
@@ -1597,6 +1597,7 @@ fun MusicScreen(
     isAuthenticated = isAuthenticated,
     ownerEthAddress = ownerEthAddress,
     tempoAccount = tempoAccount,
+    hostActivity = hostActivity,
     onClose = { addToPlaylistOpen = false },
     onShowMessage = onShowMessage,
     onSuccess = { playlistId, _ ->
@@ -2710,9 +2711,6 @@ private fun PlaylistRow(
       )
     }
 
-    if (!playlist.isLocal) {
-      Text("on-chain", color = PiratePalette.TextMuted)
-    }
   }
 }
 

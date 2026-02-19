@@ -16,7 +16,7 @@ export interface Env {
   // Explicit session escrow mode. Avoid coupling to generic ENVIRONMENT value.
   SESSION_ESCROW_MODE?: 'live' | 'mock'
   SONG_REGISTRY_ADMIN_TOKEN?: string
-  X402_FACILITATOR_MODE?: 'mock' | 'cdp' | 'self'
+  X402_FACILITATOR_MODE?: 'mock' | 'self'
   X402_FACILITATOR_BASE_URL?: string
   X402_FACILITATOR_AUTH_TOKEN?: string
   // CAI agent (AI in rooms)

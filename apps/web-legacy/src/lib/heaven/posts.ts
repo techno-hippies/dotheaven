@@ -1,5 +1,5 @@
 /**
- * Posts — fetch posts from the dotheaven-activity subgraph + translate via Lit Action.
+ * Posts — fetch posts from the dotheaven music-social subgraph + translate via Lit Action.
  *
  * Posts are created via PostsV1, engagement (likes, comments, translations, flags)
  * via EngagementV2. Both are indexed by the same subgraph.
@@ -13,7 +13,7 @@
  */
 
 import { createPublicClient, http, parseAbi, type Address } from 'viem'
-import { SUBGRAPH_ACTIVITY, ENGAGEMENT_V2 } from '@heaven/core'
+import { SUBGRAPH_MUSIC_SOCIAL, ENGAGEMENT_V2 } from '@heaven/core'
 import { megaTestnetV2 } from '../chains'
 import { getLitClient } from '../lit/client'
 import { POST_TRANSLATE_V1_CID, LIKE_V1_CID, COMMENT_V1_CID, FLAG_V1_CID } from '../lit/action-cids'
@@ -114,12 +114,12 @@ export async function fetchFeedPosts(opts: {
     }
   }`
 
-  const res = await fetch(SUBGRAPH_ACTIVITY, {
+  const res = await fetch(SUBGRAPH_MUSIC_SOCIAL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),
   })
-  if (!res.ok) throw new Error(`Activity subgraph query failed: ${res.status}`)
+  if (!res.ok) throw new Error(`Music-social subgraph query failed: ${res.status}`)
   const json = await res.json()
 
   const posts: PostGQL[] = json.data?.posts ?? []
@@ -151,7 +151,7 @@ export async function fetchPost(postId: string): Promise<FeedPostData | null> {
     }
   }`
 
-  const res = await fetch(SUBGRAPH_ACTIVITY, {
+  const res = await fetch(SUBGRAPH_MUSIC_SOCIAL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),
@@ -183,7 +183,7 @@ export async function fetchPostComments(postId: string): Promise<Array<{
     }
   }`
 
-  const res = await fetch(SUBGRAPH_ACTIVITY, {
+  const res = await fetch(SUBGRAPH_MUSIC_SOCIAL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),

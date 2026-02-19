@@ -49,8 +49,9 @@ SELF_SCOPE = "heaven"
 SELF_ENDPOINT = "https://heaven-api.deletion-backup782.workers.dev/api/self/verify"
 SELF_MOCK_PASSPORT = "true"  # Set to "false" for production
 
-# Tempo music publish finalize — ContentRegistry on MegaETH testnet
-TEMPO_CONTENT_REGISTRY = "0x9ca08C2D2170A43ecfA12AB35e06F2E1cEEB4Ef2"
+# Tempo music publish finalize — Tempo Moderato contracts
+TEMPO_SCROBBLE_V4 = "0xe00e82086480E61AaC8d5ad8B05B56A582dD0000"
+TEMPO_CONTENT_REGISTRY = "0x2A3beA895AE5bb4415c436155cbA15a97ACc2C77"
 # TEMPO_CANONICAL_LYRICS_REGISTRY = "0x..." # Canonical lyrics refs for study generation
 TEMPO_STUDY_SET_REGISTRY = "0x7fD583d6e9D2F820432455D071617b5C1449c7a4" # StudySetRegistryV1 for on-chain pack refs
 

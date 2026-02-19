@@ -1,5 +1,6 @@
 package com.pirate.app.schedule
 
+import android.util.Log
 import com.pirate.app.tempo.P256Utils
 import com.pirate.app.tempo.SessionKeyManager
 import com.pirate.app.tempo.TempoClient
@@ -85,10 +86,12 @@ data class HostAvailabilitySlot(
 data class EscrowTxResult(
   val success: Boolean,
   val txHash: String? = null,
+  val usedSelfPayFallback: Boolean = false,
   val error: String? = null,
 )
 
 object TempoSessionEscrowApi {
+  private const val TAG = "TempoSessionEscrowApi"
   private const val RPC_URL = TempoClient.RPC_URL
   private const val ESCROW_ADDRESS = TempoClient.SESSION_ESCROW_V1
   private const val MAX_BOOKING_SCAN = 300
@@ -100,7 +103,8 @@ object TempoSessionEscrowApi {
   private const val GAS_LIMIT_CREATE_SLOT = 260_000L
   private const val GAS_LIMIT_CANCEL_SLOT = 180_000L
   private const val GAS_LIMIT_CANCEL_BOOKING = 220_000L
-  private const val EXPIRY_WINDOW_SEC = 30L
+  // Tempo expiring nonce windows must stay strictly below 30s in practice.
+  private const val EXPIRY_WINDOW_SEC = 25L
 
   private val EXPIRING_NONCE_KEY = ByteArray(32) { 0xFF.toByte() }
 
@@ -388,7 +392,10 @@ object TempoSessionEscrowApi {
         return TempoClient.sendRawTransaction(signedTx)
       }
 
+      var usedSelfPayFallback = false
       val txHash = runCatching { submitRelay() }.getOrElse { relayErr ->
+        usedSelfPayFallback = true
+        Log.w(TAG, "$opLabel relay submit failed; trying self-pay fallback: ${relayErr.message}")
         runCatching { submitSelfPay() }.getOrElse { selfErr ->
           throw IllegalStateException(
             "$opLabel failed: relay=${relayErr.message}; self=${selfErr.message}",
@@ -405,11 +412,15 @@ object TempoSessionEscrowApi {
         throw IllegalStateException("$opLabel reverted on-chain: ${receipt.txHash}")
       }
 
-      txHash
-    }.fold(
-      onSuccess = { hash -> EscrowTxResult(success = true, txHash = hash) },
-      onFailure = { err -> EscrowTxResult(success = false, error = err.message ?: "$opLabel failed") },
-    )
+      Log.d(TAG, "$opLabel success mode=${if (usedSelfPayFallback) "self" else "relay"} tx=$txHash")
+      EscrowTxResult(
+        success = true,
+        txHash = txHash,
+        usedSelfPayFallback = usedSelfPayFallback,
+      )
+    }.getOrElse { err ->
+      EscrowTxResult(success = false, error = err.message ?: "$opLabel failed")
+    }
   }
 
   private fun getNextBookingId(): Long? {

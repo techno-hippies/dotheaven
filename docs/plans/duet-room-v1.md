@@ -110,9 +110,9 @@ Use one adapter interface and swap backend by env:
 
 1. `X402_FACILITATOR_MODE=mock` for local e2e/dev smoke tests (no chain settlement).
 2. `X402_FACILITATOR_MODE=self` for real settlement via our own facilitator (`POST /settle`).
-3. `X402_FACILITATOR_MODE=cdp` remains supported for CDP/OpenX402-style facilitators, but is not our preferred long-term path because OpenX402 whitelisting blocks dynamic `payTo`.
+3. External facilitator compatibility paths have been removed from this codebase.
 4. `X402_FACILITATOR_BASE_URL` selects the facilitator base URL (must be HTTPS for a deployed Worker).
-5. `X402_FACILITATOR_AUTH_TOKEN` is required for `self` (and often for CDP); it is sent as `Authorization: Bearer ...` by the worker to the facilitator.
+5. `X402_FACILITATOR_AUTH_TOKEN` is required for `self`; it is sent as `Authorization: Bearer ...` by the worker to the facilitator.
 
 Notes:
 
@@ -417,7 +417,7 @@ This preserves remaining time when users renew early.
 11. Automated no-UI tests exist:
    1. `services/session-voice/src/duet-room-do.test.ts` covers DO x402 semantics (mock).
    2. `services/session-voice/src/smoke-test-duet.ts` covers HTTP control-plane + mock 402->pay->retry.
-   3. `services/session-voice/src/smoke-test-duet-cdp.ts` covers real Base Sepolia USDC settlement via a `/settle` facilitator (OpenX402, CDP, or local).
+   3. `services/session-voice/src/smoke-test-duet-self.ts` covers real Base Sepolia USDC settlement via our `/settle` facilitator.
 
 ### Known gaps
 
@@ -490,10 +490,9 @@ From `services/session-voice`:
 2. Smoke (requires a running worker at `SESSION_VOICE_URL`, default `http://localhost:3338`): `npm run test:duet`
 3. Local e2e (starts worker + runs smoke): `npm run test:e2e:local`
 4. Local e2e with real Base Sepolia settlement (local facilitator, on-chain): `DUET_TEST_PAYER_PRIVATE_KEY=0x... npm run test:e2e:local:duet:onchain`
-5. Local e2e with real Base Sepolia settlement (OpenX402): `DUET_TEST_PAYER_PRIVATE_KEY=0x... npm run test:e2e:local:duet:openx402` (optional `DUET_TEST_SPLIT_ADDRESS=0x...`). Note: OpenX402 settlement requires their Base Sepolia signer to be funded for gas; if it’s out of gas, fund it or use `test:e2e:local:duet:onchain`.
-6. Local e2e with real Base Sepolia settlement (Coinbase CDP): `X402_FACILITATOR_AUTH_TOKEN=... DUET_TEST_PAYER_PRIVATE_KEY=0x... npm run test:e2e:local:duet:cdp`
-7. Remote live room + real Base Sepolia settlement (facilitator): `SESSION_VOICE_URL=... DUET_REMOTE_WATCH_URL=... DUET_TEST_PAYER_PRIVATE_KEY=0x... npm run test:duet:cdp:remote`
-8. Local dev server for UI + real settlement (local facilitator): `DUET_TEST_FACILITATOR_PRIVATE_KEY=0x... npm run dev:duet:onchain`
+5. Local self-facilitator smoke with real Base Sepolia settlement: `DUET_TEST_PAYER_PRIVATE_KEY=0x... npm run test:duet:self`
+6. Remote live room + real Base Sepolia settlement (self facilitator): `SESSION_VOICE_URL=... DUET_REMOTE_WATCH_URL=... DUET_TEST_PAYER_PRIVATE_KEY=0x... npm run test:duet:self:remote`
+7. Local dev server for UI + real settlement (local facilitator): `DUET_TEST_FACILITATOR_PRIVATE_KEY=0x... npm run dev:duet:onchain`
 
 Notes:
 

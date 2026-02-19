@@ -8,7 +8,7 @@
 
 import type { CommunityCardProps, VerificationState, LanguageEntry } from '@heaven/ui'
 import { unpackLanguages } from '@heaven/ui'
-import { SUBGRAPH_ACTIVITY, SUBGRAPH_PROFILES } from '@heaven/core'
+import { SUBGRAPH_MUSIC_SOCIAL, SUBGRAPH_PROFILES } from '@heaven/core'
 import { getPrimaryName, getPrimaryNode, getTextRecord } from './registry'
 import { resolveAvatarUri } from './avatar-resolver'
 import { NUM_TO_GENDER, GENDER_TO_NUM, bytes2ToCode } from './profile'
@@ -272,10 +272,10 @@ export async function fetchUserLocationCityId(
   }
 }
 
-// ── Top artists (from activity subgraph) ───────────────────────────
+// ── Top artists (from music-social subgraph) ───────────────────────────
 
 /**
- * Fetch top artists for a batch of users from the activity subgraph.
+ * Fetch top artists for a batch of users from the music-social subgraph.
  * Returns map of address → top 3 artist names.
  */
 async function fetchTopArtistsBatch(
@@ -302,7 +302,7 @@ async function fetchTopArtistsBatch(
   }`
 
   try {
-    const res = await fetch(SUBGRAPH_ACTIVITY, {
+    const res = await fetch(SUBGRAPH_MUSIC_SOCIAL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),

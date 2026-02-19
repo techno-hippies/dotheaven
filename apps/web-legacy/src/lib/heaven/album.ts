@@ -4,7 +4,7 @@
  */
 
 import type { Track } from '@heaven/ui'
-import { SUBGRAPH_ACTIVITY } from '@heaven/core'
+import { SUBGRAPH_MUSIC_SOCIAL } from '@heaven/core'
 import { normalizeArtistName, normalizeArtistVariants, splitArtistNames, artistMatchesTarget, payloadToMbid } from './artist'
 import { resolveCoverUrl } from './cover-ref'
 
@@ -177,7 +177,7 @@ export async function fetchAlbumTracks(
     }
   }`
 
-  const res = await fetch(SUBGRAPH_ACTIVITY, {
+  const res = await fetch(SUBGRAPH_MUSIC_SOCIAL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),
@@ -248,7 +248,7 @@ async function fetchAlbumRanking(
         scrobbles { id }
       }
     }`
-    const res = await fetch(SUBGRAPH_ACTIVITY, {
+    const res = await fetch(SUBGRAPH_MUSIC_SOCIAL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),

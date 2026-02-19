@@ -1,5 +1,6 @@
 package com.pirate.app.music
 
+import android.util.Log
 import com.pirate.app.tempo.P256Utils
 import com.pirate.app.tempo.SessionKeyManager
 import com.pirate.app.tempo.TempoClient
@@ -34,6 +35,7 @@ data class TempoPlaylistTxResult(
 )
 
 object TempoPlaylistApi {
+  private const val TAG = "TempoPlaylistApi"
   const val PLAYLIST_V1 = "0xeF6a21324548155630670397DA68318E126510EF"
   const val PLAYLIST_SHARE_V1 = "0x1912cEa18eAFC17cd0f21F58fCF87E699Be512Aa"
 
@@ -49,6 +51,11 @@ object TempoPlaylistApi {
   private const val EXPIRY_WINDOW_SEC = 25L
   private const val MAX_UNDERPRICED_RETRIES = 4
   private const val RETRY_DELAY_MS = 220L
+  private const val RELAY_MIN_PRIORITY_FEE_PER_GAS = 6_000_000_000L
+  private const val RELAY_MIN_MAX_FEE_PER_GAS = 120_000_000_000L
+
+  private val bidFloorLock = Any()
+  private val lastBidByAddress = mutableMapOf<String, TempoClient.Eip1559Fees>()
 
   private val client = OkHttpClient()
   private val jsonType = "application/json; charset=utf-8".toMediaType()
@@ -225,6 +232,10 @@ object TempoPlaylistApi {
     parsePlaylistId: Boolean = false,
   ): TempoPlaylistTxResult {
     return runCatching {
+      if (!SessionKeyManager.isValid(sessionKey, ownerAddress = account.address)) {
+        throw IllegalStateException("Missing valid Tempo session key. Please sign in again.")
+      }
+
       val chainId = withContext(Dispatchers.IO) { TempoClient.getChainId() }
       if (chainId != TempoClient.CHAIN_ID) {
         throw IllegalStateException("Wrong chain connected: $chainId (expected ${TempoClient.CHAIN_ID})")
@@ -236,14 +247,26 @@ object TempoPlaylistApi {
           val estimated = estimateGas(from = account.address, to = normalizedContract, data = callData)
           withBuffer(estimated = estimated, minimum = minimumGasLimit)
         }
-
-      var fees = withContext(Dispatchers.IO) { TempoClient.getSuggestedFees() }
+      var fees = withContext(Dispatchers.IO) {
+        val suggested = TempoClient.getSuggestedFees()
+        withAddressBidFloor(account.address, withRelayMinimumFeeFloor(suggested))
+      }
+      Log.d(
+        TAG,
+        "$opLabel tx params gas=$gasLimit fees=${fees.maxPriorityFeePerGas}/${fees.maxFeePerGas}",
+      )
 
       suspend fun submitWithMode(
         feeMode: TempoTransaction.FeeMode,
         txFees: TempoClient.Eip1559Fees,
       ): String {
-        var attemptFees = txFees
+        var attemptFees =
+          when (feeMode) {
+            TempoTransaction.FeeMode.RELAY_SPONSORED ->
+              withAddressBidFloor(account.address, withRelayMinimumFeeFloor(txFees))
+            TempoTransaction.FeeMode.SELF ->
+              withAddressBidFloor(account.address, txFees)
+          }
         var lastUnderpriced: Throwable? = null
 
         repeat(MAX_UNDERPRICED_RETRIES + 1) { attempt ->
@@ -291,7 +314,14 @@ object TempoPlaylistApi {
             }
 
           val txHash = result.getOrNull()
-          if (!txHash.isNullOrBlank()) return txHash
+          if (!txHash.isNullOrBlank()) {
+            rememberAddressBidFloor(account.address, attemptFees)
+            Log.d(
+              TAG,
+              "$opLabel submit success mode=$feeMode attempt=${attempt + 1} tx=$txHash",
+            )
+            return txHash
+          }
 
           val err = result.exceptionOrNull() ?: IllegalStateException("Unknown $opLabel submission failure")
           if (!isReplacementUnderpriced(err) || attempt >= MAX_UNDERPRICED_RETRIES) {
@@ -299,20 +329,36 @@ object TempoPlaylistApi {
           }
           lastUnderpriced = err
           attemptFees = aggressivelyBumpFees(attemptFees)
+          attemptFees =
+            when (feeMode) {
+              TempoTransaction.FeeMode.RELAY_SPONSORED ->
+                withAddressBidFloor(account.address, withRelayMinimumFeeFloor(attemptFees))
+              TempoTransaction.FeeMode.SELF ->
+                withAddressBidFloor(account.address, attemptFees)
+            }
+          rememberAddressBidFloor(account.address, attemptFees)
+          Log.w(
+            TAG,
+            "$opLabel underpriced mode=$feeMode attempt=${attempt + 1}; bumping to " +
+              "${attemptFees.maxPriorityFeePerGas}/${attemptFees.maxFeePerGas}",
+          )
           delay(RETRY_DELAY_MS)
         }
 
         throw (lastUnderpriced ?: IllegalStateException("replacement transaction underpriced"))
       }
 
+      var usedSelfPayFallback = false
       val relayTxHash =
         runCatching {
           submitWithMode(TempoTransaction.FeeMode.RELAY_SPONSORED, fees)
         }.getOrElse { relayErr ->
+          usedSelfPayFallback = true
+          Log.w(TAG, "$opLabel relay submit failed; trying self-pay fallback: ${relayErr.message}")
           withContext(Dispatchers.IO) {
             runCatching { TempoClient.fundAddress(account.address) }
           }
-          fees = aggressivelyBumpFees(fees)
+          fees = aggressivelyBumpFees(withAddressBidFloor(account.address, fees))
           runCatching {
             submitWithMode(TempoTransaction.FeeMode.SELF, fees)
           }.getOrElse { selfErr ->
@@ -323,13 +369,7 @@ object TempoPlaylistApi {
           }
         }
 
-      val receipt =
-        withContext(Dispatchers.IO) {
-          TempoClient.waitForTransactionReceipt(
-            txHash = relayTxHash,
-            timeoutMs = (EXPIRY_WINDOW_SEC + 20L) * 1000L,
-          )
-        }
+      val receipt = awaitPlaylistReceipt(relayTxHash)
       if (!receipt.isSuccess) {
         throw IllegalStateException("$opLabel reverted on-chain: ${receipt.txHash}")
       }
@@ -345,9 +385,10 @@ object TempoPlaylistApi {
         success = true,
         txHash = relayTxHash,
         playlistId = playlistId,
-        usedSelfPayFallback = false,
+        usedSelfPayFallback = usedSelfPayFallback,
       )
     }.getOrElse { error ->
+      Log.w(TAG, "$opLabel failed: ${error.message}", error)
       TempoPlaylistTxResult(
         success = false,
         error = error.message ?: "$opLabel failed",
@@ -536,13 +577,53 @@ object TempoPlaylistApi {
     estimated: Long,
     minimum: Long,
   ): Long {
-    val buffered = saturatingAdd(estimated.coerceAtLeast(0L), GAS_LIMIT_BUFFER)
-    return maxOf(minimum, buffered)
+    if (estimated <= 0L) return minimum
+    val padded = saturatingAdd(saturatingMul(estimated, 3) / 2, GAS_LIMIT_BUFFER)
+    return maxOf(minimum, padded)
+  }
+
+  private suspend fun awaitPlaylistReceipt(txHash: String): TempoClient.TransactionReceipt {
+    val timeoutMs = (EXPIRY_WINDOW_SEC + 20L) * 1000L
+    val receipt =
+      withContext(Dispatchers.IO) {
+        runCatching {
+          TempoClient.waitForTransactionReceipt(
+            txHash = txHash,
+            timeoutMs = timeoutMs,
+          )
+        }.getOrElse { error ->
+          if (!isReceiptTimeout(error)) throw error
+          null
+        }
+      }
+    if (receipt != null) return receipt
+
+    val txStillKnown = withContext(Dispatchers.IO) { TempoClient.hasTransaction(txHash) }
+    if (!txStillKnown) {
+      throw IllegalStateException("Playlist tx dropped before inclusion: $txHash")
+    }
+
+    delay(2_000L)
+    val lateReceipt = withContext(Dispatchers.IO) { TempoClient.getTransactionReceipt(txHash) }
+    if (lateReceipt != null) return lateReceipt
+    throw IllegalStateException("Playlist tx not confirmed before expiry: $txHash")
+  }
+
+  private fun isReceiptTimeout(error: Throwable): Boolean {
+    val message = error.message.orEmpty()
+    return message.contains("timed out waiting for transaction receipt", ignoreCase = true)
   }
 
   private fun aggressivelyBumpFees(fees: TempoClient.Eip1559Fees): TempoClient.Eip1559Fees {
-    val bumpedPriority = bumpForReplacement(fees.maxPriorityFeePerGas)
-    val bumpedMax = bumpForReplacement(maxOf(fees.maxFeePerGas, bumpedPriority))
+    val bumpedPriority = maxOf(
+      bumpForReplacement(fees.maxPriorityFeePerGas),
+      saturatingMul(fees.maxPriorityFeePerGas, 2),
+    )
+    val bumpedMax = maxOf(
+      bumpForReplacement(fees.maxFeePerGas),
+      saturatingMul(fees.maxFeePerGas, 2),
+      saturatingAdd(bumpedPriority, 1_000_000L),
+    )
     return TempoClient.Eip1559Fees(
       maxPriorityFeePerGas = bumpedPriority,
       maxFeePerGas = maxOf(bumpedMax, bumpedPriority),
@@ -551,18 +632,68 @@ object TempoPlaylistApi {
 
   private fun bumpForReplacement(value: Long): Long {
     if (value <= 0L) return 1L
-    val bump = value / 5L // +20%
+    val bump = value / 4L // +25%
     return saturatingAdd(value, maxOf(1L, bump))
   }
 
+  private fun withRelayMinimumFeeFloor(fees: TempoClient.Eip1559Fees): TempoClient.Eip1559Fees {
+    val priority = maxOf(fees.maxPriorityFeePerGas, RELAY_MIN_PRIORITY_FEE_PER_GAS)
+    val maxFee = maxOf(
+      fees.maxFeePerGas,
+      RELAY_MIN_MAX_FEE_PER_GAS,
+      saturatingAdd(priority, 1_000_000L),
+    )
+    return TempoClient.Eip1559Fees(maxPriorityFeePerGas = priority, maxFeePerGas = maxFee)
+  }
+
+  private fun withAddressBidFloor(
+    address: String,
+    fees: TempoClient.Eip1559Fees,
+  ): TempoClient.Eip1559Fees {
+    val key = address.trim().lowercase()
+    if (key.isBlank()) return fees
+    val previous = synchronized(bidFloorLock) { lastBidByAddress[key] } ?: return fees
+    val priority = maxOf(fees.maxPriorityFeePerGas, previous.maxPriorityFeePerGas)
+    val maxFee = maxOf(fees.maxFeePerGas, previous.maxFeePerGas, saturatingAdd(priority, 1_000_000L))
+    return TempoClient.Eip1559Fees(maxPriorityFeePerGas = priority, maxFeePerGas = maxFee)
+  }
+
+  private fun rememberAddressBidFloor(
+    address: String,
+    fees: TempoClient.Eip1559Fees,
+  ) {
+    val key = address.trim().lowercase()
+    if (key.isBlank()) return
+    synchronized(bidFloorLock) {
+      val previous = lastBidByAddress[key]
+      lastBidByAddress[key] =
+        if (previous == null) {
+          fees
+        } else {
+          TempoClient.Eip1559Fees(
+            maxPriorityFeePerGas = maxOf(previous.maxPriorityFeePerGas, fees.maxPriorityFeePerGas),
+            maxFeePerGas = maxOf(previous.maxFeePerGas, fees.maxFeePerGas),
+          )
+        }
+    }
+  }
+
   private fun isReplacementUnderpriced(error: Throwable): Boolean {
-    return error.message?.contains("replacement transaction underpriced", ignoreCase = true) == true
+    val message = error.message.orEmpty().lowercase()
+    return message.contains("replacement transaction underpriced") ||
+      message.contains("transaction underpriced") ||
+      message.contains("underpriced")
   }
 
   private fun saturatingAdd(
     a: Long,
     b: Long,
   ): Long = if (Long.MAX_VALUE - a < b) Long.MAX_VALUE else a + b
+
+  private fun saturatingMul(
+    a: Long,
+    factor: Int,
+  ): Long = if (a > Long.MAX_VALUE / factor) Long.MAX_VALUE else a * factor
 
   private fun nowSec(): Long = System.currentTimeMillis() / 1000L
 
