@@ -14,6 +14,7 @@
     "test:visibility": "bun src/smoke-test-visibility.ts",
     "test:duet": "bun src/smoke-test-duet.ts",
     "test:duet:broadcast": "bun src/smoke-test-duet-broadcast.ts",
+    "test:duet:broadcast:video": "bun src/smoke-test-duet-broadcast-video.ts",
     "test:duet:cdp": "bun src/smoke-test-duet-cdp.ts",
     "test:duet:cdp:remote": "bun src/smoke-test-duet-cdp-remote.ts",
     "test:e2e:local": "bun src/e2e-local.ts",
