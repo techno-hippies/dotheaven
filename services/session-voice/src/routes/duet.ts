@@ -996,8 +996,10 @@ duetRoutes.get('/:id/watch', async (c) => {
           connectedAudioUsers.delete(String(user.uid));
           updateAudioMessage();
         }
-        const el = document.getElementById('u-' + user.uid);
-        if (el) el.remove();
+        if (mediaType === 'video') {
+          const el = document.getElementById('u-' + user.uid);
+          if (el) el.remove();
+        }
       });
       client.on('user-left', (user) => {
         connectedAudioUsers.delete(String(user.uid));
