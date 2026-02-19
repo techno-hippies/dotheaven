@@ -22,6 +22,8 @@ type ReplayMode = 'load_gated' | 'worker_gated'
 type RecordingMode = 'host_local' | 'agora_cloud'
 type EntitlementType = 'live' | 'replay'
 type BroadcastState = 'idle' | 'live' | 'stopped'
+type AudienceMediaMode = 'bridge' | 'direct'
+type BroadcastSeat = 'host' | 'guest'
 type SegmentRightsKind = 'original' | 'derivative'
 
 interface WalletEntitlement {
@@ -68,6 +70,11 @@ interface RecordingMetadata {
   created_at: number
 }
 
+interface BroadcastMediaState {
+  audio: boolean
+  video: boolean
+}
+
 interface DuetRoomMeta {
   room_id: string
   status: RoomStatus
@@ -82,11 +89,26 @@ interface DuetRoomMeta {
   access_window_minutes: number
   replay_mode: ReplayMode
   recording_mode: RecordingMode
+  audience_media_mode?: AudienceMediaMode
   agora_channel: string
   bridge_ticket?: string
   bridge_ticket_hash?: string
   bridge_ticket_valid_until?: number
   bridge_agora_uid?: number
+  guest_bridge_ticket?: string
+  guest_bridge_ticket_hash?: string
+  guest_bridge_ticket_revoked_hash?: string
+  guest_bridge_agora_uid?: number
+  host_broadcast_state?: BroadcastState
+  host_broadcast_mode?: string
+  host_broadcast_heartbeat_at?: number
+  host_broadcast_started_at?: number
+  guest_broadcast_state?: BroadcastState
+  guest_broadcast_mode?: string
+  guest_broadcast_heartbeat_at?: number
+  guest_broadcast_started_at?: number
+  host_broadcast_media?: BroadcastMediaState
+  guest_broadcast_media?: BroadcastMediaState
   broadcast_state?: BroadcastState
   broadcast_mode?: string
   broadcast_heartbeat_at?: number
@@ -149,6 +171,8 @@ export class DuetRoomDO implements DurableObject {
     try {
       if (request.method === 'POST' && url.pathname === '/init') return this.handleInit(request)
       if (request.method === 'POST' && url.pathname === '/guest-accept') return this.handleGuestAccept(request)
+      if (request.method === 'POST' && url.pathname === '/guest-start') return this.handleGuestStart(request)
+      if (request.method === 'POST' && url.pathname === '/guest-remove') return this.handleGuestRemove(request)
       if (request.method === 'POST' && url.pathname === '/start') return this.handleStart(request)
       if (request.method === 'POST' && url.pathname === '/segments/start') return this.handleSegmentsStart(request)
       if (request.method === 'POST' && url.pathname === '/bridge-token') return this.handleBridgeToken(request)
@@ -222,6 +246,7 @@ export class DuetRoomDO implements DurableObject {
       access_window_minutes: Math.floor(body.accessWindowMinutes),
       replay_mode: body.replayMode,
       recording_mode: body.recordingMode,
+      audience_media_mode: 'bridge',
       agora_channel: body.agoraChannel,
       created_at: now,
     }
@@ -284,6 +309,90 @@ export class DuetRoomDO implements DurableObject {
     })
   }
 
+  private async handleGuestStart(request: Request): Promise<Response> {
+    const meta = await this.getMeta()
+    if (!meta) return json({ error: 'room_not_found' }, 404)
+
+    const body = await request.json<{ wallet?: string }>()
+    if (!body.wallet || !isAddress(body.wallet)) return json({ error: 'invalid_wallet' }, 400)
+    if (meta.status !== 'live') return json({ error: 'room_not_live', status: meta.status }, 400)
+    if (!meta.guest_wallet || !meta.guest_accepted_at) return json({ error: 'guest_not_accepted' }, 403)
+
+    const wallet = body.wallet.toLowerCase()
+    if (wallet !== meta.guest_wallet) return json({ error: 'forbidden' }, 403)
+
+    const guestBridgeTicket = randomTicket()
+    const guestUid = meta.guest_bridge_agora_uid ?? randomAgoraUid()
+
+    meta.guest_bridge_ticket = guestBridgeTicket
+    meta.guest_bridge_ticket_hash = await sha256Hex(guestBridgeTicket)
+    meta.guest_bridge_ticket_revoked_hash = undefined
+    meta.guest_bridge_agora_uid = guestUid
+    meta.guest_broadcast_state = 'idle'
+    meta.guest_broadcast_mode = undefined
+    meta.guest_broadcast_heartbeat_at = undefined
+    meta.guest_broadcast_started_at = undefined
+    meta.guest_broadcast_media = { audio: false, video: false }
+    this.recomputeAggregateBroadcast(meta)
+    await this.putMeta(meta)
+
+    const broadcaster = generateToken(
+      this.env.AGORA_APP_ID,
+      this.env.AGORA_APP_CERTIFICATE,
+      meta.agora_channel,
+      guestUid,
+      BRIDGE_TOKEN_TTL_SECONDS,
+    )
+
+    return json({
+      ok: true,
+      seat: 'guest',
+      room_id: meta.room_id,
+      guest_wallet: meta.guest_wallet,
+      guest_bridge_ticket: guestBridgeTicket,
+      agora_app_id: this.env.AGORA_APP_ID,
+      agora_channel: meta.agora_channel,
+      agora_broadcaster_uid: guestUid,
+      agora_broadcaster_token: broadcaster.token,
+      token_expires_in_seconds: broadcaster.expiresInSeconds,
+      audience_media_mode: meta.audience_media_mode ?? 'bridge',
+    })
+  }
+
+  private async handleGuestRemove(request: Request): Promise<Response> {
+    const meta = await this.getMeta()
+    if (!meta) return json({ error: 'room_not_found' }, 404)
+
+    const body = await request.json<{ wallet?: string }>()
+    if (!body.wallet || !isAddress(body.wallet)) return json({ error: 'invalid_wallet' }, 400)
+    if (body.wallet.toLowerCase() !== meta.host_wallet) return json({ error: 'forbidden' }, 403)
+
+    const hadActiveTicket = !!meta.guest_bridge_ticket_hash
+    if (meta.guest_bridge_ticket_hash) {
+      meta.guest_bridge_ticket_revoked_hash = meta.guest_bridge_ticket_hash
+    }
+    meta.guest_bridge_ticket = undefined
+    meta.guest_bridge_ticket_hash = undefined
+    meta.guest_broadcast_state = 'stopped'
+    meta.guest_broadcast_mode = undefined
+    meta.guest_broadcast_heartbeat_at = nowSeconds()
+    meta.guest_broadcast_media = { audio: false, video: false }
+
+    const hostVideoLive = !!meta.host_broadcast_media?.video
+    if (!hostVideoLive) {
+      meta.audience_media_mode = 'bridge'
+    }
+    this.recomputeAggregateBroadcast(meta)
+    await this.putMeta(meta)
+
+    return json({
+      ok: true,
+      revoked: hadActiveTicket,
+      already_revoked: !hadActiveTicket,
+      audience_media_mode: meta.audience_media_mode ?? 'bridge',
+    })
+  }
+
   private async handleStart(request: Request): Promise<Response> {
     const meta = await this.getMeta()
     if (!meta) return json({ error: 'room_not_found' }, 404)
@@ -328,6 +437,7 @@ export class DuetRoomDO implements DurableObject {
         agora_broadcaster_token: broadcaster.token,
         token_expires_in_seconds: broadcaster.expiresInSeconds,
         recording_mode: meta.recording_mode,
+        audience_media_mode: meta.audience_media_mode ?? 'bridge',
       })
     }
 
@@ -341,10 +451,24 @@ export class DuetRoomDO implements DurableObject {
     meta.bridge_ticket_hash = await sha256Hex(bridgeTicket)
     meta.bridge_ticket_valid_until = undefined
     meta.bridge_agora_uid = bridgeUid
+    meta.host_broadcast_state = 'idle'
+    meta.host_broadcast_mode = undefined
+    meta.host_broadcast_heartbeat_at = undefined
+    meta.host_broadcast_started_at = undefined
+    meta.host_broadcast_media = { audio: false, video: false }
+    meta.guest_broadcast_state = 'idle'
+    meta.guest_broadcast_mode = undefined
+    meta.guest_broadcast_heartbeat_at = undefined
+    meta.guest_broadcast_started_at = undefined
+    meta.guest_broadcast_media = { audio: false, video: false }
     meta.broadcast_state = 'idle'
     meta.broadcast_mode = undefined
     meta.broadcast_heartbeat_at = undefined
     meta.broadcast_started_at = undefined
+    if (!meta.audience_media_mode) {
+      meta.audience_media_mode = 'bridge'
+    }
+    this.recomputeAggregateBroadcast(meta)
     await this.putMeta(meta)
 
     const broadcaster = generateToken(
@@ -365,6 +489,7 @@ export class DuetRoomDO implements DurableObject {
       agora_broadcaster_token: broadcaster.token,
       token_expires_in_seconds: broadcaster.expiresInSeconds,
       recording_mode: meta.recording_mode,
+      audience_media_mode: meta.audience_media_mode ?? 'bridge',
     })
   }
 
@@ -379,8 +504,16 @@ export class DuetRoomDO implements DurableObject {
     if (!verify.ok) return json({ error: verify.error }, verify.status)
     if (meta.status !== 'live') return json({ error: 'room_not_live' }, 400)
 
-    const uid = meta.bridge_agora_uid ?? randomAgoraUid()
-    if (!meta.bridge_agora_uid) {
+    const seat: BroadcastSeat = verify.seat
+    const uid = seat === 'guest'
+      ? (meta.guest_bridge_agora_uid ?? randomAgoraUid())
+      : (meta.bridge_agora_uid ?? randomAgoraUid())
+    if (seat === 'guest') {
+      if (!meta.guest_bridge_agora_uid) {
+        meta.guest_bridge_agora_uid = uid
+        await this.putMeta(meta)
+      }
+    } else if (!meta.bridge_agora_uid) {
       meta.bridge_agora_uid = uid
       await this.putMeta(meta)
     }
@@ -395,6 +528,7 @@ export class DuetRoomDO implements DurableObject {
 
     return json({
       ok: true,
+      seat,
       agora_app_id: this.env.AGORA_APP_ID,
       agora_channel: meta.agora_channel,
       agora_broadcaster_uid: uid,
@@ -418,7 +552,16 @@ export class DuetRoomDO implements DurableObject {
     const now = nowSeconds()
     meta.status = 'ended'
     meta.ended_at = now
-    meta.broadcast_state = 'stopped'
+    meta.host_broadcast_state = 'stopped'
+    meta.host_broadcast_mode = meta.host_broadcast_mode ?? meta.broadcast_mode
+    meta.host_broadcast_heartbeat_at = now
+    meta.host_broadcast_media = { audio: false, video: false }
+    meta.guest_broadcast_state = 'stopped'
+    meta.guest_broadcast_mode = undefined
+    meta.guest_broadcast_heartbeat_at = now
+    meta.guest_broadcast_media = { audio: false, video: false }
+    meta.audience_media_mode = 'bridge'
+    this.recomputeAggregateBroadcast(meta)
     if (meta.bridge_ticket_hash) {
       meta.bridge_ticket_valid_until = now + BRIDGE_TICKET_GRACE_AFTER_END_SECONDS
     }
@@ -440,30 +583,64 @@ export class DuetRoomDO implements DurableObject {
       bridgeTicket?: string
       status?: BroadcastState
       mode?: string
+      media?: {
+        audio?: boolean
+        video?: boolean
+      }
     }>()
 
     if (!body.bridgeTicket) return json({ error: 'missing_bridge_ticket' }, 401)
-    const verify = await this.verifyBridgeTicket(meta, body.bridgeTicket, { allowAfterEnd: false })
+    const verify = await this.verifyBridgeTicket(meta, body.bridgeTicket, { allowAfterEnd: false, allowGuest: true })
     if (!verify.ok) return json({ error: verify.error }, verify.status)
     if (meta.status !== 'live') return json({ error: 'room_not_live', status: meta.status }, 400)
 
+    const seat = verify.seat
     const now = nowSeconds()
     const nextState: BroadcastState = body.status === 'stopped' ? 'stopped' : 'live'
-    meta.broadcast_state = nextState
-    meta.broadcast_mode = body.mode ? body.mode.slice(0, 24) : meta.broadcast_mode
-    meta.broadcast_heartbeat_at = now
-    if (nextState === 'live' && !meta.broadcast_started_at) {
-      meta.broadcast_started_at = now
+    const nextMode = body.mode ? body.mode.slice(0, 24) : this.getSeatBroadcastMode(meta, seat)
+    const currentMedia = this.getSeatBroadcastMedia(meta, seat)
+    const nextMedia: BroadcastMediaState = nextState === 'stopped'
+      ? { audio: false, video: false }
+      : body.media
+        ? { audio: !!body.media.audio, video: !!body.media.video }
+        : currentMedia
+
+    if (seat === 'host') {
+      meta.host_broadcast_state = nextState
+      meta.host_broadcast_mode = nextMode
+      meta.host_broadcast_heartbeat_at = now
+      if (nextState === 'live' && !meta.host_broadcast_started_at) {
+        meta.host_broadcast_started_at = now
+      }
+      meta.host_broadcast_media = nextMedia
+    } else {
+      meta.guest_broadcast_state = nextState
+      meta.guest_broadcast_mode = nextMode
+      meta.guest_broadcast_heartbeat_at = now
+      if (nextState === 'live' && !meta.guest_broadcast_started_at) {
+        meta.guest_broadcast_started_at = now
+      }
+      meta.guest_broadcast_media = nextMedia
     }
+
+    const anyLiveVideo =
+      (meta.host_broadcast_state === 'live' && !!meta.host_broadcast_media?.video) ||
+      (meta.guest_broadcast_state === 'live' && !!meta.guest_broadcast_media?.video)
+    meta.audience_media_mode = anyLiveVideo ? 'direct' : 'bridge'
+    this.recomputeAggregateBroadcast(meta)
     await this.putMeta(meta)
 
     return json({
       ok: true,
+      seat,
       room_id: meta.room_id,
       broadcast_state: meta.broadcast_state,
       broadcast_mode: meta.broadcast_mode ?? null,
       broadcast_heartbeat_at: meta.broadcast_heartbeat_at,
       broadcaster_online: isBroadcastOnline(meta, now),
+      audience_media_mode: meta.audience_media_mode ?? 'bridge',
+      host_broadcaster_online: this.isSeatBroadcastOnline(meta, 'host', now),
+      guest_broadcaster_online: this.isSeatBroadcastOnline(meta, 'guest', now),
     })
   }
 
@@ -713,6 +890,25 @@ export class DuetRoomDO implements DurableObject {
       broadcast_mode: meta.broadcast_mode ?? null,
       broadcast_heartbeat_at: meta.broadcast_heartbeat_at ?? null,
       broadcaster_online: isBroadcastOnline(meta, now),
+      audience_media_mode: meta.audience_media_mode ?? 'bridge',
+      broadcaster_uids: {
+        host: meta.bridge_agora_uid ?? null,
+        guest: meta.guest_bridge_agora_uid ?? null,
+      },
+      host_broadcast: {
+        state: meta.host_broadcast_state ?? 'idle',
+        mode: meta.host_broadcast_mode ?? null,
+        heartbeat_at: meta.host_broadcast_heartbeat_at ?? null,
+        media: meta.host_broadcast_media ?? { audio: false, video: false },
+        online: this.isSeatBroadcastOnline(meta, 'host', now),
+      },
+      guest_broadcast: {
+        state: meta.guest_broadcast_state ?? 'idle',
+        mode: meta.guest_broadcast_mode ?? null,
+        heartbeat_at: meta.guest_broadcast_heartbeat_at ?? null,
+        media: meta.guest_broadcast_media ?? { audio: false, video: false },
+        online: this.isSeatBroadcastOnline(meta, 'guest', now),
+      },
     })
   }
 
@@ -925,7 +1121,7 @@ export class DuetRoomDO implements DurableObject {
     }>()
 
     if (!body.bridgeTicket) return json({ error: 'missing_bridge_ticket' }, 401)
-    const verify = await this.verifyBridgeTicket(meta, body.bridgeTicket, { allowAfterEnd: true })
+    const verify = await this.verifyBridgeTicket(meta, body.bridgeTicket, { allowAfterEnd: true, allowGuest: false })
     if (!verify.ok) return json({ error: verify.error }, verify.status)
 
     if (!body.load_dataitem_id) return json({ error: 'missing_load_dataitem_id' }, 400)
@@ -947,6 +1143,12 @@ export class DuetRoomDO implements DurableObject {
     meta.bridge_ticket = undefined
     meta.bridge_ticket_hash = undefined
     meta.bridge_ticket_valid_until = undefined
+    meta.guest_bridge_ticket = undefined
+    meta.guest_bridge_ticket_hash = undefined
+    meta.guest_broadcast_state = 'stopped'
+    meta.guest_broadcast_mode = undefined
+    meta.guest_broadcast_media = { audio: false, video: false }
+    this.recomputeAggregateBroadcast(meta)
     await this.putMeta(meta)
 
     return json({
@@ -1230,27 +1432,146 @@ export class DuetRoomDO implements DurableObject {
 
   // -- Internal helpers --
 
+  private getSeatBroadcastState(meta: DuetRoomMeta, seat: BroadcastSeat): BroadcastState {
+    if (seat === 'guest') return meta.guest_broadcast_state ?? 'idle'
+    return meta.host_broadcast_state ?? 'idle'
+  }
+
+  private getSeatBroadcastMode(meta: DuetRoomMeta, seat: BroadcastSeat): string | undefined {
+    if (seat === 'guest') return meta.guest_broadcast_mode
+    return meta.host_broadcast_mode
+  }
+
+  private getSeatBroadcastHeartbeat(meta: DuetRoomMeta, seat: BroadcastSeat): number | undefined {
+    if (seat === 'guest') return meta.guest_broadcast_heartbeat_at
+    return meta.host_broadcast_heartbeat_at
+  }
+
+  private getSeatBroadcastStarted(meta: DuetRoomMeta, seat: BroadcastSeat): number | undefined {
+    if (seat === 'guest') return meta.guest_broadcast_started_at
+    return meta.host_broadcast_started_at
+  }
+
+  private getSeatBroadcastMedia(meta: DuetRoomMeta, seat: BroadcastSeat): BroadcastMediaState {
+    const media = seat === 'guest' ? meta.guest_broadcast_media : meta.host_broadcast_media
+    if (media) {
+      return { audio: !!media.audio, video: !!media.video }
+    }
+    return {
+      audio: this.getSeatBroadcastState(meta, seat) === 'live',
+      video: false,
+    }
+  }
+
+  private isSeatBroadcastOnline(meta: DuetRoomMeta, seat: BroadcastSeat, now: number): boolean {
+    if (meta.status !== 'live') return false
+    if (this.getSeatBroadcastState(meta, seat) !== 'live') return false
+    const heartbeatAt = this.getSeatBroadcastHeartbeat(meta, seat) ?? 0
+    if (heartbeatAt <= 0) return false
+    return now - heartbeatAt <= BROADCAST_HEARTBEAT_TIMEOUT_SECONDS
+  }
+
+  private recomputeAggregateBroadcast(meta: DuetRoomMeta): boolean {
+    const prevState = meta.broadcast_state
+    const prevMode = meta.broadcast_mode
+    const prevHeartbeat = meta.broadcast_heartbeat_at
+    const prevStarted = meta.broadcast_started_at
+
+    const hostState = this.getSeatBroadcastState(meta, 'host')
+    const guestState = this.getSeatBroadcastState(meta, 'guest')
+    const hostMode = this.getSeatBroadcastMode(meta, 'host')
+    const guestMode = this.getSeatBroadcastMode(meta, 'guest')
+    const hostHeartbeat = this.getSeatBroadcastHeartbeat(meta, 'host') ?? 0
+    const guestHeartbeat = this.getSeatBroadcastHeartbeat(meta, 'guest') ?? 0
+    const hostStarted = this.getSeatBroadcastStarted(meta, 'host') ?? 0
+    const guestStarted = this.getSeatBroadcastStarted(meta, 'guest') ?? 0
+
+    const hasLive = hostState === 'live' || guestState === 'live'
+    const hasStopped = hostState === 'stopped' || guestState === 'stopped' || meta.status === 'ended'
+
+    const nextState: BroadcastState = hasLive ? 'live' : (hasStopped ? 'stopped' : 'idle')
+    let nextMode: string | undefined
+    if (hostState === 'live' && guestState === 'live') {
+      if (hostMode && guestMode) {
+        nextMode = hostMode === guestMode ? hostMode : 'multi'
+      } else {
+        nextMode = hostMode ?? guestMode
+      }
+    } else if (hostState === 'live') {
+      nextMode = hostMode
+    } else if (guestState === 'live') {
+      nextMode = guestMode
+    } else if (hostState === 'stopped') {
+      nextMode = hostMode
+    } else if (guestState === 'stopped') {
+      nextMode = guestMode
+    } else {
+      nextMode = undefined
+    }
+
+    const nextHeartbeat = Math.max(hostHeartbeat, guestHeartbeat, 0) || undefined
+    let nextStarted: number | undefined
+    const liveStarted = [hostState === 'live' ? hostStarted : 0, guestState === 'live' ? guestStarted : 0].filter((v) => v > 0)
+    if (liveStarted.length > 0) {
+      nextStarted = Math.min(...liveStarted)
+    } else if ((meta.broadcast_started_at ?? 0) > 0) {
+      nextStarted = meta.broadcast_started_at
+    } else {
+      const anyStarted = [hostStarted, guestStarted].filter((v) => v > 0)
+      nextStarted = anyStarted.length > 0 ? Math.min(...anyStarted) : undefined
+    }
+
+    meta.broadcast_state = nextState
+    meta.broadcast_mode = nextMode
+    meta.broadcast_heartbeat_at = nextHeartbeat
+    meta.broadcast_started_at = nextStarted
+
+    return (
+      prevState !== meta.broadcast_state ||
+      prevMode !== meta.broadcast_mode ||
+      prevHeartbeat !== meta.broadcast_heartbeat_at ||
+      prevStarted !== meta.broadcast_started_at
+    )
+  }
+
   private async verifyBridgeTicket(
     meta: DuetRoomMeta,
     bridgeTicket: string,
-    opts: { allowAfterEnd: boolean },
-  ): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
-    if (!meta.bridge_ticket_hash) return { ok: false, error: 'bridge_not_started', status: 400 }
+    opts: { allowAfterEnd: boolean; allowGuest?: boolean },
+  ): Promise<{ ok: true; seat: BroadcastSeat } | { ok: false; error: string; status: number }> {
+    const hasHostTicket = !!meta.bridge_ticket_hash
+    const hasGuestTicket = !!meta.guest_bridge_ticket_hash
+    if (!hasHostTicket && !hasGuestTicket) return { ok: false, error: 'bridge_not_started', status: 400 }
 
     const providedHash = await sha256Hex(bridgeTicket)
-    if (providedHash !== meta.bridge_ticket_hash) {
+    if (meta.guest_bridge_ticket_revoked_hash && providedHash === meta.guest_bridge_ticket_revoked_hash) {
+      return { ok: false, error: 'guest_revoked', status: 403 }
+    }
+
+    let seat: BroadcastSeat | null = null
+    if (meta.bridge_ticket_hash && providedHash === meta.bridge_ticket_hash) {
+      seat = 'host'
+    } else if (meta.guest_bridge_ticket_hash && providedHash === meta.guest_bridge_ticket_hash) {
+      seat = 'guest'
+    }
+    if (!seat) {
+      return { ok: false, error: 'forbidden', status: 403 }
+    }
+
+    if (seat === 'guest' && opts.allowGuest === false) {
       return { ok: false, error: 'forbidden', status: 403 }
     }
 
     if (meta.status === 'ended') {
       if (!opts.allowAfterEnd) return { ok: false, error: 'room_not_live', status: 400 }
+      if (seat === 'guest') return { ok: false, error: 'bridge_ticket_expired', status: 401 }
       const validUntil = meta.bridge_ticket_valid_until ?? 0
       if (nowSeconds() > validUntil) {
         return { ok: false, error: 'bridge_ticket_expired', status: 401 }
       }
     }
 
-    return { ok: true }
+    return { ok: true, seat }
   }
 
   private async issueReplayAccessGrant(wallet: string, replayUrl: string): Promise<{ token: string; expires_at: number }> {
@@ -1326,6 +1647,48 @@ export class DuetRoomDO implements DurableObject {
 
     if (!meta.segment_locks) {
       meta.segment_locks = {}
+      changed = true
+    }
+
+    if (!meta.audience_media_mode) {
+      meta.audience_media_mode = 'bridge'
+      changed = true
+    }
+
+    if (!meta.host_broadcast_state) {
+      meta.host_broadcast_state = meta.broadcast_state ?? 'idle'
+      changed = true
+    }
+    if (meta.host_broadcast_mode === undefined && meta.broadcast_mode !== undefined) {
+      meta.host_broadcast_mode = meta.broadcast_mode
+      changed = true
+    }
+    if (meta.host_broadcast_heartbeat_at === undefined && meta.broadcast_heartbeat_at !== undefined) {
+      meta.host_broadcast_heartbeat_at = meta.broadcast_heartbeat_at
+      changed = true
+    }
+    if (meta.host_broadcast_started_at === undefined && meta.broadcast_started_at !== undefined) {
+      meta.host_broadcast_started_at = meta.broadcast_started_at
+      changed = true
+    }
+    if (!meta.host_broadcast_media) {
+      meta.host_broadcast_media = {
+        audio: (meta.host_broadcast_state ?? 'idle') === 'live',
+        video: false,
+      }
+      changed = true
+    }
+
+    if (!meta.guest_broadcast_state) {
+      meta.guest_broadcast_state = 'idle'
+      changed = true
+    }
+    if (!meta.guest_broadcast_media) {
+      meta.guest_broadcast_media = { audio: false, video: false }
+      changed = true
+    }
+
+    if (this.recomputeAggregateBroadcast(meta)) {
       changed = true
     }
 

@@ -334,4 +334,168 @@ describe('DuetRoomDO x402 flow', () => {
     })
     expect(sourceReplay.status).toBe(401)
   })
+
+  test('guest seat start + bridge token are seat-aware', async () => {
+    const room = makeRoom()
+    const { bridgeTicket } = await initAndStartLiveRoom(room, {
+      roomId: 'duet-test-guest-seat-start',
+    })
+
+    const guestStartBeforeAccept = await request(room, 'POST', '/guest-start', { wallet: GUEST_WALLET })
+    expect(guestStartBeforeAccept.status).toBe(403)
+
+    const guestAccept = await request(room, 'POST', '/guest-accept', { wallet: GUEST_WALLET })
+    expect(guestAccept.status).toBe(200)
+
+    const guestStart = await request(room, 'POST', '/guest-start', { wallet: GUEST_WALLET })
+    expect(guestStart.status).toBe(200)
+    const guestStartBody = await guestStart.json() as {
+      seat?: string
+      guest_bridge_ticket?: string
+      agora_broadcaster_uid?: number
+      audience_media_mode?: string
+    }
+    expect(guestStartBody.seat).toBe('guest')
+    expect(typeof guestStartBody.guest_bridge_ticket).toBe('string')
+    expect(typeof guestStartBody.agora_broadcaster_uid).toBe('number')
+    expect(guestStartBody.audience_media_mode).toBe('bridge')
+
+    const hostBridgeToken = await request(room, 'POST', '/bridge-token', {
+      bridgeTicket,
+    })
+    expect(hostBridgeToken.status).toBe(200)
+    const hostBridgeTokenBody = await hostBridgeToken.json() as { seat?: string }
+    expect(hostBridgeTokenBody.seat).toBe('host')
+
+    const guestBridgeToken = await request(room, 'POST', '/bridge-token', {
+      bridgeTicket: guestStartBody.guest_bridge_ticket as string,
+    })
+    expect(guestBridgeToken.status).toBe(200)
+    const guestBridgeTokenBody = await guestBridgeToken.json() as { seat?: string }
+    expect(guestBridgeTokenBody.seat).toBe('guest')
+  })
+
+  test('guest remove revokes active guest ticket for token refresh and heartbeat', async () => {
+    const room = makeRoom()
+    const { bridgeTicket } = await initAndStartLiveRoom(room, {
+      roomId: 'duet-test-guest-seat-revoke',
+    })
+
+    const guestAccept = await request(room, 'POST', '/guest-accept', { wallet: GUEST_WALLET })
+    expect(guestAccept.status).toBe(200)
+
+    const guestStart = await request(room, 'POST', '/guest-start', { wallet: GUEST_WALLET })
+    expect(guestStart.status).toBe(200)
+    const guestStartBody = await guestStart.json() as { guest_bridge_ticket?: string }
+    expect(typeof guestStartBody.guest_bridge_ticket).toBe('string')
+
+    const guestRemove = await request(room, 'POST', '/guest-remove', { wallet: HOST_WALLET })
+    expect(guestRemove.status).toBe(200)
+    const guestRemoveBody = await guestRemove.json() as { revoked?: boolean; audience_media_mode?: string }
+    expect(guestRemoveBody.revoked).toBe(true)
+    expect(guestRemoveBody.audience_media_mode).toBe('bridge')
+
+    const guestTokenAfterRevoke = await request(room, 'POST', '/bridge-token', {
+      bridgeTicket: guestStartBody.guest_bridge_ticket as string,
+    })
+    expect(guestTokenAfterRevoke.status).toBe(403)
+    const guestTokenAfterRevokeBody = await guestTokenAfterRevoke.json() as { error?: string }
+    expect(guestTokenAfterRevokeBody.error).toBe('guest_revoked')
+
+    const guestHeartbeatAfterRevoke = await request(room, 'POST', '/broadcast-heartbeat', {
+      bridgeTicket: guestStartBody.guest_bridge_ticket,
+      status: 'live',
+      mode: 'mic',
+      media: { audio: true, video: true },
+    })
+    expect(guestHeartbeatAfterRevoke.status).toBe(403)
+    const guestHeartbeatAfterRevokeBody = await guestHeartbeatAfterRevoke.json() as { error?: string }
+    expect(guestHeartbeatAfterRevokeBody.error).toBe('guest_revoked')
+
+    const hostHeartbeat = await request(room, 'POST', '/broadcast-heartbeat', {
+      bridgeTicket,
+      status: 'live',
+      mode: 'mic',
+      media: { audio: true, video: false },
+    })
+    expect(hostHeartbeat.status).toBe(200)
+  })
+
+  test('heartbeat media updates audience_media_mode and public-info seat state', async () => {
+    const room = makeRoom()
+    const { bridgeTicket } = await initAndStartLiveRoom(room, {
+      roomId: 'duet-test-audience-media-mode',
+    })
+
+    const audioOnlyHeartbeat = await request(room, 'POST', '/broadcast-heartbeat', {
+      bridgeTicket,
+      status: 'live',
+      mode: 'mic',
+      media: { audio: true, video: false },
+    })
+    expect(audioOnlyHeartbeat.status).toBe(200)
+    const audioOnlyBody = await audioOnlyHeartbeat.json() as { audience_media_mode?: string }
+    expect(audioOnlyBody.audience_media_mode).toBe('bridge')
+
+    const videoHeartbeat = await request(room, 'POST', '/broadcast-heartbeat', {
+      bridgeTicket,
+      status: 'live',
+      mode: 'mic',
+      media: { audio: true, video: true },
+    })
+    expect(videoHeartbeat.status).toBe(200)
+    const videoBody = await videoHeartbeat.json() as { audience_media_mode?: string; host_broadcaster_online?: boolean }
+    expect(videoBody.audience_media_mode).toBe('direct')
+    expect(videoBody.host_broadcaster_online).toBe(true)
+
+    const publicInfo = await request(room, 'GET', '/public-info')
+    expect(publicInfo.status).toBe(200)
+    const publicBody = await publicInfo.json() as {
+      audience_media_mode?: string
+      host_broadcast?: { media?: { video?: boolean } }
+      broadcaster_uids?: { host?: number | null }
+    }
+    expect(publicBody.audience_media_mode).toBe('direct')
+    expect(publicBody.host_broadcast?.media?.video).toBe(true)
+    expect(typeof publicBody.broadcaster_uids?.host).toBe('number')
+
+    const stopHeartbeat = await request(room, 'POST', '/broadcast-heartbeat', {
+      bridgeTicket,
+      status: 'stopped',
+      mode: 'mic',
+    })
+    expect(stopHeartbeat.status).toBe(200)
+    const stopBody = await stopHeartbeat.json() as { audience_media_mode?: string }
+    expect(stopBody.audience_media_mode).toBe('bridge')
+  })
+
+  test('recording-complete accepts host bridge ticket and rejects guest bridge ticket', async () => {
+    const room = makeRoom()
+    const { bridgeTicket } = await initAndStartLiveRoom(room, {
+      roomId: 'duet-test-recording-seat-auth',
+    })
+
+    const guestAccept = await request(room, 'POST', '/guest-accept', { wallet: GUEST_WALLET })
+    expect(guestAccept.status).toBe(200)
+    const guestStart = await request(room, 'POST', '/guest-start', { wallet: GUEST_WALLET })
+    expect(guestStart.status).toBe(200)
+    const guestStartBody = await guestStart.json() as { guest_bridge_ticket?: string }
+    expect(typeof guestStartBody.guest_bridge_ticket).toBe('string')
+
+    const guestRecordingComplete = await request(room, 'POST', '/recording-complete', {
+      bridgeTicket: guestStartBody.guest_bridge_ticket,
+      load_dataitem_id: 'guest-should-fail',
+      replay_url: 'https://example.com/guest.mp3',
+    })
+    expect(guestRecordingComplete.status).toBe(403)
+    const guestRecordingBody = await guestRecordingComplete.json() as { error?: string }
+    expect(guestRecordingBody.error).toBe('forbidden')
+
+    const hostRecordingComplete = await request(room, 'POST', '/recording-complete', {
+      bridgeTicket,
+      load_dataitem_id: 'host-ok',
+      replay_url: 'https://example.com/host.mp3',
+    })
+    expect(hostRecordingComplete.status).toBe(200)
+  })
 })

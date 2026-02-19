@@ -324,4 +324,133 @@ describe('duet routes', () => {
     expect(guestRoom?.started_at).toBe(guestRoom?.created_at)
     expect(guestRoom?.audience_mode).toBe('free')
   })
+
+  test('POST /duet/:id/guest/start forwards wallet to DO guest-start', async () => {
+    const roomId = 'room-guest-start'
+    let forwardedBody: any = null
+    let forwardedPath = ''
+    const env = makeEnv({
+      DUET_ROOM_DO: {
+        idFromName: (name: string) => name as any,
+        get: (_id: any) => ({
+          fetch: async (req: Request) => {
+            const url = new URL(req.url)
+            forwardedPath = url.pathname
+            forwardedBody = await req.json()
+            return Response.json({ ok: true, seat: 'guest' })
+          },
+        }),
+      } as any,
+    })
+    const token = await mintJWT(GUEST_WALLET, env.JWT_SECRET)
+
+    const app = makeApp()
+    const res = await app.request(
+      `/duet/${roomId}/guest/start`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+      env,
+    )
+
+    expect(res.status).toBe(200)
+    expect(forwardedPath).toBe('/guest-start')
+    expect(forwardedBody?.wallet).toBe(GUEST_WALLET.toLowerCase())
+  })
+
+  test('POST /duet/:id/guest/remove forwards wallet to DO guest-remove', async () => {
+    const roomId = 'room-guest-remove'
+    let forwardedBody: any = null
+    let forwardedPath = ''
+    const env = makeEnv({
+      DUET_ROOM_DO: {
+        idFromName: (name: string) => name as any,
+        get: (_id: any) => ({
+          fetch: async (req: Request) => {
+            const url = new URL(req.url)
+            forwardedPath = url.pathname
+            forwardedBody = await req.json()
+            return Response.json({ ok: true, revoked: true })
+          },
+        }),
+      } as any,
+    })
+    const token = await mintJWT(HOST_WALLET, env.JWT_SECRET)
+
+    const app = makeApp()
+    const res = await app.request(
+      `/duet/${roomId}/guest/remove`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+      env,
+    )
+
+    expect(res.status).toBe(200)
+    expect(forwardedPath).toBe('/guest-remove')
+    expect(forwardedBody?.wallet).toBe(HOST_WALLET.toLowerCase())
+  })
+
+  test('POST /duet/:id/broadcast/heartbeat forwards media payload and bridge token', async () => {
+    const roomId = 'room-heartbeat-media'
+    let forwardedBody: any = null
+    let forwardedPath = ''
+    const env = makeEnv({
+      DUET_ROOM_DO: {
+        idFromName: (name: string) => name as any,
+        get: (_id: any) => ({
+          fetch: async (req: Request) => {
+            const url = new URL(req.url)
+            forwardedPath = url.pathname
+            forwardedBody = await req.json()
+            return Response.json({ ok: true })
+          },
+        }),
+      } as any,
+    })
+
+    const app = makeApp()
+    const res = await app.request(
+      `/duet/${roomId}/broadcast/heartbeat`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer bridge-ticket-test',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'live',
+          mode: 'mic',
+          media: { audio: true, video: true },
+        }),
+      },
+      env,
+    )
+
+    expect(res.status).toBe(200)
+    expect(forwardedPath).toBe('/broadcast-heartbeat')
+    expect(forwardedBody?.bridgeTicket).toBe('bridge-ticket-test')
+    expect(forwardedBody?.status).toBe('live')
+    expect(forwardedBody?.mode).toBe('mic')
+    expect(forwardedBody?.media).toEqual({ audio: true, video: true })
+  })
+
+  test('GET /duet/:id/guest/broadcast redirects to /duet/:id/broadcast with query', async () => {
+    const env = makeEnv()
+    const app = makeApp()
+    const res = await app.request(
+      '/duet/room-guest-broadcast/guest/broadcast?bridgeTicket=abc123&role=guest',
+      { method: 'GET', redirect: 'manual' as RequestRedirect },
+      env,
+    )
+
+    expect(res.status).toBe(302)
+    expect(res.headers.get('Location')).toBe('/duet/room-guest-broadcast/broadcast?bridgeTicket=abc123&role=guest')
+  })
 })

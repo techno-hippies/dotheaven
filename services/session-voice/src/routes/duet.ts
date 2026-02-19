@@ -5,6 +5,8 @@
  * - POST /create
  * - GET  /discover
  * - POST /:id/guest/accept
+ * - POST /:id/guest/start
+ * - POST /:id/guest/remove
  * - POST /:id/start
  * - POST /:id/segments/start
  * - POST /:id/bridge/token
@@ -13,6 +15,7 @@
  * - POST /:id/public-enter
  * - GET  /:id/watch
  * - GET  /:id/broadcast
+ * - GET  /:id/guest/broadcast
  * - POST /:id/broadcast/heartbeat
  * - POST /:id/end
  * - POST /:id/recording/complete
@@ -208,6 +211,34 @@ duetRoutes.post('/:id/guest/accept', async (c) => {
     await updateDuetDiscoveryGuest(c.env, roomId, guestWallet)
   }
   return forwarded
+})
+
+duetRoutes.post('/:id/guest/start', async (c) => {
+  const wallet = await requireWallet(c, c.env)
+  if (!wallet) return c.json({ error: 'unauthorized' }, 401)
+
+  const roomId = c.req.param('id')
+  const stub = getDuetRoomStub(c.env, roomId)
+  const doResp = await stub.fetch(new Request('http://do/guest-start', {
+    method: 'POST',
+    body: JSON.stringify({ wallet }),
+  }))
+
+  return forwardDoResponse(doResp)
+})
+
+duetRoutes.post('/:id/guest/remove', async (c) => {
+  const wallet = await requireWallet(c, c.env)
+  if (!wallet) return c.json({ error: 'unauthorized' }, 401)
+
+  const roomId = c.req.param('id')
+  const stub = getDuetRoomStub(c.env, roomId)
+  const doResp = await stub.fetch(new Request('http://do/guest-remove', {
+    method: 'POST',
+    body: JSON.stringify({ wallet }),
+  }))
+
+  return forwardDoResponse(doResp)
 })
 
 duetRoutes.post('/:id/start', async (c) => {
@@ -2287,6 +2318,12 @@ duetRoutes.get('/:id/broadcast', async (c) => {
   return c.html(html)
 })
 
+duetRoutes.get('/:id/guest/broadcast', async (c) => {
+  const roomId = c.req.param('id')
+  const query = new URL(c.req.url).search
+  return c.redirect(`/duet/${encodeURIComponent(roomId)}/broadcast${query}`, 302)
+})
+
 duetRoutes.post('/:id/end', async (c) => {
   const wallet = await requireWallet(c, c.env)
   if (!wallet) return c.json({ error: 'unauthorized' }, 401)
@@ -2312,8 +2349,22 @@ duetRoutes.post('/:id/broadcast/heartbeat', async (c) => {
   if (!bridgeTicket) return c.json({ error: 'bridge_ticket_required' }, 401)
 
   const roomId = c.req.param('id')
-  const body = await c.req.json<{ status?: 'live' | 'stopped'; mode?: string }>()
-    .catch(() => ({} as { status?: 'live' | 'stopped'; mode?: string }))
+  const body = await c.req.json<{
+    status?: 'live' | 'stopped'
+    mode?: string
+    media?: {
+      audio?: boolean
+      video?: boolean
+    }
+  }>()
+    .catch(() => ({} as {
+      status?: 'live' | 'stopped'
+      mode?: string
+      media?: {
+        audio?: boolean
+        video?: boolean
+      }
+    }))
   const stub = getDuetRoomStub(c.env, roomId)
   const doResp = await stub.fetch(new Request('http://do/broadcast-heartbeat', {
     method: 'POST',
@@ -2321,6 +2372,7 @@ duetRoutes.post('/:id/broadcast/heartbeat', async (c) => {
       bridgeTicket,
       status: body.status,
       mode: body.mode,
+      media: body.media,
     }),
   }))
 
