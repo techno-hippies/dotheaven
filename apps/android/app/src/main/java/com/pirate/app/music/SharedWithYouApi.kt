@@ -37,7 +37,7 @@ object SharedWithYouApi {
   private const val TEMPO_RPC = "https://rpc.moderato.tempo.xyz"
   private const val SCROBBLE_V4 = "0xe00e82086480E61AaC8d5ad8B05B56A582dD0000"
   private const val DEFAULT_SUBGRAPH_MUSIC_SOCIAL =
-    "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-music-social-tempo/1.0.0/gn"
+    "https://graph.dotheaven.org/subgraphs/name/dotheaven/music-social-tempo"
 
   private const val SUBGRAPH_PLAYLISTS =
     "https://graph.dotheaven.org/subgraphs/name/dotheaven/playlist-feed-tempo"
@@ -46,7 +46,7 @@ object SharedWithYouApi {
   private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
   private fun musicSocialSubgraphUrl(): String {
-    val fromMusicSocial = BuildConfig.TEMPO_MUSIC_SOCIAL_SUBGRAPH_URL.trim()
+    val fromMusicSocial = BuildConfig.SUBGRAPH_MUSIC_SOCIAL_URL.trim()
     if (fromMusicSocial.isNotBlank()) return fromMusicSocial
     return DEFAULT_SUBGRAPH_MUSIC_SOCIAL
   }

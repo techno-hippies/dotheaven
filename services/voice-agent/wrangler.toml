@@ -11,7 +11,7 @@ LLM_MODEL = "moonshotai/kimi-k2-instruct-0905"
 AGORA_REST_BASE = "https://api.agora.io"
 AGORA_CUSTOM_LLM_BEARER_PREFIX = "neo_"
 # Music-social subgraph
-SUBGRAPH_URL = "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-music-social-tempo/1.0.0/gn"
+SUBGRAPH_URL = "https://graph.dotheaven.org/subgraphs/name/dotheaven/music-social-tempo"
 
 [[d1_databases]]
 binding = "DB"

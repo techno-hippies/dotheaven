@@ -72,11 +72,9 @@ export const PIRATE_NODE = '0xace9c9c435cf933be3564cdbcf7b7e2faee63e4f39034849ea
 // ── Subgraph Endpoints (The Graph via local Cloudflare tunnel) ───────────
 
 const THE_GRAPH_BASE = 'https://graph.dotheaven.org/subgraphs/name/dotheaven'
-const GOLDSKY_PUBLIC_BASE =
-  'https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs'
 
 /** Music-social subgraph — tracks/scrobbles, content access, follows */
-export const SUBGRAPH_MUSIC_SOCIAL = `${GOLDSKY_PUBLIC_BASE}/dotheaven-music-social-tempo/1.0.0/gn`
+export const SUBGRAPH_MUSIC_SOCIAL = `${THE_GRAPH_BASE}/music-social-tempo`
 
 /** Profiles subgraph — ProfileV2 events (denormalized enums) */
 export const SUBGRAPH_PROFILES = `${THE_GRAPH_BASE}/profiles-tempo`

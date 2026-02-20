@@ -51,18 +51,32 @@ pub(crate) fn tempo_rpc_url() -> String {
 }
 
 pub(crate) fn subgraph_music_social_url() -> String {
-    std::env::var("HEAVEN_SUBGRAPH_MUSIC_SOCIAL_URL")
+    std::env::var("SUBGRAPH_MUSIC_SOCIAL_URL")
         .ok()
-        .map(|v| v.trim().to_string())
+        .map(|v| v.trim().trim_end_matches('/').to_string())
         .filter(|v| !v.is_empty())
+        .or_else(|| {
+            std::env::var("SUBGRAPH_BASE_URL")
+                .ok()
+                .map(|v| v.trim().trim_end_matches('/').to_string())
+                .filter(|v| !v.is_empty())
+                .map(|base| format!("{base}/subgraphs/name/dotheaven/music-social-tempo"))
+        })
         .unwrap_or_else(|| DEFAULT_SUBGRAPH_MUSIC_SOCIAL.to_string())
 }
 
 pub(crate) fn subgraph_playlists_url() -> String {
-    std::env::var("HEAVEN_SUBGRAPH_PLAYLISTS_URL")
+    std::env::var("SUBGRAPH_PLAYLISTS_URL")
         .ok()
-        .map(|v| v.trim().to_string())
+        .map(|v| v.trim().trim_end_matches('/').to_string())
         .filter(|v| !v.is_empty())
+        .or_else(|| {
+            std::env::var("SUBGRAPH_BASE_URL")
+                .ok()
+                .map(|v| v.trim().trim_end_matches('/').to_string())
+                .filter(|v| !v.is_empty())
+                .map(|base| format!("{base}/subgraphs/name/dotheaven/playlist-feed-tempo"))
+        })
         .unwrap_or_else(|| DEFAULT_SUBGRAPH_PLAYLISTS.to_string())
 }
 

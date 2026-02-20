@@ -32,35 +32,43 @@ JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew \
   installDebug
 ```
 
-To point music-social reads (scrobbles, published songs, follows, shared content) at a custom subgraph endpoint (self-hosted Graph Node or Goldsky):
+Fastest full swap (music-social + profiles + playlists + study-progress) to a local Graph Node:
 
 ```bash
 JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew \
-  -PTEMPO_MUSIC_SOCIAL_SUBGRAPH_URL=http://<your-host>:8000/subgraphs/name/dotheaven/music-social-tempo \
+  -PSUBGRAPH_BASE_URL=http://<your-host>:8000 \
   installDebug
 ```
 
-To point profile/music playlist reads at a custom playlists subgraph endpoint:
+To override only music-social:
 
 ```bash
 JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew \
-  -PTEMPO_PLAYLISTS_SUBGRAPH_URL=http://<your-host>:8000/<your-playlists-subgraph-path> \
+  -PSUBGRAPH_MUSIC_SOCIAL_URL=http://<your-host>:8000/subgraphs/name/dotheaven/music-social-tempo \
   installDebug
 ```
 
-To point Learn queue reads at a custom `study-progress` subgraph endpoint:
+To override only playlists:
 
 ```bash
 JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew \
-  -PTEMPO_STUDY_PROGRESS_SUBGRAPH_URL=http://<your-host>:8000/subgraphs/name/dotheaven/study-progress-tempo \
+  -PSUBGRAPH_PLAYLISTS_URL=http://<your-host>:8000/subgraphs/name/dotheaven/playlist-feed-tempo \
   installDebug
 ```
 
-To point profile/community profile reads at a custom profiles subgraph endpoint (for Cloudflare tunnel or self-hosted Graph Node):
+To override only study-progress:
 
 ```bash
 JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew \
-  -PTEMPO_PROFILES_SUBGRAPH_URL=http://<your-host>:8000/subgraphs/name/dotheaven/profiles-tempo \
+  -PSUBGRAPH_STUDY_PROGRESS_URL=http://<your-host>:8000/subgraphs/name/dotheaven/study-progress-tempo \
+  installDebug
+```
+
+To override only profiles:
+
+```bash
+JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew \
+  -PSUBGRAPH_PROFILES_URL=http://<your-host>:8000/subgraphs/name/dotheaven/profiles-tempo \
   installDebug
 ```
 
@@ -91,7 +99,7 @@ Quick check:
 ```bash
 curl -sS -i -H 'content-type: application/json' \
   --data '{"query":"{__typename}"}' \
-  https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-music-social-tempo/1.0.0/gn
+  https://graph.dotheaven.org/subgraphs/name/dotheaven/music-social-tempo
 ```
 
 Interpretation:
@@ -99,7 +107,7 @@ Interpretation:
 - `HTTP 200` with GraphQL JSON: tunnel is up; investigate query/deployment/data.
 
 Expected production Tempo endpoints used by Android:
-- `https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-music-social-tempo/1.0.0/gn`
+- `https://graph.dotheaven.org/subgraphs/name/dotheaven/music-social-tempo`
 - `https://graph.dotheaven.org/subgraphs/name/dotheaven/profiles-tempo`
 - `https://graph.dotheaven.org/subgraphs/name/dotheaven/playlist-feed-tempo`
 - `https://graph.dotheaven.org/subgraphs/name/dotheaven/study-progress-tempo`

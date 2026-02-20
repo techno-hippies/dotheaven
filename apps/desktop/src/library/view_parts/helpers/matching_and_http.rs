@@ -116,9 +116,17 @@ pub(in crate::library) fn resolver_url() -> String {
 }
 
 pub(in crate::library) fn subgraph_music_social_url() -> String {
-    env::var("HEAVEN_SUBGRAPH_MUSIC_SOCIAL_URL")
+    env::var("SUBGRAPH_MUSIC_SOCIAL_URL")
         .ok()
-        .map(|value| value.trim().to_string())
+        .map(|value| value.trim().trim_end_matches('/').to_string())
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            env::var("SUBGRAPH_BASE_URL")
+                .ok()
+                .map(|value| value.trim().trim_end_matches('/').to_string())
+                .filter(|value| !value.is_empty())
+                .map(|base| format!("{base}/subgraphs/name/dotheaven/music-social-tempo"))
+        })
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| DEFAULT_SUBGRAPH_MUSIC_SOCIAL_URL.to_string())
 }

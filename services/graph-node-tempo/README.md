@@ -37,6 +37,16 @@ bun run create:tempo:local || true
 bun run deploy:tempo:local
 ```
 
+If `graph create` returns `EPERM`, create the subgraph with Graph Node JSON-RPC and deploy again:
+
+```bash
+curl -sS -H 'content-type: application/json' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"subgraph_create","params":{"name":"dotheaven/music-social-tempo"}}' \
+  http://localhost:8020/
+cd subgraphs/music-social
+bun run deploy:tempo:local
+```
+
 Optional explicit version label:
 
 ```bash
@@ -47,6 +57,20 @@ VERSION_LABEL=local-$(date +%Y%m%d-%H%M%S) bun run deploy:tempo:local
 Subgraph URL:
 
 `http://localhost:8000/subgraphs/name/dotheaven/music-social-tempo`
+
+Quick health check:
+
+```bash
+curl -sS -H 'content-type: application/json' \
+  --data '{"query":"{ _meta { block { number hash } } tracks(first:1){id} scrobbles(first:1){id} contentEntries(first:1){id} follows(first:1){id} }"}' \
+  http://localhost:8000/subgraphs/name/dotheaven/music-social-tempo
+```
+
+Parity check (local vs named tunnel vs Goldsky):
+
+```bash
+services/graph-node-tempo/check-music-social-parity.sh
+```
 
 ## Expose GraphQL with Cloudflare Tunnel (quick, no dashboard)
 

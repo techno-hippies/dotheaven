@@ -15,40 +15,48 @@ android {
     versionCode = 1
     versionName = "0.1.0"
 
-    val tempoScrobbleApi = (project.findProperty("TEMPO_SCROBBLE_API") as String?)
-      ?.replace("\"", "\\\"")
-      ?.trim()
-      ?: ""
-    buildConfigField("String", "TEMPO_SCROBBLE_API", "\"$tempoScrobbleApi\"")
-
-    val tempoMusicSocialSubgraphUrl =
-      (project.findProperty("TEMPO_MUSIC_SOCIAL_SUBGRAPH_URL") as String?)
+    fun projectStringProperty(name: String): String? =
+      (project.findProperty(name) as String?)
         ?.replace("\"", "\\\"")
         ?.trim()
-        ?: "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-music-social-tempo/1.0.0/gn"
-    buildConfigField("String", "TEMPO_MUSIC_SOCIAL_SUBGRAPH_URL", "\"$tempoMusicSocialSubgraphUrl\"")
+        ?.takeIf { it.isNotBlank() }
 
-    val tempoProfilesSubgraphUrl = (project.findProperty("TEMPO_PROFILES_SUBGRAPH_URL") as String?)
-      ?.replace("\"", "\\\"")
-      ?.trim()
-      ?: "https://graph.dotheaven.org/subgraphs/name/dotheaven/profiles-tempo"
-    buildConfigField("String", "TEMPO_PROFILES_SUBGRAPH_URL", "\"$tempoProfilesSubgraphUrl\"")
+    fun subgraphUrlFromBase(baseUrl: String?, path: String): String? =
+      baseUrl
+        ?.trim()
+        ?.removeSuffix("/")
+        ?.takeIf { it.isNotBlank() }
+        ?.let { "$it$path" }
 
-    val tempoPlaylistsSubgraphUrl = (project.findProperty("TEMPO_PLAYLISTS_SUBGRAPH_URL") as String?)
-      ?.replace("\"", "\\\"")
-      ?.trim()
-      ?: "https://graph.dotheaven.org/subgraphs/name/dotheaven/playlist-feed-tempo"
-    buildConfigField("String", "TEMPO_PLAYLISTS_SUBGRAPH_URL", "\"$tempoPlaylistsSubgraphUrl\"")
+    val tempoScrobbleApi = projectStringProperty("TEMPO_SCROBBLE_API") ?: ""
+    buildConfigField("String", "TEMPO_SCROBBLE_API", "\"$tempoScrobbleApi\"")
 
-    val tempoStudyProgressSubgraphUrl = (project.findProperty("TEMPO_STUDY_PROGRESS_SUBGRAPH_URL") as String?)
-      ?.replace("\"", "\\\"")
-      ?.trim()
-      ?: "https://graph.dotheaven.org/subgraphs/name/dotheaven/study-progress-tempo"
-    buildConfigField("String", "TEMPO_STUDY_PROGRESS_SUBGRAPH_URL", "\"$tempoStudyProgressSubgraphUrl\"")
+    val subgraphBaseUrl = projectStringProperty("SUBGRAPH_BASE_URL")
+    val subgraphMusicSocialUrl =
+      projectStringProperty("SUBGRAPH_MUSIC_SOCIAL_URL")
+        ?: subgraphUrlFromBase(subgraphBaseUrl, "/subgraphs/name/dotheaven/music-social-tempo")
+        ?: "https://graph.dotheaven.org/subgraphs/name/dotheaven/music-social-tempo"
+    buildConfigField("String", "SUBGRAPH_MUSIC_SOCIAL_URL", "\"$subgraphMusicSocialUrl\"")
 
-    val tempoFollowV1 = (project.findProperty("TEMPO_FOLLOW_V1") as String?)
-      ?.replace("\"", "\\\"")
-      ?.trim()
+    val subgraphProfilesUrl =
+      projectStringProperty("SUBGRAPH_PROFILES_URL")
+        ?: subgraphUrlFromBase(subgraphBaseUrl, "/subgraphs/name/dotheaven/profiles-tempo")
+        ?: "https://graph.dotheaven.org/subgraphs/name/dotheaven/profiles-tempo"
+    buildConfigField("String", "SUBGRAPH_PROFILES_URL", "\"$subgraphProfilesUrl\"")
+
+    val subgraphPlaylistsUrl =
+      projectStringProperty("SUBGRAPH_PLAYLISTS_URL")
+        ?: subgraphUrlFromBase(subgraphBaseUrl, "/subgraphs/name/dotheaven/playlist-feed-tempo")
+        ?: "https://graph.dotheaven.org/subgraphs/name/dotheaven/playlist-feed-tempo"
+    buildConfigField("String", "SUBGRAPH_PLAYLISTS_URL", "\"$subgraphPlaylistsUrl\"")
+
+    val subgraphStudyProgressUrl =
+      projectStringProperty("SUBGRAPH_STUDY_PROGRESS_URL")
+        ?: subgraphUrlFromBase(subgraphBaseUrl, "/subgraphs/name/dotheaven/study-progress-tempo")
+        ?: "https://graph.dotheaven.org/subgraphs/name/dotheaven/study-progress-tempo"
+    buildConfigField("String", "SUBGRAPH_STUDY_PROGRESS_URL", "\"$subgraphStudyProgressUrl\"")
+
+    val tempoFollowV1 = projectStringProperty("TEMPO_FOLLOW_V1")
       ?: "0x153DbEcA0CEF8563649cf475a687D14997D2c403"
     buildConfigField("String", "TEMPO_FOLLOW_V1", "\"$tempoFollowV1\"")
   }

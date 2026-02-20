@@ -1,9 +1,25 @@
 use super::FeedPost;
 use crate::shared::ipfs;
 use serde::Deserialize;
+use std::env;
 
-const MUSIC_SOCIAL_SUBGRAPH: &str =
-    "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-music-social-tempo/1.0.0/gn";
+const DEFAULT_MUSIC_SOCIAL_SUBGRAPH: &str =
+    "https://graph.dotheaven.org/subgraphs/name/dotheaven/music-social-tempo";
+
+fn music_social_subgraph_url() -> String {
+    env::var("SUBGRAPH_MUSIC_SOCIAL_URL")
+        .ok()
+        .map(|value| value.trim().trim_end_matches('/').to_string())
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            env::var("SUBGRAPH_BASE_URL")
+                .ok()
+                .map(|value| value.trim().trim_end_matches('/').to_string())
+                .filter(|value| !value.is_empty())
+                .map(|base| format!("{base}/subgraphs/name/dotheaven/music-social-tempo"))
+        })
+        .unwrap_or_else(|| DEFAULT_MUSIC_SOCIAL_SUBGRAPH.to_string())
+}
 
 #[derive(Debug, Deserialize)]
 struct SubgraphResponse {
@@ -44,6 +60,7 @@ struct IpfsMetadata {
 
 pub(super) async fn fetch_posts() -> Result<Vec<FeedPost>, String> {
     let gql_posts = smol::unblock(|| {
+        let subgraph_url = music_social_subgraph_url();
         let query = r#"{
             posts(
                 orderBy: blockTimestamp
@@ -63,7 +80,7 @@ pub(super) async fn fetch_posts() -> Result<Vec<FeedPost>, String> {
         }"#;
 
         let body = serde_json::json!({ "query": query });
-        let resp: SubgraphResponse = ureq::post(MUSIC_SOCIAL_SUBGRAPH)
+        let resp: SubgraphResponse = ureq::post(&subgraph_url)
             .send_json(&body)
             .map_err(|e| format!("Request failed: {}", e))?
             .body_mut()

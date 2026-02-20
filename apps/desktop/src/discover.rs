@@ -30,7 +30,7 @@ const MAX_NEW_RELEASES: usize = 10;
 const MAX_TOP_SONGS: usize = 10;
 
 const DEFAULT_SUBGRAPH_MUSIC_SOCIAL_URL: &str =
-    "https://api.goldsky.com/api/public/project_cmjjtjqpvtip401u87vcp20wd/subgraphs/dotheaven-music-social-tempo/1.0.0/gn";
+    "https://graph.dotheaven.org/subgraphs/name/dotheaven/music-social-tempo";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TopSongsMode {
@@ -916,10 +916,17 @@ fn seed_trending_rooms() -> Vec<TrendingRoom> {
 }
 
 fn subgraph_music_social_url() -> String {
-    env::var("HEAVEN_SUBGRAPH_MUSIC_SOCIAL_URL")
+    env::var("SUBGRAPH_MUSIC_SOCIAL_URL")
         .ok()
-        .map(|value| value.trim().to_string())
+        .map(|value| value.trim().trim_end_matches('/').to_string())
         .filter(|value| !value.is_empty())
+        .or_else(|| {
+            env::var("SUBGRAPH_BASE_URL")
+                .ok()
+                .map(|value| value.trim().trim_end_matches('/').to_string())
+                .filter(|value| !value.is_empty())
+                .map(|base| format!("{base}/subgraphs/name/dotheaven/music-social-tempo"))
+        })
         .unwrap_or_else(|| DEFAULT_SUBGRAPH_MUSIC_SOCIAL_URL.to_string())
 }
 
