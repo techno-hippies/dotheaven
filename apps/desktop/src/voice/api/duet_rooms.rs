@@ -61,21 +61,21 @@ pub fn get_duet_public_info(
         .timeout_global(Some(Duration::from_secs(10)))
         .build()
         .call()
-        .map_err(|e| format!("duet public-info request failed: {e}"))?;
+        .map_err(|e| format!("room public-info request failed: {e}"))?;
 
     let status = response.status().as_u16();
     if !(200..300).contains(&status) {
         let err_body = response.body_mut().read_to_string().unwrap_or_default();
         let err = parse_error_message(&err_body);
         return Err(format!(
-            "duet public-info failed (HTTP {status}) at {url}: {err}"
+            "room public-info failed (HTTP {status}) at {url}: {err}"
         ));
     }
 
     response
         .body_mut()
         .read_json()
-        .map_err(|e| format!("invalid duet public-info response: {e}"))
+        .map_err(|e| format!("invalid room public-info response: {e}"))
 }
 
 pub fn discover_duet_rooms(
@@ -98,12 +98,12 @@ pub fn discover_duet_rooms(
 
     let mut response = request
         .call()
-        .map_err(|e| format!("duet discover request failed: {e}"))?;
+        .map_err(|e| format!("room discover request failed: {e}"))?;
 
     let status = response.status().as_u16();
     if status == 404 {
         log::warn!(
-            "[Rooms] duet discover endpoint not found at {}. Returning empty list. Deploy the latest voice-control-plane worker or set DUET_WORKER_URL/VOICE_CONTROL_PLANE_URL (legacy: HEAVEN_DUET_WORKER_URL) to a worker serving /duet/discover.",
+            "[Rooms] room discover endpoint not found at {}. Returning empty list. Deploy the latest voice-control-plane worker or set DUET_WORKER_URL/VOICE_CONTROL_PLANE_URL (legacy: HEAVEN_DUET_WORKER_URL) to a worker serving /duet/discover.",
             url
         );
         return Ok(DiscoverDuetRoomsResponse { rooms: vec![] });
@@ -112,14 +112,14 @@ pub fn discover_duet_rooms(
         let err_body = response.body_mut().read_to_string().unwrap_or_default();
         let err = parse_error_message(&err_body);
         return Err(format!(
-            "duet discover failed (HTTP {status}) at {url}: {err}"
+            "room discover failed (HTTP {status}) at {url}: {err}"
         ));
     }
 
     response
         .body_mut()
         .read_json()
-        .map_err(|e| format!("invalid duet discover response: {e}"))
+        .map_err(|e| format!("invalid room discover response: {e}"))
 }
 
 fn create_duet_room(
@@ -132,7 +132,7 @@ fn create_duet_room(
     let url = format!("{}/duet/create", duet_base.trim_end_matches('/'));
 
     log::info!(
-        "[Rooms] Creating duet room: url={}, network={}, replay_mode={}, recording_mode={}, has_guest={}, access_window_minutes={}",
+        "[Rooms] Creating room: url={}, network={}, replay_mode={}, recording_mode={}, has_guest={}, access_window_minutes={}",
         url,
         request.network,
         request.replay_mode,
@@ -149,13 +149,13 @@ fn create_duet_room(
         .header("content-type", "application/json")
         .header("authorization", &format!("Bearer {token}"))
         .send_json(request)
-        .map_err(|e| format!("create duet room request failed: {e}"))?;
+        .map_err(|e| format!("create room request failed: {e}"))?;
 
     let status = response.status().as_u16();
     if !(200..300).contains(&status) {
         let err_body = response.body_mut().read_to_string().unwrap_or_default();
         log::warn!(
-            "[Rooms] create duet room failed: status={}, url={}, body={}",
+            "[Rooms] create room failed: status={}, url={}, body={}",
             status,
             url,
             truncate_for_log(&err_body, 400)
@@ -163,22 +163,22 @@ fn create_duet_room(
         let err = parse_error_message(&err_body);
         if status == 404 {
             return Err(format!(
-                "create duet room failed (HTTP 404): endpoint not found at {}. Set DUET_WORKER_URL (or VOICE_CONTROL_PLANE_URL; legacy: HEAVEN_DUET_WORKER_URL/HEAVEN_VOICE_WORKER_URL) to the voice-control-plane worker that serves /duet/* routes. Raw response: {}",
+                "create room failed (HTTP 404): endpoint not found at {}. Set DUET_WORKER_URL (or VOICE_CONTROL_PLANE_URL; legacy: HEAVEN_DUET_WORKER_URL/HEAVEN_VOICE_WORKER_URL) to the voice-control-plane worker that serves /duet/* routes. Raw response: {}",
                 url, err
             ));
         }
         return Err(format!(
-            "create duet room failed (HTTP {status}) at {url}: {err}"
+            "create room failed (HTTP {status}) at {url}: {err}"
         ));
     }
 
     let parsed: CreateDuetRoomResponse = response
         .body_mut()
         .read_json()
-        .map_err(|e| format!("invalid create duet room response: {e}"))?;
+        .map_err(|e| format!("invalid create room response: {e}"))?;
 
     log::info!(
-        "[Rooms] Duet room created: room_id={}, agora_channel={}, status={}",
+        "[Rooms] Room created: room_id={}, agora_channel={}, status={}",
         parsed.room_id,
         parsed.agora_channel,
         parsed
@@ -199,11 +199,7 @@ fn start_duet_room(
     let token = auth.bearer_token(&duet_base)?;
     let url = format!("{}/duet/{}/start", duet_base.trim_end_matches('/'), room_id);
 
-    log::info!(
-        "[Rooms] Starting duet room: url={}, room_id={}",
-        url,
-        room_id
-    );
+    log::info!("[Rooms] Starting room: url={}, room_id={}", url, room_id);
 
     let mut response = ureq::post(&url)
         .config()
@@ -213,13 +209,13 @@ fn start_duet_room(
         .header("content-type", "application/json")
         .header("authorization", &format!("Bearer {token}"))
         .send_json(serde_json::json!({}))
-        .map_err(|e| format!("start duet room request failed: {e}"))?;
+        .map_err(|e| format!("start room request failed: {e}"))?;
 
     let status = response.status().as_u16();
     if !(200..300).contains(&status) {
         let err_body = response.body_mut().read_to_string().unwrap_or_default();
         log::warn!(
-            "[Rooms] start duet room failed: status={}, url={}, body={}",
+            "[Rooms] start room failed: status={}, url={}, body={}",
             status,
             url,
             truncate_for_log(&err_body, 400)
@@ -227,22 +223,20 @@ fn start_duet_room(
         let err = parse_error_message(&err_body);
         if status == 404 {
             return Err(format!(
-                "start duet room failed (HTTP 404): endpoint not found at {}. Ensure voice-control-plane serves /duet/:id/start. Raw response: {}",
+                "start room failed (HTTP 404): endpoint not found at {}. Ensure voice-control-plane serves /duet/:id/start. Raw response: {}",
                 url, err
             ));
         }
-        return Err(format!(
-            "start duet room failed (HTTP {status}) at {url}: {err}"
-        ));
+        return Err(format!("start room failed (HTTP {status}) at {url}: {err}"));
     }
 
     let parsed: StartDuetRoomResponse = response
         .body_mut()
         .read_json()
-        .map_err(|e| format!("invalid start duet room response: {e}"))?;
+        .map_err(|e| format!("invalid start room response: {e}"))?;
 
     log::info!(
-        "[Rooms] Duet room started: room_id={}, status={}, has_bridge_ticket={}, has_broadcaster_token={}",
+        "[Rooms] Room started: room_id={}, status={}, has_bridge_ticket={}, has_broadcaster_token={}",
         room_id,
         parsed
             .status
@@ -264,7 +258,7 @@ fn end_duet_room(
     let token = auth.bearer_token(&duet_base)?;
     let url = format!("{}/duet/{}/end", duet_base.trim_end_matches('/'), room_id);
 
-    log::info!("[Rooms] Ending duet room: url={}, room_id={}", url, room_id);
+    log::info!("[Rooms] Ending room: url={}, room_id={}", url, room_id);
 
     let mut response = ureq::post(&url)
         .config()
@@ -274,13 +268,13 @@ fn end_duet_room(
         .header("content-type", "application/json")
         .header("authorization", &format!("Bearer {token}"))
         .send_json(serde_json::json!({}))
-        .map_err(|e| format!("end duet room request failed: {e}"))?;
+        .map_err(|e| format!("end room request failed: {e}"))?;
 
     let status = response.status().as_u16();
     if !(200..300).contains(&status) {
         let err_body = response.body_mut().read_to_string().unwrap_or_default();
         log::warn!(
-            "[Rooms] end duet room failed: status={}, url={}, body={}",
+            "[Rooms] end room failed: status={}, url={}, body={}",
             status,
             url,
             truncate_for_log(&err_body, 400)
@@ -288,22 +282,20 @@ fn end_duet_room(
         let err = parse_error_message(&err_body);
         if status == 404 {
             return Err(format!(
-                "end duet room failed (HTTP 404): endpoint not found at {}. Ensure voice-control-plane serves /duet/:id/end. Raw response: {}",
+                "end room failed (HTTP 404): endpoint not found at {}. Ensure voice-control-plane serves /duet/:id/end. Raw response: {}",
                 url, err
             ));
         }
-        return Err(format!(
-            "end duet room failed (HTTP {status}) at {url}: {err}"
-        ));
+        return Err(format!("end room failed (HTTP {status}) at {url}: {err}"));
     }
 
     let parsed: EndDuetRoomResponse = response
         .body_mut()
         .read_json()
-        .map_err(|e| format!("invalid end duet room response: {e}"))?;
+        .map_err(|e| format!("invalid end room response: {e}"))?;
 
     log::info!(
-        "[Rooms] Duet room ended: room_id={}, status={}, already_ended={}",
+        "[Rooms] Room ended: room_id={}, status={}, already_ended={}",
         room_id,
         parsed
             .status
@@ -331,7 +323,7 @@ fn start_duet_segment(
     );
 
     log::info!(
-        "[Rooms] Starting duet segment: url={}, room_id={}, has_song_id={}",
+        "[Rooms] Starting room segment: url={}, room_id={}, has_song_id={}",
         url,
         room_id,
         song_id.is_some()
@@ -350,13 +342,13 @@ fn start_duet_segment(
         .header("content-type", "application/json")
         .header("authorization", &format!("Bearer {token}"))
         .send_json(request)
-        .map_err(|e| format!("start duet segment request failed: {e}"))?;
+        .map_err(|e| format!("start room segment request failed: {e}"))?;
 
     let status = response.status().as_u16();
     if !(200..300).contains(&status) {
         let err_body = response.body_mut().read_to_string().unwrap_or_default();
         log::warn!(
-            "[Rooms] start duet segment failed: status={}, url={}, body={}",
+            "[Rooms] start room segment failed: status={}, url={}, body={}",
             status,
             url,
             truncate_for_log(&err_body, 400)
@@ -364,19 +356,19 @@ fn start_duet_segment(
         let err = parse_error_message(&err_body);
         if status == 404 {
             return Err(format!(
-                "start duet segment failed (HTTP 404): endpoint not found at {}. Ensure voice-control-plane serves /duet/:id/segments/start. Raw response: {}",
+                "start room segment failed (HTTP 404): endpoint not found at {}. Ensure voice-control-plane serves /duet/:id/segments/start. Raw response: {}",
                 url, err
             ));
         }
         return Err(format!(
-            "start duet segment failed (HTTP {status}) at {url}: {err}"
+            "start room segment failed (HTTP {status}) at {url}: {err}"
         ));
     }
 
     let parsed: StartDuetSegmentResponse = response
         .body_mut()
         .read_json()
-        .map_err(|e| format!("invalid start duet segment response: {e}"))?;
+        .map_err(|e| format!("invalid start room segment response: {e}"))?;
 
     Ok(parsed)
 }

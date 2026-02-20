@@ -10,83 +10,90 @@ impl WorkerAuthContext {
         }
 
         let nonce_url = format!("{}/auth/nonce", worker_url.trim_end_matches('/'));
-        let nonce: NonceResponse = {
-            let mut parsed: Option<NonceResponse> = None;
-            for attempt in 0..=WORKER_AUTH_RETRY_COUNT {
-                let response = ureq::post(&nonce_url)
-                    .config()
-                    .http_status_as_error(false)
-                    .timeout_global(Some(Duration::from_secs(20)))
-                    .build()
-                    .header("content-type", "application/json")
-                    .send_json(serde_json::json!(NonceRequest {
-                        wallet: &self.wallet,
-                    }));
+        let verify_url = format!("{}/auth/verify", worker_url.trim_end_matches('/'));
+        let mut refreshed_nonce_after_401 = false;
 
-                match response {
-                    Ok(mut nonce_resp) => {
-                        let nonce_status = nonce_resp.status().as_u16();
-                        if (200..300).contains(&nonce_status) {
-                            parsed = Some(
-                                nonce_resp
-                                    .body_mut()
-                                    .read_json()
-                                    .map_err(|e| format!("invalid nonce response: {e}"))?,
-                            );
-                            break;
-                        }
+        'auth_flow: loop {
+            let nonce: NonceResponse = {
+                let mut parsed: Option<NonceResponse> = None;
+                for attempt in 0..=WORKER_AUTH_RETRY_COUNT {
+                    let response = ureq::post(&nonce_url)
+                        .config()
+                        .http_status_as_error(false)
+                        .timeout_global(Some(Duration::from_secs(20)))
+                        .build()
+                        .header("content-type", "application/json")
+                        .send_json(serde_json::json!(NonceRequest {
+                            wallet: &self.wallet,
+                        }));
 
-                        let err_body = nonce_resp.body_mut().read_to_string().unwrap_or_default();
-                        let err = parse_error_message(&err_body);
-                        let msg = format!(
-                            "worker nonce failed (HTTP {nonce_status}) at {nonce_url}: {err}"
-                        );
-                        if attempt < WORKER_AUTH_RETRY_COUNT
-                            && is_retryable_worker_http_status(nonce_status)
-                        {
-                            let retry_idx = attempt + 1;
-                            let delay_ms = WORKER_AUTH_RETRY_BASE_DELAY_MS * retry_idx as u64;
-                            log::warn!(
-                                "[Auth] nonce request transient failure (retry {}/{} in {}ms): {}",
-                                retry_idx,
-                                WORKER_AUTH_RETRY_COUNT,
-                                delay_ms,
-                                msg
+                    match response {
+                        Ok(mut nonce_resp) => {
+                            let nonce_status = nonce_resp.status().as_u16();
+                            if (200..300).contains(&nonce_status) {
+                                parsed = Some(
+                                    nonce_resp
+                                        .body_mut()
+                                        .read_json()
+                                        .map_err(|e| format!("invalid nonce response: {e}"))?,
+                                );
+                                break;
+                            }
+
+                            let err_body =
+                                nonce_resp.body_mut().read_to_string().unwrap_or_default();
+                            let err = parse_error_message(&err_body);
+                            let msg = format!(
+                                "worker nonce failed (HTTP {nonce_status}) at {nonce_url}: {err}"
                             );
-                            std::thread::sleep(Duration::from_millis(delay_ms));
-                            continue;
+                            if attempt < WORKER_AUTH_RETRY_COUNT
+                                && is_retryable_worker_http_status(nonce_status)
+                            {
+                                let retry_idx = attempt + 1;
+                                let delay_ms = WORKER_AUTH_RETRY_BASE_DELAY_MS * retry_idx as u64;
+                                log::warn!(
+                                    "[Auth] nonce request transient failure (retry {}/{} in {}ms): {}",
+                                    retry_idx,
+                                    WORKER_AUTH_RETRY_COUNT,
+                                    delay_ms,
+                                    msg
+                                );
+                                std::thread::sleep(Duration::from_millis(delay_ms));
+                                continue;
+                            }
+                            return Err(msg);
                         }
-                        return Err(msg);
-                    }
-                    Err(e) => {
-                        let msg = format!("worker nonce request failed at {nonce_url}: {e}");
-                        if attempt < WORKER_AUTH_RETRY_COUNT && is_retryable_transport_error(&msg) {
-                            let retry_idx = attempt + 1;
-                            let delay_ms = WORKER_AUTH_RETRY_BASE_DELAY_MS * retry_idx as u64;
-                            log::warn!(
-                                "[Auth] nonce transport failure (retry {}/{} in {}ms): {}",
-                                retry_idx,
-                                WORKER_AUTH_RETRY_COUNT,
-                                delay_ms,
-                                msg
-                            );
-                            std::thread::sleep(Duration::from_millis(delay_ms));
-                            continue;
+                        Err(e) => {
+                            let msg = format!("worker nonce request failed at {nonce_url}: {e}");
+                            if attempt < WORKER_AUTH_RETRY_COUNT
+                                && is_retryable_transport_error(&msg)
+                            {
+                                let retry_idx = attempt + 1;
+                                let delay_ms = WORKER_AUTH_RETRY_BASE_DELAY_MS * retry_idx as u64;
+                                log::warn!(
+                                    "[Auth] nonce transport failure (retry {}/{} in {}ms): {}",
+                                    retry_idx,
+                                    WORKER_AUTH_RETRY_COUNT,
+                                    delay_ms,
+                                    msg
+                                );
+                                std::thread::sleep(Duration::from_millis(delay_ms));
+                                continue;
+                            }
+                            return Err(msg);
                         }
-                        return Err(msg);
                     }
                 }
-            }
-            parsed.ok_or_else(|| {
-                format!("worker nonce request failed: exhausted retries for {nonce_url}")
-            })?
-        };
+                parsed.ok_or_else(|| {
+                    format!("worker nonce request failed: exhausted retries for {nonce_url}")
+                })?
+            };
 
-        let signature = self.sign_message(&nonce.nonce)?;
+            let signature = self.sign_message(&nonce.nonce)?;
 
-        let verify_url = format!("{}/auth/verify", worker_url.trim_end_matches('/'));
-        let verified: VerifyResponse = {
             let mut parsed: Option<VerifyResponse> = None;
+            let mut retry_with_fresh_nonce = false;
+
             for attempt in 0..=WORKER_AUTH_RETRY_COUNT {
                 let response = ureq::post(&verify_url)
                     .config()
@@ -117,6 +124,22 @@ impl WorkerAuthContext {
                         let msg = format!(
                             "worker verify failed (HTTP {verify_status}) at {verify_url}: {err}"
                         );
+
+                        // Nonce can be consumed server-side if a prior verify succeeded but response
+                        // was lost. Retry once with a fresh nonce to avoid user-visible auth flake.
+                        if verify_status == 401
+                            && is_invalid_or_expired_nonce_error(&err)
+                            && !refreshed_nonce_after_401
+                        {
+                            refreshed_nonce_after_401 = true;
+                            retry_with_fresh_nonce = true;
+                            log::warn!(
+                                "[Auth] verify returned nonce error; retrying once with fresh nonce: {}",
+                                msg
+                            );
+                            break;
+                        }
+
                         if attempt < WORKER_AUTH_RETRY_COUNT
                             && is_retryable_worker_http_status(verify_status)
                         {
@@ -153,20 +176,25 @@ impl WorkerAuthContext {
                     }
                 }
             }
-            parsed.ok_or_else(|| {
+
+            if retry_with_fresh_nonce {
+                continue 'auth_flow;
+            }
+
+            let verified = parsed.ok_or_else(|| {
                 format!("worker verify request failed: exhausted retries for {verify_url}")
-            })?
-        };
+            })?;
 
-        self.cache.insert(
-            key,
-            CachedToken {
-                token: verified.token.clone(),
-                expires_at: Instant::now() + Duration::from_secs(55 * 60),
-            },
-        );
+            self.cache.insert(
+                key.clone(),
+                CachedToken {
+                    token: verified.token.clone(),
+                    expires_at: Instant::now() + Duration::from_secs(55 * 60),
+                },
+            );
 
-        Ok(verified.token)
+            return Ok(verified.token);
+        }
     }
 }
 
@@ -193,4 +221,9 @@ fn is_retryable_transport_error(err: &str) -> bool {
 
 fn is_retryable_worker_http_status(status: u16) -> bool {
     status == 408 || status == 425 || status == 429 || (500..=599).contains(&status)
+}
+
+fn is_invalid_or_expired_nonce_error(err: &str) -> bool {
+    err.to_ascii_lowercase()
+        .contains("invalid or expired nonce")
 }

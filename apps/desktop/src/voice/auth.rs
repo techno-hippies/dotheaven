@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
+use ethers::signers::LocalWallet;
 use serde::{Deserialize, Serialize};
 
 use crate::auth::{self, PersistedAuth};
@@ -16,6 +17,7 @@ struct CachedToken {
 
 pub struct WorkerAuthContext {
     wallet: String,
+    signer: Option<LocalWallet>,
     cache: HashMap<String, CachedToken>,
 }
 
