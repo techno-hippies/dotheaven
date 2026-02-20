@@ -1,5 +1,5 @@
 /**
- * Album data layer — fetches album metadata from the heaven-resolver
+ * Album data layer — fetches album metadata from the metadata-resolver
  * (MusicBrainz release-group proxy) and on-chain scrobble data from Goldsky.
  */
 
@@ -11,7 +11,7 @@ import { resolveCoverUrl } from './cover-ref'
 // ── Config ──────────────────────────────────────────────────────────
 
 const RESOLVER_URL =
-  import.meta.env.VITE_RESOLVER_URL || 'https://heaven-resolver-production.deletion-backup782.workers.dev'
+  import.meta.env.VITE_RESOLVER_URL || 'https://metadata-resolver.deletion-backup782.workers.dev'
 
 // ── Types ───────────────────────────────────────────────────────────
 

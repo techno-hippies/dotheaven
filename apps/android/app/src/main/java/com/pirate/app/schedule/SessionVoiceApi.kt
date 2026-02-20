@@ -18,7 +18,7 @@ data class SessionJoinResult(
 )
 
 object SessionVoiceApi {
-  private const val SESSION_VOICE_URL = "https://session-voice.deletion-backup782.workers.dev"
+  private const val SESSION_VOICE_URL = "https://voice-control-plane.deletion-backup782.workers.dev"
 
   private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
   private val httpClient = OkHttpClient.Builder()

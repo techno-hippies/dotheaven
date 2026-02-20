@@ -224,12 +224,12 @@ async function signTypedDataWithPKP(
 
 const IPFS_GATEWAY = 'https://ipfs.filebase.io/ipfs/'
 
-// ── Proxy upload via heaven-api backend ──────────────────────────────
+// ── Proxy upload via api-core backend ──────────────────────────────
 
 const HEAVEN_API_URL = import.meta.env.VITE_HEAVEN_API_URL || 'http://localhost:8787'
 
 /**
- * Upload files to Filebase via heaven-api proxy (avoids CORS issues).
+ * Upload files to Filebase via api-core proxy (avoids CORS issues).
  * Browser sends multipart form to worker, worker uploads to S3 server-side.
  *
  * Returns map of slot → CID
@@ -310,7 +310,7 @@ export async function publishSong(
   })
   const coverRef = coverUpload.ref
 
-  // Pre-upload audio stems to Filebase via heaven-api proxy.
+  // Pre-upload audio stems to Filebase via api-core proxy.
   // Lit nodes fetch via URL instead of receiving inline base64 (avoids 413).
   const uploadFiles: Array<{ slot: string; data: Uint8Array; contentType: string }> = [
     { slot: 'audio', data: audioBytes, contentType: formData.audioFile.type },

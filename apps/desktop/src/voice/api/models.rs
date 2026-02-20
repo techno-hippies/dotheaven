@@ -12,13 +12,29 @@ impl Default for VoiceEndpoints {
     fn default() -> Self {
         // Explicit config: don't silently fall back to a random Agora app id.
         // If you need native Agora features (Scarlett voice / native bridge), set HEAVEN_AGORA_APP_ID.
+        let default_voice_agent_url = "https://voice-agent.deletion-backup782.workers.dev".to_string();
+        let voice_worker_url = std::env::var("VOICE_AGENT_URL")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .or_else(|| {
+                std::env::var("HEAVEN_VOICE_WORKER_URL")
+                    .ok()
+                    .filter(|v| !v.trim().is_empty())
+            })
+            .unwrap_or_else(|| default_voice_agent_url.clone());
+        let chat_worker_url = std::env::var("CHAT_WORKER_URL")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .or_else(|| {
+                std::env::var("HEAVEN_CHAT_WORKER_URL")
+                    .ok()
+                    .filter(|v| !v.trim().is_empty())
+            })
+            .unwrap_or_else(|| default_voice_agent_url.clone());
+
         Self {
-            voice_worker_url: std::env::var("HEAVEN_VOICE_WORKER_URL").unwrap_or_else(|_| {
-                "https://neodate-voice.deletion-backup782.workers.dev".to_string()
-            }),
-            chat_worker_url: std::env::var("HEAVEN_CHAT_WORKER_URL").unwrap_or_else(|_| {
-                "https://neodate-voice.deletion-backup782.workers.dev".to_string()
-            }),
+            voice_worker_url,
+            chat_worker_url,
             agora_app_id: std::env::var("HEAVEN_AGORA_APP_ID").unwrap_or_default(),
             china_cn_only: std::env::var("HEAVEN_AGORA_CN_ONLY")
                 .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))

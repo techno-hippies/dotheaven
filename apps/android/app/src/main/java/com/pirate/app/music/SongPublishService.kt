@@ -12,7 +12,7 @@ import java.security.MessageDigest
 import java.util.UUID
 
 /**
- * Song publish flow via heaven-api:
+ * Song publish flow via api-core:
  * 1) Stage audio upload to Load
  * 2) Stage supporting artifacts to Load (cover + lyrics)
  * 3) Run preflight checks
@@ -21,7 +21,9 @@ import java.util.UUID
 object SongPublishService {
 
   private const val TAG = "SongPublish"
-  const val HEAVEN_API_URL = "https://heaven-api.deletion-backup782.workers.dev"
+  const val API_CORE_URL = "https://api-core.deletion-backup782.workers.dev"
+  // Backward-compatible alias for existing callers during API core migration.
+  const val HEAVEN_API_URL = API_CORE_URL
   private const val MAX_AUDIO_BYTES = 50 * 1024 * 1024 // Matches backend /api/music/publish/start limit.
   private const val PREFLIGHT_MAX_RETRIES = 3
   private const val PREFLIGHT_RETRY_DELAY_MS = 2_000L
@@ -205,7 +207,7 @@ object SongPublishService {
     userPkp: String,
     body: JSONObject,
   ): ApiResponse {
-    val url = URL("$HEAVEN_API_URL$path")
+    val url = URL("$API_CORE_URL$path")
     val conn = (url.openConnection() as HttpURLConnection).apply {
       requestMethod = "POST"
       doOutput = true
@@ -247,7 +249,7 @@ object SongPublishService {
     idempotencyKey: String,
   ): ApiResponse {
     val boundary = "----HeavenMusicStart${System.currentTimeMillis()}"
-    val url = URL("$HEAVEN_API_URL/api/music/publish/start")
+    val url = URL("$API_CORE_URL/api/music/publish/start")
     val conn = (url.openConnection() as HttpURLConnection).apply {
       requestMethod = "POST"
       doOutput = true
@@ -295,7 +297,7 @@ object SongPublishService {
     lyricsText: String,
   ): ApiResponse {
     val boundary = "----HeavenMusicArtifacts${System.currentTimeMillis()}"
-    val url = URL("$HEAVEN_API_URL/api/music/publish/$jobId/artifacts/stage")
+    val url = URL("$API_CORE_URL/api/music/publish/$jobId/artifacts/stage")
     val conn = (url.openConnection() as HttpURLConnection).apply {
       requestMethod = "POST"
       doOutput = true
@@ -431,7 +433,7 @@ object SongPublishService {
     if (artifactsResponse.status !in 200..299) {
       if (artifactsResponse.status == 404) {
         throw IllegalStateException(
-          "Artifact staging endpoint not found. Backend is outdated; deploy latest heaven-api.",
+          "Artifact staging endpoint not found. Backend is outdated; deploy latest api-core.",
         )
       }
       throw IllegalStateException(errorMessageFromApi("Artifact staging", artifactsResponse))
@@ -519,7 +521,7 @@ object SongPublishService {
     if (finalizeResponse.status !in 200..299) {
       if (finalizeResponse.status == 404) {
         throw IllegalStateException(
-          "Finalize endpoint not found. Backend is outdated; deploy latest heaven-api.",
+          "Finalize endpoint not found. Backend is outdated; deploy latest api-core.",
         )
       }
       throw IllegalStateException(errorMessageFromApi("Tempo finalize", finalizeResponse))

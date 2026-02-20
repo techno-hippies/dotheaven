@@ -5,7 +5,7 @@
  * 1. initCampAuth() — create Auth instance, authenticate with PKP custom signer
  * 2. startSpotifyLink() — sets flag + calls auth.linkSpotify() (redirects away)
  * 3. On return: handleSpotifyCallback() — re-authenticates, fetches top artists,
- *    resolves names to MBIDs via the heaven-resolver
+ *    resolves names to MBIDs via the metadata-resolver
  *
  * The Camp SDK's linkSpotify() does a full page redirect to their OAuth hub,
  * so we persist state in localStorage to resume after redirect.
@@ -20,7 +20,7 @@ const CAMP_CLIENT_ID = 'fce77d7a-8085-47ca-adff-306a933e76aa'
 const CAMP_API_KEY = '4f1a2c9c-008e-4a2e-8712-055fa04f9ffa'
 const CAMP_API_BASE = 'https://wv2h4to5qa.execute-api.us-east-2.amazonaws.com/dev'
 const RESOLVER_URL =
-  import.meta.env.VITE_RESOLVER_URL || 'https://heaven-resolver-production.deletion-backup782.workers.dev'
+  import.meta.env.VITE_RESOLVER_URL || 'https://metadata-resolver.deletion-backup782.workers.dev'
 
 const STORAGE_KEY_LINKING = 'heaven:camp:spotifyLinking'
 const STORAGE_KEY_WALLET = 'heaven:camp:walletAddress'
@@ -179,7 +179,7 @@ export async function handleSpotifyCallback(
       )
     }
 
-    // Resolve artist names to MBIDs via the heaven-resolver
+    // Resolve artist names to MBIDs via the metadata-resolver
     const artists = await resolveArtistNames(artistNames.slice(0, 20))
 
     return artists
@@ -192,7 +192,7 @@ export async function handleSpotifyCallback(
 
 /**
  * Resolve a list of artist names to OnboardingArtist objects with MBIDs.
- * Uses the heaven-resolver /search/artist?q= endpoint.
+ * Uses the metadata-resolver /search/artist?q= endpoint.
  * Skips artists that can't be resolved.
  */
 async function resolveArtistNames(

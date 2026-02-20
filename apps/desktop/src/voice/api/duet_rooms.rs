@@ -103,7 +103,7 @@ pub fn discover_duet_rooms(
     let status = response.status().as_u16();
     if status == 404 {
         log::warn!(
-            "[Rooms] duet discover endpoint not found at {}. Returning empty list. Deploy the latest session-voice worker or set HEAVEN_DUET_WORKER_URL to a worker serving /duet/discover.",
+            "[Rooms] duet discover endpoint not found at {}. Returning empty list. Deploy the latest voice-control-plane worker or set DUET_WORKER_URL/VOICE_CONTROL_PLANE_URL (legacy: HEAVEN_DUET_WORKER_URL) to a worker serving /duet/discover.",
             url
         );
         return Ok(DiscoverDuetRoomsResponse { rooms: vec![] });
@@ -163,7 +163,7 @@ fn create_duet_room(
         let err = parse_error_message(&err_body);
         if status == 404 {
             return Err(format!(
-                "create duet room failed (HTTP 404): endpoint not found at {}. Set HEAVEN_DUET_WORKER_URL (or HEAVEN_VOICE_WORKER_URL) to the session-voice worker that serves /duet/* routes. Raw response: {}",
+                "create duet room failed (HTTP 404): endpoint not found at {}. Set DUET_WORKER_URL (or VOICE_CONTROL_PLANE_URL; legacy: HEAVEN_DUET_WORKER_URL/HEAVEN_VOICE_WORKER_URL) to the voice-control-plane worker that serves /duet/* routes. Raw response: {}",
                 url, err
             ));
         }
@@ -227,7 +227,7 @@ fn start_duet_room(
         let err = parse_error_message(&err_body);
         if status == 404 {
             return Err(format!(
-                "start duet room failed (HTTP 404): endpoint not found at {}. Ensure session-voice worker serves /duet/:id/start. Raw response: {}",
+                "start duet room failed (HTTP 404): endpoint not found at {}. Ensure voice-control-plane serves /duet/:id/start. Raw response: {}",
                 url, err
             ));
         }
@@ -288,7 +288,7 @@ fn end_duet_room(
         let err = parse_error_message(&err_body);
         if status == 404 {
             return Err(format!(
-                "end duet room failed (HTTP 404): endpoint not found at {}. Ensure session-voice worker serves /duet/:id/end. Raw response: {}",
+                "end duet room failed (HTTP 404): endpoint not found at {}. Ensure voice-control-plane serves /duet/:id/end. Raw response: {}",
                 url, err
             ));
         }
@@ -364,7 +364,7 @@ fn start_duet_segment(
         let err = parse_error_message(&err_body);
         if status == 404 {
             return Err(format!(
-                "start duet segment failed (HTTP 404): endpoint not found at {}. Ensure session-voice worker serves /duet/:id/segments/start. Raw response: {}",
+                "start duet segment failed (HTTP 404): endpoint not found at {}. Ensure voice-control-plane serves /duet/:id/segments/start. Raw response: {}",
                 url, err
             ));
         }

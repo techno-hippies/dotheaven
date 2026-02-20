@@ -1,5 +1,5 @@
 /**
- * Artist data layer — fetches artist metadata from the heaven-resolver
+ * Artist data layer — fetches artist metadata from the metadata-resolver
  * (MusicBrainz proxy) and on-chain scrobble data from the Goldsky subgraph.
  */
 
@@ -10,7 +10,7 @@ import { resolveCoverUrl } from './cover-ref'
 // ── Config ──────────────────────────────────────────────────────────
 
 const RESOLVER_URL =
-  import.meta.env.VITE_RESOLVER_URL || 'https://heaven-resolver-production.deletion-backup782.workers.dev'
+  import.meta.env.VITE_RESOLVER_URL || 'https://metadata-resolver.deletion-backup782.workers.dev'
 
 // ── Types ───────────────────────────────────────────────────────────
 

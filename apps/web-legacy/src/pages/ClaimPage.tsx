@@ -1,7 +1,7 @@
 /**
  * ClaimPage — standalone route at /c/:token
  *
- * Wires the ClaimFlow UI component to the heaven-api claim endpoints.
+ * Wires the ClaimFlow UI component to the api-core claim endpoints.
  * No AppShell or AuthGuard — unauthenticated visitors can access this.
  *
  * Demo mode: /c/demo skips the API and uses mock data for testing.
@@ -13,7 +13,7 @@ import { ClaimFlow, type ClaimState } from '@heaven/ui'
 import type { ClaimProfileData } from '@heaven/ui'
 import { ONBOARDING } from '@heaven/core'
 
-const API_BASE = import.meta.env.VITE_CLAIM_API_URL || 'https://heaven-api.deletion-backup782.workers.dev'
+const API_BASE = import.meta.env.VITE_CLAIM_API_URL || 'https://api-core.deletion-backup782.workers.dev'
 const CLAIM_SIGNATURE_WINDOW_SECONDS = 120
 
 function buildClaimCompleteMessage(params: {

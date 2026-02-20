@@ -5,7 +5,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * HTTP client for Self.xyz verification endpoints on heaven-api.
+ * HTTP client for Self.xyz verification endpoints on api-core.
  * All methods are blocking — call from Dispatchers.IO.
  */
 object SelfVerificationService {

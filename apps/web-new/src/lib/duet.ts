@@ -1,4 +1,4 @@
-const DEFAULT_DUET_BASE_URL = 'https://session-voice.deletion-backup782.workers.dev'
+const DEFAULT_DUET_BASE_URL = 'https://voice-control-plane.deletion-backup782.workers.dev'
 
 export interface DiscoverDuetRoomItem {
   room_id: string
@@ -61,7 +61,11 @@ function normalizeLiveRoom(room: DiscoverDuetRoomItem, duetBaseUrl: string): Liv
 }
 
 export async function fetchLiveRooms(): Promise<LiveRoom[]> {
-  const duetBaseUrl = normalizeBaseUrl(import.meta.env.VITE_DUET_WORKER_URL || import.meta.env.VITE_SESSION_VOICE_URL)
+  const duetBaseUrl = normalizeBaseUrl(
+    import.meta.env.VITE_DUET_WORKER_URL
+      || import.meta.env.VITE_VOICE_CONTROL_PLANE_URL
+      || import.meta.env.VITE_SESSION_VOICE_URL,
+  )
   const response = await fetch(`${duetBaseUrl}/duet/discover`)
   if (!response.ok) {
     throw new Error(`duet_discover_http_${response.status}`)

@@ -36,7 +36,10 @@ export interface PKPInfo {
 const IS_DEV = import.meta.env.DEV
 
 // Session voice service URL
-const SESSION_VOICE_URL = import.meta.env.VITE_SESSION_VOICE_URL || 'https://session-voice.deletion-backup782.workers.dev'
+const SESSION_VOICE_URL =
+  import.meta.env.VITE_VOICE_CONTROL_PLANE_URL
+  || import.meta.env.VITE_SESSION_VOICE_URL
+  || 'https://voice-control-plane.deletion-backup782.workers.dev'
 
 // Agora App ID - must match worker config
 export { getAgoraAppId } from './agoraEnv'

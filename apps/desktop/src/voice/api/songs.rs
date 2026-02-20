@@ -41,7 +41,7 @@ pub fn search_songs(
         let err = parse_error_message(&err_body);
         if status == 404 {
             return Err(format!(
-                "song search failed (HTTP 404): endpoint not found at {}. Ensure session-voice worker serves /songs/search. Raw response: {}",
+                "song search failed (HTTP 404): endpoint not found at {}. Ensure voice-control-plane serves /songs/search. Raw response: {}",
                 url, err
             ));
         }

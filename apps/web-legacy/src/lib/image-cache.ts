@@ -1,11 +1,11 @@
 /**
  * Image Cache - Automatic rehosting of external images to IPFS
  *
- * Detects Wikipedia/external URLs and rehosts them to Filebase via heaven-resolver.
+ * Detects Wikipedia/external URLs and rehosts them to Filebase via metadata-resolver.
  * Uses in-memory cache to avoid duplicate rehost requests.
  */
 
-const RESOLVER_URL = import.meta.env.VITE_RESOLVER_URL || 'https://heaven-resolver-production.deletion-backup782.workers.dev'
+const RESOLVER_URL = import.meta.env.VITE_RESOLVER_URL || 'https://metadata-resolver.deletion-backup782.workers.dev'
 
 // In-memory cache: externalUrl → ipfsUrl
 const cache = new Map<string, string>()
@@ -15,7 +15,7 @@ const pending = new Map<string, Promise<string | null>>()
 
 /**
  * Resolve an image URL. If it's an external URL (Wikipedia, coverartarchive, etc.),
- * automatically rehost it to IPFS via heaven-resolver.
+ * automatically rehost it to IPFS via metadata-resolver.
  *
  * Returns the IPFS URL if rehosted, otherwise returns the original URL.
  */
