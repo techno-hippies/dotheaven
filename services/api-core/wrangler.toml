@@ -74,6 +74,7 @@ TEMPO_POLICY_SIGNER_ADDRESS = "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB"
 
 [[d1_databases]]
 binding = "DB"
+# Cloudflare resource label is legacy; keep stable until an explicit D1 migration.
 database_name = "heaven-api"
 database_id = "6c7c6c73-29c5-4886-b511-3bf4332bca09"
 

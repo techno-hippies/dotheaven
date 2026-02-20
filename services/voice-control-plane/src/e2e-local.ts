@@ -24,7 +24,7 @@ const WITH_BROADCAST = process.argv.includes("--with-broadcast");
 const SERVE = process.argv.includes("--serve");
 const SCRIPT_DIR = fileURLToPath(new URL(".", import.meta.url));
 const SERVICE_DIR = resolve(SCRIPT_DIR, "..");
-const D1_DATABASE = (process.env.D1_DATABASE || "session-voice").trim();
+const D1_DATABASE = (process.env.VOICE_CONTROL_PLANE_D1_DATABASE || process.env.D1_DATABASE || "session-voice").trim();
 
 function loadDotEnv(filePath: string): Record<string, string> {
   const env: Record<string, string> = {};

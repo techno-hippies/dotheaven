@@ -28,6 +28,10 @@ bun run migrate:local
 bun run dev
 ```
 
+Migration scripts and smoke helpers:
+- Preferred DB label override: `VOICE_CONTROL_PLANE_D1_DATABASE`
+- Legacy fallback: `D1_DATABASE`
+
 ## Testing
 From `services/voice-control-plane`:
 

@@ -25,7 +25,18 @@ Capability IDs are the canonical names.
 - `heaven-resolver` -> `metadata-resolver`
 - `heaven-voice` -> `voice-agent`
 - `session-voice` -> `voice-control-plane`
-- Some Cloudflare D1 `database_name` values are still legacy labels tied to existing dev resources.
+
+## Cloudflare Resource Labels
+D1 resources remain on legacy labels for stability; use generic env knobs in scripts.
+
+| Capability | Generic Env Override | Current D1 Label |
+| --- | --- | --- |
+| `api-core` | `API_CORE_D1_DATABASE` | `heaven-api` |
+| `voice-agent` | `VOICE_AGENT_D1_DATABASE` | `neodate-voice` |
+| `voice-control-plane` | `VOICE_CONTROL_PLANE_D1_DATABASE` | `session-voice` |
+
+Compatibility fallback:
+- `D1_DATABASE` is still accepted by service scripts.
 
 ## Naming Convention
 - Prefer capability-based identifiers over brand identifiers in new config.

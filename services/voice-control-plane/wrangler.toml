@@ -5,6 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [[d1_databases]]
 binding = "DB"
+# Cloudflare resource label is legacy; keep stable until an explicit D1 migration.
 database_name = "session-voice"
 database_id = "ac26bc37-8329-4695-a733-fe54a6bd05e0"
 

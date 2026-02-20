@@ -11,7 +11,8 @@ Cloudflare Worker for:
 
 ## Environment
 - Current setup is dev-only.
-- Optional override: set `D1_DATABASE` to avoid hardcoded DB names in scripts.
+- Preferred override: set `API_CORE_D1_DATABASE`.
+- Legacy fallback: `D1_DATABASE` is still supported.
 
 ## Local Development
 From `services/api-core`:
@@ -41,7 +42,7 @@ bun run deploy
 If schema changes were made, run remote migrations first:
 
 ```bash
-wrangler d1 execute ${D1_DATABASE:-heaven-api} --remote --file=./schema.sql
+wrangler d1 execute ${API_CORE_D1_DATABASE:-${D1_DATABASE:-heaven-api}} --remote --file=./schema.sql
 bun run db:migrate:remote
 ```
 

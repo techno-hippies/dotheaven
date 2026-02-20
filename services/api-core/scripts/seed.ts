@@ -81,7 +81,7 @@ async function generateSeedSQL(): Promise<string> {
   const now = Date.now()
   const lines: string[] = [
     '-- Auto-generated seed data',
-    '-- Run with: wrangler d1 execute ${D1_DATABASE:-heaven-api} --local --file=./scripts/seed.sql',
+    '-- Run with: wrangler d1 execute ${API_CORE_D1_DATABASE:-${D1_DATABASE:-heaven-api}} --local --file=./scripts/seed.sql',
     '',
     '-- Clear existing seed data (keeps any real data)',
     '-- Delete in correct order due to foreign keys',
@@ -148,7 +148,7 @@ await Bun.write(outputPath, sql)
 console.log(`Seed SQL written to ${outputPath}`)
 console.log('')
 console.log('To apply locally:')
-console.log('  cd services/api-core && wrangler d1 execute ${D1_DATABASE:-heaven-api} --local --file=./scripts/seed.sql')
+console.log('  cd services/api-core && wrangler d1 execute ${API_CORE_D1_DATABASE:-${D1_DATABASE:-heaven-api}} --local --file=./scripts/seed.sql')
 console.log('')
 console.log('To apply remotely:')
-console.log('  cd services/api-core && wrangler d1 execute ${D1_DATABASE:-heaven-api} --remote --file=./scripts/seed.sql')
+console.log('  cd services/api-core && wrangler d1 execute ${API_CORE_D1_DATABASE:-${D1_DATABASE:-heaven-api}} --remote --file=./scripts/seed.sql')
