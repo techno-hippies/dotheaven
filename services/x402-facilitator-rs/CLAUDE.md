@@ -3,7 +3,7 @@
 Operational notes for `services/x402-facilitator-rs`.
 
 ## Purpose
-- Self-hosted x402 settlement service used by `services/session-voice`.
+- Self-hosted x402 settlement service used by `services/voice-control-plane`.
 - Supports dynamic `payTo` for duet-room segmentation flows.
 
 ## Endpoints
@@ -42,7 +42,7 @@ cargo run --release
 
 After deploys, confirm:
 - `/health` is reachable.
-- `session-voice` uses matching `X402_FACILITATOR_AUTH_TOKEN`.
+- `voice-control-plane` uses matching `X402_FACILITATOR_AUTH_TOKEN`.
 
 ## Files You Will Touch Most
 - `services/x402-facilitator-rs/src/main.rs`

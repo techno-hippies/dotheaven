@@ -236,7 +236,7 @@ async fn post_settle(
         };
     }
 
-    // Fallback: accept the legacy settle schema session-voice currently sends.
+    // Fallback: accept the legacy settle schema voice-control-plane currently sends.
     let legacy = match serde_json::from_value::<LegacySettleRequest>(body) {
         Ok(v) => v,
         Err(err) => {
@@ -282,7 +282,7 @@ async fn main() {
 
     // Hard requirements for production posture.
     // Note: the upstream x402-facilitator crate also requires signer + rpc env,
-    // but we enforce the auth token here because session-voice depends on it.
+    // but we enforce the auth token here because voice-control-plane depends on it.
     let auth = facilitator_auth_token();
     if auth.trim().is_empty() {
         // We still start so /health can explain what's wrong, but POSTs will 500.

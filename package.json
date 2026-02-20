@@ -14,6 +14,7 @@
     "dev:web": "bun run --cwd apps/web-new dev:web",
     "build": "bun run --cwd apps/web-new build",
     "build:web": "bun run --cwd apps/web-new build:web",
+    "services:smoke": "bun run services/smoke-dev.ts",
     "check": "bun run --cwd apps/web-new check && bun run --cwd packages/core check && bun run --cwd packages/i18n check && bun run --cwd packages/platform check && bun run --cwd packages/ui check",
     "storybook": "bun run --cwd packages/ui storybook",
     "build:storybook": "bun run --cwd packages/ui build-storybook",
