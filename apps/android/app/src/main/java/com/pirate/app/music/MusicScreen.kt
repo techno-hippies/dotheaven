@@ -2,7 +2,6 @@ package com.pirate.app.music
 
 import android.Manifest
 import android.content.Intent
-import android.content.Context
 import android.database.ContentObserver
 import android.net.Uri
 import android.os.Build
@@ -138,62 +137,7 @@ private fun mergedNewReleases(
 
 private const val TAG_SHARED = "MusicShared"
 private const val SHARED_REFRESH_TTL_MS = 120_000L
-private const val SHARED_SEEN_PREFS = "pirate_music_shared_seen"
-private const val SHARED_SEEN_KEY_PREFIX = "seen_v1_"
 private const val TURBO_CREDITS_COPY = "Save this song forever on Arweave for ~\$0.03."
-
-private fun resolveReleaseAudioUrl(ref: String?): String? {
-  val raw = ref?.trim().orEmpty()
-  if (raw.isBlank()) return null
-  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw
-  if (raw.startsWith("ar://")) {
-    val id = raw.removePrefix("ar://").trim()
-    if (id.isBlank()) return null
-    return "https://arweave.net/$id"
-  }
-  if (raw.startsWith("ls3://")) {
-    val id = raw.removePrefix("ls3://").trim()
-    if (id.isBlank()) return null
-    return "${LoadTurboConfig.DEFAULT_GATEWAY_URL.trimEnd('/')}/resolve/$id"
-  }
-  if (raw.startsWith("load-s3://")) {
-    val id = raw.removePrefix("load-s3://").trim()
-    if (id.isBlank()) return null
-    return "${LoadTurboConfig.DEFAULT_GATEWAY_URL.trimEnd('/')}/resolve/$id"
-  }
-  return "${LoadTurboConfig.DEFAULT_GATEWAY_URL.trimEnd('/')}/resolve/$raw"
-}
-
-private fun resolveReleaseCoverUrl(ref: String?): String? {
-  val fromRef = CoverRef.resolveCoverUrl(ref, width = 140, height = 140, format = "webp", quality = 80)
-  if (!fromRef.isNullOrBlank()) return fromRef
-  val raw = ref?.trim().orEmpty()
-  if (raw.startsWith("content://")) return raw
-  if (raw.startsWith("file://")) return raw
-  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw
-  return null
-}
-
-private fun sharedPlaylistCoverUrl(coverCid: String?): String? {
-  return CoverRef.resolveCoverUrl(coverCid, width = 140, height = 140, format = "webp", quality = 80)
-}
-
-private fun sharedCloudTrackToRowTrack(track: SharedCloudTrack): MusicTrack {
-  return MusicTrack(
-    id = track.contentId.ifBlank { track.trackId },
-    title = track.title,
-    artist = track.artist,
-    album = track.album,
-    durationSec = track.durationSec,
-    uri = "",
-    filename = "",
-    artworkUri = sharedPlaylistCoverUrl(track.coverCid),
-    contentId = track.contentId,
-    pieceCid = track.pieceCid,
-    datasetOwner = track.datasetOwner,
-    algo = track.algo,
-  )
-}
 
 private data class CachedSharedAudio(
   val file: File,
@@ -201,56 +145,6 @@ private data class CachedSharedAudio(
   val filename: String,
   val mimeType: String?,
 )
-
-private fun sharedItemIdForPlaylist(share: PlaylistShareEntry): String {
-  return "pl:${share.id.trim().lowercase()}"
-}
-
-private fun sharedItemIdForTrack(track: SharedCloudTrack): String {
-  val stable = track.contentId.ifBlank { track.trackId }.trim().lowercase()
-  return "tr:$stable"
-}
-
-private fun computeSharedItemIds(
-  playlists: List<PlaylistShareEntry>,
-  tracks: List<SharedCloudTrack>,
-): Set<String> {
-  val out = LinkedHashSet<String>(playlists.size + tracks.size)
-  for (p in playlists) out.add(sharedItemIdForPlaylist(p))
-  for (t in tracks) out.add(sharedItemIdForTrack(t))
-  return out
-}
-
-private fun sharedSeenStorageKey(ownerEthAddress: String?): String? {
-  val owner = ownerEthAddress?.trim()?.lowercase().orEmpty()
-  if (owner.isBlank()) return null
-  return SHARED_SEEN_KEY_PREFIX + owner
-}
-
-private fun loadSeenSharedItemIds(context: Context, ownerEthAddress: String?): Set<String> {
-  val key = sharedSeenStorageKey(ownerEthAddress) ?: return emptySet()
-  val prefs = context.getSharedPreferences(SHARED_SEEN_PREFS, Context.MODE_PRIVATE)
-  val raw = prefs.getString(key, "").orEmpty()
-  if (raw.isBlank()) return emptySet()
-  return raw
-    .split('|')
-    .map { it.trim() }
-    .filter { it.isNotBlank() }
-    .toSet()
-}
-
-private fun saveSeenSharedItemIds(
-  context: Context,
-  ownerEthAddress: String?,
-  ids: Set<String>,
-) {
-  val key = sharedSeenStorageKey(ownerEthAddress) ?: return
-  val payload = ids.joinToString("|")
-  context.getSharedPreferences(SHARED_SEEN_PREFS, Context.MODE_PRIVATE)
-    .edit()
-    .putString(key, payload)
-    .apply()
-}
 
 @Composable
 fun MusicScreen(

@@ -73,6 +73,7 @@ import com.pirate.app.ui.PirateMobileHeader
 import com.pirate.app.util.abbreviateAddress
 import com.pirate.app.util.resolveAvatarUrl
 import coil.compose.AsyncImage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.xmtp.android.library.libxmtp.PermissionOption
@@ -217,69 +218,25 @@ fun ChatScreen(
   }
 
   LaunchedEffect(currentView, newDmAddress) {
-    if (currentView != ChatView.NewConversation) {
-      dmDirectorySuggestions = emptyList()
-      dmDirectoryBusy = false
-      dmDirectoryError = null
-      return@LaunchedEffect
-    }
-    val query = newDmAddress.trim()
-    if (query.length < 2 || looksLikeEthereumAddress(query)) {
-      dmDirectorySuggestions = emptyList()
-      dmDirectoryBusy = false
-      dmDirectoryError = null
-      return@LaunchedEffect
-    }
-    delay(280)
-    dmDirectoryBusy = true
-    dmDirectoryError = null
-    try {
-      val profiles = ChatDirectoryApi.searchProfilesByDisplayNamePrefix(query, first = 12)
-      dmDirectorySuggestions =
-        profiles
-          .mapNotNull(::directoryProfileToSuggestion)
-      dmDirectoryError = null
-    } catch (e: kotlinx.coroutines.CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      dmDirectorySuggestions = emptyList()
-      dmDirectoryError = e.message ?: "Directory search unavailable"
-    } finally {
-      dmDirectoryBusy = false
-    }
+    refreshDirectorySuggestions(
+      currentView = currentView,
+      expectedView = ChatView.NewConversation,
+      rawQuery = newDmAddress,
+      onSuggestions = { dmDirectorySuggestions = it },
+      onBusy = { dmDirectoryBusy = it },
+      onError = { dmDirectoryError = it },
+    )
   }
 
   LaunchedEffect(currentView, newGroupMemberQuery) {
-    if (currentView != ChatView.NewGroupMembers) {
-      groupDirectorySuggestions = emptyList()
-      groupDirectoryBusy = false
-      groupDirectoryError = null
-      return@LaunchedEffect
-    }
-    val query = newGroupMemberQuery.trim()
-    if (query.length < 2 || looksLikeEthereumAddress(query)) {
-      groupDirectorySuggestions = emptyList()
-      groupDirectoryBusy = false
-      groupDirectoryError = null
-      return@LaunchedEffect
-    }
-    delay(280)
-    groupDirectoryBusy = true
-    groupDirectoryError = null
-    try {
-      val profiles = ChatDirectoryApi.searchProfilesByDisplayNamePrefix(query, first = 12)
-      groupDirectorySuggestions =
-        profiles
-          .mapNotNull(::directoryProfileToSuggestion)
-      groupDirectoryError = null
-    } catch (e: kotlinx.coroutines.CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      groupDirectorySuggestions = emptyList()
-      groupDirectoryError = e.message ?: "Directory search unavailable"
-    } finally {
-      groupDirectoryBusy = false
-    }
+    refreshDirectorySuggestions(
+      currentView = currentView,
+      expectedView = ChatView.NewGroupMembers,
+      rawQuery = newGroupMemberQuery,
+      onSuggestions = { groupDirectorySuggestions = it },
+      onBusy = { groupDirectoryBusy = it },
+      onError = { groupDirectoryError = it },
+    )
   }
 
   fun openDm(targetInput: String) {
@@ -1813,6 +1770,39 @@ private fun buildDmSuggestions(
     .distinctBy { it.inputValue.lowercase() }
     .take(limit)
     .toList()
+}
+
+private suspend fun refreshDirectorySuggestions(
+  currentView: ChatView,
+  expectedView: ChatView,
+  rawQuery: String,
+  onSuggestions: (List<DmSuggestion>) -> Unit,
+  onBusy: (Boolean) -> Unit,
+  onError: (String?) -> Unit,
+) {
+  if (currentView != expectedView || !shouldSearchDirectory(rawQuery)) {
+    onSuggestions(emptyList())
+    onBusy(false)
+    onError(null)
+    return
+  }
+
+  val query = rawQuery.trim()
+  delay(280)
+  onBusy(true)
+  onError(null)
+  try {
+    val profiles = ChatDirectoryApi.searchProfilesByDisplayNamePrefix(query, first = 12)
+    onSuggestions(profiles.mapNotNull(::directoryProfileToSuggestion))
+    onError(null)
+  } catch (error: CancellationException) {
+    throw error
+  } catch (error: Exception) {
+    onSuggestions(emptyList())
+    onError(error.message ?: "Directory search unavailable")
+  } finally {
+    onBusy(false)
+  }
 }
 
 private fun parseGroupMembersInput(input: String): List<String> {
