@@ -1,14 +1,14 @@
 {
-  "name": "heaven-voice",
+  "name": "voice-agent-service",
   "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "tail": "wrangler tail",
-    "db:create": "wrangler d1 create heaven-voice",
-    "db:migrate": "wrangler d1 execute heaven-voice --file=schema.sql",
-    "db:migrate:local": "wrangler d1 execute heaven-voice --local --file=schema.sql"
+    "db:create": "wrangler d1 create ${D1_DATABASE:-heaven-voice}",
+    "db:migrate": "wrangler d1 execute ${D1_DATABASE:-heaven-voice} --file=schema.sql",
+    "db:migrate:local": "wrangler d1 execute ${D1_DATABASE:-heaven-voice} --local --file=schema.sql"
   },
   "dependencies": {
     "agora-token": "^2.0.3",

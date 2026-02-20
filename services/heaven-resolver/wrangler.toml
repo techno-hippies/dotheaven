@@ -1,4 +1,4 @@
-name = "heaven-resolver"
+name = "metadata-resolver"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
@@ -11,11 +11,4 @@ id = "53e3dd232b4e45ae9c21e8a756136c64"
 [vars]
 ENVIRONMENT = "development"
 # MusicBrainz API requires a User-Agent with app name + contact
-MB_USER_AGENT = "HeavenResolver/0.1.0 (https://heaven.com)"
-
-[env.production]
-vars = { ENVIRONMENT = "production", MB_USER_AGENT = "HeavenResolver/0.1.0 (https://heaven.com)" }
-
-[[env.production.kv_namespaces]]
-binding = "CACHE"
-id = "b56a63dd3a1d478da1204c95edf5f952"
+MB_USER_AGENT = "MetadataResolver/0.1.0 (https://example.com/contact)"

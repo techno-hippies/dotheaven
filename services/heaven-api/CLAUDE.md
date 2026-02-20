@@ -1,13 +1,17 @@
-# Heaven API Worker
+# API Core Worker
 
 Operational notes for `services/heaven-api`.
 
 ## Purpose
 Cloudflare Worker for:
-- Heaven names API
+- names API
 - claim flow endpoints
 - scrobble ingestion
 - photo/meal pipelines
+
+## Environment
+- Current setup is dev-only.
+- Optional override: set `D1_DATABASE` to avoid hardcoded DB names in scripts.
 
 ## Local Development
 From `services/heaven-api`:
@@ -34,16 +38,16 @@ From `services/heaven-api`:
 bun run deploy
 ```
 
-If schema changes were made, run remote migrations first (example):
+If schema changes were made, run remote migrations first:
 
 ```bash
-wrangler d1 execute heaven-api --remote --file=./schema.sql
-wrangler d1 execute heaven-api --remote --file=./migrations/0001_photos.sql
+wrangler d1 execute ${D1_DATABASE:-heaven-api} --remote --file=./schema.sql
+bun run db:migrate:remote
 ```
 
 ## Required Secrets
-Set with `wrangler secret put ...` in the target environment:
-- `DNS_SHARED_SECRET` (prod DNS-protected routes)
+Set with `wrangler secret put ...`:
+- `DNS_SHARED_SECRET` (for DNS-protected routes)
 - `FILEBASE_ACCESS_KEY`, `FILEBASE_SECRET_KEY`, `FILEBASE_BUCKET`
 - `FAL_KEY`
 - `WATERMARK_SECRET`

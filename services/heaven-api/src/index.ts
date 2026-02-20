@@ -1,5 +1,5 @@
 /**
- * Heaven API Worker
+ * API Core Worker
  *
  * Cloudflare Worker handling:
  * - /api/candidates - Get candidate profiles for swiping

@@ -1,4 +1,4 @@
-# Heaven Resolver
+# Metadata Resolver
 
 Cloudflare Worker for MusicBrainz API proxy + external image rehosting.
 
@@ -34,7 +34,7 @@ Cloudflare Worker for MusicBrainz API proxy + external image rehosting.
 ### Rehost External Images
 
 ```typescript
-import { rehostImages } from './lib/heaven/resolver-client'
+import { rehostImages } from './lib/resolver-client'
 
 const result = await rehostImages([
   'https://upload.wikimedia.org/wikipedia/commons/thumb/d/df/The_Beatles.jpg/400px-The_Beatles.jpg',
@@ -89,7 +89,7 @@ Frontend (ArtistPage) → image-cache.ts detects Wikipedia URL
                       ↓
                       → POST /rehost/image
                       ↓
-heaven-resolver → Check KV cache (rehost:{sha256(url)})
+metadata-resolver → Check KV cache (rehost:{sha256(url)})
                ↓ (cache miss)
                → Fetch Wikipedia image
                → Upload to Filebase S3
@@ -107,30 +107,26 @@ The `/artist/:mbid` and `/release-group/:mbid` endpoints perform background reho
 **Cache key**: `rehost:{sha256(url)}`
 **Cache TTL**: 1 year (images are immutable)
 
-## Deployment
+## Development and Deploy
 
 ```bash
-# Development
 cd services/heaven-resolver
+bun install
 cp .dev.vars.example .dev.vars
 # Add FILEBASE_API_KEY to .dev.vars
-wrangler dev
-
-# Production
-wrangler secret put FILEBASE_API_KEY
-wrangler deploy
+bun run dev
+bun run deploy
 ```
 
 ## Environment Variables
 
 - `FILEBASE_API_KEY` - Base64 encoded `accessKey:secretKey:bucket` (secret)
 - `MB_USER_AGENT` - MusicBrainz User-Agent (public var)
-- `ENVIRONMENT` - `development` or `production` (public var)
+- `ENVIRONMENT` - `development` (public var)
 
 ## KV Namespaces
 
-- **Development**: `53e3dd232b4e45ae9c21e8a756136c64`
-- **Production**: `b56a63dd3a1d478da1204c95edf5f952`
+- **Active**: `53e3dd232b4e45ae9c21e8a756136c64`
 
 ## Cache Keys
 

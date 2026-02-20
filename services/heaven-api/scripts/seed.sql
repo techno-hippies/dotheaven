@@ -1,5 +1,5 @@
 -- Auto-generated seed data
--- Run with: wrangler d1 execute heaven-api --local --file=./scripts/seed.sql
+-- Run with: wrangler d1 execute ${D1_DATABASE:-heaven-api} --local --file=./scripts/seed.sql
 
 -- Clear existing seed data (keeps any real data)
 -- Delete in correct order due to foreign keys

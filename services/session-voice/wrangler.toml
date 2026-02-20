@@ -1,4 +1,4 @@
-name = "session-voice"
+name = "voice-control-plane"
 main = "src/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
@@ -27,7 +27,7 @@ crons = ["*/2 * * * *"]
 
 [vars]
 ENVIRONMENT = "development"
-SESSION_ESCROW_MODE = "live"
+ESCROW_MODE = "live"
 RPC_URL = "https://rpc.moderato.tempo.xyz"
 ESCROW_ADDRESS = "0xb1E233221FB25c65090A75cc60Df5164A2eA4B98"
 REGISTRY_ADDRESS = "0xA111c5cA16752B09fF16B3B8B24BA55a8486aB23"
@@ -35,7 +35,7 @@ VERIFICATION_MIRROR_ADDRESS = "0x0000000000000000000000000000000000000000"
 CHAIN_ID = "42431"
 LLM_BASE_URL = "https://openrouter.ai/api/v1"
 ELEVENLABS_VOICE_ID = "rf0RyZGEDtFGS4U6yghI"
-X402_FACILITATOR_BASE_URL = "https://facil-x402rs-sepolia.dotheaven.org"
+PAYMENT_FACILITATOR_BASE_URL = "https://facil-x402rs-sepolia.dotheaven.org"
 X402_FACILITATOR_MODE = "self"
 
 # Secrets (set via wrangler secret put):
@@ -43,6 +43,7 @@ X402_FACILITATOR_MODE = "self"
 # AGORA_APP_CERTIFICATE
 # AGORA_REST_AUTH (key:secret for Agora REST API — needed for CAI agent)
 # JWT_SECRET
+# X402_FACILITATOR_BASE_URL (legacy fallback for PAYMENT_FACILITATOR_BASE_URL)
 # X402_FACILITATOR_AUTH_TOKEN (for facilitator settle calls)
 # LLM_API_KEY (OpenRouter)
 # ELEVENLABS_API_KEY

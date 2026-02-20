@@ -1,5 +1,5 @@
 /**
- * heaven-resolver — MusicBrainz API proxy with KV caching.
+ * metadata-resolver — MusicBrainz API proxy with KV caching.
  *
  * Endpoints:
  *   GET  /recording/:mbid              → artist + release-group info from a recording MBID
@@ -1122,7 +1122,7 @@ export default {
 
     // Health check
     if (path === '/' || path === '/health') {
-      return jsonResponse({ ok: true, service: 'heaven-resolver' })
+      return jsonResponse({ ok: true, service: 'metadata-resolver' })
     }
 
     return jsonResponse({ error: 'not found' }, 404)

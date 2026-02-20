@@ -1,4 +1,4 @@
-# Session Voice Service
+# Voice Control Plane Service
 
 Operational notes for `services/session-voice`.
 
@@ -23,7 +23,7 @@ Operational notes for `services/session-voice`.
 From `services/session-voice`:
 
 ```bash
-npm install
+bun install
 bun run migrate:local
 bun run dev
 ```
@@ -49,6 +49,7 @@ DUET_TEST_FACILITATOR_PRIVATE_KEY=0x... bun run dev:duet:onchain
 ## Facilitator Wiring
 - `X402_FACILITATOR_MODE=mock`: no on-chain settlement.
 - `X402_FACILITATOR_MODE=self`: preferred; calls our Rust facilitator.
+- `PAYMENT_FACILITATOR_BASE_URL` is preferred; `X402_FACILITATOR_BASE_URL` remains supported as fallback.
 
 ## Required Secrets (Cloudflare)
 - `AGORA_APP_ID`
