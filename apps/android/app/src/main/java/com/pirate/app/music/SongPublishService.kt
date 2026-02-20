@@ -2,13 +2,9 @@ package com.pirate.app.music
 
 import android.content.Context
 import android.net.Uri
+import com.pirate.app.BuildConfig
 import kotlinx.coroutines.delay
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
-import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
-import java.security.MessageDigest
 import java.util.UUID
 
 /**
@@ -21,9 +17,11 @@ import java.util.UUID
 object SongPublishService {
 
   private const val TAG = "SongPublish"
-  const val API_CORE_URL = "https://api-core.deletion-backup782.workers.dev"
+  val API_CORE_URL: String
+    get() = BuildConfig.API_CORE_URL.trim().trimEnd('/')
   // Backward-compatible alias for existing callers during API core migration.
-  const val HEAVEN_API_URL = API_CORE_URL
+  val HEAVEN_API_URL: String
+    get() = API_CORE_URL
   private const val MAX_AUDIO_BYTES = 50 * 1024 * 1024 // Matches backend /api/music/publish/start limit.
   private const val PREFLIGHT_MAX_RETRIES = 3
   private const val PREFLIGHT_RETRY_DELAY_MS = 2_000L
@@ -58,329 +56,13 @@ object SongPublishService {
     val coverCid: String? = null,
   )
 
-  private data class ApiResponse(
-    val status: Int,
-    val body: String,
-    val json: JSONObject?,
-  )
-
-  private fun sha256Hex(data: ByteArray): String {
-    val digest = MessageDigest.getInstance("SHA-256").digest(data)
-    return digest.joinToString("") { "%02x".format(it) }
-  }
-
-  private fun readUriWithMaxBytes(context: Context, uri: Uri, maxBytes: Int): ByteArray {
-    // Fast-path when provider exposes content length.
-    context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { afd ->
-      val length = afd.length
-      if (length > maxBytes) {
-        throw IllegalStateException("Audio file exceeds 50MB limit ($length bytes)")
-      }
-    }
-
-    val stream = context.contentResolver.openInputStream(uri)
-      ?: throw IllegalStateException("Cannot open URI: $uri")
-
-    stream.use { input ->
-      val out = ByteArrayOutputStream()
-      val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-      var total = 0
-      while (true) {
-        val read = input.read(buffer)
-        if (read <= 0) break
-        total += read
-        if (total > maxBytes) {
-          throw IllegalStateException("Audio file exceeds 50MB limit ($total bytes)")
-        }
-        out.write(buffer, 0, read)
-      }
-      if (total == 0) throw IllegalStateException("Audio file is empty")
-      return out.toByteArray()
-    }
-  }
-
-  private fun readCoverUriWithMaxBytes(context: Context, uri: Uri, maxBytes: Int): ByteArray {
-    // Fast-path when provider exposes content length.
-    context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { afd ->
-      val length = afd.length
-      if (length > maxBytes) {
-        throw IllegalStateException("Cover file exceeds 10MB limit ($length bytes)")
-      }
-    }
-
-    val stream = context.contentResolver.openInputStream(uri)
-      ?: throw IllegalStateException("Cannot open URI: $uri")
-
-    stream.use { input ->
-      val out = ByteArrayOutputStream()
-      val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-      var total = 0
-      while (true) {
-        val read = input.read(buffer)
-        if (read <= 0) break
-        total += read
-        if (total > maxBytes) {
-          throw IllegalStateException("Cover file exceeds 10MB limit ($total bytes)")
-        }
-        out.write(buffer, 0, read)
-      }
-      if (total == 0) throw IllegalStateException("Cover file is empty")
-      return out.toByteArray()
-    }
-  }
-
-  private fun getMimeType(context: Context, uri: Uri): String {
-    return context.contentResolver.getType(uri) ?: "application/octet-stream"
-  }
-
-  private fun guessImageExtension(mimeType: String): String {
-    val normalized = mimeType.trim().lowercase()
-    return when {
-      normalized.contains("png") -> "png"
-      normalized.contains("webp") -> "webp"
-      normalized.contains("gif") -> "gif"
-      else -> "jpg"
-    }
-  }
-
-  private fun cacheRecentCoverRef(
-    context: Context,
-    coverUri: Uri,
-    audioSha256: String,
-  ): String? {
-    return runCatching {
-      val mime = getMimeType(context, coverUri)
-      val ext = guessImageExtension(mime)
-      val dir = File(context.filesDir, RECENT_COVERS_DIR)
-      if (!dir.exists()) dir.mkdirs()
-      val file = File(dir, "${audioSha256.take(24)}.$ext")
-
-      context.contentResolver.openInputStream(coverUri)?.use { input ->
-        file.outputStream().use { out ->
-          val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-          var total = 0L
-          while (true) {
-            val read = input.read(buffer)
-            if (read <= 0) break
-            total += read
-            if (total > MAX_COVER_BYTES) {
-              throw IllegalStateException("Cover image exceeds 10MB local cache limit")
-            }
-            out.write(buffer, 0, read)
-          }
-          if (total == 0L) throw IllegalStateException("Cover image is empty")
-        }
-      } ?: throw IllegalStateException("Cannot open cover URI: $coverUri")
-
-      Uri.fromFile(file).toString()
-    }.getOrNull()
-  }
-
-  private fun parseJsonObject(raw: String): JSONObject? {
-    if (raw.isBlank()) return null
-    return runCatching { JSONObject(raw) }.getOrNull()
-  }
-
-  private fun readApiResponse(conn: HttpURLConnection): ApiResponse {
-    val status = conn.responseCode
-    val body = (if (status in 200..299) conn.inputStream else conn.errorStream)
-      ?.bufferedReader()
-      ?.use { it.readText() }
-      .orEmpty()
-    return ApiResponse(status = status, body = body, json = parseJsonObject(body))
-  }
-
-  private fun errorMessageFromApi(operation: String, response: ApiResponse): String {
-    val base = response.json?.optString("error", "")
-      ?.trim()
-      ?.ifBlank { null }
-      ?: response.json?.optString("details", "")
-        ?.trim()
-        ?.ifBlank { null }
-      ?: response.body.trim().ifBlank { null }
-      ?: "HTTP ${response.status}"
-    return "$operation failed: $base"
-  }
-
-  private fun postJsonToMusicApi(
-    path: String,
-    userPkp: String,
-    body: JSONObject,
-  ): ApiResponse {
-    val url = URL("$API_CORE_URL$path")
-    val conn = (url.openConnection() as HttpURLConnection).apply {
-      requestMethod = "POST"
-      doOutput = true
-      connectTimeout = 120_000
-      readTimeout = 120_000
-      setRequestProperty("Content-Type", "application/json")
-      setRequestProperty("X-User-Pkp", userPkp)
-    }
-    conn.outputStream.use { out ->
-      out.write(body.toString().toByteArray(Charsets.UTF_8))
-    }
-    return readApiResponse(conn)
-  }
-
-  private fun finalizeMusicPublish(
-    jobId: String,
-    userPkp: String,
-    title: String,
-    artist: String,
-    album: String = "",
-  ): ApiResponse {
-    val body = JSONObject().apply {
-      put("title", title.trim())
-      put("artist", artist.trim())
-      put("album", album.trim())
-    }
-    return postJsonToMusicApi(
-      path = "/api/music/publish/$jobId/finalize",
-      userPkp = userPkp,
-      body = body,
-    )
-  }
-
-  private fun stageAudioForMusicPublish(
-    audioBytes: ByteArray,
-    audioMime: String,
-    audioSha256: String,
-    userPkp: String,
-    idempotencyKey: String,
-  ): ApiResponse {
-    val boundary = "----HeavenMusicStart${System.currentTimeMillis()}"
-    val url = URL("$API_CORE_URL/api/music/publish/start")
-    val conn = (url.openConnection() as HttpURLConnection).apply {
-      requestMethod = "POST"
-      doOutput = true
-      connectTimeout = 120_000
-      readTimeout = 120_000
-      setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
-      setRequestProperty("X-User-Pkp", userPkp)
-      setRequestProperty("Idempotency-Key", idempotencyKey)
-    }
-
-    val tags = """[{"key":"App-Name","value":"Heaven"},{"key":"Upload-Source","value":"android-song-publish"}]"""
-    val fingerprint = "sha256:$audioSha256"
-
-    conn.outputStream.use { out ->
-      fun writeField(name: String, value: String) {
-        out.write("--$boundary\r\n".toByteArray())
-        out.write("Content-Disposition: form-data; name=\"$name\"\r\n\r\n".toByteArray())
-        out.write(value.toByteArray(Charsets.UTF_8))
-        out.write("\r\n".toByteArray())
-      }
-
-      out.write("--$boundary\r\n".toByteArray())
-      out.write("Content-Disposition: form-data; name=\"file\"; filename=\"audio.bin\"\r\n".toByteArray())
-      out.write("Content-Type: $audioMime\r\n\r\n".toByteArray())
-      out.write(audioBytes)
-      out.write("\r\n".toByteArray())
-
-      writeField("publishType", "original")
-      writeField("contentType", audioMime)
-      writeField("audioSha256", audioSha256)
-      writeField("fingerprint", fingerprint)
-      writeField("idempotencyKey", idempotencyKey)
-      writeField("tags", tags)
-      out.write("--$boundary--\r\n".toByteArray())
-    }
-
-    return readApiResponse(conn)
-  }
-
-  private fun stageArtifactsForMusicPublish(
-    jobId: String,
-    userPkp: String,
-    coverBytes: ByteArray,
-    coverMime: String,
-    lyricsText: String,
-  ): ApiResponse {
-    val boundary = "----HeavenMusicArtifacts${System.currentTimeMillis()}"
-    val url = URL("$API_CORE_URL/api/music/publish/$jobId/artifacts/stage")
-    val conn = (url.openConnection() as HttpURLConnection).apply {
-      requestMethod = "POST"
-      doOutput = true
-      connectTimeout = 120_000
-      readTimeout = 120_000
-      setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
-      setRequestProperty("X-User-Pkp", userPkp)
-    }
-
-    conn.outputStream.use { out ->
-      fun writeField(name: String, value: String) {
-        out.write("--$boundary\r\n".toByteArray())
-        out.write("Content-Disposition: form-data; name=\"$name\"\r\n\r\n".toByteArray())
-        out.write(value.toByteArray(Charsets.UTF_8))
-        out.write("\r\n".toByteArray())
-      }
-
-      out.write("--$boundary\r\n".toByteArray())
-      out.write("Content-Disposition: form-data; name=\"cover\"; filename=\"cover.bin\"\r\n".toByteArray())
-      out.write("Content-Type: $coverMime\r\n\r\n".toByteArray())
-      out.write(coverBytes)
-      out.write("\r\n".toByteArray())
-
-      writeField("coverContentType", coverMime)
-      writeField("lyricsText", lyricsText)
-      out.write("--$boundary--\r\n".toByteArray())
-    }
-
-    return readApiResponse(conn)
-  }
-
-  private fun requireJobObject(operation: String, response: ApiResponse): JSONObject {
-    val job = response.json?.optJSONObject("job")
-    if (job != null) return job
-    throw IllegalStateException("$operation failed: missing job in response")
-  }
-
-  private fun extractDataitemId(job: JSONObject): String? {
-    val anchor = job.optJSONObject("anchor")
-    if (anchor != null) {
-      val explicitId = anchor.optString("dataitemId", "").trim()
-      if (explicitId.isNotBlank()) return explicitId
-      val ref = anchor.optString("ref", "").trim()
-      if (ref.startsWith("ar://")) {
-        return ref.removePrefix("ar://").trim().ifBlank { null }
-      }
-      val arweaveUrl = anchor.optString("arweaveUrl", "").trim()
-      if (arweaveUrl.startsWith("http://") || arweaveUrl.startsWith("https://")) {
-        return arweaveUrl.substringAfterLast('/').trim().ifBlank { null }
-      }
-    }
-    val stagedId = job
-      .optJSONObject("upload")
-      ?.optString("stagedDataitemId", "")
-      ?.trim()
-      .orEmpty()
-    return stagedId.ifBlank { null }
-  }
-
-  private fun extractStagedCoverGatewayUrl(job: JSONObject): String? {
-    return job
-      .optJSONObject("upload")
-      ?.optJSONObject("cover")
-      ?.optString("stagedGatewayUrl", "")
-      ?.trim()
-      ?.ifBlank { null }
-  }
-
-  private fun normalizeUserPkp(address: String): String {
-    val clean = address.trim().lowercase()
-    if (!Regex("^0x[a-f0-9]{40}$").matches(clean)) {
-      throw IllegalStateException("Invalid user PKP address: $address")
-    }
-    return clean
-  }
-
   suspend fun publish(
     context: Context,
     formData: SongFormData,
     ownerAddress: String,
     onProgress: (Int) -> Unit,
   ): PublishResult {
-    val userPkp = normalizeUserPkp(ownerAddress)
+    val userPkp = songPublishNormalizeUserPkp(ownerAddress)
     if (formData.title.isBlank()) throw IllegalStateException("Song title is required")
     if (formData.artist.isBlank()) throw IllegalStateException("Artist is required")
     if (formData.lyrics.isBlank()) throw IllegalStateException("Lyrics are required")
@@ -390,14 +72,14 @@ object SongPublishService {
     val audioUri = formData.audioUri ?: throw IllegalStateException("Audio file is required")
     val coverUri = formData.coverUri ?: throw IllegalStateException("Cover image is required")
 
-    val audioBytes = readUriWithMaxBytes(context, audioUri, MAX_AUDIO_BYTES)
-    val coverBytes = readCoverUriWithMaxBytes(context, coverUri, MAX_COVER_BYTES)
+    val audioBytes = songPublishReadUriWithMaxBytes(context, audioUri, MAX_AUDIO_BYTES)
+    val coverBytes = songPublishReadCoverUriWithMaxBytes(context, coverUri, MAX_COVER_BYTES)
 
-    val detectedAudioMime = getMimeType(context, audioUri)
+    val detectedAudioMime = songPublishGetMimeType(context, audioUri)
     val audioMime = if (detectedAudioMime.startsWith("audio/")) detectedAudioMime else "audio/mpeg"
-    val detectedCoverMime = getMimeType(context, coverUri)
+    val detectedCoverMime = songPublishGetMimeType(context, coverUri)
     val coverMime = if (detectedCoverMime.startsWith("image/")) detectedCoverMime else "image/jpeg"
-    val audioSha256 = sha256Hex(audioBytes)
+    val audioSha256 = songPublishSha256Hex(audioBytes)
     val lyricsBytes = formData.lyrics.toByteArray(Charsets.UTF_8)
     if (lyricsBytes.size > MAX_LYRICS_BYTES) {
       throw IllegalStateException("Lyrics exceed 256KB limit (${lyricsBytes.size} bytes)")
@@ -406,7 +88,7 @@ object SongPublishService {
     onProgress(15)
 
     val idempotencyKey = "music-android-${UUID.randomUUID()}"
-    val startResponse = stageAudioForMusicPublish(
+    val startResponse = songPublishStageAudioForMusicPublish(
       audioBytes = audioBytes,
       audioMime = audioMime,
       audioSha256 = audioSha256,
@@ -414,16 +96,16 @@ object SongPublishService {
       idempotencyKey = idempotencyKey,
     )
     if (startResponse.status !in 200..299) {
-      throw IllegalStateException(errorMessageFromApi("Audio staging upload", startResponse))
+      throw IllegalStateException(songPublishErrorMessageFromApi("Audio staging upload", startResponse))
     }
 
-    val startJob = requireJobObject("Audio staging upload", startResponse)
+    val startJob = songPublishRequireJobObject("Audio staging upload", startResponse)
     val jobId = startJob.optString("jobId", "").trim()
     if (jobId.isBlank()) throw IllegalStateException("Audio staging upload failed: missing jobId")
 
     onProgress(35)
 
-    val artifactsResponse = stageArtifactsForMusicPublish(
+    val artifactsResponse = songPublishStageArtifactsForMusicPublish(
       jobId = jobId,
       userPkp = userPkp,
       coverBytes = coverBytes,
@@ -436,21 +118,21 @@ object SongPublishService {
           "Artifact staging endpoint not found. Backend is outdated; deploy latest api-core.",
         )
       }
-      throw IllegalStateException(errorMessageFromApi("Artifact staging", artifactsResponse))
+      throw IllegalStateException(songPublishErrorMessageFromApi("Artifact staging", artifactsResponse))
     }
-    val artifactsJob = requireJobObject("Artifact staging", artifactsResponse)
-    var stagedCoverGatewayUrl = extractStagedCoverGatewayUrl(artifactsJob)
+    val artifactsJob = songPublishRequireJobObject("Artifact staging", artifactsResponse)
+    var stagedCoverGatewayUrl = songPublishExtractStagedCoverGatewayUrl(artifactsJob)
 
     onProgress(50)
 
-    var preflightResponse: ApiResponse? = null
+    var preflightResponse: SongPublishApiResponse? = null
     for (attempt in 1..PREFLIGHT_MAX_RETRIES) {
       val preflightBody = JSONObject().apply {
         put("jobId", jobId)
         put("publishType", "original")
         put("fingerprint", "sha256:$audioSha256")
       }
-      val response = postJsonToMusicApi(
+      val response = songPublishPostJsonToMusicApi(
         path = "/api/music/preflight",
         userPkp = userPkp,
         body = preflightBody,
@@ -476,9 +158,9 @@ object SongPublishService {
 
     val finalPreflight = preflightResponse ?: throw IllegalStateException("Preflight checks failed unexpectedly")
     if (finalPreflight.status !in 200..299) {
-      throw IllegalStateException(errorMessageFromApi("Preflight checks", finalPreflight))
+      throw IllegalStateException(songPublishErrorMessageFromApi("Preflight checks", finalPreflight))
     }
-    val preflightJob = requireJobObject("Preflight checks", finalPreflight)
+    val preflightJob = songPublishRequireJobObject("Preflight checks", finalPreflight)
     val preflightStatus = preflightJob.optString("status", "").trim()
     if (preflightStatus != "policy_passed") {
       val reason = preflightJob
@@ -496,14 +178,14 @@ object SongPublishService {
       )
     }
 
-    val stagedAudioId = extractDataitemId(preflightJob)
+    val stagedAudioId = songPublishExtractDataitemId(preflightJob)
     val stagedAudioUrl = preflightJob
       .optJSONObject("upload")
       ?.optString("stagedGatewayUrl", "")
       ?.trim()
       ?.ifBlank { null }
     if (stagedCoverGatewayUrl.isNullOrBlank()) {
-      stagedCoverGatewayUrl = extractStagedCoverGatewayUrl(preflightJob)
+      stagedCoverGatewayUrl = songPublishExtractStagedCoverGatewayUrl(preflightJob)
     }
     if (stagedCoverGatewayUrl.isNullOrBlank()) {
       throw IllegalStateException("Artifact staging succeeded but staged cover URL is missing")
@@ -511,7 +193,7 @@ object SongPublishService {
 
     onProgress(88)
 
-    val finalizeResponse = finalizeMusicPublish(
+    val finalizeResponse = songPublishFinalizeMusicPublish(
       jobId = jobId,
       userPkp = userPkp,
       title = formData.title,
@@ -524,9 +206,9 @@ object SongPublishService {
           "Finalize endpoint not found. Backend is outdated; deploy latest api-core.",
         )
       }
-      throw IllegalStateException(errorMessageFromApi("Tempo finalize", finalizeResponse))
+      throw IllegalStateException(songPublishErrorMessageFromApi("Tempo finalize", finalizeResponse))
     }
-    val finalizeJob = requireJobObject("Tempo finalize", finalizeResponse)
+    val finalizeJob = songPublishRequireJobObject("Tempo finalize", finalizeResponse)
     val finalizedStatus = finalizeJob.optString("status", "").trim()
     if (finalizedStatus != "registered") {
       throw IllegalStateException("Tempo finalize did not complete (status=$finalizedStatus)")
@@ -534,10 +216,12 @@ object SongPublishService {
 
     onProgress(100)
 
-    val cachedCoverRef = cacheRecentCoverRef(
+    val cachedCoverRef = songPublishCacheRecentCoverRef(
       context = context,
       coverUri = coverUri,
       audioSha256 = audioSha256,
+      recentCoversDir = RECENT_COVERS_DIR,
+      maxCoverBytes = MAX_COVER_BYTES,
     )
 
     val canonicalCoverRef = stagedCoverGatewayUrl

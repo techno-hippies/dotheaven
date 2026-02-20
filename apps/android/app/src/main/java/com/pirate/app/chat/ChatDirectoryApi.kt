@@ -27,7 +27,7 @@ object ChatDirectoryApi {
     first: Int = 12,
   ): List<ChatDirectoryProfile> = withContext(Dispatchers.IO) {
     val endpoint =
-      BuildConfig.TEMPO_PROFILES_SUBGRAPH_URL
+      BuildConfig.SUBGRAPH_PROFILES_URL
         .trim()
         .removeSuffix("/")
         .ifBlank { DEFAULT_TUNNEL_PROFILES_SUBGRAPH_URL }

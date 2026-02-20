@@ -5,7 +5,11 @@
  * Uses in-memory cache to avoid duplicate rehost requests.
  */
 
-const RESOLVER_URL = import.meta.env.VITE_RESOLVER_URL || 'https://metadata-resolver.deletion-backup782.workers.dev'
+const RESOLVER_URL = (() => {
+  const url = (import.meta.env.VITE_RESOLVER_URL || '').trim()
+  if (!url) throw new Error('Missing VITE_RESOLVER_URL')
+  return url.replace(/\/+$/, '')
+})()
 
 // In-memory cache: externalUrl → ipfsUrl
 const cache = new Map<string, string>()

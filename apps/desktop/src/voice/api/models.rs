@@ -10,9 +10,6 @@ pub struct VoiceEndpoints {
 
 impl Default for VoiceEndpoints {
     fn default() -> Self {
-        // Explicit config: don't silently fall back to a random Agora app id.
-        // If you need native Agora features (Scarlett voice / native bridge), set HEAVEN_AGORA_APP_ID.
-        let default_voice_agent_url = "https://voice-agent.deletion-backup782.workers.dev".to_string();
         let voice_worker_url = std::env::var("VOICE_AGENT_URL")
             .ok()
             .filter(|v| !v.trim().is_empty())
@@ -21,7 +18,11 @@ impl Default for VoiceEndpoints {
                     .ok()
                     .filter(|v| !v.trim().is_empty())
             })
-            .unwrap_or_else(|| default_voice_agent_url.clone());
+            .unwrap_or_else(|| {
+                panic!(
+                    "Missing voice worker URL. Set VOICE_AGENT_URL (or HEAVEN_VOICE_WORKER_URL)."
+                )
+            });
         let chat_worker_url = std::env::var("CHAT_WORKER_URL")
             .ok()
             .filter(|v| !v.trim().is_empty())
@@ -30,7 +31,11 @@ impl Default for VoiceEndpoints {
                     .ok()
                     .filter(|v| !v.trim().is_empty())
             })
-            .unwrap_or_else(|| default_voice_agent_url.clone());
+            .unwrap_or_else(|| {
+                panic!(
+                    "Missing chat worker URL. Set CHAT_WORKER_URL (or HEAVEN_CHAT_WORKER_URL)."
+                )
+            });
 
         Self {
             voice_worker_url,

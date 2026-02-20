@@ -1,5 +1,6 @@
 package com.pirate.app.community
 
+import com.pirate.app.music.CoverRef
 import com.pirate.app.onboarding.steps.LANGUAGE_OPTIONS
 import com.pirate.app.util.tempoProfilesSubgraphUrls
 import java.math.BigInteger
@@ -287,11 +288,7 @@ object CommunityApi {
 
   private fun resolvePhotoUrl(uri: String?): String? {
     if (uri.isNullOrBlank()) return null
-    return if (uri.startsWith("ipfs://")) {
-      "https://heaven.myfilebase.com/ipfs/${uri.removePrefix("ipfs://")}"
-    } else {
-      uri
-    }
+    return CoverRef.resolveCoverUrl(uri, width = null, height = null, format = null, quality = null)
   }
 
   private fun unpackLanguages(packedDec: String): List<CommunityLanguage> {

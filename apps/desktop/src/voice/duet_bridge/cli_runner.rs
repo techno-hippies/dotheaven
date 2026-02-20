@@ -295,5 +295,5 @@ fn env_truthy(key: &str) -> bool {
 }
 
 fn cli_usage() -> &'static str {
-    "Usage:\n  heaven-desktop duet-bridge --room <room_id> --bridge-ticket <ticket> [--worker-url <url>] [--agora-app-id <id>] [--china-cn-only] [--refresh-seconds <n>] [--pulse-source <source_name>]\n\nExample:\n  heaven-desktop duet-bridge --room <room_id> --bridge-ticket <ticket> --worker-url https://voice-control-plane.deletion-backup782.workers.dev"
+    "Usage:\n  heaven-desktop duet-bridge --room <room_id> --bridge-ticket <ticket> [--worker-url <url>] [--agora-app-id <id>] [--china-cn-only] [--refresh-seconds <n>] [--pulse-source <source_name>]\n\nExample:\n  DUET_WORKER_URL=https://voice-control-plane.example.com heaven-desktop duet-bridge --room <room_id> --bridge-ticket <ticket>"
 }

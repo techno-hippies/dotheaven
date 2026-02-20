@@ -134,9 +134,9 @@ pub(super) async fn fetch_posts() -> Result<Vec<FeedPost>, String> {
 
 fn fetch_ipfs_metadata_sync(cid: Option<&str>, uri: &str) -> IpfsMetadata {
     let url = if let Some(cid) = cid {
-        format!("{}{}", ipfs::HEAVEN_IPFS_GATEWAY, cid)
+        ipfs::resolve_ipfs_url(&format!("ipfs://{cid}"))
     } else if uri.starts_with("ipfs://") {
-        format!("{}{}", ipfs::HEAVEN_IPFS_GATEWAY, &uri[7..])
+        ipfs::resolve_ipfs_url(uri)
     } else if uri.starts_with("http") {
         uri.to_string()
     } else {

@@ -11,7 +11,7 @@
  *
  * Usage examples:
  *   bun run tests/smoke/music-flow.smoke.ts
- *   API_BASE=https://api-core.deletion-backup782.workers.dev bun run tests/smoke/music-flow.smoke.ts
+ *   API_BASE=https://api-core.dotheaven.org bun run tests/smoke/music-flow.smoke.ts
  *
  * Optional env:
  *   TEST_USER_ADDRESS=0x...
@@ -23,7 +23,7 @@
 
 type MusicPublishType = 'original' | 'derivative' | 'cover'
 
-const API_BASE = (process.env.API_BASE || 'http://localhost:8787').replace(/\/+$/, '')
+const API_BASE = (process.env.API_BASE || process.env.API_CORE_URL || 'http://localhost:8787').replace(/\/+$/, '')
 const TEST_USER_ADDRESS = (process.env.TEST_USER_ADDRESS || '0x1234567890abcdef1234567890abcdef12345678').toLowerCase()
 const PUBLISH_TYPE = ((process.env.PUBLISH_TYPE || 'original').toLowerCase() as MusicPublishType)
 const FINALIZE_PERMANENT = process.env.FINALIZE_PERMANENT === 'true'

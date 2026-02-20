@@ -37,9 +37,15 @@ const IS_DEV = import.meta.env.DEV
 
 // Session voice service URL
 const SESSION_VOICE_URL =
-  import.meta.env.VITE_VOICE_CONTROL_PLANE_URL
-  || import.meta.env.VITE_SESSION_VOICE_URL
-  || 'https://voice-control-plane.deletion-backup782.workers.dev'
+  (() => {
+    const url = (
+      import.meta.env.VITE_VOICE_CONTROL_PLANE_URL
+      || import.meta.env.VITE_SESSION_VOICE_URL
+      || ''
+    ).trim()
+    if (!url) throw new Error('Missing VITE_VOICE_CONTROL_PLANE_URL (or VITE_SESSION_VOICE_URL)')
+    return url.replace(/\/+$/, '')
+  })()
 
 // Agora App ID - must match worker config
 export { getAgoraAppId } from './agoraEnv'

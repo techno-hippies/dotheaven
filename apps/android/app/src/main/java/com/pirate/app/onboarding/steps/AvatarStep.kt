@@ -52,7 +52,7 @@ fun AvatarStep(
   submitting: Boolean,
   error: String?,
   onContinue: (base64: String, contentType: String) -> Unit,
-  onSkip: () -> Unit,
+  onSkip: (() -> Unit)? = null,
 ) {
   val context = LocalContext.current
   var preview by remember { mutableStateOf<Bitmap?>(null) }
@@ -165,17 +165,8 @@ fun AvatarStep(
       if (submitting) {
         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
       } else {
-        Text("Upload & Continue", fontSize = 16.sp)
+        Text("Continue", fontSize = 16.sp)
       }
-    }
-
-    Spacer(Modifier.height(8.dp))
-
-    TextButton(
-      onClick = onSkip,
-      modifier = Modifier.fillMaxWidth(),
-    ) {
-      Text("Skip for now", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 
     Spacer(Modifier.height(32.dp))

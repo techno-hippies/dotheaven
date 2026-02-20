@@ -166,14 +166,6 @@ pub(crate) fn playlist_track_input_to_json(track: &PlaylistTrackInput) -> Result
     Ok(Value::Object(obj))
 }
 
-pub(crate) fn filebase_covers_plaintext_key() -> Option<String> {
-    std::env::var("HEAVEN_FILEBASE_COVERS_KEY")
-        .ok()
-        .or_else(|| std::env::var("FILEBASE_COVERS_API_KEY").ok())
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-}
-
 pub(crate) fn normalize_lit_action_response(raw: Value, label: &str) -> Result<Value, String> {
     match raw {
         Value::Object(_) => Ok(raw),

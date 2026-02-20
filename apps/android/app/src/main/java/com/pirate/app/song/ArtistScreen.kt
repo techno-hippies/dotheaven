@@ -1,28 +1,30 @@
 package com.pirate.app.song
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -44,6 +46,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,15 +56,13 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.pirate.app.music.CoverRef
 import com.pirate.app.theme.PiratePalette
-import com.pirate.app.ui.PirateMobileHeader
 import com.pirate.app.util.formatTimeAgoShort
 import com.pirate.app.util.shortAddress
 import java.util.Locale
 
-enum class ArtistTab(val label: String) {
-  Songs("Songs"),
-  Leaderboard("Leaderboard"),
-  Scrobbles("Scrobbles"),
+private enum class ArtistTab(val icon: ImageVector, val contentDescription: String) {
+  Songs(Icons.Rounded.MusicNote, "Songs"),
+  Leaderboard(Icons.Rounded.EmojiEvents, "Leaderboard"),
 }
 
 @Composable
@@ -71,86 +74,147 @@ fun ArtistScreen(
 ) {
   var selectedTab by remember { mutableIntStateOf(0) }
   var refreshKey by remember { mutableIntStateOf(0) }
-  var refreshMenuExpanded by remember { mutableStateOf(false) }
 
   var loading by remember { mutableStateOf(true) }
   var loadError by remember { mutableStateOf<String?>(null) }
   var topTracks by remember { mutableStateOf<List<ArtistTrackRow>>(emptyList()) }
   var topListeners by remember { mutableStateOf<List<ArtistListenerRow>>(emptyList()) }
-  var recentScrobbles by remember { mutableStateOf<List<ArtistScrobbleRow>>(emptyList()) }
 
   LaunchedEffect(artistName, refreshKey) {
     loading = true
     loadError = null
-
     val tracksResult = runCatching { SongArtistApi.fetchArtistTopTracks(artistName, maxEntries = 80) }
     val listenersResult = runCatching { SongArtistApi.fetchArtistTopListeners(artistName, maxEntries = 40) }
-    val scrobblesResult = runCatching { SongArtistApi.fetchArtistRecentScrobbles(artistName, maxEntries = 80) }
-
     topTracks = tracksResult.getOrElse { emptyList() }
     topListeners = listenersResult.getOrElse { emptyList() }
-    recentScrobbles = scrobblesResult.getOrElse { emptyList() }
-
-    if (topTracks.isEmpty() && topListeners.isEmpty() && recentScrobbles.isEmpty()) {
+    if (topTracks.isEmpty() && topListeners.isEmpty()) {
       loadError = tracksResult.exceptionOrNull()?.message
         ?: listenersResult.exceptionOrNull()?.message
-        ?: scrobblesResult.exceptionOrNull()?.message
+        ?: loadError
     }
-
     loading = false
   }
 
   val tabs = ArtistTab.entries
 
-  Column(modifier = Modifier.fillMaxSize()) {
-    PirateMobileHeader(
-      title = artistName,
-      onBackPress = onBack,
-      rightSlot = {
-        Box {
-          IconButton(onClick = { refreshMenuExpanded = true }) {
-            Icon(Icons.Rounded.MoreVert, contentDescription = "More")
-          }
-          DropdownMenu(
-            expanded = refreshMenuExpanded,
-            onDismissRequest = { refreshMenuExpanded = false },
-          ) {
-            DropdownMenuItem(
-              text = { Text("Refresh") },
-              onClick = {
-                refreshMenuExpanded = false
-                refreshKey += 1
-              },
-            )
-          }
-        }
-      },
-    )
+  if (loading) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+      CircularProgressIndicator()
+    }
+    return
+  }
 
-    if (loading) {
-      Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator()
+  if (!loadError.isNullOrBlank() && topTracks.isEmpty() && topListeners.isEmpty()) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+      Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(loadError ?: "Failed to load", color = MaterialTheme.colorScheme.error)
+        OutlinedButton(onClick = { refreshKey += 1 }) { Text("Retry") }
       }
-      return@Column
+    }
+    return
+  }
+
+  val coverUrl = CoverRef.resolveCoverUrl(
+    ref = topTracks.firstOrNull()?.coverCid,
+    width = 800, height = 800, format = "webp", quality = 85,
+  )
+  val totalScrobbles = topTracks.sumOf { it.scrobbleCountTotal }
+
+  Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    // ── Hero: full-width square image, artist name bottom-left, back button top-left ──
+    Box(
+      modifier = Modifier
+        .fillMaxWidth()
+        .aspectRatio(1f),
+    ) {
+      // Image or fallback
+      if (!coverUrl.isNullOrBlank()) {
+        AsyncImage(
+          model = coverUrl,
+          contentDescription = "Artist cover",
+          modifier = Modifier.fillMaxSize(),
+          contentScale = ContentScale.Crop,
+        )
+      } else {
+        Box(
+          modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant),
+          contentAlignment = Alignment.Center,
+        ) {
+          Text(
+            artistName.take(1).uppercase(Locale.US),
+            style = MaterialTheme.typography.displayLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      }
+
+      // Gradient scrim for text legibility
+      Box(
+        modifier = Modifier
+          .fillMaxWidth()
+          .height(160.dp)
+          .align(Alignment.BottomStart)
+          .background(
+            Brush.verticalGradient(
+              colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.75f)),
+            ),
+          ),
+      )
+
+      // Back button — top-left with status bar padding
+      IconButton(
+        onClick = onBack,
+        modifier = Modifier
+          .align(Alignment.TopStart)
+          .statusBarsPadding()
+          .padding(4.dp),
+      ) {
+        Icon(
+          Icons.AutoMirrored.Rounded.ArrowBack,
+          contentDescription = "Back",
+          tint = Color.White,
+          modifier = Modifier.size(26.dp),
+        )
+      }
+
+      // Artist name + listener count — bottom-left
+      Column(
+        modifier = Modifier
+          .align(Alignment.BottomStart)
+          .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+      ) {
+        Text(
+          primaryArtist(artistName),
+          style = MaterialTheme.typography.headlineMedium,
+          fontWeight = FontWeight.Bold,
+          color = Color.White,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+        if (topListeners.isNotEmpty()) {
+          Text(
+            "${topListeners.size} monthly listeners",
+            style = MaterialTheme.typography.bodyLarge,
+            color = Color.White.copy(alpha = 0.8f),
+          )
+        }
+      }
     }
 
-    if (!loadError.isNullOrBlank() && topTracks.isEmpty() && topListeners.isEmpty() && recentScrobbles.isEmpty()) {
-      Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          Text(loadError ?: "Failed to load", color = MaterialTheme.colorScheme.error)
-          OutlinedButton(onClick = { refreshKey += 1 }) { Text("Retry") }
-        }
-      }
-      return@Column
+    // ── Stats row ──
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 20.dp, vertical = 14.dp),
+      horizontalArrangement = Arrangement.spacedBy(28.dp),
+    ) {
+      ArtistStatColumn("${topListeners.size}", "listeners")
+      ArtistStatColumn("$totalScrobbles", "scrobbles")
     }
 
-    ArtistHeroCard(
-      artistName = artistName,
-      tracks = topTracks,
-      listeners = topListeners,
-      scrobbles = recentScrobbles,
-    )
-
+    // ── Icon tab row ──
     TabRow(
       selectedTabIndex = selectedTab,
       containerColor = MaterialTheme.colorScheme.background,
@@ -167,7 +231,14 @@ fun ArtistScreen(
         Tab(
           selected = idx == selectedTab,
           onClick = { selectedTab = idx },
-          text = { Text(tab.label) },
+          icon = {
+            Icon(
+              imageVector = tab.icon,
+              contentDescription = tab.contentDescription,
+              modifier = Modifier.size(26.dp),
+              tint = if (idx == selectedTab) Color.White else Color(0xFFA3A3A3),
+            )
+          },
         )
       }
     }
@@ -175,99 +246,15 @@ fun ArtistScreen(
     when (tabs[selectedTab]) {
       ArtistTab.Songs -> ArtistSongsPanel(rows = topTracks, onOpenSong = onOpenSong)
       ArtistTab.Leaderboard -> ArtistLeaderboardPanel(rows = topListeners, onOpenProfile = onOpenProfile)
-      ArtistTab.Scrobbles -> ArtistScrobblesPanel(rows = recentScrobbles, onOpenSong = onOpenSong, onOpenProfile = onOpenProfile)
     }
   }
 }
 
 @Composable
-private fun ArtistHeroCard(
-  artistName: String,
-  tracks: List<ArtistTrackRow>,
-  listeners: List<ArtistListenerRow>,
-  scrobbles: List<ArtistScrobbleRow>,
-) {
-  val totalScrobbles = tracks.sumOf { it.scrobbleCountTotal }
-
-  Card(
-    modifier = Modifier
-      .fillMaxWidth()
-      .padding(horizontal = 16.dp, vertical = 8.dp),
-    shape = RoundedCornerShape(16.dp),
-    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-  ) {
-    Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(14.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        val leadCover = tracks.firstOrNull()?.coverCid
-        val coverUrl = CoverRef.resolveCoverUrl(ref = leadCover, width = 144, height = 144, format = null, quality = null)
-        if (!coverUrl.isNullOrBlank()) {
-          AsyncImage(
-            model = coverUrl,
-            contentDescription = "Artist image",
-            modifier = Modifier.size(72.dp).clip(CircleShape),
-            contentScale = ContentScale.Crop,
-          )
-        } else {
-          Surface(
-            modifier = Modifier.size(72.dp),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceVariant,
-          ) {
-            Box(contentAlignment = Alignment.Center) {
-              Text(
-                artistName.take(1).uppercase(Locale.US),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-              )
-            }
-          }
-        }
-
-        androidx.compose.foundation.layout.Spacer(Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-          Text(
-            artistName,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-          )
-          Text(
-            "Recent activity: ${scrobbles.size} scrobbles",
-            style = MaterialTheme.typography.bodyMedium,
-            color = PiratePalette.TextMuted,
-          )
-        }
-      }
-
-      Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        ArtistStatPill(label = "Tracks", value = tracks.size.toString())
-        ArtistStatPill(label = "Listeners", value = listeners.size.toString())
-        ArtistStatPill(label = "Scrobbles", value = totalScrobbles.toString())
-      }
-    }
-  }
-}
-
-@Composable
-private fun ArtistStatPill(label: String, value: String) {
-  Card(
-    shape = RoundedCornerShape(12.dp),
-    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-  ) {
-    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-      Text(value, fontWeight = FontWeight.SemiBold)
-      Text(label, style = MaterialTheme.typography.bodyMedium, color = PiratePalette.TextMuted)
-    }
+private fun ArtistStatColumn(value: String, label: String) {
+  Column {
+    Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+    Text(label, style = MaterialTheme.typography.bodyLarge, color = PiratePalette.TextMuted)
   }
 }
 
@@ -283,42 +270,42 @@ private fun ArtistSongsPanel(
     return
   }
 
-  LazyColumn(
-    modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 20.dp),
-    verticalArrangement = Arrangement.spacedBy(8.dp),
-  ) {
+  LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 20.dp)) {
     itemsIndexed(rows, key = { _, row -> row.trackId }) { idx, row ->
-      Card(
+      val coverUrl = CoverRef.resolveCoverUrl(ref = row.coverCid, width = 96, height = 96, format = "webp", quality = 80)
+      Row(
         modifier = Modifier
           .fillMaxWidth()
-          .clickable { onOpenSong(row.trackId, row.title, row.artist) },
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+          .height(72.dp)
+          .clickable { onOpenSong(row.trackId, row.title, row.artist) }
+          .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
       ) {
-        Row(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically,
+        Text(
+          "#${idx + 1}",
+          style = MaterialTheme.typography.bodyLarge,
+          color = PiratePalette.TextMuted,
+          modifier = Modifier.width(32.dp),
+        )
+        Box(
+          modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+          contentAlignment = Alignment.Center,
         ) {
-          Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text("#${idx + 1} ${row.title}", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            val subtitle = buildString {
-              if (row.album.isNotBlank()) append(row.album)
-              if (row.scrobbleCountVerified > 0) {
-                if (isNotEmpty()) append(" • ")
-                append("${row.scrobbleCountVerified} verified")
-              }
-            }
-            if (subtitle.isNotBlank()) {
-              Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = PiratePalette.TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
+          if (!coverUrl.isNullOrBlank()) {
+            AsyncImage(model = coverUrl, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+          } else {
+            Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = PiratePalette.TextMuted, modifier = Modifier.size(20.dp))
           }
-          Text(row.scrobbleCountTotal.toString(), fontWeight = FontWeight.SemiBold)
         }
+        Column(modifier = Modifier.weight(1f)) {
+          Text(row.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onBackground)
+          if (row.album.isNotBlank()) {
+            Text(row.album, style = MaterialTheme.typography.bodyLarge, color = PiratePalette.TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          }
+        }
+        Text(row.scrobbleCountTotal.toString(), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
       }
     }
   }
@@ -336,81 +323,28 @@ private fun ArtistLeaderboardPanel(
     return
   }
 
-  LazyColumn(
-    modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 20.dp),
-    verticalArrangement = Arrangement.spacedBy(8.dp),
-  ) {
+  LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 20.dp)) {
     itemsIndexed(rows, key = { _, row -> row.userAddress }) { idx, row ->
-      Card(
+      Row(
         modifier = Modifier
           .fillMaxWidth()
-          .clickable { onOpenProfile(row.userAddress) },
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+          .height(64.dp)
+          .clickable { onOpenProfile(row.userAddress) }
+          .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
       ) {
-        Row(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text("#${idx + 1} ${shortAddress(row.userAddress)}", fontWeight = FontWeight.SemiBold)
-            Text("Last: ${formatTimeAgoShort(row.lastScrobbleAtSec)}", style = MaterialTheme.typography.bodyMedium, color = PiratePalette.TextMuted)
-          }
-          Text(row.scrobbleCount.toString(), fontWeight = FontWeight.SemiBold)
-        }
-      }
-    }
-  }
-}
-
-@Composable
-private fun ArtistScrobblesPanel(
-  rows: List<ArtistScrobbleRow>,
-  onOpenSong: (trackId: String, title: String?, artist: String?) -> Unit,
-  onOpenProfile: (String) -> Unit,
-) {
-  if (rows.isEmpty()) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-      Text("No scrobbles yet.", color = PiratePalette.TextMuted)
-    }
-    return
-  }
-
-  LazyColumn(
-    modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 20.dp),
-    verticalArrangement = Arrangement.spacedBy(8.dp),
-  ) {
-    itemsIndexed(rows, key = { idx, row -> "${row.trackId}:${row.userAddress}:$idx" }) { _, row ->
-      Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-      ) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-          Text(
-            text = row.title,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.clickable { onOpenSong(row.trackId, row.title, null) },
-          )
-          Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-              text = shortAddress(row.userAddress),
-              color = PiratePalette.TextMuted,
-              style = MaterialTheme.typography.bodyMedium,
-              modifier = Modifier.clickable { onOpenProfile(row.userAddress) },
-            )
-            Text("•", color = PiratePalette.TextMuted)
-            Text(formatTimeAgoShort(row.playedAtSec), color = PiratePalette.TextMuted, style = MaterialTheme.typography.bodyMedium)
+        Text("#${idx + 1}", style = MaterialTheme.typography.bodyLarge, color = PiratePalette.TextMuted, modifier = Modifier.width(32.dp))
+        Surface(modifier = Modifier.size(40.dp), shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
+          Box(contentAlignment = Alignment.Center) {
+            Text(shortAddress(row.userAddress).take(2), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
           }
         }
+        Column(modifier = Modifier.weight(1f)) {
+          Text(shortAddress(row.userAddress), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onBackground, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          Text(formatTimeAgoShort(row.lastScrobbleAtSec), style = MaterialTheme.typography.bodyLarge, color = PiratePalette.TextMuted)
+        }
+        Text(row.scrobbleCount.toString(), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
       }
     }
   }

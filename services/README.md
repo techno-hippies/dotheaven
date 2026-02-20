@@ -60,10 +60,14 @@ Compatibility fallback:
 Run one dev smoke pass for Cloudflare Workers:
 
 ```bash
+API_CORE_URL=https://api-core.example.com \
+METADATA_RESOLVER_URL=https://metadata-resolver.example.com \
+VOICE_AGENT_URL=https://voice-agent.example.com \
+VOICE_CONTROL_PLANE_URL=https://voice-control-plane.example.com \
 bun run services/smoke-dev.ts
 ```
 
-Optional endpoint overrides:
+Required endpoint env vars:
 - `API_CORE_URL`
 - `METADATA_RESOLVER_URL`
 - `VOICE_AGENT_URL`

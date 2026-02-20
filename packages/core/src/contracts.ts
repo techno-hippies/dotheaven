@@ -59,7 +59,7 @@ export const FOLLOW_V1 = '0x153DbEcA0CEF8563649cf475a687D14997D2c403'
 // ── Escrow ─────────────────────────────────────────────────────────
 
 /** SessionEscrowV1 — Meeting booking escrow */
-export const SESSION_ESCROW_V1 = '0xb1E233221FB25c65090A75cc60Df5164A2eA4B98'
+export const SESSION_ESCROW_V1 = '0xF3B4DB746a874A2197ae21C857e1Ca692C6ED059'
 
 // ── ENS / Name Resolution ──────────────────────────────────────────
 

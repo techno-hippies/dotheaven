@@ -6,6 +6,11 @@ import {
   generateStudySetWithOpenRouter,
   type GeniusReferentInput,
 } from '../lib/study-set-generator'
+import {
+  arweaveGatewayBaseFromEnv,
+  createLoadBlobStore,
+  loadGatewayBaseFromEnv,
+} from '../lib/blob-store'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -16,9 +21,6 @@ const GENERATION_LOCK_TTL_SECONDS = 120
 const DEFAULT_TEMPO_CHAIN_ID = 42431
 const DEFAULT_TEMPO_RPC_URL = 'https://rpc.moderato.tempo.xyz'
 const DEFAULT_TEMPO_SCROBBLE_V4 = '0xe00e82086480E61AaC8d5ad8B05B56A582dD0000'
-const DEFAULT_AGENT_URL = 'https://load-s3-agent.load.network'
-const DEFAULT_GATEWAY_URL = 'https://gateway.s3-node-1.load.network'
-const DEFAULT_ARWEAVE_GATEWAY = 'https://arweave.net'
 const DEFAULT_GENIUS_API_URL = 'https://api.genius.com'
 const DEFAULT_GENIUS_PUBLIC_API_URL = 'https://genius.com/api'
 
@@ -183,17 +185,6 @@ async function parseJsonResponse(res: Response): Promise<unknown> {
   }
 }
 
-function extractUploadId(payload: unknown): string | null {
-  if (!payload || typeof payload !== 'object') return null
-  const candidate = (payload as Record<string, unknown>).id
-    ?? (payload as Record<string, unknown>).dataitem_id
-    ?? (payload as Record<string, unknown>).dataitemId
-    ?? ((payload as Record<string, unknown>).result as Record<string, unknown> | undefined)?.id
-    ?? ((payload as Record<string, unknown>).result as Record<string, unknown> | undefined)?.dataitem_id
-    ?? ((payload as Record<string, unknown>).result as Record<string, unknown> | undefined)?.dataitemId
-  return typeof candidate === 'string' && candidate.trim().length > 0 ? candidate.trim() : null
-}
-
 function normalizeLooseMatch(value: string): string {
   return value
     .toLowerCase()
@@ -353,13 +344,10 @@ async function stageStudySetPack(params: {
   uploadPayload: unknown
   postPayload: unknown
 }> {
-  const apiKey = params.env.LOAD_S3_AGENT_API_KEY?.trim()
-  if (!apiKey) {
+  if (!params.env.LOAD_S3_AGENT_API_KEY?.trim()) {
     throw new Error('load_stage_not_configured')
   }
 
-  const agentUrl = (params.env.LOAD_S3_AGENT_URL || DEFAULT_AGENT_URL).replace(/\/+$/, '')
-  const gatewayUrl = (params.env.LOAD_GATEWAY_URL || DEFAULT_GATEWAY_URL).replace(/\/+$/, '')
   const packJson = JSON.stringify(params.pack)
   const packBytes = new TextEncoder().encode(packJson)
   if (packBytes.byteLength > MAX_STUDY_SET_BYTES) {
@@ -375,61 +363,30 @@ async function stageStudySetPack(params: {
     { key: 'Study-Prompt-Hash', value: params.promptHash },
     { key: 'Content-Type', value: 'application/json' },
   ])
-
-  const form = new FormData()
-  form.append('file', new File([packBytes], `study-set-${params.language}.json`, { type: 'application/json' }))
-  form.append('content_type', 'application/json')
-  form.append('tags', tags)
-
-  const res = await fetch(`${agentUrl}/upload`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: form,
+  const blobStore = createLoadBlobStore(params.env)
+  const staged = await blobStore.put({
+    file: new File([packBytes], `study-set-${params.language}.json`, { type: 'application/json' }),
+    contentType: 'application/json',
+    tags,
   })
-  const payload = await parseJsonResponse(res)
-  if (!res.ok) {
-    throw new Error(`load_upload_failed:${res.status}:${JSON.stringify(payload)}`)
-  }
-
-  const dataitemId = extractUploadId(payload)
-  if (!dataitemId) {
-    throw new Error(`load_upload_missing_id:${JSON.stringify(payload)}`)
-  }
-
-  const postRes = await fetch(`${agentUrl}/post/${encodeURIComponent(dataitemId)}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}` },
-  })
-  const postPayload = await parseJsonResponse(postRes)
-  if (!postRes.ok) {
-    throw new Error(`load_post_failed:${postRes.status}:${JSON.stringify(postPayload)}`)
-  }
-
-  const arweaveUrl = `${DEFAULT_ARWEAVE_GATEWAY}/${dataitemId}`
-  let arweaveAvailable = false
-  try {
-    const head = await fetch(arweaveUrl, { method: 'HEAD' })
-    arweaveAvailable = head.ok
-  } catch {
-    arweaveAvailable = false
-  }
+  const anchored = await blobStore.anchor(staged.id)
 
   return {
-    dataitemId,
-    ls3Ref: `ls3://${dataitemId}`,
-    ls3GatewayUrl: `${gatewayUrl}/resolve/${dataitemId}`,
-    arweaveRef: `ar://${dataitemId}`,
-    arweaveUrl,
-    arweaveAvailable,
+    dataitemId: staged.id,
+    ls3Ref: `ls3://${staged.id}`,
+    ls3GatewayUrl: staged.gatewayUrl,
+    arweaveRef: anchored.ref,
+    arweaveUrl: anchored.arweaveUrl,
+    arweaveAvailable: anchored.arweaveAvailable,
     payloadHash,
-    uploadPayload: payload,
-    postPayload,
+    uploadPayload: staged.payload,
+    postPayload: anchored.payload,
   }
 }
 
 async function fetchRefBytes(ref: string, env: Env): Promise<{ bytes: Uint8Array; fetchedFrom: string }> {
-  const gatewayUrl = (env.LOAD_GATEWAY_URL || DEFAULT_GATEWAY_URL).replace(/\/+$/, '')
-  const arweaveGateway = DEFAULT_ARWEAVE_GATEWAY.replace(/\/+$/, '')
+  const gatewayUrl = loadGatewayBaseFromEnv(env)
+  const arweaveGateway = arweaveGatewayBaseFromEnv()
   const arId = dataitemIdFromArRef(ref)
   const ls3Id = dataitemIdFromLs3Ref(ref)
 

@@ -18,12 +18,8 @@ import claim from './routes/claim'
 import names from './routes/names'
 import namesPolicy from './routes/names-policy'
 import scrobble from './routes/scrobble'
-import sleep from './routes/sleep'
-import photos from './routes/photos'
-import meal from './routes/meal'
 import self from './routes/self'
 import wallet from './routes/wallet'
-import upload from './routes/upload'
 import load from './routes/load'
 import arweave from './routes/arweave'
 import music from './routes/music'
@@ -48,12 +44,8 @@ app.route('/api/claim', claim)
 app.route('/api/names', names)
 app.route('/api/names', namesPolicy)
 app.route('/api/scrobble', scrobble)
-app.route('/api/sleep', sleep)
-app.route('/api/photos', photos)
-app.route('/api/meal', meal)
 app.route('/api/self', self)
 app.route('/api/wallet', wallet)
-app.route('/api/upload', upload)
 app.route('/api/load', load)
 app.route('/api/arweave', arweave)
 app.route('/api/music', music)

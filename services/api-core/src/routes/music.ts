@@ -17,6 +17,10 @@ import type {
   MusicUploadBanRow,
   UserIdentityRow,
 } from '../types'
+import {
+  DEFAULT_ARWEAVE_GATEWAY_URL,
+  createLoadBlobStore,
+} from '../lib/blob-store'
 
 type MusicVariables = {
   userAddress: string
@@ -24,9 +28,6 @@ type MusicVariables = {
 
 const app = new Hono<{ Bindings: Env; Variables: MusicVariables }>()
 
-const DEFAULT_AGENT_URL = 'https://load-s3-agent.load.network'
-const DEFAULT_GATEWAY_URL = 'https://gateway.s3-node-1.load.network'
-const DEFAULT_ARWEAVE_GATEWAY = 'https://arweave.net'
 const DEFAULT_STORY_RPC_URL = 'https://aeneid.storyrpc.io'
 const DEFAULT_STORY_CHAIN_ID = 1315
 const DEFAULT_STORY_LICENSE_ATTACHMENT_WORKFLOWS = '0xcC2E862bCee5B6036Db0de6E06Ae87e524a79fd8'
@@ -132,18 +133,6 @@ function isLikelyAudioContentType(contentType: string): boolean {
 
 function isLikelyImageContentType(contentType: string): boolean {
   return contentType.startsWith('image/')
-}
-
-function extractUploadId(payload: unknown): string | null {
-  if (!payload || typeof payload !== 'object') return null
-  const candidate = (payload as Record<string, unknown>).id
-    ?? (payload as Record<string, unknown>).dataitem_id
-    ?? (payload as Record<string, unknown>).dataitemId
-    ?? ((payload as Record<string, unknown>).result as Record<string, unknown> | undefined)?.id
-    ?? ((payload as Record<string, unknown>).result as Record<string, unknown> | undefined)?.dataitem_id
-    ?? ((payload as Record<string, unknown>).result as Record<string, unknown> | undefined)?.dataitemId
-
-  return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : null
 }
 
 function dataitemIdFromArRef(ref: string | null | undefined): string | null {
@@ -321,19 +310,8 @@ async function sha256HexBytes(data: Uint8Array): Promise<string> {
   return sha256Hex(copy.buffer)
 }
 
-async function parseJsonResponse(res: Response): Promise<unknown> {
-  const text = await res.text()
-  try {
-    return text ? JSON.parse(text) : null
-  } catch {
-    return { raw: text }
-  }
-}
-
 async function uploadToLoadStaging(params: {
-  apiKey: string
-  agentUrl: string
-  gatewayUrl: string
+  env: Env
   file: File
   contentType: string
   tags: Array<{ key: string; value: string }>
@@ -342,30 +320,17 @@ async function uploadToLoadStaging(params: {
   gatewayUrl: string
   payload: unknown
 }> {
-  const form = new FormData()
-  form.append('file', params.file, params.file.name || 'upload.bin')
-  form.append('content_type', params.contentType)
-  form.append('tags', JSON.stringify(params.tags))
-
-  const res = await fetch(`${params.agentUrl}/upload`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${params.apiKey}` },
-    body: form,
+  const blobStore = createLoadBlobStore(params.env)
+  const staged = await blobStore.put({
+    file: params.file,
+    contentType: params.contentType,
+    tags: params.tags,
   })
-  const payload = await parseJsonResponse(res)
-  if (!res.ok) {
-    throw new Error(`load_upload_failed:${res.status}:${JSON.stringify(payload)}`)
-  }
-
-  const id = extractUploadId(payload)
-  if (!id) {
-    throw new Error(`load_upload_missing_id:${JSON.stringify(payload)}`)
-  }
 
   return {
-    dataitemId: id,
-    gatewayUrl: `${params.gatewayUrl}/resolve/${id}`,
-    payload,
+    dataitemId: staged.id,
+    gatewayUrl: staged.gatewayUrl,
+    payload: staged.payload,
   }
 }
 
@@ -414,9 +379,7 @@ function normalizeJsonPayload(value: unknown, fieldName: string): string {
 
 async function uploadAndAnchorJson(
   params: {
-    apiKey: string
-    agentUrl: string
-    gatewayUrl: string
+    env: Env
     jobId: string
     metadataType: 'ip' | 'nft'
     payloadJson: string
@@ -431,53 +394,20 @@ async function uploadAndAnchorJson(
     { key: 'Music-Metadata-Type', value: params.metadataType },
     { key: 'Content-Type', value: 'application/json' },
   ])
-
-  const uploadForm = new FormData()
-  uploadForm.append(
-    'file',
-    new File([payloadBytes], `${params.metadataType}-metadata.json`, { type: 'application/json' }),
-  )
-  uploadForm.append('content_type', 'application/json')
-  uploadForm.append('tags', tags)
-
-  const uploadResp = await fetch(`${params.agentUrl}/upload`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${params.apiKey}` },
-    body: uploadForm,
+  const blobStore = createLoadBlobStore(params.env)
+  const staged = await blobStore.put({
+    file: new File([payloadBytes], `${params.metadataType}-metadata.json`, { type: 'application/json' }),
+    contentType: 'application/json',
+    tags,
   })
-  const uploadPayload = await parseJsonResponse(uploadResp)
-  if (!uploadResp.ok) {
-    throw new Error(`load_upload_failed:${uploadResp.status}:${JSON.stringify(uploadPayload)}`)
-  }
-  const id = extractUploadId(uploadPayload)
-  if (!id) {
-    throw new Error(`load_upload_missing_id:${JSON.stringify(uploadPayload)}`)
-  }
-
-  const postResp = await fetch(`${params.agentUrl}/post/${encodeURIComponent(id)}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${params.apiKey}` },
-  })
-  const postPayload = await parseJsonResponse(postResp)
-  if (!postResp.ok) {
-    throw new Error(`load_post_failed:${postResp.status}:${JSON.stringify(postPayload)}`)
-  }
-
-  const arweaveUrl = `${DEFAULT_ARWEAVE_GATEWAY}/${id}`
-  let arweaveAvailable = false
-  try {
-    const head = await fetch(arweaveUrl, { method: 'HEAD' })
-    arweaveAvailable = head.ok
-  } catch {
-    arweaveAvailable = false
-  }
+  const anchored = await blobStore.anchor(staged.id)
 
   return {
-    dataitemId: id,
-    ref: `ar://${id}`,
-    ls3GatewayUrl: `${params.gatewayUrl}/resolve/${id}`,
-    arweaveUrl,
-    arweaveAvailable,
+    dataitemId: staged.id,
+    ref: anchored.ref,
+    ls3GatewayUrl: staged.gatewayUrl,
+    arweaveUrl: anchored.arweaveUrl,
+    arweaveAvailable: anchored.arweaveAvailable,
     payloadHash: `0x${payloadHash}`,
   }
 }
@@ -793,8 +723,7 @@ app.use('/publish/*', requireMusicAccess)
 // Stage upload only. This endpoint intentionally does not anchor to Arweave.
 app.post('/publish/start', async (c) => {
   const userAddress = c.get('userAddress')
-  const apiKey = c.env.LOAD_S3_AGENT_API_KEY
-  if (!apiKey) {
+  if (!c.env.LOAD_S3_AGENT_API_KEY) {
     return c.json({ error: 'Music upload not configured (LOAD_S3_AGENT_API_KEY)' }, 500)
   }
 
@@ -890,34 +819,22 @@ app.post('/publish/start', async (c) => {
     return c.json({ error: 'tags must be valid JSON array' }, 400)
   }
 
-  const agentUrl = (c.env.LOAD_S3_AGENT_URL || DEFAULT_AGENT_URL).replace(/\/+$/, '')
-  const gatewayUrl = (c.env.LOAD_GATEWAY_URL || DEFAULT_GATEWAY_URL).replace(/\/+$/, '')
-  const upstreamForm = new FormData()
-  upstreamForm.append('file', file, file.name || 'upload.bin')
-  upstreamForm.append('content_type', contentType)
-  upstreamForm.append('tags', tags)
-
-  const uploadResp = await fetch(`${agentUrl}/upload`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: upstreamForm,
-  })
-
-  const uploadPayload = await parseJsonResponse(uploadResp)
-  if (!uploadResp.ok) {
+  const blobStore = createLoadBlobStore(c.env)
+  let staged: Awaited<ReturnType<typeof blobStore.put>>
+  try {
+    staged = await blobStore.put({
+      file,
+      contentType,
+      tags,
+    })
+  } catch (error) {
     return c.json({
       error: 'Load agent upload failed',
-      status: uploadResp.status,
-      payload: uploadPayload,
+      details: asErrorMessage(error),
     }, 502)
   }
-
-  const stagedDataitemId = extractUploadId(uploadPayload)
-  if (!stagedDataitemId) {
-    return c.json({ error: 'Upload succeeded but no dataitem id returned', payload: uploadPayload }, 502)
-  }
-
-  const stagedGatewayUrl = `${gatewayUrl}/resolve/${stagedDataitemId}`
+  const stagedDataitemId = staged.id
+  const stagedGatewayUrl = staged.gatewayUrl
   const jobId = generateJobId()
 
   await c.env.DB.prepare(`
@@ -940,7 +857,7 @@ app.post('/publish/start', async (c) => {
     durationS,
     stagedDataitemId,
     stagedGatewayUrl,
-    JSON.stringify(uploadPayload),
+    JSON.stringify(staged.payload),
     now,
     now,
   ).run()
@@ -962,8 +879,7 @@ app.post('/publish/start', async (c) => {
 app.post('/publish/:jobId/artifacts/stage', async (c) => {
   const userAddress = c.get('userAddress')
   const jobId = c.req.param('jobId')
-  const apiKey = c.env.LOAD_S3_AGENT_API_KEY
-  if (!apiKey) {
+  if (!c.env.LOAD_S3_AGENT_API_KEY) {
     return c.json({ error: 'Music artifact upload not configured (LOAD_S3_AGENT_API_KEY)' }, 500)
   }
 
@@ -1017,9 +933,6 @@ app.post('/publish/:jobId/artifacts/stage', async (c) => {
     return c.json({ cached: true, job: serializeJob(row) })
   }
 
-  const agentUrl = (c.env.LOAD_S3_AGENT_URL || DEFAULT_AGENT_URL).replace(/\/+$/, '')
-  const gatewayUrl = (c.env.LOAD_GATEWAY_URL || DEFAULT_GATEWAY_URL).replace(/\/+$/, '')
-
   let coverUpload: Awaited<ReturnType<typeof uploadToLoadStaging>> | null = null
   let lyricsUpload: Awaited<ReturnType<typeof uploadToLoadStaging>> | null = null
   let lyricsSha256 = row.lyrics_sha256
@@ -1028,9 +941,7 @@ app.post('/publish/:jobId/artifacts/stage', async (c) => {
   try {
     if (coverFile && !coverAlreadyStaged) {
       coverUpload = await uploadToLoadStaging({
-        apiKey,
-        agentUrl,
-        gatewayUrl,
+        env: c.env,
         file: coverFile,
         contentType: coverContentType,
         tags: [
@@ -1048,9 +959,7 @@ app.post('/publish/:jobId/artifacts/stage', async (c) => {
       lyricsByteLength = lyricsBytes.byteLength
       const lyricsFile = new File([lyricsBytes], 'lyrics.txt', { type: 'text/plain; charset=utf-8' })
       lyricsUpload = await uploadToLoadStaging({
-        apiKey,
-        agentUrl,
-        gatewayUrl,
+        env: c.env,
         file: lyricsFile,
         contentType: 'text/plain; charset=utf-8',
         tags: [
@@ -1704,8 +1613,7 @@ app.post('/publish/:jobId/anchor', async (c) => {
   const userAddress = c.get('userAddress')
   const jobId = c.req.param('jobId')
 
-  const apiKey = c.env.LOAD_S3_AGENT_API_KEY
-  if (!apiKey) {
+  if (!c.env.LOAD_S3_AGENT_API_KEY) {
     return c.json({ error: 'Arweave anchor not configured (LOAD_S3_AGENT_API_KEY)' }, 500)
   }
 
@@ -1751,14 +1659,11 @@ app.post('/publish/:jobId/anchor', async (c) => {
     )
   }
 
-  const agentUrl = (c.env.LOAD_S3_AGENT_URL || DEFAULT_AGENT_URL).replace(/\/+$/, '')
-  const postResp = await fetch(`${agentUrl}/post/${encodeURIComponent(row.staged_dataitem_id)}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}` },
-  })
-
-  const postPayload = await parseJsonResponse(postResp)
-  if (!postResp.ok) {
+  const blobStore = createLoadBlobStore(c.env)
+  let anchorResult: Awaited<ReturnType<typeof blobStore.anchor>>
+  try {
+    anchorResult = await blobStore.anchor(row.staged_dataitem_id)
+  } catch (error) {
     const failNow = Math.floor(Date.now() / 1000)
     await c.env.DB.prepare(`
       UPDATE music_publish_jobs
@@ -1767,22 +1672,12 @@ app.post('/publish/:jobId/anchor', async (c) => {
           error_message = ?,
           updated_at = ?
       WHERE job_id = ? AND user_address = ?
-    `).bind(`LS3 post failed (status ${postResp.status})`, failNow, jobId, userAddress).run()
+    `).bind(asErrorMessage(error).slice(0, 512), failNow, jobId, userAddress).run()
 
     return c.json({
       error: 'LS3 post-to-arweave failed',
-      status: postResp.status,
-      payload: postPayload,
+      details: asErrorMessage(error),
     }, 502)
-  }
-
-  const arweaveUrl = `${DEFAULT_ARWEAVE_GATEWAY}/${row.staged_dataitem_id}`
-  let arweaveAvailable = false
-  try {
-    const head = await fetch(arweaveUrl, { method: 'HEAD' })
-    arweaveAvailable = head.ok
-  } catch {
-    arweaveAvailable = false
   }
 
   const doneNow = Math.floor(Date.now() / 1000)
@@ -1799,11 +1694,11 @@ app.post('/publish/:jobId/anchor', async (c) => {
         updated_at = ?
     WHERE job_id = ? AND user_address = ?
   `).bind(
-    row.staged_dataitem_id,
-    `ar://${row.staged_dataitem_id}`,
-    arweaveUrl,
-    arweaveAvailable ? 1 : 0,
-    JSON.stringify(postPayload),
+    anchorResult.id,
+    anchorResult.ref,
+    anchorResult.arweaveUrl,
+    anchorResult.arweaveAvailable ? 1 : 0,
+    JSON.stringify(anchorResult.payload),
     doneNow,
     jobId,
     userAddress,
@@ -1843,12 +1738,12 @@ function metadataResponseFromRow(jobId: string, row: MusicPublishJobRow) {
     ipMetadataURI: row.ip_metadata_uri,
     ipMetadataHash: row.ip_metadata_hash,
     ipMetadataDataitemId: ipId,
-    ipMetadataArweaveUrl: ipId ? `${DEFAULT_ARWEAVE_GATEWAY}/${ipId}` : null,
+    ipMetadataArweaveUrl: ipId ? `${DEFAULT_ARWEAVE_GATEWAY_URL}/${ipId}` : null,
     ipMetadataArweaveAvailable: !!ipId,
     nftMetadataURI: row.nft_metadata_uri,
     nftMetadataHash: row.nft_metadata_hash,
     nftMetadataDataitemId: nftId,
-    nftMetadataArweaveUrl: nftId ? `${DEFAULT_ARWEAVE_GATEWAY}/${nftId}` : null,
+    nftMetadataArweaveUrl: nftId ? `${DEFAULT_ARWEAVE_GATEWAY_URL}/${nftId}` : null,
     nftMetadataArweaveAvailable: !!nftId,
   }
 }
@@ -1856,8 +1751,7 @@ function metadataResponseFromRow(jobId: string, row: MusicPublishJobRow) {
 app.post('/publish/:jobId/metadata', async (c) => {
   const userAddress = c.get('userAddress')
   const jobId = c.req.param('jobId')
-  const apiKey = c.env.LOAD_S3_AGENT_API_KEY
-  if (!apiKey) {
+  if (!c.env.LOAD_S3_AGENT_API_KEY) {
     return c.json({ error: 'Music metadata anchor not configured (LOAD_S3_AGENT_API_KEY)' }, 500)
   }
 
@@ -1901,8 +1795,6 @@ app.post('/publish/:jobId/metadata', async (c) => {
     return c.json({ error: `Metadata payload too large (max ${maxJsonBytes} bytes each)` }, 400)
   }
 
-  const agentUrl = (c.env.LOAD_S3_AGENT_URL || DEFAULT_AGENT_URL).replace(/\/+$/, '')
-  const gatewayUrl = (c.env.LOAD_GATEWAY_URL || DEFAULT_GATEWAY_URL).replace(/\/+$/, '')
   const lockNow = Math.floor(Date.now() / 1000)
   const lock = await c.env.DB.prepare(`
     UPDATE music_publish_jobs
@@ -1944,17 +1836,13 @@ app.post('/publish/:jobId/metadata', async (c) => {
   try {
     const [ipAnchor, nftAnchor] = await Promise.all([
       uploadAndAnchorJson({
-        apiKey,
-        agentUrl,
-        gatewayUrl,
+        env: c.env,
         jobId,
         metadataType: 'ip',
         payloadJson: ipMetadataJson,
       }),
       uploadAndAnchorJson({
-        apiKey,
-        agentUrl,
-        gatewayUrl,
+        env: c.env,
         jobId,
         metadataType: 'nft',
         payloadJson: nftMetadataJson,

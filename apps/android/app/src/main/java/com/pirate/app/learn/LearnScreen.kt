@@ -7,22 +7,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,9 +31,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.pirate.app.ui.PirateMobileHeader
+import com.pirate.app.theme.PiratePalette
 import com.pirate.app.util.formatTimeAgoShort
 import kotlinx.coroutines.launch
-import kotlin.math.max
 
 @Composable
 fun LearnScreen(
@@ -47,7 +41,6 @@ fun LearnScreen(
   userAddress: String?,
   onOpenDrawer: () -> Unit,
   onShowMessage: (String) -> Unit,
-  onOpenSong: ((String) -> Unit)? = null,
 ) {
   val scope = rememberCoroutineScope()
 
@@ -56,7 +49,6 @@ fun LearnScreen(
   var selectedStudySetKey by rememberSaveable { mutableStateOf<String?>(null) }
 
   var detailLoading by remember { mutableStateOf(false) }
-  var detail by remember { mutableStateOf<UserStudySetDetail?>(null) }
   var queue by remember { mutableStateOf<StudyQueueSnapshot?>(null) }
 
   fun loadSummaries(address: String) {
@@ -72,13 +64,11 @@ fun LearnScreen(
             ?: rows.first().studySetKey
         } else {
           selectedStudySetKey = null
-          detail = null
           queue = null
         }
       }.onFailure { err ->
         summaries = emptyList()
         selectedStudySetKey = null
-        detail = null
         queue = null
         onShowMessage("Learn load failed: ${err.message ?: "unknown error"}")
       }
@@ -92,10 +82,8 @@ fun LearnScreen(
       runCatching {
         StudyProgressApi.fetchUserStudySetDetail(address, studySetKey)
       }.onSuccess { result ->
-        detail = result
         queue = if (result == null) null else StudyScheduler.replay(result.attempts)
       }.onFailure { err ->
-        detail = null
         queue = null
         onShowMessage("Learn detail failed: ${err.message ?: "unknown error"}")
       }
@@ -108,7 +96,6 @@ fun LearnScreen(
       summaries = emptyList()
       summariesLoading = false
       selectedStudySetKey = null
-      detail = null
       queue = null
       detailLoading = false
       return@LaunchedEffect
@@ -120,7 +107,6 @@ fun LearnScreen(
     val address = userAddress
     val studySetKey = selectedStudySetKey
     if (!isAuthenticated || address.isNullOrBlank() || studySetKey.isNullOrBlank()) {
-      detail = null
       queue = null
       detailLoading = false
       return@LaunchedEffect
@@ -133,20 +119,6 @@ fun LearnScreen(
       title = "Learn",
       isAuthenticated = isAuthenticated,
       onAvatarPress = onOpenDrawer,
-      rightSlot = {
-        val canRefresh = isAuthenticated && !userAddress.isNullOrBlank() && !summariesLoading
-        OutlinedButton(
-          enabled = canRefresh,
-          onClick = {
-            val address = userAddress
-            if (!address.isNullOrBlank()) {
-              loadSummaries(address)
-            }
-          },
-        ) {
-          Text("Refresh")
-        }
-      },
     )
 
     if (!isAuthenticated || userAddress.isNullOrBlank()) {
@@ -162,20 +134,9 @@ fun LearnScreen(
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
       item {
-        StudyQueueSummaryCard(
+        LearnQueueSummaryCards(
           queue = queue,
-          detail = detail,
           loading = detailLoading,
-          onOpenSong = onOpenSong,
-        )
-      }
-
-      item {
-        Text(
-          text = "Study Sets",
-          style = MaterialTheme.typography.titleMedium,
-          color = MaterialTheme.colorScheme.onSurface,
-          fontWeight = FontWeight.SemiBold,
         )
       }
 
@@ -189,21 +150,7 @@ fun LearnScreen(
           }
         }
       } else if (summaries.isEmpty()) {
-        item {
-          Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            shape = RoundedCornerShape(16.dp),
-          ) {
-            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-              Text("No study attempts indexed yet.", fontWeight = FontWeight.Medium)
-              Text(
-                "Complete a few exercises and submit attempts onchain. This queue hydrates from the study-progress subgraph.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
-              )
-            }
-          }
-        }
+        // intentionally no empty-state card text
       } else {
         items(summaries, key = { it.id }) { summary ->
           val selected = summary.studySetKey.equals(selectedStudySetKey, ignoreCase = true)
@@ -245,77 +192,70 @@ fun LearnScreen(
 }
 
 @Composable
-private fun StudyQueueSummaryCard(
+private fun LearnQueueSummaryCards(
   queue: StudyQueueSnapshot?,
-  detail: UserStudySetDetail?,
   loading: Boolean,
-  onOpenSong: ((String) -> Unit)? = null,
 ) {
-  val trackedCards = queue?.trackedCards ?: 0
-  val dueCards = queue?.dueCount ?: 0
-  val completionProgress = if (trackedCards <= 0) {
-    0f
-  } else {
-    ((trackedCards - dueCards).toFloat() / max(1, trackedCards).toFloat()).coerceIn(0f, 1f)
-  }
+  val learningCount = queue?.learningCount ?: 0
+  val reviewCount = queue?.reviewCount ?: 0
+  val dueCount = queue?.dueCount ?: 0
 
   Card(
+    modifier = Modifier.fillMaxWidth(),
     shape = RoundedCornerShape(16.dp),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
   ) {
-    Column(
-      modifier = Modifier.fillMaxWidth().padding(14.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-      Text("Queue Snapshot", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-      if (loading) {
-        Row(
-          modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-          horizontalArrangement = Arrangement.Center,
-        ) {
-          CircularProgressIndicator()
-        }
-      } else {
-        val detailSummary = detail?.summary
-        Text(
-          text = "Study set: ${detailSummary?.studySetKey?.let { abbreviateHex(it, 10, 6) } ?: "—"}",
-          style = MaterialTheme.typography.bodyMedium,
-        )
-        val anchor = detail?.anchor
-        if (anchor != null) {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            Text(
-              text = "Track: ${abbreviateHex(anchor.trackId, 10, 6)} • v${anchor.version}",
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (onOpenSong != null) {
-              OutlinedButton(onClick = { onOpenSong(anchor.trackId) }) {
-                Text("Song")
-              }
-            }
-          }
-        }
-        LinearProgressIndicator(
-          progress = { completionProgress },
-          modifier = Modifier.fillMaxWidth().height(8.dp),
-        )
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-          Text("Due ${queue?.dueCount ?: 0}", style = MaterialTheme.typography.bodySmall)
-          Text("Tracked ${queue?.trackedCards ?: 0}", style = MaterialTheme.typography.bodySmall)
-        }
-        HorizontalDivider()
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-          Text("Learning ${queue?.learningCount ?: 0}", style = MaterialTheme.typography.bodySmall)
-          Text("Review ${queue?.reviewCount ?: 0}", style = MaterialTheme.typography.bodySmall)
-          Text("Relearning ${queue?.relearningCount ?: 0}", style = MaterialTheme.typography.bodySmall)
-        }
+    if (loading && queue == null) {
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(20.dp),
+        horizontalArrangement = Arrangement.Center,
+      ) {
+        CircularProgressIndicator()
       }
+      return@Card
+    }
+
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(12.dp),
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      LearnStatCard(modifier = Modifier.weight(1f), value = learningCount.toString(), title = "Learn")
+      LearnStatCard(modifier = Modifier.weight(1f), value = reviewCount.toString(), title = "Review")
+      LearnStatCard(modifier = Modifier.weight(1f), value = dueCount.toString(), title = "Due")
+    }
+  }
+}
+
+@Composable
+private fun LearnStatCard(modifier: Modifier = Modifier, value: String, title: String) {
+  Card(
+    modifier = modifier,
+    shape = RoundedCornerShape(14.dp),
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+  ) {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(12.dp),
+      verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+      Text(
+        text = value,
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurface,
+      )
+      Text(
+        text = title,
+        style = MaterialTheme.typography.bodyLarge,
+        color = PiratePalette.TextMuted,
+      )
     }
   }
 }

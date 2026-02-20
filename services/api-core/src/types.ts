@@ -79,16 +79,6 @@ export interface Env {
   DNS_SHARED_SECRET?: string  // Required for /api/names/dns/resolve
   CLAIM_START_SECRET?: string // Required to call /api/claim/start outside local dev
 
-  // Filebase S3 credentials for IPFS pinning (scrobbles)
-  FILEBASE_ACCESS_KEY?: string
-  FILEBASE_SECRET_KEY?: string
-  FILEBASE_BUCKET?: string
-
-  // Filebase S3 credentials for food photos (separate bucket)
-  FILEBASE_FOOD_ACCESS_KEY?: string
-  FILEBASE_FOOD_SECRET_KEY?: string
-  FILEBASE_FOOD_BUCKET?: string
-
   // OpenRouter for study-set generation
   OPENROUTER_API_KEY?: string
   // Optional model override for study-set generation
@@ -157,15 +147,6 @@ export interface Env {
 
   // Images binding for transforms
   IMAGES: ImagesBinding
-
-  // Filebase IPFS pinning (format: ACCESS_KEY_ID:SECRET_ACCESS_KEY:BUCKET)
-  FILEBASE_KEY?: string
-
-  // Filebase songs bucket (audio, instrumental, cover uploads)
-  FILEBASE_SONGS_KEY?: string
-
-  // Filebase canvas videos bucket (separate bucket for video content)
-  FILEBASE_CANVAS_KEY?: string
 
   // Load S3 agent upload credentials/config
   LOAD_S3_AGENT_API_KEY?: string

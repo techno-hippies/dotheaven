@@ -11,7 +11,11 @@ import { resolveCoverUrl } from './cover-ref'
 // ── Config ──────────────────────────────────────────────────────────
 
 const RESOLVER_URL =
-  import.meta.env.VITE_RESOLVER_URL || 'https://metadata-resolver.deletion-backup782.workers.dev'
+  (() => {
+    const url = (import.meta.env.VITE_RESOLVER_URL || '').trim()
+    if (!url) throw new Error('Missing VITE_RESOLVER_URL')
+    return url.replace(/\/+$/, '')
+  })()
 
 // ── Types ───────────────────────────────────────────────────────────
 

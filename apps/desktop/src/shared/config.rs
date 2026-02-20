@@ -1,7 +1,5 @@
 use std::env;
 
-const DEFAULT_DUET_WORKER_URL: &str = "https://voice-control-plane.deletion-backup782.workers.dev";
-
 pub fn non_empty_env(key: &str) -> Option<String> {
     env::var(key).ok().filter(|v| !v.trim().is_empty())
 }
@@ -17,5 +15,9 @@ pub fn duet_worker_base_url() -> String {
         .or_else(|| non_empty_env("VOICE_CONTROL_PLANE_URL"))
         .or_else(|| non_empty_env("HEAVEN_DUET_WORKER_URL"))
         .or_else(|| non_empty_env("HEAVEN_VOICE_WORKER_URL"))
-        .unwrap_or_else(|| DEFAULT_DUET_WORKER_URL.to_string())
+        .unwrap_or_else(|| {
+            panic!(
+                "Missing duet worker URL. Set DUET_WORKER_URL (or VOICE_CONTROL_PLANE_URL / HEAVEN_DUET_WORKER_URL / HEAVEN_VOICE_WORKER_URL)."
+            )
+        })
 }

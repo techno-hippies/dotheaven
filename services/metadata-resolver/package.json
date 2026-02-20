@@ -6,7 +6,7 @@
     "deploy": "wrangler deploy",
     "check": "tsc --noEmit",
     "test:unit": "bun run check",
-    "test:smoke": "bun run tests/smoke/health.smoke.ts"
+    "test:smoke": "bun --env-file=.dev.vars run tests/smoke/health.smoke.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240405.0",

@@ -37,6 +37,31 @@ object ProfileMusicApi {
     fetchPublishedSongsInternal(ownerAddress = null, maxEntries = maxEntries)
   }
 
+  suspend fun fetchPlaylistTracks(playlistId: String): List<PublishedSongRow> = withContext(Dispatchers.IO) {
+    val trackIds = com.pirate.app.music.OnChainPlaylistsApi.fetchPlaylistTrackIds(playlistId)
+    if (trackIds.isEmpty()) return@withContext emptyList()
+    val normalized = trackIds.map { it.trim().lowercase() }.filter { it.isNotBlank() }
+    for (subgraphUrl in musicSocialSubgraphUrls()) {
+      val meta = runCatching { fetchTrackMetadata(subgraphUrl, normalized) }.getOrNull() ?: continue
+      if (meta.isEmpty()) continue
+      return@withContext normalized.mapNotNull { trackId ->
+        val m = meta[trackId] ?: return@mapNotNull null
+        PublishedSongRow(
+          contentId = trackId,
+          trackId = trackId,
+          title = m.title.ifBlank { trackId.take(14) },
+          artist = m.artist.ifBlank { "Unknown Artist" },
+          album = m.album,
+          pieceCid = null,
+          coverCid = m.coverCid,
+          durationSec = m.durationSec,
+          publishedAtSec = 0L,
+        )
+      }
+    }
+    emptyList()
+  }
+
   private suspend fun fetchPublishedSongsInternal(ownerAddress: String?, maxEntries: Int): List<PublishedSongRow> {
     var sawSuccessfulEmpty = false
     var subgraphError: Throwable? = null
@@ -55,7 +80,7 @@ object ProfileMusicApi {
       }
     }
 
-    if (ownerAddress.isNullOrBlank()) {
+    if (ownerAddress.isNullOrBlank() && !sawSuccessfulEmpty && isSubgraphAvailabilityError(subgraphError)) {
       val chainRows = runCatching { SongArtistApi.fetchLatestTracksFromChain(maxEntries = maxEntries) }.getOrNull().orEmpty()
       if (chainRows.isNotEmpty()) {
         return chainRows.map { row ->
@@ -93,22 +118,7 @@ object ProfileMusicApi {
     val album: String,
     val coverCid: String?,
     val durationSec: Int,
-  )
-
-  private data class LatestTrackRow(
-    val trackId: String,
-    val title: String,
-    val artist: String,
-    val album: String,
-    val coverCid: String?,
-    val durationSec: Int,
-    val registeredAtSec: Long,
-  )
-
-  private data class ContentPointer(
-    val contentId: String,
-    val pieceCid: String?,
-    val publishedAtSec: Long,
+    val kind: Int?,
   )
 
   private fun musicSocialSubgraphUrls(): List<String> = tempoMusicSocialSubgraphUrls()
@@ -165,7 +175,8 @@ object ProfileMusicApi {
     val trackMeta = fetchTrackMetadata(subgraphUrl, trackIds.toList())
     val out = ArrayList<PublishedSongRow>(uniqueByTrackId.size)
     for (entry in uniqueByTrackId.values) {
-      val meta = trackMeta[entry.trackId]
+      val meta = trackMeta[entry.trackId] ?: continue
+      if (!isPublishedTrackKind(meta.kind)) continue
       out.add(
         PublishedSongRow(
           contentId = entry.contentId,
@@ -184,109 +195,59 @@ object ProfileMusicApi {
   }
 
   private fun fetchLatestFromSubgraph(subgraphUrl: String, maxEntries: Int): List<PublishedSongRow> {
-    val tracksQuery = """
+    val contentQuery = """
       {
-        tracks(
-          where: { kind: 2 }
-          orderBy: registeredAt
+        contentEntries(
+          where: { active: true }
+          orderBy: createdAt
           orderDirection: desc
           first: $maxEntries
         ) {
           id
-          title
-          artist
-          album
-          coverCid
-          durationSec
-          registeredAt
+          trackId
+          pieceCid
+          createdAt
         }
       }
     """.trimIndent()
 
-    val tracksJson = postQuery(subgraphUrl, tracksQuery)
-    val tracks = tracksJson.optJSONObject("data")?.optJSONArray("tracks") ?: JSONArray()
-    if (tracks.length() == 0) return emptyList()
+    val contentJson = postQuery(subgraphUrl, contentQuery)
+    val contentEntries = contentJson.optJSONObject("data")?.optJSONArray("contentEntries") ?: JSONArray()
+    if (contentEntries.length() == 0) return emptyList()
 
-    val latestTracks = ArrayList<LatestTrackRow>(tracks.length())
-    val trackIds = LinkedHashSet<String>(tracks.length())
-    for (i in 0 until tracks.length()) {
-      val row = tracks.optJSONObject(i) ?: continue
-      val trackId = row.optString("id", "").trim().lowercase()
-      if (trackId.isEmpty()) continue
-      if (!trackIds.add(trackId)) continue
-      val coverCid = row.optString("coverCid", "").trim().ifBlank { null }?.takeIf { isValidCid(it) }
-      val registeredAt = row.optString("registeredAt", "0").trim().toLongOrNull() ?: row.optLong("registeredAt", 0L)
-      latestTracks.add(
-        LatestTrackRow(
-          trackId = trackId,
-          title = row.optString("title", "").trim(),
-          artist = row.optString("artist", "").trim(),
-          album = row.optString("album", "").trim(),
-          coverCid = coverCid,
-          durationSec = row.optInt("durationSec", 0),
-          registeredAtSec = registeredAt,
-        ),
-      )
+    val uniqueByTrackId = LinkedHashMap<String, ContentRow>(contentEntries.length())
+    val trackIds = LinkedHashSet<String>(contentEntries.length())
+    for (i in 0 until contentEntries.length()) {
+      val obj = contentEntries.optJSONObject(i) ?: continue
+      val contentId = obj.optString("id", "").trim().lowercase()
+      val trackId = obj.optString("trackId", "").trim().lowercase()
+      if (contentId.isEmpty() || trackId.isEmpty()) continue
+      if (uniqueByTrackId.containsKey(trackId)) continue
+      val pieceCid = decodeBytesUtf8(obj.optString("pieceCid", "").trim()).ifBlank { null }
+      val createdAt = obj.optString("createdAt", "0").trim().toLongOrNull() ?: obj.optLong("createdAt", 0L)
+      uniqueByTrackId[trackId] = ContentRow(contentId = contentId, trackId = trackId, pieceCid = pieceCid, publishedAtSec = createdAt)
+      trackIds.add(trackId)
     }
-    if (latestTracks.isEmpty()) return emptyList()
+    if (uniqueByTrackId.isEmpty()) return emptyList()
 
-    val contentByTrack = fetchLatestContentPointersByTrack(subgraphUrl, trackIds.toList())
-
-    val out = ArrayList<PublishedSongRow>(latestTracks.size)
-    for (track in latestTracks) {
-      val content = contentByTrack[track.trackId]
+    val trackMeta = fetchTrackMetadata(subgraphUrl, trackIds.toList())
+    val out = ArrayList<PublishedSongRow>(uniqueByTrackId.size)
+    for (entry in uniqueByTrackId.values) {
+      val meta = trackMeta[entry.trackId] ?: continue
+      if (!isPublishedTrackKind(meta.kind)) continue
       out.add(
         PublishedSongRow(
-          contentId = content?.contentId ?: track.trackId,
-          trackId = track.trackId,
-          title = track.title.ifBlank { track.trackId.take(14) },
-          artist = track.artist.ifBlank { "Unknown Artist" },
-          album = track.album,
-          pieceCid = content?.pieceCid,
-          coverCid = track.coverCid,
-          durationSec = track.durationSec,
-          publishedAtSec = content?.publishedAtSec ?: track.registeredAtSec,
+          contentId = entry.contentId,
+          trackId = entry.trackId,
+          title = meta?.title.orEmpty().ifBlank { entry.trackId.take(14) },
+          artist = meta?.artist.orEmpty().ifBlank { "Unknown Artist" },
+          album = meta?.album.orEmpty(),
+          pieceCid = entry.pieceCid,
+          coverCid = meta?.coverCid,
+          durationSec = meta?.durationSec ?: 0,
+          publishedAtSec = entry.publishedAtSec,
         ),
       )
-    }
-    return out
-  }
-
-  private fun fetchLatestContentPointersByTrack(subgraphUrl: String, trackIds: List<String>): Map<String, ContentPointer> {
-    if (trackIds.isEmpty()) return emptyMap()
-    val out = HashMap<String, ContentPointer>(trackIds.size)
-    val chunkSize = 100
-    for (start in trackIds.indices step chunkSize) {
-      val chunk = trackIds.subList(start, minOf(start + chunkSize, trackIds.size))
-      val quoted = chunk.joinToString(",") { "\"${it.replace("\"", "\\\"")}\"" }
-      val query = """
-        {
-          contentEntries(
-            where: { trackId_in: [$quoted], active: true }
-            orderBy: createdAt
-            orderDirection: desc
-            first: 1000
-          ) {
-            id
-            trackId
-            pieceCid
-            createdAt
-          }
-        }
-      """.trimIndent()
-
-      // Keep release cards visible even if pieceCid lookup fails for this chunk.
-      val json = runCatching { postQuery(subgraphUrl, query) }.getOrNull() ?: continue
-      val entries = json.optJSONObject("data")?.optJSONArray("contentEntries") ?: JSONArray()
-      for (i in 0 until entries.length()) {
-        val obj = entries.optJSONObject(i) ?: continue
-        val trackId = obj.optString("trackId", "").trim().lowercase()
-        if (trackId.isEmpty() || out.containsKey(trackId)) continue
-        val contentId = obj.optString("id", "").trim().lowercase().ifBlank { trackId }
-        val pieceCid = decodeBytesUtf8(obj.optString("pieceCid", "").trim()).ifBlank { null }
-        val createdAt = obj.optString("createdAt", "0").trim().toLongOrNull() ?: obj.optLong("createdAt", 0L)
-        out[trackId] = ContentPointer(contentId = contentId, pieceCid = pieceCid, publishedAtSec = createdAt)
-      }
     }
     return out
   }
@@ -300,13 +261,14 @@ object ProfileMusicApi {
       val quoted = chunk.joinToString(",") { "\"${it.replace("\"", "\\\"")}\"" }
       val query = """
         {
-          tracks(where: { id_in: [$quoted] }, first: 1000) {
+          tracks(where: { id_in: [$quoted], kind: 3 }, first: 1000) {
             id
             title
             artist
             album
             coverCid
             durationSec
+            kind
           }
         }
       """.trimIndent()
@@ -324,11 +286,14 @@ object ProfileMusicApi {
           album = t.optString("album", "").trim(),
           coverCid = cover,
           durationSec = t.optInt("durationSec", 0),
+          kind = t.optString("kind", "").trim().toIntOrNull(),
         )
       }
     }
     return out
   }
+
+  private fun isPublishedTrackKind(kind: Int?): Boolean = kind == 3
 
   private fun postQuery(subgraphUrl: String, query: String): JSONObject {
     val body = JSONObject().put("query", query).toString().toRequestBody(jsonMediaType)

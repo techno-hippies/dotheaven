@@ -1,7 +1,8 @@
 import { type Component, Show, For, createMemo, createSignal, createEffect, createResource } from 'solid-js'
 import { useParams, useNavigate } from '@solidjs/router'
 import { createQuery } from '@tanstack/solid-query'
-import { TrackList, IconButton } from '@heaven/ui'
+import { TrackList, IconButton, Tabs, type TabItem } from '@heaven/ui'
+import { publicProfile } from '@heaven/core'
 import {
   Globe,
   Database,
@@ -13,10 +14,35 @@ import {
 } from '@heaven/ui/icons'
 import { fetchArtistPageData, artistTracksToTracks, normalizeArtistVariants } from '../lib/heaven'
 import { useTrackPlayback, usePlaylistDialog, buildMenuActions } from '../hooks/useTrackListActions'
+import { usePeerNames } from '../lib/hooks/usePeerName'
 import { usePlayer } from '../providers'
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog'
 import { resolveImageUrl } from '../lib/image-cache'
 import { MediaBackBar } from '../components/library/media-back-bar'
+
+type ArtistTab = 'top' | 'leaderboard'
+
+const artistTabs: TabItem[] = [
+  { id: 'top', label: 'Top songs' },
+  { id: 'leaderboard', label: 'Leaderboard' },
+]
+
+const artistScrobbleFormatter = new Intl.NumberFormat()
+
+function formatLeaderboardName(address: string, label?: string): { label: string; title: string } {
+  const fallback = `${address.slice(0, 6)}...${address.slice(-4)}`
+  const resolved = label?.trim()
+
+  if (!resolved) {
+    return { label: fallback, title: address }
+  }
+
+  const isFullAddress = resolved === address
+  return {
+    label: resolved,
+    title: isFullAddress ? address : resolved,
+  }
+}
 
 export const ArtistPage: Component = () => {
   const params = useParams<{ mbid: string }>()
@@ -144,7 +170,10 @@ export const ArtistPage: Component = () => {
 
   const uniqueListeners = () => query.data?.uniqueListeners ?? 0
   const totalScrobbles = () => query.data?.totalScrobbles ?? 0
-  const ranking = () => query.data?.ranking ?? 0
+  const leaderboard = () => query.data?.leaderboard ?? []
+  const [activeTab, setActiveTab] = createSignal<ArtistTab>('top')
+  const leaderboardUsers = () => [...new Set(leaderboard().map((entry) => entry.user))]
+  const peerNames = usePeerNames(leaderboardUsers)
 
   const imageUrl = () => {
     const i = info()
@@ -258,10 +287,6 @@ export const ArtistPage: Component = () => {
                               <span>{uniqueListeners().toLocaleString()} listeners</span>
                               <span>&middot;</span>
                               <span>{totalScrobbles().toLocaleString()} scrobbles</span>
-                              <Show when={ranking() > 0}>
-                                <span>&middot;</span>
-                                <span>#{ranking().toLocaleString()} ranking</span>
-                              </Show>
                             </div>
                           </div>
 
@@ -291,32 +316,83 @@ export const ArtistPage: Component = () => {
                     </div>
                   </div>
 
-                  <Show when={tracks().length > 0} fallback={
-                    <div class="px-4 md:px-8 py-12 text-center">
-                      <p class="text-[var(--text-muted)] text-lg">No scrobbles found</p>
-                      <p class="text-[var(--text-muted)] text-base mt-2">
-                        Scrobble tracks by this artist to see them here
-                      </p>
-                    </div>
-                  }>
-                    <div class="px-4 md:px-8 pb-2">
-                      <h2 class="text-lg font-semibold text-[var(--text-primary)] mb-0">
-                        Popular
-                      </h2>
-                    </div>
-                    <TrackList
-                      tracks={tracks()}
-                      activeTrackId={playback.activeTrackId()}
-                      selectedTrackId={playback.selectedTrackId()}
-                      onTrackClick={(track) => playback.select(track)}
-                      onTrackPlay={(track) => playback.play(track)}
-                      showScrobbleCount={true}
-                      showScrobbleStatus={false}
-                      showArtist={false}
-                      showDateAdded={false}
-                      showDuration={true}
-                      menuActions={menuActions}
-                    />
+                  <Tabs
+                    tabs={artistTabs}
+                    activeTab={activeTab()}
+                    onTabChange={(tabId) => setActiveTab(tabId as ArtistTab)}
+                    class="mt-2"
+                  />
+
+                  <Show when={activeTab() === 'top'}>
+                    <Show when={tracks().length > 0} fallback={
+                      <div class="px-4 md:px-8 py-12 text-center">
+                        <p class="text-[var(--text-muted)] text-lg">No scrobbles found</p>
+                        <p class="text-[var(--text-muted)] text-base mt-2">
+                          Scrobble tracks by this artist to see them here
+                        </p>
+                      </div>
+                    }>
+                      <div class="px-4 md:px-8 pb-2">
+                        <h2 class="text-lg font-semibold text-[var(--text-primary)] mb-0">
+                          Popular
+                        </h2>
+                      </div>
+                      <TrackList
+                        tracks={tracks()}
+                        activeTrackId={playback.activeTrackId()}
+                        selectedTrackId={playback.selectedTrackId()}
+                        onTrackClick={(track) => playback.select(track)}
+                        onTrackPlay={(track) => playback.play(track)}
+                        showScrobbleCount={true}
+                        showScrobbleStatus={false}
+                        showArtist={false}
+                        showDateAdded={false}
+                        showDuration={true}
+                        menuActions={menuActions}
+                      />
+                    </Show>
+                  </Show>
+
+                  <Show when={activeTab() === 'leaderboard'}>
+                    <Show when={leaderboard().length > 0} fallback={
+                      <div class="px-4 md:px-8 py-12 text-center">
+                        <p class="text-[var(--text-muted)] text-lg">No listener leaderboard yet</p>
+                        <p class="text-[var(--text-muted)] text-base mt-2">
+                          Scrobble tracks by this artist for listeners to appear here
+                        </p>
+                      </div>
+                    }>
+                      <div class="px-4 md:px-8 py-2">
+                        <div class="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/70 overflow-hidden">
+                          <div class="px-4 md:px-6 py-3 border-b border-[var(--border-subtle)]">
+                            <h2 class="text-lg font-semibold text-[var(--text-primary)] mb-0">
+                              Top listeners
+                            </h2>
+                          </div>
+
+                          <div class="divide-y divide-[var(--border-subtle)]">
+                            <For each={leaderboard()}>
+                              {(entry, index) => (
+                                <div class="px-4 md:px-6 py-3 grid grid-cols-[3rem_1fr_auto] gap-3 items-center">
+                                  <div class="text-base text-[var(--text-muted)]">#{index() + 1}</div>
+                                  <button
+                                    type="button"
+                                    class="text-base text-[var(--text-primary)] truncate hover:underline text-left"
+                                    title={formatLeaderboardName(entry.user, peerNames.get(entry.user)?.displayName).title}
+                                    onClick={() => navigate(publicProfile(entry.user))}
+                                  >
+                                    {formatLeaderboardName(entry.user, peerNames.get(entry.user)?.displayName).label}
+                                  </button>
+                                  <div class="text-sm text-[var(--text-secondary)] text-right whitespace-nowrap">
+                                    {artistScrobbleFormatter.format(entry.scrobbles)} scrobbles
+                                  </div>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </div>
+                      </div>
+                    </Show>
                   </Show>
                 </>
               )

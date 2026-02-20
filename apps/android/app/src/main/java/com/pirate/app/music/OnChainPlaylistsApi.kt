@@ -157,7 +157,7 @@ object OnChainPlaylistsApi {
   }
 
   private fun playlistsSubgraphUrls(): List<String> {
-    val fromBuildConfig = BuildConfig.TEMPO_PLAYLISTS_SUBGRAPH_URL.trim().removeSuffix("/")
+    val fromBuildConfig = BuildConfig.SUBGRAPH_PLAYLISTS_URL.trim().removeSuffix("/")
     val urls = ArrayList<String>(2)
     if (fromBuildConfig.isNotBlank()) urls.add(fromBuildConfig)
     urls.add(DEFAULT_SUBGRAPH_PLAYLISTS)

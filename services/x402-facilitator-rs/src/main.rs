@@ -39,7 +39,7 @@ fn bind_port() -> u16 {
 }
 
 async fn bearer_auth_layer(req: axum::http::Request<axum::body::Body>, next: Next) -> impl IntoResponse {
-    // Only protect mutating endpoints. Session-voice only calls POST /settle.
+    // Only protect mutating endpoints. Voice control plane only calls POST /settle.
     if req.method() != Method::POST {
         return next.run(req).await;
     }

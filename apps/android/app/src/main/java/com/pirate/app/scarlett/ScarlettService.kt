@@ -2,6 +2,7 @@ package com.pirate.app.scarlett
 
 import android.content.Context
 import android.util.Log
+import com.pirate.app.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -31,9 +32,14 @@ class ScarlettService(private val appContext: Context) {
     private const val TAG = "ScarlettService"
     private const val PREFS_NAME = "scarlett_prefs"
     private const val KEY_MESSAGES = "messages"
-    private const val CHAT_WORKER_URL = "https://neodate-voice.deletion-backup782.workers.dev"
     private const val MAX_HISTORY = 20
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+  }
+
+  private fun requireChatWorkerUrl(): String {
+    return BuildConfig.VOICE_AGENT_URL.trim().trimEnd('/').ifBlank {
+      throw IllegalStateException("Missing VOICE_AGENT_URL BuildConfig field. Set gradle property VOICE_AGENT_URL.")
+    }
   }
 
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -75,9 +81,10 @@ class ScarlettService(private val appContext: Context) {
     _sending.value = true
 
     return try {
+      val chatWorkerUrl = requireChatWorkerUrl()
       val auth = getWorkerAuthSession(
         appContext = appContext,
-        workerUrl = CHAT_WORKER_URL,
+        workerUrl = chatWorkerUrl,
         userAddress = userAddress,
       )
 
@@ -94,7 +101,7 @@ class ScarlettService(private val appContext: Context) {
         .toRequestBody(JSON_MEDIA_TYPE)
 
       val req = Request.Builder()
-        .url("${CHAT_WORKER_URL}/chat/send")
+        .url("${chatWorkerUrl}/chat/send")
         .post(payload)
         .header("Content-Type", "application/json")
         .header("Authorization", "Bearer ${auth.token}")

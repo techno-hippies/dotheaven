@@ -1,10 +1,3 @@
-const DEFAULTS = {
-  API_CORE_URL: "https://api-core.deletion-backup782.workers.dev",
-  METADATA_RESOLVER_URL: "https://metadata-resolver.deletion-backup782.workers.dev",
-  VOICE_AGENT_URL: "https://voice-agent.deletion-backup782.workers.dev",
-  VOICE_CONTROL_PLANE_URL: "https://voice-control-plane.deletion-backup782.workers.dev",
-} as const;
-
 type SmokeResult = {
   service: string;
   ok: boolean;
@@ -125,12 +118,16 @@ function printResult(result: SmokeResult): void {
 }
 
 async function main() {
-  const apiCore = normalizeBaseUrl(process.env.API_CORE_URL || DEFAULTS.API_CORE_URL);
-  const metadataResolver = normalizeBaseUrl(process.env.METADATA_RESOLVER_URL || DEFAULTS.METADATA_RESOLVER_URL);
-  const voiceAgent = normalizeBaseUrl(process.env.VOICE_AGENT_URL || DEFAULTS.VOICE_AGENT_URL);
-  const voiceControlPlane = normalizeBaseUrl(
-    process.env.VOICE_CONTROL_PLANE_URL || DEFAULTS.VOICE_CONTROL_PLANE_URL,
-  );
+  const required = (name: string): string => {
+    const value = process.env[name]?.trim();
+    if (!value) throw new Error(`Missing required env: ${name}`);
+    return value;
+  };
+
+  const apiCore = normalizeBaseUrl(required("API_CORE_URL"));
+  const metadataResolver = normalizeBaseUrl(required("METADATA_RESOLVER_URL"));
+  const voiceAgent = normalizeBaseUrl(required("VOICE_AGENT_URL"));
+  const voiceControlPlane = normalizeBaseUrl(required("VOICE_CONTROL_PLANE_URL"));
 
   console.log("Running services smoke checks...");
   console.log(`- api-core: ${apiCore}`);

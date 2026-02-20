@@ -25,9 +25,15 @@ import { useAuth } from '../providers'
 import { useVoice, type VoiceState } from '../lib/voice'
 import { getWorkerToken } from '../lib/worker-auth'
 
-// Cloudflare Worker URL (Heaven voice worker)
+// Cloudflare Worker URL (voice-agent worker)
 const CHAT_WORKER_URL =
-  import.meta.env.VITE_CHAT_WORKER_URL || 'https://neodate-voice.deletion-backup782.workers.dev'
+  (() => {
+    const url = (import.meta.env.VITE_CHAT_WORKER_URL || '').trim()
+    if (!url) {
+      throw new Error('Missing VITE_CHAT_WORKER_URL')
+    }
+    return url.replace(/\/+$/, '')
+  })()
 
 // AI Personalities
 const AI_PERSONALITIES: Record<string, { id: string; name: string; avatarUrl: string }> = {

@@ -110,7 +110,9 @@ pub(in crate::library) fn resolver_url() -> String {
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| DEFAULT_RESOLVER_URL.to_string())
+        .unwrap_or_else(|| {
+            panic!("Missing HEAVEN_RESOLVER_URL")
+        })
         .trim_end_matches('/')
         .to_string()
 }
@@ -128,7 +130,9 @@ pub(in crate::library) fn subgraph_music_social_url() -> String {
                 .map(|base| format!("{base}/subgraphs/name/dotheaven/music-social-tempo"))
         })
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| DEFAULT_SUBGRAPH_MUSIC_SOCIAL_URL.to_string())
+        .unwrap_or_else(|| {
+            panic!("Missing SUBGRAPH_MUSIC_SOCIAL_URL (or SUBGRAPH_BASE_URL)")
+        })
 }
 
 pub(in crate::library) fn http_get_json(url: &str) -> Result<Value, String> {

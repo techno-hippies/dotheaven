@@ -1,5 +1,3 @@
-const DEFAULT_DUET_BASE_URL = 'https://voice-control-plane.deletion-backup782.workers.dev'
-
 export interface DiscoverDuetRoomItem {
   room_id: string
   host_wallet: string
@@ -45,7 +43,12 @@ function shortAddress(value: string): string {
 }
 
 function normalizeBaseUrl(raw: string | undefined): string {
-  const trimmed = (raw || DEFAULT_DUET_BASE_URL).trim()
+  const trimmed = (raw || '').trim()
+  if (!trimmed) {
+    throw new Error(
+      'Missing duet worker URL. Set VITE_DUET_WORKER_URL (or VITE_VOICE_CONTROL_PLANE_URL / VITE_SESSION_VOICE_URL).',
+    )
+  }
   return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed
 }
 

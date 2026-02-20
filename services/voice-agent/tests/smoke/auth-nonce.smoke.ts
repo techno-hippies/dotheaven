@@ -1,4 +1,5 @@
-const BASE_URL = (process.env.VOICE_AGENT_URL || 'https://voice-agent.deletion-backup782.workers.dev').trim().replace(/\/+$/, '')
+const BASE_URL = (process.env.VOICE_AGENT_URL || '').trim().replace(/\/+$/, '')
+if (!BASE_URL) throw new Error('VOICE_AGENT_URL is required')
 const TEST_WALLET = (process.env.TEST_WALLET || '0x0000000000000000000000000000000000000001').trim().toLowerCase()
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {

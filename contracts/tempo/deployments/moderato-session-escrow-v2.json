@@ -1,0 +1,43 @@
+{
+  "network": {
+    "name": "Tempo Testnet (Moderato)",
+    "chainId": 42431,
+    "rpcUrl": "https://rpc.moderato.tempo.xyz",
+    "explorer": "https://explore.tempo.xyz"
+  },
+  "deployedAt": "2026-02-20T11:25:20Z",
+  "deployer": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+  "script": "src/SessionEscrowV2.sol:SessionEscrowV2 (forge create)",
+  "command": "forge create src/SessionEscrowV2.sol:SessionEscrowV2 --rpc-url https://rpc.moderato.tempo.xyz --broadcast --revert-strings strip --no-metadata --gas-limit 16777216 --constructor-args <args>",
+  "contract": {
+    "name": "SessionEscrowV2",
+    "address": "0xF3B4DB746a874A2197ae21C857e1Ca692C6ED059",
+    "deployTx": "0xe3782a4591fa8ad9e412fb8c80a8de31d5f69d18aab1bbc87559be29ba3fea0e",
+    "blockNumber": 5670803,
+    "gasUsed": 16609789,
+    "status": true
+  },
+  "config": {
+    "owner": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+    "oracle": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+    "treasury": "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB",
+    "paymentToken": "0x20C0000000000000000000000000000000000001",
+    "feeBps": 300,
+    "challengeWindowSeconds": 86400,
+    "challengeBondTokenUnits": "10000000",
+    "lateCancelPenaltyBps": 2000,
+    "noAttestBufferSeconds": 86400,
+    "disputeTimeoutSeconds": 604800
+  },
+  "capabilities": {
+    "createSlotWithPrice": true,
+    "createSlotsWithPrices": false,
+    "cancelSlotsBestEffort": false,
+    "decreaseOpenSlotPrice": false
+  },
+  "notes": [
+    "Moderato contract creation cap is 16,777,216 gas. This deployment uses stripped revert strings + no metadata.",
+    "SessionEscrowV2 keeps full V1 settlement behavior and adds explicit createSlotWithPrice only.",
+    "Batch create/cancel helpers were omitted to stay under Moderato deploy gas limit."
+  ]
+}

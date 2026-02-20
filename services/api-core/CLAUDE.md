@@ -7,7 +7,7 @@ Cloudflare Worker for:
 - names API
 - claim flow endpoints
 - scrobble ingestion
-- photo/meal pipelines
+- music publish + Load/Arweave endpoints
 
 ## Environment
 - Current setup is dev-only.
@@ -42,25 +42,26 @@ bun run deploy
 If schema changes were made, run remote migrations first:
 
 ```bash
-wrangler d1 execute ${API_CORE_D1_DATABASE:-${D1_DATABASE:-heaven-api}} --remote --file=./schema.sql
+wrangler d1 execute ${API_CORE_D1_DATABASE:-${D1_DATABASE:-api-core}} --remote --file=./schema.sql
 bun run db:migrate:remote
 ```
 
 ## Required Secrets
 Set with `wrangler secret put ...`:
 - `DNS_SHARED_SECRET` (for DNS-protected routes)
-- `FILEBASE_ACCESS_KEY`, `FILEBASE_SECRET_KEY`, `FILEBASE_BUCKET`
+- `LOAD_S3_AGENT_API_KEY`
 - `FAL_KEY`
 - `WATERMARK_SECRET`
 - `BASE_SEPOLIA_RELAY_PK` (legacy — was for EAS relay writes on Base Sepolia)
-- meal pipeline secrets if meal APIs are enabled
 
 ## Main Route Surfaces
 - `/api/names/*`
 - `/api/claim/*`
 - `/api/scrobble/*`
-- `/api/photos/*`
-- `/api/meal/*`
+- `/api/music/*`
+- `/api/load/*`
+- `/api/arweave/*`
+- `/api/study-sets/*`
 
 ## Files You Will Touch Most
 - `services/api-core/src/index.ts`

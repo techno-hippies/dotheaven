@@ -20,7 +20,11 @@ const CAMP_CLIENT_ID = 'fce77d7a-8085-47ca-adff-306a933e76aa'
 const CAMP_API_KEY = '4f1a2c9c-008e-4a2e-8712-055fa04f9ffa'
 const CAMP_API_BASE = 'https://wv2h4to5qa.execute-api.us-east-2.amazonaws.com/dev'
 const RESOLVER_URL =
-  import.meta.env.VITE_RESOLVER_URL || 'https://metadata-resolver.deletion-backup782.workers.dev'
+  (() => {
+    const url = (import.meta.env.VITE_RESOLVER_URL || '').trim()
+    if (!url) throw new Error('Missing VITE_RESOLVER_URL')
+    return url.replace(/\/+$/, '')
+  })()
 
 const STORAGE_KEY_LINKING = 'heaven:camp:spotifyLinking'
 const STORAGE_KEY_WALLET = 'heaven:camp:walletAddress'

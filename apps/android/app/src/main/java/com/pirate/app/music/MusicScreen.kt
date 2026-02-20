@@ -1,64 +1,10 @@
 package com.pirate.app.music
 
 import android.Manifest
-import android.content.Intent
-import android.database.ContentObserver
-import android.net.Uri
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
-import android.os.SystemClock
-import android.provider.MediaStore
-import android.util.Base64
-import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.List
-import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.ArrowDropDown
-import androidx.compose.material.icons.rounded.AddCircle
-import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.FolderOpen
-import androidx.compose.material.icons.rounded.Inbox
-import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material.icons.rounded.MusicNote
-import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -67,84 +13,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import coil.compose.AsyncImage
-import androidx.compose.ui.layout.ContentScale
-import com.pirate.app.arweave.ArweaveTurboConfig
-import com.pirate.app.arweave.TurboCreditsApi
-import com.pirate.app.tempo.ContentKeyManager
-import com.pirate.app.tempo.EciesContentCrypto
-import com.pirate.app.tempo.SessionKeyManager
-import com.pirate.app.music.ui.AddToPlaylistSheet
-import com.pirate.app.music.ui.CreatePlaylistSheet
-import com.pirate.app.music.ui.TrackItemRow
-import com.pirate.app.music.ui.TrackMenuSheet
-import com.pirate.app.music.ui.TurboCreditsSheet
-import com.pirate.app.onboarding.OnboardingRpcHelpers
-import com.pirate.app.profile.ProfileMusicApi
-import com.pirate.app.profile.TempoNameRecordsApi
 import com.pirate.app.player.PlayerController
-import com.pirate.app.theme.PiratePalette
-import com.pirate.app.ui.PirateMobileHeader
-import com.pirate.app.util.shortAddress
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
-import java.io.File
-
-private enum class MusicView { Home, Library, Shared, SharedPlaylistDetail, Playlists, PlaylistDetail, Search }
-
-
-internal data class AlbumCardModel(
-  val title: String,
-  val artist: String,
-  val audioRef: String? = null,
-  val coverRef: String? = null,
-)
-
-private const val HOME_NEW_RELEASES_MAX = 12
-
-private fun mergedNewReleases(
-  recentPublished: List<AlbumCardModel>,
-): List<AlbumCardModel> {
-  if (recentPublished.isEmpty()) return emptyList()
-  val out = ArrayList<AlbumCardModel>(recentPublished.size)
-  val seen = LinkedHashSet<String>()
-
-  fun add(item: AlbumCardModel) {
-    val key = "${item.title.trim().lowercase()}|${item.artist.trim().lowercase()}"
-    if (key == "|") return
-    if (!seen.add(key)) return
-    out.add(item)
-  }
-
-  for (item in recentPublished) add(item)
-  return out.take(HOME_NEW_RELEASES_MAX)
-}
-
-private const val TAG_SHARED = "MusicShared"
-private const val SHARED_REFRESH_TTL_MS = 120_000L
-private const val TURBO_CREDITS_COPY = "Save this song forever on Arweave for ~\$0.03."
-
-private data class CachedSharedAudio(
-  val file: File,
-  val uri: String,
-  val filename: String,
-  val mimeType: String?,
-)
 
 @Composable
 fun MusicScreen(
@@ -168,7 +41,7 @@ fun MusicScreen(
   var view by rememberSaveable { mutableStateOf(MusicView.Home) }
   var searchQuery by rememberSaveable { mutableStateOf("") }
   var recentPublishedReleases by remember { mutableStateOf<List<AlbumCardModel>>(emptyList()) }
-  var recentPublishedReleasesLoading by remember { mutableStateOf(false) }
+  var recentPublishedReleasesLoading by remember { mutableStateOf(true) }
   var recentPublishedReleasesError by remember { mutableStateOf<String?>(null) }
 
   val permission = if (Build.VERSION.SDK_INT >= 33) {
@@ -218,8 +91,6 @@ fun MusicScreen(
   var addToPlaylistOpen by remember { mutableStateOf(false) }
   var createPlaylistOpen by remember { mutableStateOf(false) }
   var shareTrack by remember { mutableStateOf<MusicTrack?>(null) }
-  var shareRecipientInput by rememberSaveable { mutableStateOf("") }
-  var shareBusy by remember { mutableStateOf(false) }
 
   var uploadBusy by remember { mutableStateOf(false) }
   var turboCreditsSheetOpen by remember { mutableStateOf(false) }
@@ -236,147 +107,14 @@ fun MusicScreen(
   val sharedItemIds = remember(sharedPlaylists, sharedTracks) { computeSharedItemIds(sharedPlaylists, sharedTracks) }
   val sharedUnreadCount = remember(sharedItemIds, sharedSeenItemIds) { sharedItemIds.count { !sharedSeenItemIds.contains(it) } }
 
-  fun resolveSongTrackId(track: MusicTrack): String? {
-    val bytes32Regex = Regex("^0x[a-fA-F0-9]{64}$")
-    val fromId = track.id.trim()
-    if (bytes32Regex.matches(fromId)) return fromId
-    val fromContentId = track.contentId?.trim().orEmpty()
-    if (bytes32Regex.matches(fromContentId)) return fromContentId
-    return null
-  }
-
-  fun promptTurboTopUp(message: String) {
-    turboCreditsSheetMessage = message
-    turboCreditsSheetOpen = true
-  }
-
-  fun openTurboTopUp() {
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(ArweaveTurboConfig.TOP_UP_URL))
-    runCatching { context.startActivity(intent) }
-      .onFailure {
-        onShowMessage("Unable to open browser. Visit ${ArweaveTurboConfig.TOP_UP_URL}")
-      }
-  }
-
-  fun sharedOwnerLabel(ownerAddress: String): String {
-    val key = ownerAddress.trim().lowercase()
-    if (key.isBlank()) return "unknown"
-    return sharedOwnerLabels[key] ?: shortAddress(key, minLengthToShorten = 10)
-  }
-
-  fun buildSharedTrackForPlayer(
-    t: SharedCloudTrack,
-    uri: String,
-    filename: String,
-  ): MusicTrack {
-    val coverUri = CoverRef.resolveCoverUrl(t.coverCid, width = 192, height = 192, format = "webp", quality = 80)
-    return MusicTrack(
-      id = t.contentId.ifBlank { t.trackId },
-      title = t.title,
-      artist = t.artist,
-      album = t.album,
-      durationSec = t.durationSec,
-      uri = uri,
-      filename = filename,
-      artworkUri = coverUri,
-      contentId = t.contentId,
-      pieceCid = t.pieceCid,
-      datasetOwner = t.datasetOwner,
-      algo = t.algo,
-    )
-  }
-
-  suspend fun removeDownloadedEntry(contentId: String) {
-    val key = contentId.trim().lowercase()
-    if (key.isBlank()) return
-    downloadedTracksByContentId = DownloadedTracksStore.remove(context, key)
-  }
-
-  suspend fun resolveDownloadedEntry(contentId: String): DownloadedTrackEntry? {
-    val key = contentId.trim().lowercase()
-    if (key.isBlank()) return null
-    val entry = downloadedTracksByContentId[key] ?: return null
-    val exists = runCatching { MediaStoreAudioDownloads.uriExists(context, entry.mediaUri) }.getOrDefault(false)
-    if (exists) return entry
-    removeDownloadedEntry(key)
-    return null
-  }
-
-  suspend fun findCachedSharedAudio(contentId: String): CachedSharedAudio? = withContext(Dispatchers.IO) {
-    val safe = contentId.removePrefix("0x").trim().lowercase()
-    if (safe.isBlank()) return@withContext null
-
-    val dir = File(context.cacheDir, "heaven_cloud")
-    if (!dir.exists()) return@withContext null
-
-    val existing =
-      dir.listFiles()
-        ?.firstOrNull { f -> f.isFile && f.name.startsWith("content_${safe}.") && f.length() > 0L }
-        ?: return@withContext null
-
-    CachedSharedAudio(
-      file = existing,
-      uri = Uri.fromFile(existing).toString(),
-      filename = existing.name,
-      mimeType = audioMimeFromExtension(existing.extension),
-    )
-  }
-
-  suspend fun decryptSharedAudioToCache(t: SharedCloudTrack): CachedSharedAudio = withContext(Dispatchers.IO) {
-    if (t.algo != ContentCryptoConfig.ALGO_AES_GCM_256) {
-      throw IllegalStateException("Legacy/plaintext shared track is not supported. Ask owner to re-upload encrypted.")
-    }
-    val grantee = ownerEthAddress?.trim()?.lowercase().orEmpty()
-    if (grantee.isBlank()) {
-      throw IllegalStateException("Missing active wallet for shared-track decrypt.")
-    }
-
-    val contentKey = ContentKeyManager.load(context)
-      ?: throw IllegalStateException("No content encryption key — upload a track first to generate one")
-
-    var wrappedKey = ContentKeyManager.loadWrappedKey(context, t.contentId)
-    if (wrappedKey == null) {
-      UploadedTrackActions.ensureWrappedKeyFromLs3(
-        context = context,
-        contentId = t.contentId,
-        ownerAddress = t.owner,
-        granteeAddress = grantee,
-      )
-      wrappedKey = ContentKeyManager.loadWrappedKey(context, t.contentId)
-    }
-    val resolvedWrappedKey =
-      wrappedKey
-        ?: throw IllegalStateException(
-          "Missing encrypted key for this shared track. It may not be shared to this wallet yet.",
-        )
-
-    // Fetch encrypted blob from Load gateway
-    val blob = UploadedTrackActions.fetchResolvePayload(t.pieceCid)
-
-    // Parse blob: [iv (12 bytes)][aes ciphertext]
-    if (blob.size < 13) throw RuntimeException("Encrypted blob too small: ${blob.size} bytes")
-    val iv = blob.copyOfRange(0, 12)
-    val ciphertext = blob.copyOfRange(12, blob.size)
-
-    // ECIES decrypt wrapped AES key
-    val aesKey = EciesContentCrypto.eciesDecrypt(contentKey.privateKey, resolvedWrappedKey)
-
-    // AES-GCM decrypt file
-    val audio = EciesContentCrypto.decryptFile(aesKey, iv, ciphertext)
-    aesKey.fill(0)
-
-    // Write to cache
-    val dir = File(context.cacheDir, "heaven_cloud").also { it.mkdirs() }
-    val safe = t.contentId.removePrefix("0x").trim().lowercase()
-    val ext = if (t.title.contains(".")) t.title.substringAfterLast('.') else "mp3"
-    val cacheFile = File(dir, "content_${safe}.${ext}")
-    cacheFile.writeBytes(audio)
-
-    CachedSharedAudio(
-      file = cacheFile,
-      uri = Uri.fromFile(cacheFile).toString(),
-      filename = cacheFile.name,
-      mimeType = audioMimeFromExtension(ext),
+  suspend fun runLibraryScan(silent: Boolean) {
+    runScan(
+      context = context,
+      onShowMessage = onShowMessage,
+      silent = silent,
+      setScanning = { scanning = it },
+      setTracks = { tracks = it },
+      setError = { error = it },
     )
   }
 
@@ -384,100 +122,22 @@ fun MusicScreen(
     t: SharedCloudTrack,
     notify: Boolean = true,
   ): Boolean {
-    if (t.contentId.isBlank()) {
-      if (notify) onShowMessage("Download failed: missing contentId")
-      return false
-    }
-
-    val existing = resolveDownloadedEntry(t.contentId)
-    if (existing != null) {
-      if (notify) onShowMessage("Already downloaded")
-      return true
-    }
-
-    if (cloudPlayBusy) {
-      if (notify) onShowMessage("Another decrypt/download is in progress")
-      return false
-    }
-
-    cloudPlayBusy = true
-    cloudPlayLabel = "Downloading: ${t.title}"
-
-    try {
-      val cached = findCachedSharedAudio(t.contentId)
-      val prepared =
-        if (cached != null) {
-          cached
-        } else {
-          if (t.pieceCid.isBlank()) {
-            throw IllegalStateException("missing pieceCid")
-          }
-          if (!isAuthenticated) {
-            throw IllegalStateException("Sign in to download")
-          }
-          decryptSharedAudioToCache(t)
-        }
-
-      val preferredName =
-        listOf(t.artist.trim(), t.title.trim())
-          .filter { it.isNotBlank() }
-          .joinToString(" - ")
-          .ifBlank { t.contentId.removePrefix("0x") }
-
-      val mediaUri =
-        MediaStoreAudioDownloads.saveAudio(
-          context = context,
-          sourceFile = prepared.file,
-          title = t.title,
-          artist = t.artist,
-          album = t.album,
-          mimeType = prepared.mimeType,
-          preferredName = preferredName,
-        )
-
-      val entry =
-        DownloadedTrackEntry(
-          contentId = t.contentId.trim().lowercase(),
-          mediaUri = mediaUri,
-          title = t.title,
-          artist = t.artist,
-          album = t.album,
-          filename = prepared.filename,
-          mimeType = prepared.mimeType,
-          pieceCid = t.pieceCid,
-          datasetOwner = t.datasetOwner,
-          algo = t.algo,
-          coverCid = t.coverCid,
-          downloadedAtMs = System.currentTimeMillis(),
-        )
-
-      downloadedTracksByContentId = DownloadedTracksStore.upsert(context, entry)
-
-      // Once a persistent device copy exists, drop the temporary decrypt cache file.
-      val cacheRoot = File(context.cacheDir, "heaven_cloud").absolutePath
-      if (prepared.file.absolutePath.startsWith(cacheRoot)) {
-        runCatching { prepared.file.delete() }
-      }
-
-      runScan(
-        context = context,
-        onShowMessage = onShowMessage,
-        silent = true,
-        setScanning = { scanning = it },
-        setTracks = { tracks = it },
-        setError = { error = it },
-      )
-
-      if (notify) onShowMessage("Downloaded to device")
-      return true
-    } catch (err: Throwable) {
-      Log.e(TAG_SHARED, "download failed contentId=${t.contentId}", err)
-      if (notify) onShowMessage("Download failed: ${err.message ?: "unknown error"}")
-      return false
-    } finally {
-      cloudPlayBusy = false
-      cloudPlayLabel = null
-    }
+    return downloadSharedTrackToDeviceWithUi(
+      context = context,
+      track = t,
+      notify = notify,
+      isAuthenticated = isAuthenticated,
+      ownerEthAddress = ownerEthAddress,
+      downloadedEntries = downloadedTracksByContentId,
+      cloudPlayBusy = cloudPlayBusy,
+      onSetCloudPlayBusy = { cloudPlayBusy = it },
+      onSetCloudPlayLabel = { cloudPlayLabel = it },
+      onSetDownloadedEntries = { downloadedTracksByContentId = it },
+      onShowMessage = onShowMessage,
+      onRunScan = {
+        runLibraryScan(silent = true)
+      },
+    )
   }
 
   val requestPermission = rememberLauncherForActivityResult(
@@ -485,1204 +145,348 @@ fun MusicScreen(
     onResult = { ok ->
       hasPermission = ok
       if (ok) {
-        scope.launch { runScan(context, onShowMessage, silent = true, setScanning = { scanning = it }, setTracks = { tracks = it }, setError = { error = it }) }
+        scope.launch { runLibraryScan(silent = true) }
       }
     },
   )
 
   suspend fun loadPlaylists() {
     playlistsLoading = true
-    val local = runCatching { LocalPlaylistsStore.getLocalPlaylists(context) }.getOrElse { emptyList() }
-    localPlaylists = local
-
-    onChainPlaylists =
-      if (isAuthenticated && !ownerEthAddress.isNullOrBlank()) {
-        runCatching { OnChainPlaylistsApi.fetchUserPlaylists(ownerEthAddress) }.getOrElse { emptyList() }
-      } else {
-        emptyList()
-      }
-
+    val result = loadPlaylistsData(
+      context = context,
+      isAuthenticated = isAuthenticated,
+      ownerEthAddress = ownerEthAddress,
+    )
+    localPlaylists = result.localPlaylists
+    onChainPlaylists = result.onChainPlaylists
     playlistsLoading = false
   }
 
   suspend fun loadPlaylistDetail(playlist: PlaylistDisplayItem) {
     playlistDetailLoading = true
     playlistDetailError = null
-    try {
-      if (playlist.isLocal) {
-        val local = localPlaylists.firstOrNull { it.id == playlist.id }
-        if (local == null) {
-          playlistDetailTracks = emptyList()
-          playlistDetailError = "Playlist not found"
-          return
-        }
-        val fallbackArt = playlist.coverUri
-        playlistDetailTracks =
-          local.tracks.mapIndexed { idx, t ->
-            val stable = t.uri ?: "${t.artist}-${t.title}-${idx}"
-            MusicTrack(
-              id = "localpl:${local.id}:$stable",
-              title = t.title.ifBlank { "Track ${idx + 1}" },
-              artist = t.artist.ifBlank { "Unknown Artist" },
-              album = t.album.orEmpty(),
-              durationSec = t.durationSec ?: 0,
-              uri = t.uri.orEmpty(),
-              filename = t.title.ifBlank { "track-${idx + 1}" },
-              artworkUri = t.artworkUri ?: fallbackArt,
-              artworkFallbackUri = t.artworkFallbackUri,
-            )
-          }
-      } else {
-        val trackIds = OnChainPlaylistsApi.fetchPlaylistTrackIds(playlist.id)
-        val byContentId =
-          tracks
-            .mapNotNull { t ->
-              val key = t.contentId?.trim()?.lowercase().orEmpty()
-              if (key.isBlank()) null else key to t
-            }
-            .toMap()
-        val byTrackId = tracks.associateBy { it.id.trim().lowercase() }
-        val fallbackArt = playlist.coverUri
-        playlistDetailTracks =
-          trackIds.mapIndexed { idx, tid ->
-            val key = tid.trim().lowercase()
-            val match = byContentId[key] ?: byTrackId[key]
-            if (match != null) {
-              match.copy(
-                id = "onchain:${playlist.id}:$idx:${match.id}",
-                artworkUri = match.artworkUri ?: fallbackArt,
-              )
-            } else {
-              MusicTrack(
-                id = "onchain:${playlist.id}:$idx",
-                title = "Track ${idx + 1}",
-                artist = key.take(10).ifBlank { "Unknown Artist" },
-                album = playlist.name,
-                durationSec = 0,
-                uri = "",
-                filename = key.ifBlank { "track-${idx + 1}" },
-                artworkUri = fallbackArt,
-                contentId = key.ifBlank { null },
-              )
-            }
-          }
-      }
-    } catch (err: Throwable) {
-      playlistDetailTracks = emptyList()
-      playlistDetailError = err.message ?: "Failed to load playlist"
-    } finally {
-      playlistDetailLoading = false
-    }
+    val result = loadPlaylistDetailTracks(
+      playlist = playlist,
+      localPlaylists = localPlaylists,
+      libraryTracks = tracks,
+    )
+    playlistDetailTracks = result.tracks
+    playlistDetailError = result.error
+    playlistDetailLoading = false
   }
 
   suspend fun loadShared(force: Boolean) {
-    sharedError = null
-    if (!isAuthenticated || ownerEthAddress.isNullOrBlank()) {
-      sharedPlaylists = emptyList()
-      sharedTracks = emptyList()
-      sharedLastFetchAtMs = 0L
-      SharedWithYouCache.playlists = emptyList()
-      SharedWithYouCache.tracks = emptyList()
-      SharedWithYouCache.lastFetchAtMs = 0L
-      return
-    }
-    if (sharedLoading) return
-
-    val now = SystemClock.elapsedRealtime()
-    val hasData = sharedPlaylists.isNotEmpty() || sharedTracks.isNotEmpty()
-    val stale = !hasData || (sharedLastFetchAtMs == 0L) || (now - sharedLastFetchAtMs > SHARED_REFRESH_TTL_MS)
-    if (!force && !stale) return
-
-    // Avoid flashing loaders when navigating between tabs; keep stale data visible while refreshing.
-    sharedLoading = !hasData
-    try {
-      val playlists =
-        runCatching { SharedWithYouApi.fetchSharedPlaylists(ownerEthAddress) }
-          .getOrElse { err ->
-            sharedError = err.message ?: "Failed to load shared playlists"
-            emptyList()
-          }
-      val tracks =
-        runCatching { SharedWithYouApi.fetchSharedTracks(ownerEthAddress) }
-          .getOrElse { err ->
-            if (sharedError == null) sharedError = err.message ?: "Failed to load shared tracks"
-            emptyList()
-          }
-      sharedPlaylists = playlists
-      sharedTracks = tracks
-      sharedLastFetchAtMs = now
-      SharedWithYouCache.playlists = playlists
-      SharedWithYouCache.tracks = tracks
-      SharedWithYouCache.lastFetchAtMs = now
-    } finally {
-      sharedLoading = false
-    }
-  }
-
-  suspend fun loadSharedPlaylistTracks(share: PlaylistShareEntry, force: Boolean) {
-    sharedPlaylistError = null
-
-    val key = "${share.id}:${share.playlistVersion}:${share.tracksHash}".lowercase()
-    sharedPlaylistKey = key
-
-    val cached = SharedWithYouCache.getPlaylistTracks(key)
-    // Show cached tracks instantly; otherwise clear to avoid showing stale tracks from a
-    // previously-opened playlist.
-    sharedPlaylistTracks = cached?.second ?: emptyList()
-
-    if (sharedPlaylistLoading || sharedPlaylistRefreshing) return
-
-    val now = SystemClock.elapsedRealtime()
-    val hasData = (cached?.second?.isNotEmpty() == true)
-    val cachedAt = cached?.first ?: 0L
-    val stale = !hasData || cachedAt == 0L || (now - cachedAt > SHARED_REFRESH_TTL_MS)
-    val hasMissingPointers =
-      cached?.second?.any { it.contentId.isBlank() || it.pieceCid.isBlank() } == true
-    if (!force && !stale && !hasMissingPointers) return
-
-    if (hasData) sharedPlaylistRefreshing = true else sharedPlaylistLoading = true
-    try {
-      val tracks =
-        runCatching { SharedWithYouApi.fetchSharedPlaylistTracks(share) }
-          .getOrElse { err ->
-            sharedPlaylistError = err.message ?: "Failed to load playlist"
-            emptyList()
-          }
-      // Only apply if we're still on this same playlist key (avoid race when switching fast).
-      if (sharedPlaylistKey == key) {
-        sharedPlaylistTracks = tracks
-      }
-      SharedWithYouCache.putPlaylistTracks(key, now, tracks)
-    } finally {
-      sharedPlaylistLoading = false
-      sharedPlaylistRefreshing = false
-    }
-  }
-
-  suspend fun playSharedCloudTrack(t: SharedCloudTrack) {
-    if (cloudPlayBusy) {
-      onShowMessage("Playback already in progress")
-      return
-    }
-    if (t.contentId.isBlank()) {
-      Log.w(TAG_SHARED, "play blocked: missing contentId title='${t.title}' trackId='${t.trackId}'")
-      onShowMessage("Not unlocked yet (missing contentId).")
-      return
-    }
-
-    try {
-      val downloaded = resolveDownloadedEntry(t.contentId)
-      if (downloaded != null) {
-        Log.d(TAG_SHARED, "play local download contentId=${t.contentId} uri=${downloaded.mediaUri}")
-        val track = buildSharedTrackForPlayer(t, downloaded.mediaUri, downloaded.filename.ifBlank { t.title })
-        player.playTrack(track, listOf(track))
-        onOpenPlayer()
-        return
-      }
-
-      Log.d(TAG_SHARED, "play requested title='${t.title}' contentId='${t.contentId}' pieceCid='${t.pieceCid.take(18)}...' datasetOwner='${t.datasetOwner}' algo=${t.algo}")
-      val cached = findCachedSharedAudio(t.contentId)
-      if (cached != null) {
-        Log.d(TAG_SHARED, "cache hit contentId=${t.contentId} file=${cached.filename}")
-        val track = buildSharedTrackForPlayer(t, cached.uri, cached.filename)
-        player.playTrack(track, listOf(track))
-        onOpenPlayer()
-        return
-      }
-
-      if (!isAuthenticated) {
-        onShowMessage("Sign in to play")
-        return
-      }
-      if (t.pieceCid.isBlank()) {
-        Log.w(TAG_SHARED, "play blocked: missing pieceCid title='${t.title}' contentId='${t.contentId}' trackId='${t.trackId}'")
-        onShowMessage("Not unlocked yet (missing pieceCid).")
-        return
-      }
-      val isFilecoinPiece = run {
-        val v = t.pieceCid.trim()
-        v.startsWith("baga") || v.startsWith("bafy") || v.startsWith("Qm")
-      }
-      if (isFilecoinPiece && t.datasetOwner.isBlank()) {
-        Log.w(TAG_SHARED, "play blocked: missing datasetOwner for Filecoin pieceCid='${t.pieceCid}' contentId='${t.contentId}'")
-        onShowMessage("Not unlocked yet (missing datasetOwner).")
-        return
-      }
-
-      cloudPlayBusy = true
-      cloudPlayLabel = "Decrypting: ${t.title} (can take up to ~60s)"
-      onShowMessage("Decrypting (can take up to ~60s)…")
-      val startedAtMs = SystemClock.elapsedRealtime()
-
-      val prepared = decryptSharedAudioToCache(t)
-
-      val tookMs = SystemClock.elapsedRealtime() - startedAtMs
-      Log.d(TAG_SHARED, "decrypt ok contentId=${t.contentId} tookMs=$tookMs file=${prepared.filename}")
-      val track = buildSharedTrackForPlayer(t, prepared.uri, prepared.filename)
-      player.playTrack(track, listOf(track))
-      onOpenPlayer()
-    } catch (err: Throwable) {
-      Log.e(TAG_SHARED, "decrypt/play failed contentId=${t.contentId}", err)
-      onShowMessage("Playback failed: ${err.message ?: "unknown error"}")
-    } finally {
-      cloudPlayBusy = false
-      cloudPlayLabel = null
-    }
-  }
-
-  fun toDisplayItems(local: List<LocalPlaylist>, onChain: List<OnChainPlaylist>): List<PlaylistDisplayItem> {
-    val out = ArrayList<PlaylistDisplayItem>(local.size + onChain.size)
-    for (lp in local) {
-      out.add(
-        PlaylistDisplayItem(
-          id = lp.id,
-          name = lp.name,
-          trackCount = lp.tracks.size,
-          coverUri = lp.coverUri ?: lp.tracks.firstOrNull()?.artworkUri,
-          isLocal = true,
-        ),
-      )
-    }
-    for (p in onChain) {
-      out.add(
-        PlaylistDisplayItem(
-          id = p.id,
-          name = p.name,
-          trackCount = p.trackCount,
-          coverUri = CoverRef.resolveCoverUrl(p.coverCid, width = 140, height = 140, format = "webp", quality = 80),
-          isLocal = false,
-        ),
-      )
-    }
-    return out
-  }
-
-  val displayPlaylists = remember(localPlaylists, onChainPlaylists) { toDisplayItems(localPlaylists, onChainPlaylists) }
-
-  LaunchedEffect(Unit) {
-    tracks = MusicLibrary.loadCachedTracks(context)
-    downloadedTracksByContentId = DownloadedTracksStore.load(context)
-    loadPlaylists()
-    // Background refresh once on open when permitted.
-    if (hasPermission) {
-      scope.launch { runScan(context, onShowMessage, silent = true, setScanning = { scanning = it }, setTracks = { tracks = it }, setError = { error = it }) }
-    }
-  }
-
-  LaunchedEffect(ownerEthAddress, isAuthenticated) {
-    sharedSeenItemIds =
-      if (isAuthenticated && !ownerEthAddress.isNullOrBlank()) {
-        withContext(Dispatchers.IO) { loadSeenSharedItemIds(context, ownerEthAddress) }
-      } else {
-        emptySet()
-      }
-    loadPlaylists()
-    loadShared(force = false)
-  }
-
-  LaunchedEffect(view, ownerEthAddress, isAuthenticated) {
-    if (view != MusicView.Shared) return@LaunchedEffect
-    loadShared(force = false)
-  }
-
-  LaunchedEffect(view) {
-    if (view != MusicView.Home) return@LaunchedEffect
-    recentPublishedReleasesLoading = true
-    recentPublishedReleasesError = null
-    runCatching { ProfileMusicApi.fetchLatestPublishedSongs(maxEntries = HOME_NEW_RELEASES_MAX) }
-      .onSuccess { rows ->
-        recentPublishedReleases =
-          rows.map { row ->
-            AlbumCardModel(
-              title = row.title,
-              artist = row.artist,
-              audioRef = row.pieceCid,
-              coverRef = row.coverCid,
-            )
-          }
-        recentPublishedReleasesLoading = false
-      }
-      .onFailure { error ->
-        recentPublishedReleases = emptyList()
-        recentPublishedReleasesError = error.message ?: "Failed to load new releases"
-        recentPublishedReleasesLoading = false
-      }
-  }
-
-  LaunchedEffect(view, sharedSelectedPlaylist) {
-    if (view != MusicView.SharedPlaylistDetail) return@LaunchedEffect
-    val share = sharedSelectedPlaylist ?: return@LaunchedEffect
-
-    loadSharedPlaylistTracks(share, force = false)
-  }
-
-  LaunchedEffect(view, sharedItemIds, ownerEthAddress, isAuthenticated) {
-    if (view != MusicView.Shared || !isAuthenticated || ownerEthAddress.isNullOrBlank()) return@LaunchedEffect
-    if (sharedItemIds.isEmpty()) return@LaunchedEffect
-    val merged = sharedSeenItemIds + sharedItemIds
-    if (merged.size == sharedSeenItemIds.size) return@LaunchedEffect
-    sharedSeenItemIds = merged
-    withContext(Dispatchers.IO) { saveSeenSharedItemIds(context, ownerEthAddress, merged) }
-  }
-
-  LaunchedEffect(sharedPlaylists) {
-    val owners =
-      sharedPlaylists
-        .map { it.owner.trim().lowercase() }
-        .filter { it.startsWith("0x") && it.length == 42 }
-        .distinct()
-
-    for (owner in owners) {
-      if (sharedOwnerLabels.containsKey(owner)) continue
-      sharedOwnerLabels[owner] = shortAddress(owner, minLengthToShorten = 10)
-      val handle =
-        runCatching {
-          withContext(Dispatchers.IO) {
-            TempoNameRecordsApi.getPrimaryName(owner)
-              ?: OnboardingRpcHelpers.getPrimaryName(owner)?.trim()?.takeIf { it.isNotBlank() }?.let { "$it.heaven" }
-          }
-        }
-          .getOrNull()
-          ?.trim()
-          .orEmpty()
-      if (handle.isNotBlank()) {
-        sharedOwnerLabels[owner] = handle
-      }
-    }
-  }
-
-  DisposableEffect(hasPermission) {
-    if (!hasPermission) {
-      return@DisposableEffect onDispose {}
-    }
-
-    val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
-      override fun onChange(selfChange: Boolean) {
-        autoSyncJob?.cancel()
-        autoSyncJob = scope.launch {
-          delay(1200)
-          runScan(context, onShowMessage, silent = true, setScanning = { scanning = it }, setTracks = { tracks = it }, setError = { error = it })
-        }
-      }
-    }
-    context.contentResolver.registerContentObserver(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, true, observer)
-    onDispose {
-      runCatching { context.contentResolver.unregisterContentObserver(observer) }
-      autoSyncJob?.cancel()
-      autoSyncJob = null
-    }
-  }
-
-  Box(modifier = Modifier.fillMaxSize()) {
-    Column(modifier = Modifier.fillMaxSize()) {
-      when (view) {
-      MusicView.Home -> {
-        PirateMobileHeader(
-          title = "Music",
-          isAuthenticated = isAuthenticated,
-          onAvatarPress = onOpenDrawer,
-          rightSlot = {
-            IconButton(
-              onClick = { view = MusicView.Search },
-            ) {
-              Icon(
-                Icons.Rounded.Search,
-                contentDescription = "Search",
-                tint = MaterialTheme.colorScheme.onBackground,
-              )
-            }
-          },
-        )
-        MusicHomeView(
-          sharedPlaylistCount = sharedPlaylists.size,
-          sharedTrackCount = sharedTracks.size,
-          sharedUnreadCount = sharedUnreadCount,
-          playlistCount = displayPlaylists.size,
-          playlists = displayPlaylists,
-          newReleases = mergedNewReleases(recentPublishedReleases),
-          newReleasesLoading = recentPublishedReleasesLoading,
-          newReleasesError = recentPublishedReleasesError,
-          onNavigateLibrary = { view = MusicView.Library },
-          onNavigateShared = { view = MusicView.Shared },
-          onNavigatePlaylists = { view = MusicView.Playlists },
-          onOpenPlaylist = { pl ->
-            selectedPlaylist = pl
-            selectedPlaylistId = pl.id
-            view = MusicView.PlaylistDetail
-            scope.launch { loadPlaylistDetail(pl) }
-          },
-          onPlayRelease = { release ->
-            val audioUrl = resolveReleaseAudioUrl(release.audioRef)
-            if (audioUrl.isNullOrBlank()) {
-              onShowMessage("This release is not playable yet")
-              return@MusicHomeView
-            }
-            val coverUrl = resolveReleaseCoverUrl(release.coverRef)
-            val track =
-              MusicTrack(
-                id = "release:${release.audioRef ?: "${release.title}-${release.artist}"}",
-                title = release.title,
-                artist = release.artist,
-                album = "",
-                durationSec = 0,
-                uri = audioUrl,
-                filename = "${release.title}.mp3",
-                artworkUri = coverUrl,
-                artworkFallbackUri = release.coverRef,
-              )
-            player.playTrack(track, listOf(track))
-            onOpenPlayer()
-          },
-        )
-      }
-
-      MusicView.Library -> {
-        PirateMobileHeader(
-          title = "Library",
-          onBackPress = { view = MusicView.Home },
-          rightSlot = {
-            IconButton(onClick = { view = MusicView.Search }) {
-              Icon(
-                Icons.Rounded.Search,
-                contentDescription = "Search",
-                tint = MaterialTheme.colorScheme.onBackground,
-              )
-            }
-          },
-        )
-        LibraryView(
-          hasPermission = hasPermission,
-          requestPermission = { requestPermission.launch(permission) },
-          tracks = tracks,
-          scanning = scanning,
-          error = error,
-          currentTrackId = currentTrack?.id,
-          isPlaying = isPlaying,
-          onScan = {
-            scope.launch {
-              runScan(
-                context,
-                onShowMessage,
-                silent = false,
-                setScanning = { scanning = it },
-                setTracks = { tracks = it },
-                setError = { error = it },
-              )
-            }
-          },
-          onPlayTrack = { t ->
-            if (currentTrack?.id == t.id) {
-              player.togglePlayPause()
-            } else {
-              player.playTrack(t, tracks)
-            }
-            onOpenPlayer()
-          },
-          onTrackMenu = { t ->
-            selectedTrack = t
-            trackMenuOpen = true
-          },
-        )
-      }
-
-      MusicView.Search -> {
-        PirateMobileHeader(
-          title = "Search",
-          onBackPress = {
-            searchQuery = ""
-            view = MusicView.Home
-          },
-        )
-        SearchView(
-          query = searchQuery,
-          onQueryChange = { searchQuery = it },
-          tracks = tracks,
-          currentTrackId = currentTrack?.id,
-          isPlaying = isPlaying,
-          onPlayTrack = { t ->
-            if (currentTrack?.id == t.id) {
-              player.togglePlayPause()
-            } else {
-              player.playTrack(t, tracks)
-            }
-            onOpenPlayer()
-          },
-          onTrackMenu = { t ->
-            selectedTrack = t
-            trackMenuOpen = true
-          },
-        )
-      }
-
-      MusicView.Shared -> {
-        PirateMobileHeader(
-          title = "Shared With You",
-          onBackPress = { view = MusicView.Home },
-          rightSlot = {
-            if (cloudPlayBusy || sharedLoading) {
-              CircularProgressIndicator(
-                modifier = Modifier.size(18.dp),
-                strokeWidth = 2.dp,
-                color = MaterialTheme.colorScheme.primary,
-              )
-            } else {
-              IconButton(
-                onClick = {
-                  scope.launch { loadShared(force = true) }
-                },
-              ) {
-                Icon(
-                  Icons.Rounded.Refresh,
-                  contentDescription = "Refresh",
-                  tint = MaterialTheme.colorScheme.onBackground,
-                )
-              }
-            }
-          },
-        )
-        SharedView(
-          loading = sharedLoading,
-          error = sharedError,
-          sharedPlaylists = sharedPlaylists,
-          sharedTracks = sharedTracks,
-          isAuthenticated = isAuthenticated,
-          ownerLabelFor = { owner -> sharedOwnerLabel(owner) },
-          onOpenPlaylist = { pl ->
-            sharedSelectedPlaylist = pl
-            view = MusicView.SharedPlaylistDetail
-          },
-          onPlayTrack = { t ->
-            scope.launch { playSharedCloudTrack(t) }
-          },
-          onDownloadTrack = { t ->
-            scope.launch { downloadSharedTrackToDevice(t, notify = true) }
-          },
-        )
-      }
-
-      MusicView.Playlists -> {
-        PirateMobileHeader(
-          title = "Playlists",
-          onBackPress = { view = MusicView.Home },
-          rightSlot = {
-            IconButton(onClick = { createPlaylistOpen = true }) {
-              Icon(
-                Icons.Rounded.Add,
-                contentDescription = "Create playlist",
-                tint = MaterialTheme.colorScheme.onBackground,
-              )
-            }
-          },
-        )
-        PlaylistsView(
-          loading = playlistsLoading,
-          playlists = displayPlaylists,
-          onOpenPlaylist = { pl ->
-            selectedPlaylist = pl
-            selectedPlaylistId = pl.id
-            view = MusicView.PlaylistDetail
-            scope.launch { loadPlaylistDetail(pl) }
-          },
-        )
-      }
-
-      MusicView.PlaylistDetail -> {
-        // Recover selectedPlaylist from saveable ID after state loss (e.g. returning from Player)
-        val pl = selectedPlaylist ?: displayPlaylists.find { it.id == selectedPlaylistId }?.also { selectedPlaylist = it }
-        LaunchedEffect(pl) {
-          if (pl != null && playlistDetailTracks.isEmpty() && !playlistDetailLoading) {
-            loadPlaylistDetail(pl)
-          }
-        }
-        PirateMobileHeader(
-          title = pl?.name?.ifBlank { "Playlist" } ?: "Playlist",
-          onBackPress = { view = MusicView.Playlists },
-        )
-        PlaylistDetailView(
-          playlist = pl,
-          loading = playlistDetailLoading,
-          error = playlistDetailError,
-          tracks = playlistDetailTracks,
-          currentTrackId = currentTrack?.id,
-          isPlaying = isPlaying,
-          onPlayTrack = { t ->
-            if (t.uri.isBlank()) {
-              onShowMessage("This playlist track isn't available for playback on this device yet")
-              return@PlaylistDetailView
-            }
-            val playable = playlistDetailTracks.filter { it.uri.isNotBlank() }
-            if (currentTrack?.id == t.id) {
-              player.togglePlayPause()
-            } else {
-              player.playTrack(t, playable)
-            }
-            onOpenPlayer()
-          },
-          onTrackMenu = { t ->
-            if (t.uri.isBlank()) {
-              onShowMessage("Track actions unavailable for this item")
-              return@PlaylistDetailView
-            }
-            selectedTrack = t
-            trackMenuOpen = true
-          },
-        )
-      }
-
-      MusicView.SharedPlaylistDetail -> {
-        val share = sharedSelectedPlaylist
-        PirateMobileHeader(
-          title = share?.playlist?.name?.ifBlank { "Shared Playlist" } ?: "Shared Playlist",
-          onBackPress = { view = MusicView.Shared },
-          rightSlot = {
-            if (share != null) {
-              Box {
-                IconButton(onClick = { sharedPlaylistMenuOpen = true }) {
-                  Icon(
-                    Icons.Rounded.MoreVert,
-                    contentDescription = "Playlist actions",
-                    tint = MaterialTheme.colorScheme.onBackground,
-                  )
-                }
-                DropdownMenu(
-                  expanded = sharedPlaylistMenuOpen,
-                  onDismissRequest = { sharedPlaylistMenuOpen = false },
-                ) {
-                  DropdownMenuItem(
-                    text = { Text("Refresh") },
-                    onClick = {
-                      sharedPlaylistMenuOpen = false
-                      scope.launch { loadSharedPlaylistTracks(share, force = true) }
-                    },
-                  )
-                  DropdownMenuItem(
-                    text = { Text("Download to device") },
-                    onClick = {
-                      sharedPlaylistMenuOpen = false
-                      if (sharedPlaylistTracks.isEmpty()) {
-                        onShowMessage("No tracks to download")
-                      } else {
-                        scope.launch {
-                          var ok = 0
-                          for ((idx, track) in sharedPlaylistTracks.withIndex()) {
-                            cloudPlayLabel = "Downloading ${idx + 1}/${sharedPlaylistTracks.size}: ${track.title}"
-                            if (downloadSharedTrackToDevice(track, notify = false)) ok += 1
-                          }
-                          onShowMessage("Downloaded $ok/${sharedPlaylistTracks.size} tracks")
-                        }
-                      }
-                    },
-                  )
-                }
-              }
-            }
-          },
-        )
-        SharedPlaylistDetailView(
-          loading = sharedPlaylistLoading || sharedPlaylistRefreshing,
-          error = sharedPlaylistError,
-          share = share,
-          sharedByLabel = share?.let { sharedOwnerLabel(it.owner) },
-          tracks = sharedPlaylistTracks,
-          currentTrackId = currentTrack?.id,
-          isPlaying = isPlaying,
-          onPlayTrack = { t ->
-            scope.launch { playSharedCloudTrack(t) }
-          },
-          onDownloadTrack = { t ->
-            scope.launch { downloadSharedTrackToDevice(t, notify = true) }
-          },
-          onShowMessage = onShowMessage,
-        )
-      }
-    }
-  }
-
-    if (cloudPlayBusy) {
-      Surface(
-        modifier = Modifier
-          .align(Alignment.BottomCenter)
-          .padding(horizontal = 16.dp, vertical = 18.dp),
-        color = MaterialTheme.colorScheme.surface,
-        shape = MaterialTheme.shapes.extraLarge,
-        shadowElevation = 4.dp,
-      ) {
-        Row(
-          modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-          horizontalArrangement = Arrangement.spacedBy(10.dp),
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          CircularProgressIndicator(
-            modifier = Modifier.size(18.dp),
-            strokeWidth = 2.dp,
-            color = MaterialTheme.colorScheme.primary,
-          )
-          Text(
-            text = cloudPlayLabel ?: "Decrypting...",
-            color = MaterialTheme.colorScheme.onSurface,
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-          )
-        }
-      }
-    }
-  }
-
-  fun isTrackDownloaded(track: MusicTrack): Boolean {
-    val key = track.contentId?.trim()?.lowercase().orEmpty()
-    if (key.isBlank()) return false
-    return downloadedTracksByContentId.containsKey(key)
-  }
-
-  val selectedTrackMenuPolicy =
-    selectedTrack?.let { track ->
-      TrackMenuPolicyResolver.resolve(
-        track = track,
-        ownerEthAddress = ownerEthAddress,
-        alreadyDownloaded = isTrackDownloaded(track),
-      )
-    }
-
-  TrackMenuSheet(
-    open = trackMenuOpen,
-    track = selectedTrack,
-    onClose = { trackMenuOpen = false },
-    onUpload = { t ->
-      val policy = TrackMenuPolicyResolver.resolve(t, ownerEthAddress)
-      if (!policy.canUpload) {
-        onShowMessage("Upload is only available for local tracks")
-        return@TrackMenuSheet
-      }
-      if (uploadBusy) {
-        onShowMessage("Upload already in progress")
-        return@TrackMenuSheet
-      }
-      if (!isAuthenticated || ownerEthAddress.isNullOrBlank()) {
-        onShowMessage("Sign in to upload")
-        return@TrackMenuSheet
-      }
-
-      uploadBusy = true
-      scope.launch {
-        onShowMessage("Uploading to Load...")
-        val result =
-          runCatching {
-            TrackUploadService.uploadEncrypted(
-              context = context,
-              ownerEthAddress = ownerEthAddress,
-              track = t,
-              hostActivity = hostActivity,
-              tempoAccount = tempoAccount,
-            )
-          }
-        uploadBusy = false
-
-        result.onFailure { err ->
-          onShowMessage("Upload failed: ${err.message ?: "unknown error"}")
-        }
-        result.onSuccess { ok ->
-          val next =
-            tracks.map { tr ->
-              if (tr.id != t.id) tr
-              else
-                tr.copy(
-                  contentId = ok.contentId,
-                  pieceCid = ok.pieceCid,
-                  datasetOwner = ok.datasetOwner,
-                  algo = ok.algo,
-                )
-            }
-          tracks = next
-          MusicLibrary.saveCachedTracks(context, next)
-
-          onShowMessage("Uploaded.")
-        }
-      }
-    },
-    onSaveForever = { t ->
-      val policy = TrackMenuPolicyResolver.resolve(t, ownerEthAddress)
-      if (!policy.canSaveForever) {
-        onShowMessage("This track can't be saved forever")
-        return@TrackMenuSheet
-      }
-      if (uploadBusy) {
-        onShowMessage("Upload already in progress")
-        return@TrackMenuSheet
-      }
-      if (!isAuthenticated || ownerEthAddress.isNullOrBlank()) {
-        onShowMessage("Sign in to save forever")
-        return@TrackMenuSheet
-      }
-      if (!t.permanentRef.isNullOrBlank()) {
-        onShowMessage("Already saved forever")
-        return@TrackMenuSheet
-      }
-
-      uploadBusy = true
-      scope.launch {
-        val sessionKey = SessionKeyManager.load(context)?.takeIf {
-          SessionKeyManager.isValid(it, ownerAddress = ownerEthAddress)
-        }
-        if (sessionKey == null) {
-          uploadBusy = false
-          onShowMessage("Session expired. Sign in again to save forever.")
-          return@launch
-        }
-
-        val balanceResult = runCatching { TurboCreditsApi.fetchBalance(sessionKey.address) }
-        val balanceError = balanceResult.exceptionOrNull()
-        if (balanceError != null) {
-          uploadBusy = false
-          if (TurboCreditsApi.isLikelyInsufficientBalanceError(balanceError.message)) {
-            promptTurboTopUp(TURBO_CREDITS_COPY)
-          } else {
-            onShowMessage("Couldn't check Turbo balance. Try again.")
-          }
-          return@launch
-        }
-        val balance = balanceResult.getOrNull()
-        if (balance == null || !balance.hasCredits) {
-          uploadBusy = false
-          promptTurboTopUp(TURBO_CREDITS_COPY)
-          return@launch
-        }
-
-        onShowMessage("Saving Forever...")
-        val result =
-          runCatching {
-            TrackSaveForeverService.saveForever(
-              context = context,
-              ownerEthAddress = ownerEthAddress,
-              track = t,
-            )
-          }
-        uploadBusy = false
-
-        result.onFailure { err ->
-          if (TurboCreditsApi.isLikelyInsufficientBalanceError(err.message)) {
-            promptTurboTopUp(TURBO_CREDITS_COPY)
-            return@onFailure
-          }
-          onShowMessage("Save Forever failed: ${err.message ?: "unknown error"}")
-        }
-        result.onSuccess { ok ->
-          val next =
-            tracks.map { tr ->
-              if (tr.id != t.id) tr
-              else {
-                tr.copy(
-                  contentId = ok.contentId,
-                  datasetOwner = ok.datasetOwner,
-                  algo = ok.algo,
-                  permanentRef = ok.permanentRef,
-                  permanentGatewayUrl = ok.permanentGatewayUrl,
-                  permanentSavedAtMs = ok.permanentSavedAtMs,
-                  savedForever = true,
-                )
-              }
-            }
-          tracks = next
-          MusicLibrary.saveCachedTracks(context, next)
-
-          onShowMessage("Saved forever on Arweave.")
-        }
-      }
-    },
-    onDownload = { t ->
-      val policy =
-        TrackMenuPolicyResolver.resolve(
-          track = t,
-          ownerEthAddress = ownerEthAddress,
-          alreadyDownloaded = isTrackDownloaded(t),
-        )
-      if (!policy.canDownload) {
-        onShowMessage("Already on device")
-        return@TrackMenuSheet
-      }
-      scope.launch {
-        val owner = ownerEthAddress?.trim()
-        val result =
-          UploadedTrackActions.downloadUploadedTrackToDevice(
-            context = context,
-            track = t,
-            ownerAddress = owner ?: t.datasetOwner,
-            granteeAddress = owner,
-          )
-        if (!result.success) {
-          onShowMessage("Download failed: ${result.error ?: "unknown error"}")
-          return@launch
-        }
-        runScan(
-          context = context,
-          onShowMessage = onShowMessage,
-          silent = true,
-          setScanning = { scanning = it },
-          setTracks = { tracks = it },
-          setError = { error = it },
-        )
-        onShowMessage(if (result.alreadyDownloaded) "Already downloaded" else "Downloaded to device")
-      }
-    },
-    onShare = { t ->
-      val policy = TrackMenuPolicyResolver.resolve(t, ownerEthAddress)
-      if (!policy.canShare) {
-        onShowMessage("Share is only available for your uploaded tracks")
-        return@TrackMenuSheet
-      }
-      if (!isAuthenticated || ownerEthAddress.isNullOrBlank()) {
-        onShowMessage("Sign in to share")
-        return@TrackMenuSheet
-      }
-      shareTrack = t
-      shareRecipientInput = ""
-    },
-    onAddToPlaylist = { t ->
-      selectedTrack = t
-      addToPlaylistOpen = true
-    },
-    onAddToQueue = { onShowMessage("Add to queue coming soon") },
-    onGoToSong = { t ->
-      val trackId = resolveSongTrackId(t)
-      if (trackId.isNullOrBlank()) {
-        onShowMessage("Song page unavailable for this track")
-        return@TrackMenuSheet
-      }
-      val navigator = onOpenSongPage
-      if (navigator == null) {
-        onShowMessage("Song view coming soon")
-        return@TrackMenuSheet
-      }
-      navigator(trackId, t.title, t.artist)
-    },
-    onGoToAlbum = { onShowMessage("Album view coming soon") },
-    onGoToArtist = { t ->
-      val artist = t.artist.trim()
-      if (artist.isBlank() || artist.equals("Unknown Artist", ignoreCase = true)) {
-        onShowMessage("Artist unavailable for this track")
-        return@TrackMenuSheet
-      }
-      val navigator = onOpenArtistPage
-      if (navigator == null) {
-        onShowMessage("Artist view coming soon")
-        return@TrackMenuSheet
-      }
-      navigator(artist)
-    },
-    showUploadAction = selectedTrackMenuPolicy?.canUpload ?: false,
-    showSaveAction = (selectedTrackMenuPolicy?.canSaveForever ?: false) || !selectedTrack?.permanentRef.isNullOrBlank(),
-    showDownloadAction = selectedTrackMenuPolicy?.canDownload ?: false,
-    showShareAction = selectedTrackMenuPolicy?.canShare ?: false,
-    uploadLabel = "Upload to Load",
-    saveActionLabel = "Save Forever",
-    savedActionLabel = "Saved Forever",
-    downloadLabel = "Download from Load",
-  )
-
-  CreatePlaylistSheet(
-    open = createPlaylistOpen,
-    isAuthenticated = isAuthenticated,
-    ownerEthAddress = ownerEthAddress,
-    tempoAccount = tempoAccount,
-    hostActivity = hostActivity,
-    onClose = { createPlaylistOpen = false },
-    onShowMessage = onShowMessage,
-    onSuccess = { playlistId, _, successMessage ->
-      scope.launch {
-        loadPlaylists()
-        if (playlistId.startsWith("0x")) {
-          selectedPlaylistId = playlistId
-          selectedPlaylist = displayPlaylists.firstOrNull { it.id.equals(playlistId, ignoreCase = true) }
-          view = MusicView.PlaylistDetail
-          selectedPlaylist?.let { loadPlaylistDetail(it) }
-        }
-        onShowMessage(successMessage)
-      }
-    },
-  )
-
-  AddToPlaylistSheet(
-    open = addToPlaylistOpen,
-    track = selectedTrack,
-    isAuthenticated = isAuthenticated,
-    ownerEthAddress = ownerEthAddress,
-    tempoAccount = tempoAccount,
-    hostActivity = hostActivity,
-    onClose = { addToPlaylistOpen = false },
-    onShowMessage = onShowMessage,
-    onSuccess = { playlistId, _ ->
-      scope.launch {
-        loadPlaylists()
-        if (playlistId.startsWith("0x")) {
-          selectedPlaylistId = playlistId
-          selectedPlaylist = displayPlaylists.firstOrNull { it.id.equals(playlistId, ignoreCase = true) }
-          selectedPlaylist?.let {
-            if (view == MusicView.PlaylistDetail && selectedPlaylistId == it.id) {
-              loadPlaylistDetail(it)
-            }
-          }
-        }
-      }
-    },
-  )
-
-  if (shareTrack != null) {
-    val activeTrack = shareTrack!!
-    AlertDialog(
-      onDismissRequest = {
-        if (!shareBusy) {
-          shareTrack = null
-          shareRecipientInput = ""
-        }
-      },
-      title = { Text("Share Track") },
-      text = {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          Text(
-            text = "Enter wallet address, .heaven, or .pirate name.",
-            style = MaterialTheme.typography.bodyMedium,
-          )
-          OutlinedTextField(
-            value = shareRecipientInput,
-            onValueChange = { if (!shareBusy) shareRecipientInput = it },
-            singleLine = true,
-            label = { Text("Recipient") },
-            placeholder = { Text("0x..., alice.heaven, bob.pirate") },
-            enabled = !shareBusy,
-            modifier = Modifier.fillMaxWidth(),
-          )
-        }
-      },
-      confirmButton = {
-        TextButton(
-          enabled = !shareBusy && shareRecipientInput.trim().isNotEmpty(),
-          onClick = {
-            val owner = ownerEthAddress
-            if (owner.isNullOrBlank()) {
-              onShowMessage("Missing share credentials")
-              return@TextButton
-            }
-            shareBusy = true
-            scope.launch {
-              val result =
-                UploadedTrackActions.shareUploadedTrack(
-                  context = context,
-                  track = activeTrack,
-                  recipient = shareRecipientInput,
-                  ownerAddress = owner,
-                )
-              shareBusy = false
-              if (!result.success) {
-                onShowMessage("Share failed: ${result.error ?: "unknown error"}")
-                return@launch
-              }
-              shareTrack = null
-              shareRecipientInput = ""
-              val target = result.recipientAddress?.let { shortAddress(it, minLengthToShorten = 10) } ?: "recipient"
-              onShowMessage("Shared with $target")
-            }
-          },
-        ) {
-          Text(if (shareBusy) "Sharing..." else "Share")
-        }
-      },
-      dismissButton = {
-        TextButton(
-          enabled = !shareBusy,
-          onClick = {
-            shareTrack = null
-            shareRecipientInput = ""
-          },
-        ) { Text("Cancel") }
-      },
+    refreshSharedLibraryWithUi(
+      force = force,
+      isAuthenticated = isAuthenticated,
+      ownerEthAddress = ownerEthAddress,
+      sharedLoading = sharedLoading,
+      sharedPlaylists = sharedPlaylists,
+      sharedTracks = sharedTracks,
+      sharedLastFetchAtMs = sharedLastFetchAtMs,
+      ttlMs = SHARED_REFRESH_TTL_MS,
+      onSetSharedError = { sharedError = it },
+      onSetSharedLoading = { sharedLoading = it },
+      onSetSharedPlaylists = { sharedPlaylists = it },
+      onSetSharedTracks = { sharedTracks = it },
+      onSetSharedLastFetchAtMs = { sharedLastFetchAtMs = it },
     )
   }
 
-  TurboCreditsSheet(
-    open = turboCreditsSheetOpen,
-    message = turboCreditsSheetMessage,
-    onDismiss = { turboCreditsSheetOpen = false },
-    onGetCredits = {
-      turboCreditsSheetOpen = false
-      openTurboTopUp()
+  suspend fun loadSharedPlaylistTracks(share: PlaylistShareEntry, force: Boolean) {
+    refreshSharedPlaylistTracksWithUi(
+      share = share,
+      force = force,
+      sharedPlaylistLoading = sharedPlaylistLoading,
+      sharedPlaylistRefreshing = sharedPlaylistRefreshing,
+      ttlMs = SHARED_REFRESH_TTL_MS,
+      currentSharedPlaylistKey = { sharedPlaylistKey },
+      onSetSharedPlaylistError = { sharedPlaylistError = it },
+      onSetSharedPlaylistKey = { sharedPlaylistKey = it },
+      onSetSharedPlaylistTracks = { sharedPlaylistTracks = it },
+      onSetSharedPlaylistLoading = { sharedPlaylistLoading = it },
+      onSetSharedPlaylistRefreshing = { sharedPlaylistRefreshing = it },
+    )
+  }
+
+  val displayPlaylists = remember(localPlaylists, onChainPlaylists) { toDisplayItems(localPlaylists, onChainPlaylists) }
+  MusicScreenLaunchEffects(
+    context = context,
+    newReleasesMax = HOME_NEW_RELEASES_MAX,
+    view = view,
+    ownerEthAddress = ownerEthAddress,
+    isAuthenticated = isAuthenticated,
+    hasPermission = hasPermission,
+    sharedSelectedPlaylist = sharedSelectedPlaylist,
+    sharedPlaylists = sharedPlaylists,
+    sharedItemIds = sharedItemIds,
+    sharedSeenItemIds = sharedSeenItemIds,
+    sharedOwnerLabels = sharedOwnerLabels,
+    onSetTracks = { tracks = it },
+    onSetDownloadedTracksByContentId = { downloadedTracksByContentId = it },
+    onSetSharedSeenItemIds = { sharedSeenItemIds = it },
+    onSetRecentPublishedReleases = { recentPublishedReleases = it },
+    onSetRecentPublishedReleasesLoading = { recentPublishedReleasesLoading = it },
+    onSetRecentPublishedReleasesError = { recentPublishedReleasesError = it },
+    onLoadPlaylists = { loadPlaylists() },
+    onLoadShared = { force -> loadShared(force) },
+    onLoadSharedPlaylistTracks = { share, force -> loadSharedPlaylistTracks(share, force) },
+    onRunSilentScan = { runLibraryScan(silent = true) },
+  )
+
+  MusicScreenMediaObserverEffect(
+    context = context,
+    scope = scope,
+    hasPermission = hasPermission,
+    autoSyncJob = autoSyncJob,
+    onSetAutoSyncJob = { autoSyncJob = it },
+    onRunSilentScan = {
+      runLibraryScan(silent = true)
     },
   )
-}
 
-private suspend fun runScan(
-  context: android.content.Context,
-  onShowMessage: (String) -> Unit,
-  silent: Boolean,
-  setScanning: (Boolean) -> Unit,
-  setTracks: (List<MusicTrack>) -> Unit,
-  setError: (String?) -> Unit,
-) {
-  // Guard against overlapping scans; `scope` is stable per composition, but callers can still spam.
-  // Use the UI state lock for now.
-  // (If this becomes flaky, move scanning to a ViewModel with an atomic guard.)
-  setScanning(true)
-  setError(null)
-  val result = runCatching { MusicLibrary.scanDeviceTracks(context) }
-  result.onFailure { err ->
-    setScanning(false)
-    setError(err.message ?: "Failed to scan")
-    if (!silent) onShowMessage(err.message ?: "Scan failed")
-  }
-  result.onSuccess { list ->
-    val cached = runCatching { MusicLibrary.loadCachedTracks(context) }.getOrElse { emptyList() }
-    val cachedById = cached.associateBy { it.id }
-    val downloadedByUri =
-      runCatching { DownloadedTracksStore.load(context).values.associateBy { it.mediaUri } }
-        .getOrElse { emptyMap() }
-
-    val merged =
-      list.map { scanned ->
-        val downloaded = downloadedByUri[scanned.uri]
-        if (downloaded != null) {
-          val mergedTitle =
-            when {
-              scanned.title.isBlank() -> downloaded.title
-              scanned.title == "(untitled)" && downloaded.title.isNotBlank() -> downloaded.title
-              else -> scanned.title
-            }
-          val mergedArtist =
-            when {
-              scanned.artist.isBlank() -> downloaded.artist
-              scanned.artist.equals("unknown artist", ignoreCase = true) && downloaded.artist.isNotBlank() -> downloaded.artist
-              else -> scanned.artist
-            }
-          val mergedAlbum = if (scanned.album.isBlank()) downloaded.album else scanned.album
-
-          return@map scanned.copy(
-            title = mergedTitle,
-            artist = mergedArtist,
-            album = mergedAlbum,
-            contentId = downloaded.contentId,
-            pieceCid = null,
-            datasetOwner = null,
-            algo = null,
-            permanentRef = null,
-            permanentGatewayUrl = null,
-            permanentSavedAtMs = null,
-            savedForever = false,
-          )
-        }
-
-        val prior = cachedById[scanned.id] ?: return@map scanned
-        scanned.copy(
-          contentId = prior.contentId,
-          pieceCid = prior.pieceCid,
-          datasetOwner = prior.datasetOwner,
-          algo = prior.algo,
-          permanentRef = prior.permanentRef,
-          permanentGatewayUrl = prior.permanentGatewayUrl,
-          permanentSavedAtMs = prior.permanentSavedAtMs,
-          savedForever = prior.savedForever,
+  MusicScreenRouteHost(
+    view = view,
+    onViewChange = { view = it },
+    sharedPlaylists = sharedPlaylists,
+    sharedTracks = sharedTracks,
+    sharedUnreadCount = sharedUnreadCount,
+    displayPlaylists = displayPlaylists,
+    newReleases = mergedNewReleases(recentPublishedReleases),
+    newReleasesLoading = recentPublishedReleasesLoading,
+    newReleasesError = recentPublishedReleasesError,
+    onOpenDrawer = onOpenDrawer,
+    onShowMessage = onShowMessage,
+    onPlayRelease = { release ->
+      playNewReleaseWithUi(
+        release = release,
+        player = player,
+        onOpenPlayer = onOpenPlayer,
+        onShowMessage = onShowMessage,
+      )
+    },
+    player = player,
+    currentTrackId = currentTrack?.id,
+    isPlaying = isPlaying,
+    onOpenPlayer = onOpenPlayer,
+    hasPermission = hasPermission,
+    tracks = tracks,
+    scanning = scanning,
+    libraryError = error,
+    onRequestPermission = { requestPermission.launch(permission) },
+    onScan = {
+      scope.launch {
+        runLibraryScan(silent = false)
+      }
+    },
+    onOpenTrackMenu = { track ->
+      selectedTrack = track
+      trackMenuOpen = true
+    },
+    searchQuery = searchQuery,
+    onSearchQueryChange = { searchQuery = it },
+    sharedLoading = sharedLoading,
+    sharedError = sharedError,
+    isAuthenticated = isAuthenticated,
+    ownerLabelFor = { owner -> sharedOwnerLabel(ownerAddress = owner, sharedOwnerLabels = sharedOwnerLabels) },
+    onRefreshShared = { scope.launch { loadShared(force = true) } },
+    onOpenSharedPlaylist = { playlist ->
+      sharedSelectedPlaylist = playlist
+      view = MusicView.SharedPlaylistDetail
+    },
+    onPlaySharedTrack = { track ->
+      scope.launch {
+        playSharedCloudTrackWithUi(
+          context = context,
+          ownerEthAddress = ownerEthAddress,
+          track = track,
+          isAuthenticated = isAuthenticated,
+          downloadedEntries = downloadedTracksByContentId,
+          cloudPlayBusy = cloudPlayBusy,
+          onSetCloudPlayBusy = { cloudPlayBusy = it },
+          onSetCloudPlayLabel = { cloudPlayLabel = it },
+          onSetDownloadedEntries = { downloadedTracksByContentId = it },
+          onShowMessage = onShowMessage,
+          onPlayTrack = { selected ->
+            player.playTrack(selected, listOf(selected))
+            onOpenPlayer()
+          },
         )
       }
+    },
+    onDownloadSharedTrack = { track -> scope.launch { downloadSharedTrackToDevice(track, notify = true) } },
+    playlistsLoading = playlistsLoading,
+    onCreatePlaylist = { createPlaylistOpen = true },
+    onOpenPlaylist = { playlist ->
+      openPlaylistDetailWithUi(
+        playlist = playlist,
+        onSetSelectedPlaylist = { selectedPlaylist = it },
+        onSetSelectedPlaylistId = { selectedPlaylistId = it },
+        onSetView = { view = it },
+        onLoadPlaylistDetail = { selected ->
+          loadPlaylistDetail(selected)
+        },
+        scope = scope,
+      )
+    },
+    selectedPlaylist = selectedPlaylist,
+    selectedPlaylistId = selectedPlaylistId,
+    onSelectedPlaylistChange = { selectedPlaylist = it },
+    playlistDetailLoading = playlistDetailLoading,
+    playlistDetailError = playlistDetailError,
+    playlistDetailTracks = playlistDetailTracks,
+    onLoadPlaylistDetail = { playlist -> loadPlaylistDetail(playlist) },
+    onChangePlaylistCover = { playlist, coverUri ->
+      changePlaylistCoverWithUi(
+        context = context,
+        hostActivity = hostActivity,
+        playlist = playlist,
+        coverUri = coverUri,
+        ownerEthAddress = ownerEthAddress,
+        isAuthenticated = isAuthenticated,
+        tempoAccount = tempoAccount,
+        onChainPlaylists = onChainPlaylists,
+        selectedPlaylistId = selectedPlaylistId,
+        selectedPlaylist = selectedPlaylist,
+        onSetOnChainPlaylists = { onChainPlaylists = it },
+        onSetSelectedPlaylist = { selectedPlaylist = it },
+        onShowMessage = onShowMessage,
+      )
+    },
+    onSharePlaylistToWallet = { playlist, recipient ->
+      sharePlaylistToWalletWithUi(
+        context = context,
+        hostActivity = hostActivity,
+        playlist = playlist,
+        recipientInput = recipient,
+        ownerEthAddress = ownerEthAddress,
+        isAuthenticated = isAuthenticated,
+        tempoAccount = tempoAccount,
+        onShowMessage = onShowMessage,
+      )
+    },
+    onDeletePlaylist = { playlist ->
+      deletePlaylistWithUi(
+        context = context,
+        hostActivity = hostActivity,
+        playlist = playlist,
+        ownerEthAddress = ownerEthAddress,
+        isAuthenticated = isAuthenticated,
+        tempoAccount = tempoAccount,
+        onChainPlaylists = onChainPlaylists,
+        selectedPlaylistId = selectedPlaylistId,
+        onSetOnChainPlaylists = { onChainPlaylists = it },
+        onSelectedPlaylistDeleted = {
+          selectedPlaylist = null
+          selectedPlaylistId = null
+          playlistDetailTracks = emptyList()
+          playlistDetailError = null
+          playlistDetailLoading = false
+          view = MusicView.Playlists
+        },
+        onShowMessage = onShowMessage,
+      )
+    },
+    sharedSelectedPlaylist = sharedSelectedPlaylist,
+    sharedPlaylistMenuOpen = sharedPlaylistMenuOpen,
+    onSharedPlaylistMenuOpenChange = { sharedPlaylistMenuOpen = it },
+    sharedPlaylistTracks = sharedPlaylistTracks,
+    sharedPlaylistLoading = sharedPlaylistLoading,
+    sharedPlaylistRefreshing = sharedPlaylistRefreshing,
+    sharedPlaylistError = sharedPlaylistError,
+    sharedByLabel = sharedSelectedPlaylist?.let { sharedOwnerLabel(ownerAddress = it.owner, sharedOwnerLabels = sharedOwnerLabels) },
+    onRefreshSharedPlaylist = { share -> scope.launch { loadSharedPlaylistTracks(share, force = true) } },
+    onDownloadAllSharedPlaylist = {
+      downloadAllSharedPlaylistTracksWithUi(
+        tracks = sharedPlaylistTracks,
+        onSetCloudPlayLabel = { cloudPlayLabel = it },
+        onDownloadTrack = { track ->
+          downloadSharedTrackToDevice(track, notify = false)
+        },
+        onShowMessage = onShowMessage,
+      )
+    },
+    cloudPlayBusy = cloudPlayBusy,
+    cloudPlayLabel = cloudPlayLabel,
+  )
 
-    setTracks(merged)
-    MusicLibrary.saveCachedTracks(context, merged)
-    setScanning(false)
-  }
+  MusicScreenOverlayHost(
+    trackMenuOpen = trackMenuOpen,
+    selectedTrack = selectedTrack,
+    ownerEthAddress = ownerEthAddress,
+    isAuthenticated = isAuthenticated,
+    hostActivity = hostActivity,
+    tempoAccount = tempoAccount,
+    tracks = tracks,
+    downloadedTracksByContentId = downloadedTracksByContentId,
+    uploadBusy = uploadBusy,
+    turboCreditsCopy = TURBO_CREDITS_COPY,
+    onUploadBusyChange = { uploadBusy = it },
+    onTracksChange = { tracks = it },
+    onOpenShare = { shareTrack = it },
+    onOpenAddToPlaylist = {
+      selectedTrack = it
+      addToPlaylistOpen = true
+    },
+    onCloseTrackMenu = { trackMenuOpen = false },
+    onPromptTurboTopUp = {
+      turboCreditsSheetMessage = it
+      turboCreditsSheetOpen = true
+    },
+    onShowMessage = onShowMessage,
+    onRescanAfterDownload = {
+      runLibraryScan(silent = true)
+    },
+    onOpenSongPage = onOpenSongPage,
+    onOpenArtistPage = onOpenArtistPage,
+    createPlaylistOpen = createPlaylistOpen,
+    addToPlaylistOpen = addToPlaylistOpen,
+    onCreatePlaylistOpenChange = { createPlaylistOpen = it },
+    onAddToPlaylistOpenChange = { addToPlaylistOpen = it },
+    onCreatePlaylistSuccess = { playlistId, successMessage ->
+      scope.launch {
+        handleCreatePlaylistSuccessWithUi(
+          playlistId = playlistId,
+          successMessage = successMessage,
+          displayPlaylists = displayPlaylists,
+          onLoadPlaylists = { loadPlaylists() },
+          onSetSelectedPlaylistId = { selectedPlaylistId = it },
+          onSetSelectedPlaylist = { selectedPlaylist = it },
+          onSetView = { view = it },
+          onLoadPlaylistDetail = { selected ->
+            loadPlaylistDetail(selected)
+          },
+          onShowMessage = onShowMessage,
+        )
+      }
+    },
+    onAddToPlaylistSuccess = { playlistId ->
+      scope.launch {
+        handleAddToPlaylistSuccessWithUi(
+          playlistId = playlistId,
+          currentView = view,
+          displayPlaylists = displayPlaylists,
+          onLoadPlaylists = { loadPlaylists() },
+          onSetSelectedPlaylistId = { selectedPlaylistId = it },
+          onSetSelectedPlaylist = { selectedPlaylist = it },
+          selectedPlaylistId = selectedPlaylistId,
+          onLoadPlaylistDetail = { selected ->
+            loadPlaylistDetail(selected)
+          },
+        )
+      }
+    },
+    shareTrack = shareTrack,
+    onDismissShare = { shareTrack = null },
+    turboCreditsSheetOpen = turboCreditsSheetOpen,
+    turboCreditsSheetMessage = turboCreditsSheetMessage,
+    onDismissTurboCredits = { turboCreditsSheetOpen = false },
+    onGetTurboCredits = {
+      turboCreditsSheetOpen = false
+      openTurboTopUpUrl(
+        context = context,
+        onShowMessage = onShowMessage,
+      )
+    },
+  )
 }

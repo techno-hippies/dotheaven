@@ -88,9 +88,6 @@ const ARTIST_COLUMN_WIDTH: f32 = 200.0;
 const ALBUM_COLUMN_WIDTH: f32 = 240.0;
 const DETAIL_ARTIST_COLUMN_WIDTH: f32 = 225.0;
 const DETAIL_ALBUM_COLUMN_WIDTH: f32 = 300.0;
-const DEFAULT_SUBGRAPH_MUSIC_SOCIAL_URL: &str =
-    "https://graph.dotheaven.org/subgraphs/name/dotheaven/music-social-tempo";
-const DEFAULT_RESOLVER_URL: &str = "https://metadata-resolver.deletion-backup782.workers.dev";
 // Subgraphs are eventually consistent. Keep deleted playlists hidden locally while the indexer
 // catches up so they don't briefly reappear after a refresh.
 const PLAYLIST_DELETE_TOMBSTONE_AFTER_MS: i64 = 10 * 60_000;

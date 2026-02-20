@@ -42,7 +42,9 @@ ENABLE_MB_FALLBACK_SEARCH = "false"
 # STORY_ROYALTY_POLICY_LAP = "0xBe54FB168b3c982b7AaE60dB6CF75Bd8447b390E"
 # STORY_WIP_TOKEN = "0x1514000000000000000000000000000000000000"
 # STORY_PIL_LICENSE_TEMPLATE = "0x2E896b0b2Fdb7457499B56AAaA4AE55BCB4Cd316"
-# FILEBASE_KEY = "ACCESS_KEY:SECRET_KEY:BUCKET"  # Set via wrangler secret for IPFS pinning
+# LOAD_S3_AGENT_API_KEY = "..." # Set via wrangler secret for Load uploads
+# LOAD_S3_AGENT_URL = "https://load-s3-agent.load.network" # Optional override
+# LOAD_GATEWAY_URL = "https://gateway.s3-node-1.load.network" # Optional override
 
 # Self.xyz verification
 # Generic app identity params (legacy SELF_SCOPE still supported by code as fallback)
@@ -74,9 +76,9 @@ TEMPO_POLICY_SIGNER_ADDRESS = "0xc77Ad4de7d179FFFBa417cA24c055d86Af69F4BB"
 
 [[d1_databases]]
 binding = "DB"
-# Cloudflare resource label is legacy; keep stable until an explicit D1 migration.
-database_name = "heaven-api"
-database_id = "6c7c6c73-29c5-4886-b511-3bf4332bca09"
+# D1 uses capability label.
+database_name = "api-core"
+database_id = "71319c22-fd87-4b96-bf47-45d1eb865eb8"
 
 # R2 buckets for photo pipeline
 [[r2_buckets]]

@@ -34,21 +34,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
-import com.pirate.app.music.LocalPlaylist
-import com.pirate.app.music.LocalPlaylistTrack
-import com.pirate.app.music.LocalPlaylistsStore
 import com.pirate.app.music.MusicTrack
-import com.pirate.app.music.OnChainPlaylist
-import com.pirate.app.music.OnChainPlaylistsApi
 import com.pirate.app.music.PlaylistDisplayItem
-import com.pirate.app.music.TempoPlaylistApi
-import com.pirate.app.music.TrackIds
-import com.pirate.app.tempo.SessionKeyManager
 import com.pirate.app.tempo.TempoPasskeyManager
-import com.pirate.app.tempo.TempoSessionKeyApi
 import kotlinx.coroutines.launch
-
-private const val IPFS_GATEWAY = "https://heaven.myfilebase.com/ipfs/"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,54 +63,16 @@ fun AddToPlaylistSheet(
   var showCreate by remember { mutableStateOf(false) }
   var newName by remember { mutableStateOf("") }
 
-  suspend fun resolveSessionKey(
-    owner: String,
-    failureMessage: String,
-  ): SessionKeyManager.SessionKey? {
-    val loaded =
-      SessionKeyManager.load(context)?.takeIf {
-        SessionKeyManager.isValid(it, ownerAddress = owner) &&
-          it.keyAuthorization?.isNotEmpty() == true
-      }
-    if (loaded != null) return loaded
-
-    val activity = hostActivity
-    val account = tempoAccount
-    if (activity == null || account == null) {
-      onShowMessage(failureMessage)
-      return null
-    }
-    onShowMessage("Authorizing session key...")
-    val auth = TempoSessionKeyApi.authorizeSessionKey(activity = activity, account = account)
-    val authorized =
-      auth.sessionKey?.takeIf {
-        auth.success &&
-          SessionKeyManager.isValid(it, ownerAddress = owner) &&
-          it.keyAuthorization?.isNotEmpty() == true
-      }
-    if (authorized != null) return authorized
-
-    onShowMessage(auth.error ?: failureMessage)
-    return null
-  }
-
-  suspend fun loadPlaylists() {
-    loading = true
-
-    val local = runCatching { LocalPlaylistsStore.getLocalPlaylists(context) }.getOrElse { emptyList() }
-    val onChain =
-      if (isAuthenticated && !ownerEthAddress.isNullOrBlank()) {
-        runCatching { OnChainPlaylistsApi.fetchUserPlaylists(ownerEthAddress) }.getOrElse { emptyList() }
-      } else {
-        emptyList()
-      }
-
-    playlists = toDisplayItems(local, onChain)
-    loading = false
-  }
-
   LaunchedEffect(open, isAuthenticated, ownerEthAddress) {
-    if (open) loadPlaylists()
+    if (!open) return@LaunchedEffect
+    loading = true
+    playlists =
+      loadPlaylistDisplayItems(
+        context = context,
+        isAuthenticated = isAuthenticated,
+        ownerEthAddress = ownerEthAddress,
+      )
+    loading = false
   }
 
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -164,55 +115,24 @@ fun AddToPlaylistSheet(
               val name = newName.trim()
               scope.launch {
                 mutating = true
-                val owner = ownerEthAddress?.trim()?.lowercase().orEmpty()
-                if (isAuthenticated && owner.isNotBlank() && tempoAccount != null) {
-                  val sessionKey =
-                    resolveSessionKey(
-                      owner = owner,
-                      failureMessage = "Session expired. Sign in again to create playlists.",
-                    )
-                  if (sessionKey == null) {
-                    mutating = false
-                    return@launch
-                  }
-
-                  val trackId =
-                    TrackIds.computeMetaTrackId(
-                      title = track.title,
-                      artist = track.artist,
-                      album = track.album.ifBlank { null },
-                    )
-                  val createResult =
-                    TempoPlaylistApi.createPlaylist(
-                      account = tempoAccount,
-                      sessionKey = sessionKey,
-                      name = name,
-                      coverCid = "",
-                      visibility = 0,
-                      trackIds = listOf(trackId),
-                    )
-                  if (!createResult.success) {
-                    onShowMessage("Create failed: ${createResult.error ?: "unknown error"}")
-                    mutating = false
-                    return@launch
-                  }
-
-                  val resolvedId = resolveCreatedPlaylistId(owner, name, createResult.playlistId)
-                  val createFundingPath = if (createResult.usedSelfPayFallback) "self-pay fallback" else "sponsored"
-                  onShowMessage("Added to $name ($createFundingPath)")
-                  onSuccess(
-                    resolvedId ?: "pending:${System.currentTimeMillis()}",
-                    name,
+                val result =
+                  createPlaylistWithTrack(
+                    context = context,
+                    track = track,
+                    playlistName = name,
+                    isAuthenticated = isAuthenticated,
+                    ownerEthAddress = ownerEthAddress,
+                    tempoAccount = tempoAccount,
+                    hostActivity = hostActivity,
+                    onShowMessage = onShowMessage,
                   )
-                } else {
-                  val created = LocalPlaylistsStore.createLocalPlaylist(context, name, track.toLocalPlaylistTrack())
-                  onShowMessage("Added to ${created.name}")
-                  onSuccess(created.id, created.name)
+                if (result != null) {
+                  onSuccess(result.playlistId, result.playlistName)
+                  showCreate = false
+                  newName = ""
+                  onClose()
                 }
                 mutating = false
-                showCreate = false
-                newName = ""
-                onClose()
               }
             },
           ) { Text("Create") }
@@ -247,81 +167,26 @@ fun AddToPlaylistSheet(
               scope.launch {
                 if (mutating) return@launch
                 mutating = true
-                if (pl.isLocal) {
-                  LocalPlaylistsStore.addTrackToLocalPlaylist(context, pl.id, track.toLocalPlaylistTrack())
-                  onShowMessage("Added to ${pl.name}")
-                  onSuccess(pl.id, pl.name)
-                } else {
-                  val owner = ownerEthAddress?.trim()?.lowercase().orEmpty()
-                  if (!isAuthenticated || owner.isBlank() || tempoAccount == null) {
-                    onShowMessage("Sign in with Tempo passkey to update on-chain playlists")
-                    mutating = false
-                    return@launch
-                  }
-
-                  val sessionKey =
-                    resolveSessionKey(
-                      owner = owner,
-                      failureMessage = "Session expired. Sign in again to update playlists.",
-                    )
-                  if (sessionKey == null) {
-                    mutating = false
-                    return@launch
-                  }
-
-                  val trackId =
-                    TrackIds.computeMetaTrackId(
-                      title = track.title,
-                      artist = track.artist,
-                      album = track.album.ifBlank { null },
-                    )
-
-                  val existingTrackIds = runCatching { OnChainPlaylistsApi.fetchPlaylistTrackIds(pl.id) }
-                    .getOrElse {
-                      onShowMessage("Could not load playlist tracks yet. Try again in a moment.")
-                      mutating = false
-                      return@launch
-                    }
-
-                  if (pl.trackCount > 0 && existingTrackIds.isEmpty()) {
-                    onShowMessage("Playlist tracks are still indexing. Try again shortly.")
-                    mutating = false
-                    return@launch
-                  }
-
-                  if (existingTrackIds.any { it.equals(trackId, ignoreCase = true) }) {
-                    onShowMessage("Already in ${pl.name}")
-                    onSuccess(pl.id, pl.name)
-                    mutating = false
-                    onClose()
-                    return@launch
-                  }
-
-                  val nextTrackIds = ArrayList<String>(existingTrackIds.size + 1)
-                  nextTrackIds.addAll(existingTrackIds)
-                  nextTrackIds.add(trackId)
-
-                  val result =
-                    TempoPlaylistApi.setTracks(
-                      account = tempoAccount,
-                      sessionKey = sessionKey,
-                      playlistId = pl.id,
-                      trackIds = nextTrackIds,
-                    )
-                  if (!result.success) {
-                    onShowMessage("Add failed: ${result.error ?: "unknown error"}")
-                    mutating = false
-                    return@launch
-                  }
-
-                  val updateFundingPath = if (result.usedSelfPayFallback) "self-pay fallback" else "sponsored"
-                  onShowMessage("Added to ${pl.name} ($updateFundingPath)")
-                  onSuccess(pl.id, pl.name)
+                val result =
+                  addTrackToPlaylistWithUi(
+                    context = context,
+                    playlist = pl,
+                    track = track,
+                    isAuthenticated = isAuthenticated,
+                    ownerEthAddress = ownerEthAddress,
+                    tempoAccount = tempoAccount,
+                    hostActivity = hostActivity,
+                    onShowMessage = onShowMessage,
+                  )
+                if (result != null) {
+                  onSuccess(result.playlistId, result.playlistName)
+                  showCreate = false
+                  newName = ""
                 }
-                showCreate = false
-                newName = ""
                 mutating = false
-                onClose()
+                if (result != null) {
+                  onClose()
+                }
               }
             },
           )
@@ -355,69 +220,4 @@ private fun PlaylistRow(
       Text("on-chain", color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
   }
-}
-
-private fun toDisplayItems(local: List<LocalPlaylist>, onChain: List<OnChainPlaylist>): List<PlaylistDisplayItem> {
-  val out = ArrayList<PlaylistDisplayItem>(local.size + onChain.size)
-  for (lp in local) {
-    out.add(
-      PlaylistDisplayItem(
-        id = lp.id,
-        name = lp.name,
-        trackCount = lp.tracks.size,
-        coverUri = lp.coverUri ?: lp.tracks.firstOrNull()?.artworkUri,
-        isLocal = true,
-      ),
-    )
-  }
-  for (p in onChain) {
-    out.add(
-      PlaylistDisplayItem(
-        id = p.id,
-        name = p.name,
-        trackCount = p.trackCount,
-        coverUri = p.coverCid.ifBlank { null }?.let { cid ->
-          "${IPFS_GATEWAY}${cid}?img-width=96&img-height=96&img-format=webp&img-quality=80"
-        },
-        isLocal = false,
-      ),
-    )
-  }
-  return out
-}
-
-private fun MusicTrack.toLocalPlaylistTrack(): LocalPlaylistTrack {
-  return LocalPlaylistTrack(
-    artist = artist,
-    title = title,
-    album = album.ifBlank { null },
-    durationSec = durationSec.takeIf { it > 0 },
-    uri = uri,
-    artworkUri = artworkUri,
-    artworkFallbackUri = artworkFallbackUri,
-  )
-}
-
-private suspend fun resolveCreatedPlaylistId(
-  ownerAddress: String,
-  playlistName: String,
-  immediateId: String?,
-): String? {
-  val direct = immediateId?.trim().orEmpty()
-  if (direct.startsWith("0x") && direct.length == 66) return direct.lowercase()
-
-  repeat(4) {
-    val candidates = runCatching { OnChainPlaylistsApi.fetchUserPlaylists(ownerAddress, maxEntries = 30) }.getOrNull()
-    val match =
-      candidates
-        ?.firstOrNull { playlist ->
-          playlist.name.trim().equals(playlistName.trim(), ignoreCase = true)
-        }
-        ?.id
-        ?.trim()
-    if (!match.isNullOrBlank()) return match.lowercase()
-    kotlinx.coroutines.delay(1_200L)
-  }
-
-  return null
 }

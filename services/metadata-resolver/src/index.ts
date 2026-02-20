@@ -17,13 +17,17 @@ interface Env {
   CACHE: KVNamespace
   MB_USER_AGENT: string
   ENVIRONMENT: string
-  FILEBASE_API_KEY?: string
+  LOAD_S3_AGENT_API_KEY?: string
+  LOAD_S3_AGENT_URL?: string
+  LOAD_GATEWAY_URL?: string
 }
 
 // ── Cache TTLs ───────────────────────────────────────────────────────
 const CACHE_TTL_POSITIVE = 60 * 60 * 24 * 30 // 30 days
 const CACHE_TTL_NEGATIVE = 60 * 60            // 1 hour
 const CACHE_TTL_IMAGE = 60 * 60 * 24 * 365    // 1 year (images are immutable once rehosted)
+const DEFAULT_LOAD_S3_AGENT_URL = 'https://load-s3-agent.load.network'
+const DEFAULT_LOAD_GATEWAY_URL = 'https://gateway.s3-node-1.load.network'
 
 // ── Rate limiter (per-isolate, best-effort) ──────────────────────────
 let lastMbRequest = 0
@@ -646,7 +650,7 @@ function luceneEscape(s: string): string {
   return s.replace(/([+\-&|!(){}[\]^"~*?:\\/])/g, '\\$1')
 }
 
-// ── Filebase S3 Upload ──────────────────────────────────────────────
+// ── Load S3 Agent Upload ────────────────────────────────────────────
 
 async function sha256Hex(message: string): Promise<string> {
   const encoder = new TextEncoder()
@@ -657,116 +661,61 @@ async function sha256Hex(message: string): Promise<string> {
     .join('')
 }
 
-async function uploadToFilebase(
+function extractLoadUploadId(payload: unknown): string | null {
+  const candidate = (payload as Record<string, unknown> | null)?.id
+    ?? (payload as Record<string, unknown> | null)?.dataitem_id
+    ?? (payload as Record<string, unknown> | null)?.dataitemId
+    ?? ((payload as Record<string, unknown> | null)?.result as Record<string, unknown> | undefined)?.id
+    ?? ((payload as Record<string, unknown> | null)?.result as Record<string, unknown> | undefined)?.dataitem_id
+    ?? ((payload as Record<string, unknown> | null)?.result as Record<string, unknown> | undefined)?.dataitemId
+  return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : null
+}
+
+async function uploadToLoad(
   imageData: Uint8Array,
   contentType: string,
   filename: string,
   env: Env
-): Promise<string> {
-  if (!env.FILEBASE_API_KEY) {
-    throw new Error('FILEBASE_API_KEY not configured')
+): Promise<{ id: string; gatewayUrl: string }> {
+  if (!env.LOAD_S3_AGENT_API_KEY) {
+    throw new Error('LOAD_S3_AGENT_API_KEY not configured')
   }
 
-  const decoded = atob(env.FILEBASE_API_KEY)
-  const [accessKey, secretKey, bucket] = decoded.split(':')
-  if (!accessKey || !secretKey || !bucket) {
-    throw new Error('Invalid FILEBASE_API_KEY format (expected base64(accessKey:secretKey:bucket))')
-  }
+  const agentBase = (env.LOAD_S3_AGENT_URL || DEFAULT_LOAD_S3_AGENT_URL).replace(/\/+$/, '')
+  const gatewayBase = (env.LOAD_GATEWAY_URL || DEFAULT_LOAD_GATEWAY_URL).replace(/\/+$/, '')
+  const uploadForm = new FormData()
+  uploadForm.append('file', new File([imageData], filename, { type: contentType }))
+  uploadForm.append('content_type', contentType)
 
-  const endpoint = 's3.filebase.com'
-  const region = 'us-east-1'
-  const service = 's3'
-
-  const date = new Date()
-  const amzDate = date.toISOString().replace(/[:-]|\.\d{3}/g, '')
-  const dateStamp = amzDate.slice(0, 8)
-
-  const canonicalUri = `/${bucket}/${filename}`
-
-  // Compute payload hash
-  const payloadHashBuffer = await crypto.subtle.digest('SHA-256', imageData)
-  const payloadHash = bytesToHex(new Uint8Array(payloadHashBuffer))
-
-  const canonicalHeaders =
-    `host:${endpoint}\n` +
-    `x-amz-content-sha256:${payloadHash}\n` +
-    `x-amz-date:${amzDate}\n`
-  const signedHeaders = 'host;x-amz-content-sha256;x-amz-date'
-
-  const canonicalRequest = [
-    'PUT',
-    canonicalUri,
-    '',
-    canonicalHeaders,
-    signedHeaders,
-    payloadHash,
-  ].join('\n')
-
-  const algorithm = 'AWS4-HMAC-SHA256'
-  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`
-  const canonicalRequestHash = await sha256Hex(canonicalRequest)
-  const stringToSign = [algorithm, amzDate, credentialScope, canonicalRequestHash].join('\n')
-
-  // Compute signing key
-  const kDate = await hmacSha256(new TextEncoder().encode(`AWS4${secretKey}`), dateStamp)
-  const kRegion = await hmacSha256(kDate, region)
-  const kService = await hmacSha256(kRegion, service)
-  const kSigning = await hmacSha256(kService, 'aws4_request')
-
-  const signature = await hmacHex(kSigning, stringToSign)
-
-  const authHeader = [
-    `${algorithm} Credential=${accessKey}/${credentialScope}`,
-    `SignedHeaders=${signedHeaders}`,
-    `Signature=${signature}`,
-  ].join(', ')
-
-  const response = await fetch(`https://${endpoint}${canonicalUri}`, {
-    method: 'PUT',
+  const response = await fetch(`${agentBase}/upload`, {
+    method: 'POST',
     headers: {
-      Authorization: authHeader,
-      'x-amz-content-sha256': payloadHash,
-      'x-amz-date': amzDate,
-      'Content-Type': contentType,
+      Authorization: `Bearer ${env.LOAD_S3_AGENT_API_KEY}`,
     },
-    body: imageData,
+    body: uploadForm,
   })
 
+  const responseText = await response.text()
+  let payload: unknown = null
+  try {
+    payload = responseText ? JSON.parse(responseText) : null
+  } catch {
+    payload = { raw: responseText }
+  }
+
   if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`Filebase upload failed: ${response.status} ${text}`)
+    throw new Error(`Load upload failed: ${response.status} ${responseText}`)
   }
 
-  const cid = response.headers.get('x-amz-meta-cid')
-  if (!cid) {
-    throw new Error('No CID returned from Filebase')
+  const id = extractLoadUploadId(payload)
+  if (!id) {
+    throw new Error(`Load upload returned no id: ${responseText}`)
   }
 
-  return cid
-}
-
-async function hmacSha256(key: Uint8Array, message: string): Promise<Uint8Array> {
-  const encoder = new TextEncoder()
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    key,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  )
-  const sig = await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(message))
-  return new Uint8Array(sig)
-}
-
-async function hmacHex(key: Uint8Array, message: string): Promise<string> {
-  const sig = await hmacSha256(key, message)
-  return bytesToHex(sig)
-}
-
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
+  return {
+    id,
+    gatewayUrl: `${gatewayBase}/resolve/${id}`,
+  }
 }
 
 // ── Image Rehosting ─────────────────────────────────────────────────
@@ -785,13 +734,13 @@ interface RehostResult {
 
 /**
  * POST /rehost/image
- * Batch rehost external images to Filebase IPFS.
+ * Batch rehost external images to Load.
  * Input:  { urls: ["https://..."] }
  * Output: { results: [{ url, ipfsUrl, cid, error, cached }] }
  */
 async function handleRehostImage(request: Request, env: Env): Promise<Response> {
-  if (!env.FILEBASE_API_KEY) {
-    return jsonResponse({ error: 'FILEBASE_API_KEY not configured' }, 500)
+  if (!env.LOAD_S3_AGENT_API_KEY) {
+    return jsonResponse({ error: 'LOAD_S3_AGENT_API_KEY not configured' }, 500)
   }
 
   let body: RehostRequest
@@ -877,16 +826,16 @@ async function rehostSingleImage(url: string, env: Env): Promise<RehostResult> {
   const ext = contentType.split('/')[1]?.split(';')[0] || 'jpg'
   const filename = `${urlHash.slice(0, 16)}.${ext}`
 
-  // Upload to Filebase
-  const cid = await uploadToFilebase(imageData, contentType, filename, env)
+  // Upload to Load
+  const { id, gatewayUrl } = await uploadToLoad(imageData, contentType, filename, env)
 
-  // Cache CID (1 year TTL)
-  await env.CACHE.put(cacheKey, cid, { expirationTtl: CACHE_TTL_IMAGE })
+  // Cache upload id (1 year TTL)
+  await env.CACHE.put(cacheKey, id, { expirationTtl: CACHE_TTL_IMAGE })
 
   return {
     url,
-    ipfsUrl: `ipfs://${cid}`,
-    cid,
+    ipfsUrl: gatewayUrl,
+    cid: id,
     error: null,
     cached: false,
   }

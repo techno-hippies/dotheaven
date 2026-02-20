@@ -92,11 +92,11 @@ Frontend (ArtistPage) → image-cache.ts detects Wikipedia URL
 metadata-resolver → Check KV cache (rehost:{sha256(url)})
                ↓ (cache miss)
                → Fetch Wikipedia image
-               → Upload to Filebase S3
-               → Store URL → CID in KV (1 year TTL)
-               → Return ipfs://QmXxx...
+               → Upload to Load S3 agent
+               → Store URL → dataitem id in KV (1 year TTL)
+               → Return Load gateway URL
                ↓
-Frontend      → Display Filebase gateway URL
+Frontend      → Display resolved gateway URL
                → No more 429 errors!
 ```
 
@@ -113,14 +113,16 @@ The `/artist/:mbid` and `/release-group/:mbid` endpoints perform background reho
 cd services/metadata-resolver
 bun install
 cp .dev.vars.example .dev.vars
-# Add FILEBASE_API_KEY to .dev.vars
+# Add LOAD_S3_AGENT_API_KEY to .dev.vars
 bun run dev
 bun run deploy
 ```
 
 ## Environment Variables
 
-- `FILEBASE_API_KEY` - Base64 encoded `accessKey:secretKey:bucket` (secret)
+- `LOAD_S3_AGENT_API_KEY` - Load S3 agent bearer token (secret)
+- `LOAD_S3_AGENT_URL` - Optional Load agent base URL override
+- `LOAD_GATEWAY_URL` - Optional public gateway base URL override
 - `MB_USER_AGENT` - MusicBrainz User-Agent (public var)
 - `ENVIRONMENT` - `development` (public var)
 
@@ -151,11 +153,11 @@ The frontend automatically rehosts external images via `apps/web/src/lib/image-c
 **Flow:**
 1. Page loads with external URL
 2. `image-cache.ts` detects external URL → calls `/rehost/image`
-3. Worker checks KV cache → returns cached CID or uploads to Filebase
-4. Frontend displays IPFS URL (no more 429 errors!)
-5. Subsequent loads use cached IPFS URL immediately
+3. Worker checks KV cache → returns cached upload id or uploads to Load
+4. Frontend displays resolved gateway URL (no more 429 errors!)
+5. Subsequent loads use cached upload id immediately
 
-All external URLs are automatically rehosted to IPFS with global dedupe across all users.
+All external URLs are automatically rehosted through Load with global dedupe across all users.
 
 ## Rate Limiting
 
@@ -168,11 +170,11 @@ All external URLs are automatically rehosted to IPFS with global dedupe across a
 - **429 from external source**: Returns error in result, does not cache
 - **Network timeout**: Returns error, graceful fallback to original URL
 - **Invalid image**: Returns error with details
-- **Missing FILEBASE_API_KEY**: Returns 500 with clear error message
+- **Missing LOAD_S3_AGENT_API_KEY**: Returns 500 with clear error message
 
 ## Cost Estimate
 
 - **Cloudflare Workers**: Free tier (100k requests/day)
 - **Cloudflare KV**: $0.50/million reads, $5/million writes
-- **Filebase**: ~$5/month storage for ~10k cached images
+- **Load network**: depends on account plan and egress profile
 - **Total**: ~$10/month for moderate usage

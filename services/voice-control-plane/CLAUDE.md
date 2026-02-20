@@ -36,10 +36,13 @@ Migration scripts and smoke helpers:
 From `services/voice-control-plane`:
 
 ```bash
-bun run test:smoke
-bun run test:duet:unit
+bun run test:unit
+bun run test:integration:rooms
 bun run test:e2e:local
 ```
+
+Detailed tiered test matrix:
+- `services/voice-control-plane/TESTING.md`
 
 Useful paid-flow variants:
 

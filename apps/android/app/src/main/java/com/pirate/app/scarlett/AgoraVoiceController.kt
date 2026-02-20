@@ -2,6 +2,7 @@ package com.pirate.app.scarlett
 
 import android.content.Context
 import android.util.Log
+import com.pirate.app.BuildConfig
 import io.agora.rtc2.ChannelMediaOptions
 import io.agora.rtc2.Constants
 import io.agora.rtc2.IRtcEngineEventHandler
@@ -30,8 +31,13 @@ class AgoraVoiceController(private val appContext: Context) {
   companion object {
     private const val TAG = "AgoraVoice"
     private const val AGORA_APP_ID = "3260ad15ace147c88a8bf32da798a114"
-    private const val CHAT_WORKER_URL = "https://neodate-voice.deletion-backup782.workers.dev"
     private val JSON_MT = "application/json; charset=utf-8".toMediaType()
+  }
+
+  private fun requireChatWorkerUrl(): String {
+    return BuildConfig.VOICE_AGENT_URL.trim().trimEnd('/').ifBlank {
+      throw IllegalStateException("Missing VOICE_AGENT_URL BuildConfig field. Set gradle property VOICE_AGENT_URL.")
+    }
   }
 
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -120,10 +126,11 @@ class AgoraVoiceController(private val appContext: Context) {
 
     scope.launch {
       try {
+        val chatWorkerUrl = requireChatWorkerUrl()
         // 1. Build authenticated worker session.
         val auth = getWorkerAuthSession(
           appContext = appContext,
-          workerUrl = CHAT_WORKER_URL,
+          workerUrl = chatWorkerUrl,
           userAddress = userAddress,
         )
         sessionBearerToken = auth.token
@@ -134,7 +141,7 @@ class AgoraVoiceController(private val appContext: Context) {
           .toString()
           .toRequestBody(JSON_MT)
         val startReq = Request.Builder()
-          .url("$CHAT_WORKER_URL/agent/start")
+          .url("$chatWorkerUrl/agent/start")
           .post(startPayload)
           .header("Authorization", "Bearer ${auth.token}")
           .build()
@@ -203,7 +210,7 @@ class AgoraVoiceController(private val appContext: Context) {
       scope.launch {
         try {
           val stopReq = Request.Builder()
-            .url("$CHAT_WORKER_URL/agent/$sid/stop")
+            .url("${requireChatWorkerUrl()}/agent/$sid/stop")
             .post("{}".toRequestBody(JSON_MT))
             .header("Authorization", "Bearer $bearerToken")
             .build()

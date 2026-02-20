@@ -15,8 +15,12 @@ export interface PKPInfo {
 
 const IS_DEV = import.meta.env.DEV
 
-// Worker base URL - production deployed worker
-const VOICE_WORKER_URL = import.meta.env.VITE_VOICE_WORKER_URL || 'https://neodate-voice.deletion-backup782.workers.dev'
+// Worker base URL - dev deployed worker
+const VOICE_WORKER_URL = (() => {
+  const url = (import.meta.env.VITE_VOICE_WORKER_URL || '').trim()
+  if (!url) throw new Error('Missing VITE_VOICE_WORKER_URL')
+  return url.replace(/\/+$/, '')
+})()
 
 // Agora App ID - must match worker config
 export { getAgoraAppId } from './agoraEnv'

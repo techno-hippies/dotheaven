@@ -39,7 +39,7 @@ type SmokeCase = {
   triviaCount?: number
 }
 
-const API_BASE = (process.env.API_BASE || 'http://localhost:8787').replace(/\/+$/, '')
+const API_BASE = (process.env.API_BASE || process.env.API_CORE_URL || 'http://localhost:8787').replace(/\/+$/, '')
 const TEST_USER_ADDRESS = (process.env.TEST_USER_ADDRESS || '').trim()
 const DEFAULT_LANGUAGE = (process.env.STUDY_SET_LANGUAGE || 'es').trim()
 const DEFAULT_VERSION = parsePositiveInt(process.env.STUDY_SET_VERSION, 1)

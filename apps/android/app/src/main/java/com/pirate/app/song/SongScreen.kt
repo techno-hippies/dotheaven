@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.MoreVert
@@ -25,7 +26,10 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,6 +55,7 @@ import com.pirate.app.util.shortAddress
 import java.util.Locale
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SongScreen(
   trackId: String,
@@ -124,6 +129,9 @@ fun SongScreen(
   val effectiveTitle = stats?.title?.ifBlank { null } ?: initialTitle?.ifBlank { null } ?: "Song"
   val effectiveArtist = stats?.artist?.ifBlank { null } ?: initialArtist?.ifBlank { null }
 
+  // Artist-picker sheet: shown when artist string contains multiple artists
+  var artistPickerOpen by remember { mutableStateOf(false) }
+
   Column(modifier = Modifier.fillMaxSize()) {
     PirateMobileHeader(
       title = "",
@@ -173,7 +181,13 @@ fun SongScreen(
       scrobbleCountTotal = stats?.scrobbleCountTotal ?: 0L,
       onArtistClick = {
         val artistName = effectiveArtist.orEmpty()
-        if (artistName.isNotBlank()) onOpenArtist(artistName)
+        if (artistName.isBlank()) return@SongTopSection
+        val artists = parseAllArtists(artistName)
+        if (artists.size > 1) {
+          artistPickerOpen = true
+        } else {
+          onOpenArtist(primaryArtist(artistName).ifBlank { artistName })
+        }
       },
       isAuthenticated = isAuthenticated,
       statusLoading = studyStatusLoading,
@@ -212,6 +226,59 @@ fun SongScreen(
     )
 
     SongLeaderboardPanel(rows = listeners, onOpenProfile = onOpenProfile)
+  }
+
+  // Artist-picker bottom sheet for compound artist strings
+  if (artistPickerOpen) {
+    val artists = parseAllArtists(effectiveArtist.orEmpty())
+    ModalBottomSheet(
+      onDismissRequest = { artistPickerOpen = false },
+      containerColor = androidx.compose.ui.graphics.Color(0xFF1C1C1C),
+    ) {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(horizontal = 24.dp)
+          .padding(bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+      ) {
+        Text(
+          "Go to Artist",
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.SemiBold,
+          color = MaterialTheme.colorScheme.onBackground,
+          modifier = Modifier.padding(bottom = 8.dp),
+        )
+        artists.forEach { artist ->
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .clickable {
+                artistPickerOpen = false
+                onOpenArtist(artist)
+              }
+              .padding(vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+          ) {
+            Surface(
+              modifier = Modifier.size(40.dp),
+              shape = CircleShape,
+              color = MaterialTheme.colorScheme.surfaceVariant,
+            ) {
+              Box(contentAlignment = Alignment.Center) {
+                Text(
+                  artist.take(1).uppercase(),
+                  style = MaterialTheme.typography.bodyLarge,
+                  fontWeight = FontWeight.SemiBold,
+                )
+              }
+            }
+            Text(artist, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
+          }
+        }
+      }
+    }
   }
 }
 

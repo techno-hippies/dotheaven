@@ -8,13 +8,6 @@ import com.pirate.app.tempo.TempoPasskeyManager
 import com.pirate.app.tempo.TempoTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.bouncycastle.jcajce.provider.digest.Keccak
-import org.json.JSONArray
-import org.json.JSONObject
 import org.web3j.abi.FunctionEncoder
 import org.web3j.abi.datatypes.Address
 import org.web3j.abi.datatypes.DynamicArray
@@ -54,8 +47,6 @@ object TempoNameRecordsApi {
   private const val GAS_LIMIT_BUFFER = 300_000L
   const val CONTENT_PUBKEY_RECORD_KEY = "contentPubKey"
 
-  private val jsonType = "application/json; charset=utf-8".toMediaType()
-  private val client = OkHttpClient()
   private val parentNodeByTld =
     mapOf(
       TLD_HEAVEN to HEAVEN_NODE,
@@ -71,11 +62,11 @@ object TempoNameRecordsApi {
   fun parentNodeForTld(tld: String): String? = parentNodeByTld[tld.trim().lowercase()]
 
   fun computeNode(nameOrLabel: String): String {
-    val parsed = parseName(nameOrLabel)
-    val labelHash = keccak256(parsed.label.toByteArray(Charsets.UTF_8))
-    val parentBytes = hexToBytes(parsed.parentNode.removePrefix("0x"))
-    val node = keccak256(parentBytes + labelHash)
-    return "0x${bytesToHex(node)}"
+    val parsed = parseTempoName(nameOrLabel, parentNodeByTld, HEAVEN_NODE)
+    val labelHash = tempoNameKeccak256(parsed.label.toByteArray(Charsets.UTF_8))
+    val parentBytes = tempoNameHexToBytes(parsed.parentNode.removePrefix("0x"))
+    val node = tempoNameKeccak256(parentBytes + labelHash)
+    return "0x${tempoNameBytesToHex(node)}"
   }
 
   fun formatName(label: String, parentNode: String): String {
@@ -96,21 +87,21 @@ object TempoNameRecordsApi {
 
     val node = runCatching { computeNode(normalized) }.getOrNull() ?: return@withContext null
     val tokenId = node.removePrefix("0x").padStart(64, '0')
-    val data = "0x${functionSelector("ownerOf(uint256)")}$tokenId"
-    val result = runCatching { ethCall(REGISTRY_V1, data) }.getOrNull() ?: return@withContext null
+    val data = "0x${tempoNameFunctionSelector("ownerOf(uint256)")}$tokenId"
+    val result = runCatching { tempoNameEthCall(REGISTRY_V1, data) }.getOrNull() ?: return@withContext null
     val clean = result.removePrefix("0x").lowercase()
     if (clean.length < 64) return@withContext null
 
     val owner = "0x${clean.takeLast(40)}"
     if (owner == ZERO_ADDRESS) return@withContext null
-    normalizeAddress(owner)
+    tempoNameNormalizeAddress(owner)
   }
 
   suspend fun getPrimaryNameDetails(userAddress: String): TempoPrimaryName? = withContext(Dispatchers.IO) {
-    val addr = normalizeAddress(userAddress) ?: return@withContext null
-    val data = "0x${functionSelector("primaryName(address)")}${addr.drop(2).padStart(64, '0')}"
+    val addr = tempoNameNormalizeAddress(userAddress) ?: return@withContext null
+    val data = "0x${tempoNameFunctionSelector("primaryName(address)")}${addr.drop(2).padStart(64, '0')}"
     try {
-      val result = ethCall(REGISTRY_V1, data)
+      val result = tempoNameEthCall(REGISTRY_V1, data)
       val hex = result.removePrefix("0x")
       if (hex.length < 128) return@withContext null
 
@@ -124,7 +115,11 @@ object TempoNameRecordsApi {
       val len = hex.substring(start, start + 64).toBigIntegerOrNull(16)?.toInt() ?: return@withContext null
       if (len == 0) return@withContext null
       val valueHex = hex.substring(start + 64, start + 64 + len * 2)
-      val label = String(hexToBytes(valueHex), Charsets.UTF_8).trim().lowercase().ifBlank { return@withContext null }
+      val label =
+        String(tempoNameHexToBytes(valueHex), Charsets.UTF_8)
+          .trim()
+          .lowercase()
+          .ifBlank { return@withContext null }
       val tld = tldByParentNode[parentHex.lowercase()]
       val full = if (tld.isNullOrBlank()) label else "$label.$tld"
       TempoPrimaryName(
@@ -139,16 +134,16 @@ object TempoNameRecordsApi {
   }
 
   suspend fun getTextRecord(node: String, key: String): String? = withContext(Dispatchers.IO) {
-    val nodeHex = normalizeBytes32(node) ?: return@withContext null
+    val nodeHex = tempoNameNormalizeBytes32(node) ?: return@withContext null
     val keyBytes = key.toByteArray(Charsets.UTF_8)
-    val keyHex = bytesToHex(keyBytes)
-    val selector = functionSelector("text(bytes32,string)")
+    val keyHex = tempoNameBytesToHex(keyBytes)
+    val selector = tempoNameFunctionSelector("text(bytes32,string)")
     val offset = "0000000000000000000000000000000000000000000000000000000000000040"
     val len = keyBytes.size.toString(16).padStart(64, '0')
     val paddedKey = keyHex.padEnd(((keyHex.length + 63) / 64) * 64, '0')
     val data = "0x$selector$nodeHex$offset$len$paddedKey"
     try {
-      val result = ethCall(RECORDS_V1, data)
+      val result = tempoNameEthCall(RECORDS_V1, data)
       val hex = result.removePrefix("0x")
       if (hex.length < 128) return@withContext null
       val stringOffset = hex.substring(0, 64).toBigIntegerOrNull(16)?.toInt() ?: return@withContext null
@@ -157,7 +152,7 @@ object TempoNameRecordsApi {
       val stringLen = hex.substring(start, start + 64).toBigIntegerOrNull(16)?.toInt() ?: return@withContext null
       if (stringLen == 0) return@withContext null
       val stringHex = hex.substring(start + 64, start + 64 + stringLen * 2)
-      String(hexToBytes(stringHex), Charsets.UTF_8).ifBlank { null }
+      String(tempoNameHexToBytes(stringHex), Charsets.UTF_8).ifBlank { null }
     } catch (_: Throwable) {
       null
     }
@@ -185,7 +180,7 @@ object TempoNameRecordsApi {
     rpId: String = account.rpId,
     sessionKey: SessionKeyManager.SessionKey? = null,
   ): TempoRecordsWriteResult {
-    if (!isValidContentPubKey(publicKey)) {
+    if (!tempoNameIsValidContentPubKey(publicKey)) {
       return TempoRecordsWriteResult(success = false, error = "Invalid contentPubKey format (expected 65-byte uncompressed P256 key).")
     }
 
@@ -210,8 +205,10 @@ object TempoNameRecordsApi {
   }
 
   fun encodeContentPubKey(publicKey: ByteArray): String {
-    require(isValidContentPubKey(publicKey)) { "Invalid contentPubKey format (expected 65-byte uncompressed P256 key)." }
-    return "0x${bytesToHex(publicKey)}"
+    require(tempoNameIsValidContentPubKey(publicKey)) {
+      "Invalid contentPubKey format (expected 65-byte uncompressed P256 key)."
+    }
+    return "0x${tempoNameBytesToHex(publicKey)}"
   }
 
   fun decodeContentPubKey(value: String?): ByteArray? {
@@ -220,9 +217,9 @@ object TempoNameRecordsApi {
     val normalized = raw.removePrefix("0x").removePrefix("0X")
     if (normalized.length != 130) return null
     if (!normalized.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }) return null
-    return runCatching { hexToBytes(normalized) }
+    return runCatching { tempoNameHexToBytes(normalized) }
       .getOrNull()
-      ?.takeIf { isValidContentPubKey(it) }
+      ?.takeIf { tempoNameIsValidContentPubKey(it) }
   }
 
   suspend fun setTextRecords(
@@ -238,7 +235,7 @@ object TempoNameRecordsApi {
     if (keys.size != values.size) {
       return TempoRecordsWriteResult(success = false, error = "records length mismatch")
     }
-    val normalizedNode = normalizeBytes32(node)
+    val normalizedNode = tempoNameNormalizeBytes32(node)
       ?: return TempoRecordsWriteResult(success = false, error = "invalid node")
 
     return runCatching {
@@ -256,8 +253,8 @@ object TempoNameRecordsApi {
       val minimumGasLimit = if (keys.size == 1) MIN_GAS_LIMIT_SET_TEXT else MIN_GAS_LIMIT_SET_RECORDS
       val gasLimit =
         withContext(Dispatchers.IO) {
-          val estimated = estimateGas(from = account.address, to = RECORDS_V1, data = callData)
-          withBuffer(estimated = estimated, minimum = minimumGasLimit)
+          val estimated = tempoNameEstimateGas(from = account.address, to = RECORDS_V1, data = callData)
+          tempoNameWithBuffer(estimated = estimated, minimum = minimumGasLimit, buffer = GAS_LIMIT_BUFFER)
         }
 
       fun buildTx(
@@ -339,7 +336,7 @@ object TempoNameRecordsApi {
       Function(
         "setText",
         listOf(
-          Bytes32(hexToBytes(nodeHexNoPrefix)),
+          Bytes32(tempoNameHexToBytes(nodeHexNoPrefix)),
           Utf8String(key),
           Utf8String(value),
         ),
@@ -359,7 +356,7 @@ object TempoNameRecordsApi {
       Function(
         "setRecords",
         listOf(
-          Bytes32(hexToBytes(nodeHexNoPrefix)),
+          Bytes32(tempoNameHexToBytes(nodeHexNoPrefix)),
           Address(ZERO_ADDRESS),
           DynamicArray(Utf8String::class.java, keyValues),
           DynamicArray(Utf8String::class.java, textValues),
@@ -370,154 +367,14 @@ object TempoNameRecordsApi {
     return FunctionEncoder.encode(function)
   }
 
-  private fun ethCall(to: String, data: String): String {
-    val payload =
-      JSONObject()
-        .put("jsonrpc", "2.0")
-        .put("id", 1)
-        .put("method", "eth_call")
-        .put(
-          "params",
-          JSONArray()
-            .put(JSONObject().put("to", to).put("data", data))
-            .put("latest"),
-        )
-    val req =
-      Request.Builder()
-        .url(TempoClient.RPC_URL)
-        .post(payload.toString().toRequestBody(jsonType))
-        .build()
-    client.newCall(req).execute().use { response ->
-      if (!response.isSuccessful) throw IllegalStateException("RPC failed: ${response.code}")
-      val body = JSONObject(response.body?.string().orEmpty())
-      val error = body.optJSONObject("error")
-      if (error != null) throw IllegalStateException(error.optString("message", error.toString()))
-      return body.optString("result", "0x")
-    }
-  }
-
-  private fun estimateGas(
-    from: String,
-    to: String,
-    data: String,
-  ): Long {
-    val payload =
-      JSONObject()
-        .put("jsonrpc", "2.0")
-        .put("id", 1)
-        .put("method", "eth_estimateGas")
-        .put(
-          "params",
-          JSONArray().put(
-            JSONObject()
-              .put("from", from)
-              .put("to", to)
-              .put("data", data),
-          ),
-        )
-    val req =
-      Request.Builder()
-        .url(TempoClient.RPC_URL)
-        .post(payload.toString().toRequestBody(jsonType))
-        .build()
-    client.newCall(req).execute().use { response ->
-      if (!response.isSuccessful) throw IllegalStateException("Gas estimate failed: ${response.code}")
-      val body = JSONObject(response.body?.string().orEmpty())
-      val error = body.optJSONObject("error")
-      if (error != null) throw IllegalStateException(error.optString("message", error.toString()))
-      val result = body.optString("result", "0x0")
-      val value = result.removePrefix("0x").removePrefix("0X")
-      return value.toLongOrNull(16) ?: 0L
-    }
-  }
-
-  private fun withBuffer(
-    estimated: Long,
-    minimum: Long,
-  ): Long {
-    val buffered = saturatingAdd(estimated, GAS_LIMIT_BUFFER)
-    return if (buffered < minimum) minimum else buffered
-  }
-
-  private fun saturatingAdd(a: Long, b: Long): Long =
-    if (Long.MAX_VALUE - a < b) Long.MAX_VALUE else a + b
-
-  private fun normalizeAddress(raw: String): String? {
-    val value = raw.trim().lowercase()
-    if (!value.startsWith("0x") || value.length != 42) return null
-    if (!value.drop(2).all { it.isDigit() || it in 'a'..'f' }) return null
-    return value
-  }
-
-  private fun normalizeBytes32(raw: String): String? {
-    val value = raw.trim().lowercase().removePrefix("0x")
-    if (value.length != 64) return null
-    if (!value.all { it.isDigit() || it in 'a'..'f' }) return null
-    return value
-  }
-
-  private fun functionSelector(signature: String): String {
-    val hash = keccak256(signature.toByteArray(Charsets.UTF_8))
-    return bytesToHex(hash.copyOfRange(0, 4))
-  }
-
-  private fun keccak256(input: ByteArray): ByteArray {
-    val digest = Keccak.Digest256()
-    digest.update(input, 0, input.size)
-    return digest.digest()
-  }
-
-  private fun hexToBytes(hex: String): ByteArray {
-    val clean = hex.removePrefix("0x").removePrefix("0X")
-    require(clean.length % 2 == 0) { "hex length must be even" }
-    return ByteArray(clean.length / 2) { i ->
-      clean.substring(i * 2, i * 2 + 2).toInt(16).toByte()
-    }
-  }
-
-  private fun bytesToHex(bytes: ByteArray): String {
-    val sb = StringBuilder(bytes.size * 2)
-    for (b in bytes) {
-      sb.append(((b.toInt() ushr 4) and 0x0f).toString(16))
-      sb.append((b.toInt() and 0x0f).toString(16))
-    }
-    return sb.toString()
-  }
-
-  private fun isValidContentPubKey(publicKey: ByteArray): Boolean {
-    return publicKey.size == 65 && publicKey[0] == 0x04.toByte()
-  }
-
-  private data class ParsedName(val label: String, val parentNode: String)
-
-  private fun parseName(nameOrLabel: String): ParsedName {
-    val normalized = nameOrLabel.trim().lowercase()
-    require(normalized.isNotBlank()) { "name is empty" }
-
-    val parts = normalized.split('.')
-    if (parts.size >= 2) {
-      val label = parts.first().trim()
-      val tld = parts[1].trim()
-      if (label.isNotBlank()) {
-        val parentNode = parentNodeByTld[tld]
-        if (!parentNode.isNullOrBlank()) {
-          return ParsedName(label = label, parentNode = parentNode)
-        }
-      }
-    }
-
-    val fallbackLabel = parts.firstOrNull()?.trim().orEmpty().ifBlank { normalized }
-    return ParsedName(label = fallbackLabel, parentNode = HEAVEN_NODE)
-  }
-
   /** Debug helper: call RecordsV1.isAuthorized(node, addr) view function. */
   fun isAuthorized(node: String, addr: String): Boolean {
-    val nodeHex = normalizeBytes32(node) ?: return false
-    val addrHex = normalizeAddress(addr)?.removePrefix("0x")?.padStart(64, '0') ?: return false
-    val selector = functionSelector("isAuthorized(bytes32,address)")
+    val nodeHex = tempoNameNormalizeBytes32(node) ?: return false
+    val addrHex = tempoNameNormalizeAddress(addr)?.removePrefix("0x")?.padStart(64, '0') ?: return false
+    val selector = tempoNameFunctionSelector("isAuthorized(bytes32,address)")
     val data = "0x$selector$nodeHex$addrHex"
     return try {
-      val result = ethCall(RECORDS_V1, data)
+      val result = tempoNameEthCall(RECORDS_V1, data)
       val hex = result.removePrefix("0x")
       hex.endsWith("1")
     } catch (_: Throwable) {

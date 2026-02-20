@@ -43,16 +43,16 @@ impl LoadStorageService {
         params.insert("visibility".to_string(), json!(visibility));
 
         let mut track_values = Vec::<Value>::new();
-        let mut needs_filebase_key = false;
+        let mut has_inline_cover_upload = false;
         for track in tracks {
             if track.cover_image.is_some() {
-                needs_filebase_key = true;
+                has_inline_cover_upload = true;
             }
             track_values.push(playlist_track_input_to_json(track)?);
         }
         params.insert("tracks".to_string(), Value::Array(track_values));
 
-        self.execute_playlist_action(auth, "create", params, needs_filebase_key)
+        self.execute_playlist_action(auth, "create", params, has_inline_cover_upload)
     }
 
     pub fn playlist_set_tracks(
@@ -69,10 +69,10 @@ impl LoadStorageService {
         );
 
         let mut track_values = Vec::<Value>::new();
-        let mut needs_filebase_key = false;
+        let mut has_inline_cover_upload = false;
         for track in tracks {
             if track.cover_image.is_some() {
-                needs_filebase_key = true;
+                has_inline_cover_upload = true;
             }
             track_values.push(playlist_track_input_to_json(track)?);
         }
@@ -86,7 +86,7 @@ impl LoadStorageService {
             params.insert("existingTrackIds".to_string(), Value::Array(normalized));
         }
 
-        self.execute_playlist_action(auth, "setTracks", params, needs_filebase_key)
+        self.execute_playlist_action(auth, "setTracks", params, has_inline_cover_upload)
     }
 
     pub fn playlist_update_meta(
@@ -115,9 +115,9 @@ impl LoadStorageService {
         );
         params.insert("visibility".to_string(), json!(visibility));
 
-        let mut needs_filebase_key = false;
+        let mut has_inline_cover_upload = false;
         if let Some(img) = cover_image {
-            needs_filebase_key = true;
+            has_inline_cover_upload = true;
             params.insert(
                 "coverImage".to_string(),
                 json!({
@@ -127,7 +127,7 @@ impl LoadStorageService {
             );
         }
 
-        self.execute_playlist_action(auth, "updateMeta", params, needs_filebase_key)
+        self.execute_playlist_action(auth, "updateMeta", params, has_inline_cover_upload)
     }
 
     pub fn playlist_delete(

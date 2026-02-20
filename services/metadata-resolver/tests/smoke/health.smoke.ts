@@ -1,4 +1,8 @@
-const BASE_URL = (process.env.METADATA_RESOLVER_URL || 'https://metadata-resolver.deletion-backup782.workers.dev').trim().replace(/\/+$/, '')
+const BASE_URL = (
+  process.env.METADATA_RESOLVER_URL
+  || process.env.API_BASE
+  || 'http://localhost:8787'
+).trim().replace(/\/+$/, '')
 
 async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
   const controller = new AbortController()

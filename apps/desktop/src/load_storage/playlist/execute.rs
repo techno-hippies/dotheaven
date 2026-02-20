@@ -32,7 +32,7 @@ impl LoadStorageService {
         auth: &PersistedAuth,
         operation: &str,
         params: serde_json::Map<String, Value>,
-        _needs_filebase_key: bool,
+        _has_inline_cover_upload: bool,
     ) -> Result<Value, String> {
         let playlist_contract = playlist_v1();
 

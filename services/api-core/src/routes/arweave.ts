@@ -1,32 +1,17 @@
 import { Hono } from 'hono'
 import type { Env } from '../types'
+import { createLoadBlobStore } from '../lib/blob-store'
 
 const app = new Hono<{ Bindings: Env }>()
 
 // Uses Load's S3 agent as the "staging" uploader, then anchors the dataitem to Arweave.
 // On-chain we should store only the stable dataitem id (e.g. `ar://<id>`).
 
-const DEFAULT_AGENT_URL = 'https://load-s3-agent.load.network'
-const DEFAULT_GATEWAY_URL = 'https://gateway.s3-node-1.load.network'
-const DEFAULT_ARWEAVE_GATEWAY = 'https://arweave.net'
-
 // Turbo free tier is commonly quoted as <= 100 KiB. Enforce at the API boundary.
 const MAX_COVER_BYTES = 100 * 1024
 
-function extractUploadId(payload: any): string | null {
-  const candidate =
-    payload?.id ||
-    payload?.dataitem_id ||
-    payload?.dataitemId ||
-    payload?.result?.id ||
-    payload?.result?.dataitem_id ||
-    payload?.result?.dataitemId
-  return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : null
-}
-
 app.post('/cover', async (c) => {
-  const apiKey = c.env.LOAD_S3_AGENT_API_KEY
-  if (!apiKey) {
+  if (!c.env.LOAD_S3_AGENT_API_KEY) {
     return c.json({ error: 'Arweave cover upload not configured (LOAD_S3_AGENT_API_KEY)' }, 500)
   }
 
@@ -48,87 +33,41 @@ app.post('/cover', async (c) => {
   }
 
   const tags = (form.get('tags') as string | null) || '[]'
-
-  const agentUrl = (c.env.LOAD_S3_AGENT_URL || DEFAULT_AGENT_URL).replace(/\/+$/, '')
-  const ls3Gateway = (c.env.LOAD_GATEWAY_URL || DEFAULT_GATEWAY_URL).replace(/\/+$/, '')
-
-  // 1) Upload to LS3 (creates an ANS-104 dataitem and returns its id).
-  const upstreamForm = new FormData()
-  upstreamForm.append(
-    'file',
-    new File([await file.arrayBuffer()], file.name || 'cover', { type: contentType }),
-  )
-  upstreamForm.append('content_type', contentType)
-  upstreamForm.append('tags', tags)
-
-  const uploadResp = await fetch(`${agentUrl}/upload`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: upstreamForm,
-  })
-
-  const uploadText = await uploadResp.text()
-  let uploadPayload: any = null
+  const blobStore = createLoadBlobStore(c.env)
+  let staged: Awaited<ReturnType<typeof blobStore.put>>
   try {
-    uploadPayload = uploadText ? JSON.parse(uploadText) : null
-  } catch {
-    uploadPayload = { raw: uploadText }
+    staged = await blobStore.put({
+      file: new File([await file.arrayBuffer()], file.name || 'cover', { type: contentType }),
+      contentType,
+      tags,
+    })
+  } catch (error) {
+    return c.json({ error: 'LS3 agent upload failed', details: error instanceof Error ? error.message : String(error) }, 502)
   }
 
-  if (!uploadResp.ok) {
+  let anchored: Awaited<ReturnType<typeof blobStore.anchor>>
+  try {
+    anchored = await blobStore.anchor(staged.id)
+  } catch (error) {
     return c.json(
-      { error: 'LS3 agent upload failed', status: uploadResp.status, payload: uploadPayload },
+      {
+        error: 'LS3 agent post-to-arweave failed',
+        details: error instanceof Error ? error.message : String(error),
+        id: staged.id,
+      },
       502,
     )
-  }
-
-  const id = extractUploadId(uploadPayload)
-  if (!id) {
-    return c.json({ error: 'Upload succeeded but no dataitem id returned', payload: uploadPayload }, 502)
-  }
-
-  // 2) Anchor to Arweave via the agent.
-  const postResp = await fetch(`${agentUrl}/post/${encodeURIComponent(id)}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}` },
-  })
-
-  const postText = await postResp.text()
-  let postPayload: any = null
-  try {
-    postPayload = postText ? JSON.parse(postText) : null
-  } catch {
-    postPayload = { raw: postText }
-  }
-
-  if (!postResp.ok) {
-    return c.json(
-      { error: 'LS3 agent post-to-arweave failed', status: postResp.status, payload: postPayload, id },
-      502,
-    )
-  }
-
-  // Best-effort: check Arweave gateway visibility. Even after "post" succeeds,
-  // it can take a bit for gateways to serve the dataitem.
-  const arweaveUrl = `${DEFAULT_ARWEAVE_GATEWAY}/${id}`
-  let arweaveAvailable = false
-  try {
-    const head = await fetch(arweaveUrl, { method: 'HEAD' })
-    arweaveAvailable = head.ok
-  } catch {
-    arweaveAvailable = false
   }
 
   return c.json({
-    id,
-    ref: `ar://${id}`,
-    ls3GatewayUrl: `${ls3Gateway}/resolve/${id}`,
-    arweaveUrl,
-    arweaveAvailable,
-    uploadPayload,
-    postPayload,
+    id: staged.id,
+    ref: anchored.ref,
+    ls3GatewayUrl: staged.gatewayUrl,
+    arweaveUrl: anchored.arweaveUrl,
+    arweaveAvailable: anchored.arweaveAvailable,
+    uploadPayload: staged.payload,
+    postPayload: anchored.payload,
   })
 })
 
 export default app
-

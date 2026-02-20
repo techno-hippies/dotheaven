@@ -2,6 +2,7 @@ package com.pirate.app.learn
 
 import com.pirate.app.BuildConfig
 import com.pirate.app.util.HttpClients
+import java.net.URI
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -12,10 +13,6 @@ import org.json.JSONObject
 
 private const val DEFAULT_STUDY_PROGRESS_SUBGRAPH =
   "https://graph.dotheaven.org/subgraphs/name/dotheaven/study-progress-tempo"
-private const val DEBUG_DEFAULT_STUDY_PROGRESS_SUBGRAPH_EMULATOR =
-  "http://10.0.2.2:8000/subgraphs/name/dotheaven/study-progress-tempo"
-private const val DEBUG_DEFAULT_STUDY_PROGRESS_SUBGRAPH_REVERSE =
-  "http://127.0.0.1:8000/subgraphs/name/dotheaven/study-progress-tempo"
 
 private val ADDRESS_REGEX = Regex("^0x[a-fA-F0-9]{40}$")
 private val BYTES32_REGEX = Regex("^0x[a-fA-F0-9]{64}$")
@@ -63,6 +60,7 @@ object StudyProgressApi {
       val first = maxEntries.coerceIn(1, 100)
       var sawSuccessfulEmpty = false
       var lastError: Throwable? = null
+      val endpointErrors = ArrayList<String>()
 
       for (subgraphUrl in studyProgressSubgraphUrls()) {
         try {
@@ -71,11 +69,17 @@ object StudyProgressApi {
           sawSuccessfulEmpty = true
         } catch (error: Throwable) {
           lastError = error
+          endpointErrors.add("$subgraphUrl -> ${error.message ?: "unknown error"}")
         }
       }
 
       if (sawSuccessfulEmpty) return@withContext emptyList()
-      if (lastError != null) throw lastError
+      if (lastError != null) {
+        throw IllegalStateException(
+          "Study subgraph query failed. ${endpointErrors.joinToString(" | ")}",
+          lastError,
+        )
+      }
       emptyList()
     }
 
@@ -94,6 +98,7 @@ object StudyProgressApi {
 
     var sawSuccessfulNull = false
     var lastError: Throwable? = null
+    val endpointErrors = ArrayList<String>()
 
     for (subgraphUrl in studyProgressSubgraphUrls()) {
       try {
@@ -107,11 +112,17 @@ object StudyProgressApi {
         sawSuccessfulNull = true
       } catch (error: Throwable) {
         lastError = error
+        endpointErrors.add("$subgraphUrl -> ${error.message ?: "unknown error"}")
       }
     }
 
     if (sawSuccessfulNull) return@withContext null
-    if (lastError != null) throw lastError
+    if (lastError != null) {
+      throw IllegalStateException(
+        "Study detail query failed. ${endpointErrors.joinToString(" | ")}",
+        lastError,
+      )
+    }
     null
   }
 
@@ -123,7 +134,7 @@ object StudyProgressApi {
     val query = """
       {
         userStudySetProgresses(
-          where: { user: \"$normalizedUser\" }
+          where: { user: "$normalizedUser" }
           orderBy: latestCanonicalOrder
           orderDirection: desc
           first: $first
@@ -174,7 +185,7 @@ object StudyProgressApi {
   ): UserStudySetDetail? {
     val query = """
       {
-        userStudySetProgress(id: \"$userStudySetId\") {
+        userStudySetProgress(id: "$userStudySetId") {
           id
           studySetKey
           totalAttempts
@@ -192,7 +203,7 @@ object StudyProgressApi {
             clientTimestamp
           }
         }
-        studySetAnchor(id: \"${studySetKey.lowercase()}\") {
+        studySetAnchor(id: "${studySetKey.lowercase()}") {
           trackId
           version
           studySetRef
@@ -258,15 +269,25 @@ object StudyProgressApi {
   }
 
   private fun studyProgressSubgraphUrls(): List<String> {
-    val fromBuildConfig = BuildConfig.TEMPO_STUDY_PROGRESS_SUBGRAPH_URL.trim().removeSuffix("/")
-    val urls = ArrayList<String>(4)
+    val fromBuildConfig = BuildConfig.SUBGRAPH_STUDY_PROGRESS_URL.trim().removeSuffix("/")
+    val urls = ArrayList<String>(2)
     if (fromBuildConfig.isNotBlank()) urls.add(fromBuildConfig)
     urls.add(DEFAULT_STUDY_PROGRESS_SUBGRAPH)
-    if (BuildConfig.DEBUG) {
-      urls.add(DEBUG_DEFAULT_STUDY_PROGRESS_SUBGRAPH_REVERSE)
-      urls.add(DEBUG_DEFAULT_STUDY_PROGRESS_SUBGRAPH_EMULATOR)
+    return urls
+      .distinct()
+      .filterNot(::isLikelyLocalSubgraphUrl)
+  }
+
+  private fun isLikelyLocalSubgraphUrl(url: String): Boolean {
+    val host = runCatching { URI(url).host.orEmpty().lowercase() }.getOrDefault("")
+    if (host.isBlank()) return false
+    if (host == "localhost" || host == "10.0.2.2" || host == "127.0.0.1") return true
+    if (host.startsWith("192.168.") || host.startsWith("10.")) return true
+    if (host.startsWith("172.")) {
+      val second = host.split(".").getOrNull(1)?.toIntOrNull()
+      if (second != null && second in 16..31) return true
     }
-    return urls.distinct()
+    return false
   }
 
   private fun postQuery(subgraphUrl: String, query: String): JSONObject {

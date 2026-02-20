@@ -10,7 +10,8 @@ import { resolveCoverUrl } from './cover-ref'
 // ── Config ──────────────────────────────────────────────────────────
 
 const RESOLVER_URL =
-  import.meta.env.VITE_RESOLVER_URL || 'https://metadata-resolver.deletion-backup782.workers.dev'
+  import.meta.env.VITE_RESOLVER_URL?.trim().replace(/\/+$/, '') ||
+  'https://metadata-resolver.deletion-backup782.workers.dev'
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -40,13 +41,17 @@ export interface ArtistTrack {
   lastPlayed: number // unix seconds
 }
 
+export interface ArtistLeaderboardEntry {
+  user: string
+  scrobbles: bigint
+}
+
 export interface ArtistPageData {
   info: ArtistInfo
   tracks: ArtistTrack[]
   totalScrobbles: number
   uniqueListeners: number
-  ranking: number       // 1-based rank among all artists by scrobble count
-  totalArtists: number  // total number of artists with scrobbles
+  leaderboard: ArtistLeaderboardEntry[]
 }
 
 // ── MBID codec ──────────────────────────────────────────────────────
@@ -124,10 +129,10 @@ export async function fetchArtistTracks(
 export async function fetchArtistPageData(mbid: string): Promise<ArtistPageData> {
   const info = await fetchArtistInfo(mbid)
 
-  // Fetch artist tracks + ranking in parallel
-  const [trackResult, rankResult] = await Promise.all([
+  // Fetch artist tracks + leaderboard in parallel
+  const [trackResult, leaderboard] = await Promise.all([
     fetchArtistTracks(info.name),
-    fetchArtistRanking(info.name),
+    fetchArtistLeaderboard(info.name),
   ])
 
   return {
@@ -135,68 +140,124 @@ export async function fetchArtistPageData(mbid: string): Promise<ArtistPageData>
     tracks: trackResult.tracks,
     totalScrobbles: trackResult.totalScrobbles,
     uniqueListeners: trackResult.uniqueListeners,
-    ranking: rankResult.ranking,
-    totalArtists: rankResult.totalArtists,
+    leaderboard,
   }
 }
 
 /**
- * Compute the artist's ranking by total scrobble count among all artists.
- * Fetches all tracks with scrobbles and groups by primary artist name.
+ * Fetch and aggregate user leaderboard rows for a given artist.
  */
-async function fetchArtistRanking(artistName: string): Promise<{ ranking: number; totalArtists: number }> {
-  // Paginate through all tracks that have at least 1 scrobble
-  const allTracks: Array<{ artist: string; scrobbleCount: number }> = []
+async function fetchArtistLeaderboard(artistName: string, limit = 100): Promise<ArtistLeaderboardEntry[]> {
+  const rows = await queryArtistLeaderboardRows(artistName, limit)
+  return mapArtistLeaderboardRows(artistName, rows, limit)
+}
+
+type RawArtistLeaderboardRow = {
+  id: string
+  user: string
+  artist: string
+  scrobbleCount: string
+  lastScrobbleAt: string
+}
+
+async function queryArtistLeaderboardRows(
+  artistName: string,
+  limit: number,
+): Promise<RawArtistLeaderboardRow[]> {
+  const rows: RawArtistLeaderboardRow[] = []
   let skip = 0
-  const pageSize = 1000
+  const pageSize = Math.max(1, Math.min(100, limit))
 
   while (true) {
+    const remaining = Math.max(0, limit - rows.length)
+    const take = Math.max(1, Math.min(pageSize, remaining))
     const query = `{
-      tracks(first: ${pageSize}, skip: ${skip}, orderBy: registeredAt, orderDirection: desc) {
+      userArtistStats(
+        where: { artist_contains_nocase: "${escapeGql(artistName)}" }
+        orderBy: scrobbleCount
+        orderDirection: desc
+        first: ${take}
+        skip: ${skip}
+      ) {
+        id
+        user
         artist
-        scrobbles { id }
+        scrobbleCount
+        lastScrobbleAt
       }
     }`
+
     const res = await fetch(SUBGRAPH_MUSIC_SOCIAL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),
     })
-    if (!res.ok) break
+    if (!res.ok) throw new Error(`Subgraph query failed: ${res.status}`)
     const json = await res.json()
-    const tracks = json.data?.tracks ?? []
-    if (tracks.length === 0) break
-    for (const t of tracks) {
-      if (t.scrobbles.length > 0) {
-        allTracks.push({ artist: t.artist, scrobbleCount: t.scrobbles.length })
-      }
+    const page = json.data?.userArtistStats ?? []
+    rows.push(...page)
+
+    if (!Array.isArray(page) || page.length < take) {
+      break
     }
-    if (tracks.length < pageSize) break
-    skip += pageSize
-  }
 
-  // Group scrobbles by primary artist name (first part before feat/ft etc.)
-  const artistScrobbles = new Map<string, number>()
-  for (const t of allTracks) {
-    const parts = splitArtistNames(t.artist)
-    const primary = parts[0] || normalizeArtistName(t.artist)
-    artistScrobbles.set(primary, (artistScrobbles.get(primary) ?? 0) + t.scrobbleCount)
-  }
+    skip += take
 
-  // Sort descending by scrobble count
-  const sorted = [...artistScrobbles.entries()].sort((a, b) => b[1] - a[1])
-
-  // Find our artist's rank
-  const targetVariants = normalizeArtistVariants(artistName)
-  let ranking = 0
-  for (let i = 0; i < sorted.length; i++) {
-    if (targetVariants.has(sorted[i][0])) {
-      ranking = i + 1
+    if (rows.length >= limit) {
       break
     }
   }
 
-  return { ranking: ranking || sorted.length + 1, totalArtists: sorted.length }
+  return rows
+}
+
+function mapArtistLeaderboardRows(
+  artistName: string,
+  rows: RawArtistLeaderboardRow[],
+  limit: number,
+): ArtistLeaderboardEntry[] {
+  const userScrobbles = new Map<string, bigint>()
+
+  for (const row of rows) {
+    if (!row.artist || !artistMatchesTarget(row.artist, artistName)) {
+      continue
+    }
+
+    const value = parseBigInt(row.scrobbleCount)
+    if (value === null) continue
+
+    const user = row.user.toLowerCase()
+    userScrobbles.set(user, (userScrobbles.get(user) ?? 0n) + value)
+  }
+
+  const normalizedRows = [...userScrobbles.entries()].map(([user, scrobbles]) => ({
+    user,
+    scrobbles,
+  }))
+
+  const sorted = normalizedRows.sort((a, b) => {
+    if (a.scrobbles === b.scrobbles) {
+      return a.user.localeCompare(b.user)
+    }
+    return a.scrobbles > b.scrobbles ? -1 : 1
+  })
+
+  return sorted.slice(0, limit)
+}
+
+function parseBigInt(value: string | number | null | undefined): bigint | null {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value < 0) return null
+    return BigInt(Math.floor(value))
+  }
+
+  if (typeof value !== 'string' || value.trim() === '') return null
+
+  try {
+    return BigInt(value)
+  } catch {
+    return null
+  }
 }
 
 /**

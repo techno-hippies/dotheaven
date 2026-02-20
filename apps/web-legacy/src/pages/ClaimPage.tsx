@@ -13,7 +13,11 @@ import { ClaimFlow, type ClaimState } from '@heaven/ui'
 import type { ClaimProfileData } from '@heaven/ui'
 import { ONBOARDING } from '@heaven/core'
 
-const API_BASE = import.meta.env.VITE_CLAIM_API_URL || 'https://api-core.deletion-backup782.workers.dev'
+const API_BASE = (() => {
+  const url = (import.meta.env.VITE_CLAIM_API_URL || '').trim()
+  if (!url) throw new Error('Missing VITE_CLAIM_API_URL')
+  return url.replace(/\/+$/, '')
+})()
 const CLAIM_SIGNATURE_WINDOW_SECONDS = 120
 
 function buildClaimCompleteMessage(params: {

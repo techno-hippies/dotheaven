@@ -29,6 +29,12 @@ export HEAVEN_LOAD_TURBO_UPLOAD_URL="https://loaded-turbo-api.load.network"
 export HEAVEN_LOAD_TURBO_TOKEN="ethereum"
 export HEAVEN_LOAD_GATEWAY_URL="https://gateway.s3-node-1.load.network"
 
+# Media resolution gateways (ipfs://, ar://, ls3:// refs)
+export HEAVEN_IPFS_GATEWAY_URL="https://ipfs.io"
+export HEAVEN_ARWEAVE_GATEWAY_URL="https://arweave.net"
+# Optional: if unset, defaults to gateway.s3-node-1.load.network
+# export HEAVEN_LOAD_GATEWAY_URL="https://gateway.s3-node-1.load.network"
+
 # Subgraphs (generic swap knobs for rebrand-friendly config)
 # One-switch local Graph Node override:
 # export SUBGRAPH_BASE_URL="http://127.0.0.1:8000"
@@ -121,10 +127,10 @@ export AGORA_SDK_ROOT=/path/to/agora/native/sdk
 # optional (defaults by OS):
 # export AGORA_SDK_LIB_NAME=agora_rtc_sdk
 export HEAVEN_AGORA_APP_ID=...
-export VOICE_CONTROL_PLANE_URL=https://voice-control-plane.deletion-backup782.workers.dev
+export VOICE_CONTROL_PLANE_URL=https://voice-control-plane.dotheaven.org
 # legacy alias (still accepted):
-# export HEAVEN_VOICE_WORKER_URL=https://voice-control-plane.deletion-backup782.workers.dev
-export HEAVEN_CHAT_WORKER_URL=https://voice-agent.deletion-backup782.workers.dev
+# export HEAVEN_VOICE_WORKER_URL=https://voice-control-plane.dotheaven.org
+export HEAVEN_CHAT_WORKER_URL=https://voice-agent.dotheaven.org
 export HEAVEN_AGORA_CN_ONLY=true   # optional mainland-China-only routing
 
 cargo run --features agora-native

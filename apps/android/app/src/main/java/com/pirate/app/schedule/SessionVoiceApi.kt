@@ -1,6 +1,7 @@
 package com.pirate.app.schedule
 
 import android.content.Context
+import com.pirate.app.BuildConfig
 import com.pirate.app.scarlett.getWorkerAuthSession
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -18,7 +19,11 @@ data class SessionJoinResult(
 )
 
 object SessionVoiceApi {
-  private const val SESSION_VOICE_URL = "https://voice-control-plane.deletion-backup782.workers.dev"
+  private fun requireSessionVoiceUrl(): String {
+    return BuildConfig.VOICE_CONTROL_PLANE_URL.trim().trimEnd('/').ifBlank {
+      throw IllegalStateException("Missing VOICE_CONTROL_PLANE_URL BuildConfig field. Set gradle property VOICE_CONTROL_PLANE_URL.")
+    }
+  }
 
   private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
   private val httpClient = OkHttpClient.Builder()
@@ -31,9 +36,10 @@ object SessionVoiceApi {
     userAddress: String,
     bookingId: Long,
   ): SessionJoinResult = withContext(Dispatchers.IO) {
+    val sessionVoiceUrl = requireSessionVoiceUrl()
     val auth = getWorkerAuthSession(
       appContext = appContext,
-      workerUrl = SESSION_VOICE_URL,
+      workerUrl = sessionVoiceUrl,
       userAddress = userAddress,
     )
 
@@ -43,7 +49,7 @@ object SessionVoiceApi {
       .toRequestBody(JSON_MEDIA_TYPE)
 
     val request = Request.Builder()
-      .url("${SESSION_VOICE_URL}/session/join")
+      .url("${sessionVoiceUrl}/session/join")
       .post(body)
       .header("Authorization", "Bearer ${auth.token}")
       .build()
@@ -76,14 +82,15 @@ object SessionVoiceApi {
     userAddress: String,
     bookingId: Long,
   ) = withContext(Dispatchers.IO) {
+    val sessionVoiceUrl = requireSessionVoiceUrl()
     val auth = getWorkerAuthSession(
       appContext = appContext,
-      workerUrl = SESSION_VOICE_URL,
+      workerUrl = sessionVoiceUrl,
       userAddress = userAddress,
     )
 
     val request = Request.Builder()
-      .url("${SESSION_VOICE_URL}/session/$bookingId/leave")
+      .url("${sessionVoiceUrl}/session/$bookingId/leave")
       .post("{}".toRequestBody(JSON_MEDIA_TYPE))
       .header("Authorization", "Bearer ${auth.token}")
       .build()

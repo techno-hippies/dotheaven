@@ -8,23 +8,20 @@
  * Flow:
  * 1. Android app collects scrobbles locally (Room DB)
  * 2. WorkManager periodically syncs to this endpoint
- * 3. Worker pins batch JSON to Filebase IPFS
+ * 3. Worker uploads batch JSON via Load S3 agent
  * 4. Worker stores batch metadata in D1
- * 5. Returns CID to Android for local marking
+ * 5. Returns dataitem id to Android for local marking
  */
 
 import { Hono } from 'hono'
 import { jwt, sign } from 'hono/jwt'
 import type { Env, ScrobbleSubmitRequest, ScrobbleSubmitResponse, ScrobbleTrack } from '../types'
 import { createScrobbleAttestation } from '../lib/eas'
+import { createLoadBlobStore } from '../lib/blob-store'
 import { resolveTrack, type Normalized, type Resolved } from '../resolver/resolveTrack'
 import { pLimit } from '../util/pLimit'
 
 const app = new Hono<{ Bindings: Env }>()
-
-// ============================================================================
-// AWS Signature V4 helpers for Filebase S3 API
-// ============================================================================
 
 async function sha256Hex(message: string): Promise<string> {
   const encoder = new TextEncoder()
@@ -35,100 +32,25 @@ async function sha256Hex(message: string): Promise<string> {
     .join('')
 }
 
-async function hmacSha256(key: ArrayBuffer | string, message: string): Promise<ArrayBuffer> {
-  const encoder = new TextEncoder()
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    typeof key === 'string' ? encoder.encode(key) : key,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  )
-  return crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(message))
-}
-
-async function hmacHex(key: ArrayBuffer | string, message: string): Promise<string> {
-  const sig = await hmacSha256(key, message)
-  return Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-}
-
-async function getSigningKey(
-  secretKey: string,
-  dateStamp: string,
-  region: string,
-  service: string
-): Promise<ArrayBuffer> {
-  const kDate = await hmacSha256('AWS4' + secretKey, dateStamp)
-  const kRegion = await hmacSha256(kDate, region)
-  const kService = await hmacSha256(kRegion, service)
-  return hmacSha256(kService, 'aws4_request')
-}
-
-/**
- * Pin JSON to Filebase IPFS via S3 PUT
- * Returns the CID from the x-amz-meta-cid header
- */
-async function pinToFilebase(
-  accessKey: string,
-  secretKey: string,
-  bucket: string,
+async function uploadBatchViaLoadAndAnchor(
+  env: Env,
   batchJson: string,
-  fileName: string
+  fileName: string,
 ): Promise<string> {
-  const endpoint = 's3.filebase.com'
-  const region = 'us-east-1'
-  const service = 's3'
-
-  const date = new Date()
-  const amzDate = date.toISOString().replace(/[:-]|\.\d{3}/g, '')
-  const dateStamp = amzDate.slice(0, 8)
-
-  const canonicalUri = `/${bucket}/${fileName}`
-  const payloadHash = await sha256Hex(batchJson)
-
-  const canonicalHeaders =
-    [`host:${endpoint}`, `x-amz-content-sha256:${payloadHash}`, `x-amz-date:${amzDate}`].join('\n') + '\n'
-  const signedHeaders = 'host;x-amz-content-sha256;x-amz-date'
-
-  const canonicalRequest = ['PUT', canonicalUri, '', canonicalHeaders, signedHeaders, payloadHash].join('\n')
-
-  const algorithm = 'AWS4-HMAC-SHA256'
-  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`
-  const stringToSign = [algorithm, amzDate, credentialScope, await sha256Hex(canonicalRequest)].join('\n')
-
-  const signingKey = await getSigningKey(secretKey, dateStamp, region, service)
-  const signature = await hmacHex(signingKey, stringToSign)
-
-  const authHeader = [
-    `${algorithm} Credential=${accessKey}/${credentialScope}`,
-    `SignedHeaders=${signedHeaders}`,
-    `Signature=${signature}`,
-  ].join(', ')
-
-  const response = await fetch(`https://${endpoint}${canonicalUri}`, {
-    method: 'PUT',
-    headers: {
-      Authorization: authHeader,
-      'x-amz-content-sha256': payloadHash,
-      'x-amz-date': amzDate,
-      'Content-Type': 'application/json',
-    },
-    body: batchJson,
+  if (!env.LOAD_S3_AGENT_API_KEY) {
+    throw new Error('Load upload not configured (LOAD_S3_AGENT_API_KEY)')
+  }
+  const blobStore = createLoadBlobStore(env)
+  const staged = await blobStore.put({
+    file: new File([batchJson], fileName, { type: 'application/json' }),
+    contentType: 'application/json',
+    tags: [
+      { name: 'App-Name', value: 'HeavenScrobble' },
+      { name: 'Content-Type', value: 'application/json' },
+    ],
   })
-
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`Filebase upload failed: ${response.status} ${text}`)
-  }
-
-  const cid = response.headers.get('x-amz-meta-cid')
-  if (!cid) {
-    throw new Error('No CID returned from Filebase')
-  }
-
-  return cid
+  await blobStore.anchor(staged.id)
+  return staged.id
 }
 
 // ============================================================================
@@ -196,13 +118,6 @@ app.post('/submit', async (c) => {
   const userAddress = c.get('userAddress' as never) as string
   if (!userAddress) {
     return c.json({ success: false, error: 'User not authenticated' } as ScrobbleSubmitResponse, 401)
-  }
-
-  // Check Filebase credentials
-  const { FILEBASE_ACCESS_KEY, FILEBASE_SECRET_KEY, FILEBASE_BUCKET } = c.env
-  if (!FILEBASE_ACCESS_KEY || !FILEBASE_SECRET_KEY || !FILEBASE_BUCKET) {
-    console.error('[Scrobble] Missing Filebase credentials')
-    return c.json({ success: false, error: 'Server misconfiguration' } as ScrobbleSubmitResponse, 500)
   }
 
   // Parse request
@@ -311,20 +226,14 @@ app.post('/submit', async (c) => {
   const batchHash = (await sha256Hex(batchJson)).slice(0, 16)
   const fileName = `scrobble-${userPrefix}-${startTs}-${batchHash}.json`
 
-  // Pin to Filebase
+  // Upload to Load and anchor to Arweave
   let cid: string
   try {
-    cid = await pinToFilebase(
-      FILEBASE_ACCESS_KEY,
-      FILEBASE_SECRET_KEY,
-      FILEBASE_BUCKET,
-      batchJson,
-      fileName
-    )
-    console.log(`[Scrobble] Pinned batch for ${userAddress}: ${cid} (${count} tracks)`)
+    cid = await uploadBatchViaLoadAndAnchor(c.env, batchJson, fileName)
+    console.log(`[Scrobble] Uploaded batch for ${userAddress}: ${cid} (${count} tracks)`)
   } catch (err) {
-    console.error('[Scrobble] Filebase error:', err)
-    return c.json({ success: false, error: 'Failed to pin to IPFS' } as ScrobbleSubmitResponse, 500)
+    console.error('[Scrobble] Load upload/post error:', err)
+    return c.json({ success: false, error: 'Failed to upload batch' } as ScrobbleSubmitResponse, 500)
   }
 
   // Store batch metadata in D1

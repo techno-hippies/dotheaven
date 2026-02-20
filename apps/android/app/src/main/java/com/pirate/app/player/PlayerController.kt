@@ -1,26 +1,13 @@
 package com.pirate.app.player
 
 import android.content.Context
-import android.content.Intent
-import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.net.Uri
-import android.os.Build
-import android.util.Log
 import androidx.media3.common.C
-import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
-import androidx.media3.database.StandaloneDatabaseProvider
-import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
-import androidx.media3.datasource.cache.CacheDataSource
-import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
-import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import com.pirate.app.music.MusicTrack
-import com.pirate.app.widget.NowPlayingWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -31,7 +18,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.io.File
 import kotlin.math.absoluteValue
 
 class PlayerController(private val context: Context) {
@@ -41,6 +27,8 @@ class PlayerController(private val context: Context) {
   )
 
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+  private val widgetSyncBridge = WidgetSyncBridge(context = context, scope = scope)
+  private val playbackServiceBridge = PlaybackServiceBridge(context = context) { this }
   private val tag = "PiratePlayer"
   private val mediaInfoNetworkBandwidth = 703
   private var mediaPlayer: MediaPlayer? = null
@@ -53,14 +41,6 @@ class PlayerController(private val context: Context) {
   }
 
   private var activeEngine: PlaybackEngine? = null
-
-  companion object {
-    private const val EXO_CACHE_DIR = "exo_audio_cache"
-    private const val EXO_CACHE_MAX_BYTES = 64L * 1024 * 1024
-    private val cacheLock = Any()
-    @Volatile private var sharedExoCache: SimpleCache? = null
-    @Volatile private var sharedDbProvider: StandaloneDatabaseProvider? = null
-  }
 
   private val _currentTrack = MutableStateFlow<MusicTrack?>(null)
   val currentTrack: StateFlow<MusicTrack?> = _currentTrack.asStateFlow()
@@ -157,161 +137,63 @@ class PlayerController(private val context: Context) {
     }
   }
 
-  private fun loadAndPlayMedia(track: MusicTrack, playWhenReady: Boolean, parsedUri: Uri) {
-    val player = MediaPlayer()
-    mediaPlayer = player
-    activeEngine = PlaybackEngine.MEDIA
+  private fun setDurationSec(durationSec: Float) {
+    _progress.value = _progress.value.copy(durationSec = durationSec)
+  }
 
-    player.setAudioAttributes(
-      AudioAttributes.Builder()
-        .setUsage(AudioAttributes.USAGE_MEDIA)
-        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-        .build(),
-    )
-
-    player.setOnPreparedListener {
-      val durationMs = runCatching { it.duration }.getOrDefault(0).coerceAtLeast(0)
-      _progress.value = _progress.value.copy(durationSec = durationMs / 1000f)
-
-      if (playWhenReady) {
-        runCatching { it.start() }
-        _isPlaying.value = true
-        startPlaybackService()
-        syncWidgetState()
-      }
-      startProgressUpdates()
-    }
-
-    player.setOnCompletionListener {
-      _isPlaying.value = false
-      val q2 = _queue.value
-      if (q2.isNotEmpty() && _queueIndex.value < q2.lastIndex) {
-        _queueIndex.value = _queueIndex.value + 1
-        loadAndPlay(index = _queueIndex.value, playWhenReady = true)
-      } else {
-        syncWidgetState()
-      }
-    }
-
-    player.setOnErrorListener { _, _, _ ->
-      _isPlaying.value = false
-      Log.w(tag, "MediaPlayer onError for track=${track.id} uri=${track.uri}")
-      true
-    }
-
-    player.setOnInfoListener { _, what, extra ->
-      when (what) {
-        MediaPlayer.MEDIA_INFO_BUFFERING_START -> Log.d(tag, "buffering_start track=${track.id}")
-        MediaPlayer.MEDIA_INFO_BUFFERING_END -> Log.d(tag, "buffering_end track=${track.id}")
-        mediaInfoNetworkBandwidth -> Log.d(tag, "network_bandwidth track=${track.id} kbps=$extra")
-      }
-      false
-    }
-
-    try {
-      player.setDataSource(context, parsedUri)
-      player.prepareAsync()
-    } catch (error: Throwable) {
-      Log.e(tag, "Failed to load local track=${track.id} uri=${track.uri}", error)
-      stopInternal(resetPosition = true)
-      _currentTrack.value = null
-      _isPlaying.value = false
+  private fun handleTrackEnded() {
+    val q2 = _queue.value
+    if (q2.isNotEmpty() && _queueIndex.value < q2.lastIndex) {
+      _queueIndex.value = _queueIndex.value + 1
+      loadAndPlay(index = _queueIndex.value, playWhenReady = true)
+    } else {
+      syncWidgetState()
     }
   }
 
-  private fun loadAndPlayExo(track: MusicTrack, playWhenReady: Boolean) {
-    val loadControl = DefaultLoadControl.Builder()
-      .setBufferDurationsMs(
-        15_000, // min buffer before/while playback
-        60_000, // max buffer
-        1_500,  // buffer required for initial start
-        5_000,  // buffer required after rebuffer
-      )
-      .build()
-    val player = ExoPlayer.Builder(context)
-      .setLoadControl(loadControl)
-      .build()
-    exoPlayer = player
-    activeEngine = PlaybackEngine.EXO
+  private fun handleTrackLoadFailed() {
+    stopInternal(resetPosition = true)
+    _currentTrack.value = null
+    _isPlaying.value = false
+  }
 
-    var buffering = false
-    player.addListener(
-      object : Player.Listener {
-        override fun onIsPlayingChanged(isPlaying: Boolean) {
-          _isPlaying.value = isPlaying
-          if (isPlaying) {
-            startPlaybackService()
-          }
-          syncWidgetState()
-        }
-
-        override fun onPlaybackStateChanged(state: Int) {
-          when (state) {
-            Player.STATE_BUFFERING -> {
-              if (!buffering) {
-                buffering = true
-                Log.d(tag, "buffering_start track=${track.id}")
-              }
-            }
-            Player.STATE_READY -> {
-              val durationMs = player.duration.takeIf { it > 0 && it != C.TIME_UNSET } ?: 0L
-              _progress.value = _progress.value.copy(durationSec = durationMs / 1000f)
-              if (buffering) {
-                buffering = false
-                Log.d(tag, "buffering_end track=${track.id}")
-              }
-              startProgressUpdates()
-            }
-            Player.STATE_ENDED -> {
-              _isPlaying.value = false
-              val q2 = _queue.value
-              if (q2.isNotEmpty() && _queueIndex.value < q2.lastIndex) {
-                _queueIndex.value = _queueIndex.value + 1
-                loadAndPlay(index = _queueIndex.value, playWhenReady = true)
-              } else {
-                syncWidgetState()
-              }
-            }
-          }
-        }
-
-        override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-          _isPlaying.value = false
-          Log.e(tag, "ExoPlayer error track=${track.id} uri=${track.uri}", error)
-        }
-      },
+  private fun loadAndPlayMedia(track: MusicTrack, playWhenReady: Boolean, parsedUri: Uri) {
+    activeEngine = PlaybackEngine.MEDIA
+    loadAndPlayMediaEngine(
+      context = context,
+      track = track,
+      playWhenReady = playWhenReady,
+      parsedUri = parsedUri,
+      tag = tag,
+      mediaInfoNetworkBandwidth = mediaInfoNetworkBandwidth,
+      onSetMediaPlayer = { mediaPlayer = it },
+      onSetIsPlaying = { _isPlaying.value = it },
+      onSetDurationSec = { durationSec -> setDurationSec(durationSec) },
+      onStartPlaybackService = { startPlaybackService() },
+      onSyncWidgetState = { syncWidgetState() },
+      onStartProgressUpdates = { startProgressUpdates() },
+      onTrackEnded = { handleTrackEnded() },
+      onTrackLoadFailed = { handleTrackLoadFailed() },
     )
+  }
 
-    try {
-      val upstreamFactory = DefaultDataSource.Factory(
-        context,
-        DefaultHttpDataSource.Factory()
-          .setAllowCrossProtocolRedirects(true)
-          .setConnectTimeoutMs(15_000)
-          .setReadTimeoutMs(30_000),
-      )
-
-      val mediaSource = runCatching {
-        val cache = getOrCreateExoCache(context)
-        val cacheFactory = CacheDataSource.Factory()
-          .setCache(cache)
-          .setUpstreamDataSourceFactory(upstreamFactory)
-          .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-        ProgressiveMediaSource.Factory(cacheFactory).createMediaSource(MediaItem.fromUri(track.uri))
-      }.getOrElse {
-        Log.w(tag, "Falling back to uncached Exo stream for ${track.id}: ${it.message}")
-        ProgressiveMediaSource.Factory(upstreamFactory).createMediaSource(MediaItem.fromUri(track.uri))
-      }
-
-      player.setMediaSource(mediaSource)
-      player.playWhenReady = playWhenReady
-      player.prepare()
-    } catch (error: Throwable) {
-      Log.e(tag, "Failed to load remote track=${track.id} uri=${track.uri}", error)
-      stopInternal(resetPosition = true)
-      _currentTrack.value = null
-      _isPlaying.value = false
-    }
+  private fun loadAndPlayExo(track: MusicTrack, playWhenReady: Boolean) {
+    activeEngine = PlaybackEngine.EXO
+    loadAndPlayExoEngine(
+      context = context,
+      track = track,
+      playWhenReady = playWhenReady,
+      tag = tag,
+      onGetOrCreateExoCache = { ctx -> getOrCreateExoCache(ctx) },
+      onSetExoPlayer = { exoPlayer = it },
+      onSetIsPlaying = { _isPlaying.value = it },
+      onSetDurationSec = { durationSec -> setDurationSec(durationSec) },
+      onStartPlaybackService = { startPlaybackService() },
+      onSyncWidgetState = { syncWidgetState() },
+      onStartProgressUpdates = { startProgressUpdates() },
+      onTrackEnded = { handleTrackEnded() },
+      onTrackLoadFailed = { handleTrackLoadFailed() },
+    )
   }
 
   fun togglePlayPause() {
@@ -397,65 +279,25 @@ class PlayerController(private val context: Context) {
   // -- Widget: push state into Glance DataStore so provideContent sees fresh data --
 
   private fun syncWidgetState() {
-    val track = _currentTrack.value
-    scope.launch(Dispatchers.IO) {
-      if (track == null) {
-        NowPlayingWidget.clearState(context)
-      } else {
-        NowPlayingWidget.pushState(
-          context = context,
-          title = track.title,
-          artist = track.artist,
-          artworkUri = track.artworkUri,
-          isPlaying = _isPlaying.value,
-        )
-      }
-    }
+    widgetSyncBridge.sync(track = _currentTrack.value, isPlaying = _isPlaying.value)
   }
 
   // -- Foreground PlaybackService (notification + MediaSession) --
 
-  private var serviceStarted = false
-
   private fun startPlaybackService() {
-    PlaybackService.playerRef = this
-    val intent = Intent(context, PlaybackService::class.java)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      context.startForegroundService(intent)
-    } else {
-      context.startService(intent)
-    }
-    serviceStarted = true
+    playbackServiceBridge.start()
   }
 
   private fun updatePlaybackService() {
-    if (!serviceStarted) return
-    val intent = Intent(context, PlaybackService::class.java).apply {
-      action = PlaybackService.ACTION_UPDATE
-    }
-    context.startService(intent)
+    playbackServiceBridge.update()
   }
 
   private fun stopPlaybackService() {
-    if (!serviceStarted) return
-    val intent = Intent(context, PlaybackService::class.java).apply {
-      action = PlaybackService.ACTION_STOP
-    }
-    context.startService(intent)
-    serviceStarted = false
+    playbackServiceBridge.stop()
   }
 
   private fun getOrCreateExoCache(context: Context): SimpleCache {
-    synchronized(cacheLock) {
-      sharedExoCache?.let { return it }
-      val dbProvider = sharedDbProvider ?: StandaloneDatabaseProvider(context.applicationContext).also {
-        sharedDbProvider = it
-      }
-      val cacheDir = File(context.cacheDir, EXO_CACHE_DIR).apply { mkdirs() }
-      return SimpleCache(cacheDir, LeastRecentlyUsedCacheEvictor(EXO_CACHE_MAX_BYTES), dbProvider).also {
-        sharedExoCache = it
-      }
-    }
+    return ExoCacheStore.getOrCreate(context)
   }
 
   private fun startProgressUpdates() {

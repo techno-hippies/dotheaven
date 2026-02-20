@@ -56,6 +56,30 @@ android {
     val tempoFollowV1 = projectStringProperty("TEMPO_FOLLOW_V1")
       ?: "0x153DbEcA0CEF8563649cf475a687D14997D2c403"
     buildConfigField("String", "TEMPO_FOLLOW_V1", "\"$tempoFollowV1\"")
+
+    val apiCoreUrl = projectStringProperty("API_CORE_URL") ?: ""
+    buildConfigField("String", "API_CORE_URL", "\"$apiCoreUrl\"")
+
+    val voiceAgentUrl = projectStringProperty("VOICE_AGENT_URL") ?: ""
+    buildConfigField("String", "VOICE_AGENT_URL", "\"$voiceAgentUrl\"")
+
+    val voiceControlPlaneUrl = projectStringProperty("VOICE_CONTROL_PLANE_URL") ?: ""
+    buildConfigField("String", "VOICE_CONTROL_PLANE_URL", "\"$voiceControlPlaneUrl\"")
+
+    val ipfsGatewayUrl =
+      projectStringProperty("IPFS_GATEWAY_URL")
+        ?: "https://ipfs.io/ipfs"
+    buildConfigField("String", "IPFS_GATEWAY_URL", "\"$ipfsGatewayUrl\"")
+
+    val arweaveGatewayUrl =
+      projectStringProperty("ARWEAVE_GATEWAY_URL")
+        ?: "https://arweave.net"
+    buildConfigField("String", "ARWEAVE_GATEWAY_URL", "\"$arweaveGatewayUrl\"")
+
+    val loadGatewayUrl =
+      projectStringProperty("LOAD_GATEWAY_URL")
+        ?: "https://gateway.s3-node-1.load.network"
+    buildConfigField("String", "LOAD_GATEWAY_URL", "\"$loadGatewayUrl\"")
   }
 
   buildFeatures {

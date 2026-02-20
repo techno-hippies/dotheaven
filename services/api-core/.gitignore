@@ -1,1 +1,4 @@
 .wrangler/
+
+# Localflare generated files
+.localflare/

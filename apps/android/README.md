@@ -64,6 +64,24 @@ JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew \
   installDebug
 ```
 
+To override service + gateway endpoints in one install:
+
+```bash
+JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew \
+  -PAPI_CORE_URL=https://api-core.example.com \
+  -PVOICE_AGENT_URL=https://voice-agent.example.com \
+  -PVOICE_CONTROL_PLANE_URL=https://voice-control-plane.example.com \
+  -PIPFS_GATEWAY_URL=https://ipfs.io/ipfs \
+  -PARWEAVE_GATEWAY_URL=https://arweave.net \
+  -PLOAD_GATEWAY_URL=https://gateway.s3-node-1.load.network \
+  installDebug
+```
+
+Gateway property notes:
+- `IPFS_GATEWAY_URL`: base IPFS gateway URL used for `ipfs://` refs.
+- `ARWEAVE_GATEWAY_URL`: base gateway URL used for `ar://` refs.
+- `LOAD_GATEWAY_URL`: base gateway URL used for `ls3://` / `load-s3://` refs.
+
 To enable on-chain follow reads/writes against a Tempo FollowV1 deployment:
 
 ```bash

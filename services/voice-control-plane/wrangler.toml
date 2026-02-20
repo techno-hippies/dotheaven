@@ -5,9 +5,9 @@ compatibility_flags = ["nodejs_compat"]
 
 [[d1_databases]]
 binding = "DB"
-# Cloudflare resource label is legacy; keep stable until an explicit D1 migration.
-database_name = "session-voice"
-database_id = "ac26bc37-8329-4695-a733-fe54a6bd05e0"
+# D1 uses capability label.
+database_name = "voice-control-plane"
+database_id = "5517f013-8d59-4c7c-8388-8ee2200f2912"
 
 [durable_objects]
 bindings = [
@@ -30,7 +30,7 @@ crons = ["*/2 * * * *"]
 ENVIRONMENT = "development"
 ESCROW_MODE = "live"
 RPC_URL = "https://rpc.moderato.tempo.xyz"
-ESCROW_ADDRESS = "0xb1E233221FB25c65090A75cc60Df5164A2eA4B98"
+ESCROW_ADDRESS = "0xF3B4DB746a874A2197ae21C857e1Ca692C6ED059"
 REGISTRY_ADDRESS = "0xA111c5cA16752B09fF16B3B8B24BA55a8486aB23"
 VERIFICATION_MIRROR_ADDRESS = "0x0000000000000000000000000000000000000000"
 CHAIN_ID = "42431"

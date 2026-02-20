@@ -15,9 +15,9 @@ SUBGRAPH_URL = "https://graph.dotheaven.org/subgraphs/name/dotheaven/music-socia
 
 [[d1_databases]]
 binding = "DB"
-# Cloudflare resource label is legacy; keep stable until an explicit D1 migration.
-database_name = "neodate-voice"
-database_id = "17a75aea-374c-46f5-b80d-be9144485955"
+# D1 uses capability label.
+database_name = "voice-agent"
+database_id = "8b7da1ee-79fb-4229-9896-79d8fe82d1b4"
 
 # Secrets (set via `wrangler secret put`):
 # JWT_SECRET, LLM_API_KEY, AGORA_APP_ID, AGORA_APP_CERT, AGORA_REST_AUTH

@@ -9,14 +9,8 @@ import com.pirate.app.tempo.EciesContentCrypto
 import com.pirate.app.tempo.P256Utils
 import com.pirate.app.tempo.SessionKeyManager
 import java.io.File
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONArray
 import org.json.JSONObject
 
 data class UploadedTrackDownloadResult(
@@ -34,15 +28,6 @@ data class UploadedTrackShareResult(
 )
 
 object UploadedTrackActions {
-  private val addressRegex = Regex("^0x[a-fA-F0-9]{40}$")
-  private val jsonMediaType = "application/json".toMediaType()
-
-  private val http =
-    OkHttpClient.Builder()
-      .connectTimeout(30, TimeUnit.SECONDS)
-      .readTimeout(120, TimeUnit.SECONDS)
-      .build()
-
   suspend fun downloadUploadedTrackToDevice(
     context: Context,
     track: MusicTrack,
@@ -57,8 +42,8 @@ object UploadedTrackActions {
     if (pieceCid.isEmpty()) {
       return@withContext UploadedTrackDownloadResult(success = false, error = "Track has no pieceCid.")
     }
-    if (isUnsupportedAlgo(track.algo)) {
-      return@withContext UploadedTrackDownloadResult(success = false, error = legacyUploadError())
+    if (isUnsupportedUploadedTrackAlgo(track.algo)) {
+      return@withContext UploadedTrackDownloadResult(success = false, error = uploadedTrackLegacyUploadError())
     }
 
     val existing = DownloadedTracksStore.load(context)[contentId]
@@ -93,13 +78,13 @@ object UploadedTrackActions {
     if (wrappedKey == null) {
       return@withContext UploadedTrackDownloadResult(
         success = false,
-        error = missingWrappedKeyError(),
+        error = uploadedTrackMissingWrappedKeyError(),
       )
     }
     val resolvedWrappedKey = wrappedKey
 
     return@withContext runCatching {
-      val blob = fetchBlob(pieceCid)
+      val blob = fetchUploadedBlob(pieceCid)
       if (blob.size < 13) {
         throw IllegalStateException("Encrypted payload too small (${blob.size} bytes).")
       }
@@ -113,7 +98,7 @@ object UploadedTrackActions {
         aesKey.fill(0)
       }
 
-      val ext = preferredExtension(track)
+      val ext = uploadedTrackPreferredExtension(track)
       val cacheDir = File(context.cacheDir, "heaven_download_tmp").also { it.mkdirs() }
       val tmp = File.createTempFile("content_", ".$ext", cacheDir)
       tmp.writeBytes(audio)
@@ -169,11 +154,11 @@ object UploadedTrackActions {
     if (contentId.isEmpty()) {
       return@withContext UploadedTrackShareResult(success = false, error = "Track has no contentId.")
     }
-    if (isUnsupportedAlgo(track.algo)) {
-      return@withContext UploadedTrackShareResult(success = false, error = legacyUploadError())
+    if (isUnsupportedUploadedTrackAlgo(track.algo)) {
+      return@withContext UploadedTrackShareResult(success = false, error = uploadedTrackLegacyUploadError())
     }
     val normalizedRecipientInput = recipient.trim().removePrefix("@").lowercase()
-    val recipientAddress = resolveRecipientAddress(normalizedRecipientInput)
+    val recipientAddress = resolveUploadedTrackRecipientAddress(normalizedRecipientInput)
       ?: return@withContext UploadedTrackShareResult(
         success = false,
         error = "Recipient must be a wallet, .heaven, or .pirate name.",
@@ -200,13 +185,13 @@ object UploadedTrackActions {
     if (wrappedKey == null) {
       return@withContext UploadedTrackShareResult(
         success = false,
-        error = missingWrappedKeyError(),
+        error = uploadedTrackMissingWrappedKeyError(),
       )
     }
     val resolvedWrappedKey = wrappedKey
 
     val recipientPub =
-      if (addressRegex.matches(normalizedRecipientInput)) {
+      if (uploadedTrackAddressRegex.matches(normalizedRecipientInput)) {
         TempoNameRecordsApi.getContentPubKeyForAddress(recipientAddress)
       } else {
         TempoNameRecordsApi.getContentPubKeyForName(normalizedRecipientInput)
@@ -281,183 +266,20 @@ object UploadedTrackActions {
     }
   }
 
-  private suspend fun resolveRecipientAddress(rawRecipient: String): String? {
-    val clean = rawRecipient.trim().removePrefix("@")
-    if (clean.isBlank()) return null
-    if (addressRegex.matches(clean)) return clean.lowercase()
-    val resolved = TempoNameRecordsApi.resolveAddressForName(clean.lowercase())
-    return resolved?.lowercase()
-  }
-
   internal suspend fun ensureWrappedKeyFromLs3(
     context: Context,
     contentId: String,
     ownerAddress: String,
     granteeAddress: String,
-  ): Boolean = withContext(Dispatchers.IO) {
-    val normalizedContentId = normalizeContentId(contentId)
-    val normalizedOwner = ownerAddress.trim().lowercase()
-    val normalizedGrantee = granteeAddress.trim().lowercase()
-    if (normalizedContentId.isEmpty() || normalizedOwner.isEmpty() || normalizedGrantee.isEmpty()) {
-      return@withContext false
-    }
-    if (ContentKeyManager.loadWrappedKey(context, normalizedContentId) != null) {
-      return@withContext true
-    }
-
-    val envelopeIds =
-      runCatching {
-        queryEnvelopeIds(
-          contentId = normalizedContentId,
-          ownerAddress = normalizedOwner,
-          granteeAddress = normalizedGrantee,
-        )
-      }.getOrElse { emptyList() }
-
-    if (envelopeIds.isEmpty()) return@withContext false
-
-    for (envelopeId in envelopeIds) {
-      val payload = runCatching { fetchResolveBytes(envelopeId) }.getOrNull() ?: continue
-      val envelope =
-        parseEnvelopePayload(
-          payload = payload,
-          expectedContentId = normalizedContentId,
-          expectedOwner = normalizedOwner,
-          expectedGrantee = normalizedGrantee,
-        ) ?: continue
-      ContentKeyManager.saveWrappedKey(context, normalizedContentId, envelope)
-      return@withContext true
-    }
-    false
-  }
-
-  private fun queryEnvelopeIds(
-    contentId: String,
-    ownerAddress: String,
-    granteeAddress: String,
-  ): List<String> {
-    val filters =
-      JSONArray()
-        .put(JSONObject().put("key", "App-Name").put("value", "Heaven"))
-        .put(JSONObject().put("key", "Heaven-Type").put("value", "content-key-envelope"))
-        .put(JSONObject().put("key", "Content-Id").put("value", contentId))
-        .put(JSONObject().put("key", "Owner").put("value", ownerAddress))
-        .put(JSONObject().put("key", "Grantee").put("value", granteeAddress))
-
-    val body =
-      JSONObject()
-        .put("filters", filters)
-        .put("first", 8)
-        .put("include_tags", false)
-        .toString()
-        .toRequestBody(jsonMediaType)
-
-    val req =
-      Request.Builder()
-        .url("${LoadTurboConfig.DEFAULT_AGENT_URL.trimEnd('/')}/tags/query")
-        .post(body)
-        .build()
-    val res = http.newCall(req).execute()
-    if (!res.isSuccessful) return emptyList()
-    val raw = res.body?.string().orEmpty()
-    if (raw.isBlank()) return emptyList()
-    val json = runCatching { JSONObject(raw) }.getOrNull() ?: return emptyList()
-    val items = json.optJSONArray("items") ?: return emptyList()
-    if (items.length() == 0) return emptyList()
-
-    val out = ArrayList<String>(items.length())
-    for (i in 0 until items.length()) {
-      val row = items.optJSONObject(i) ?: continue
-      val id =
-        row.optString("dataitem_id", "").trim()
-          .ifBlank { row.optString("dataitemId", "").trim() }
-          .ifBlank { row.optString("id", "").trim() }
-      if (id.isNotBlank()) out.add(id)
-    }
-    return out
-  }
-
-  private fun parseEnvelopePayload(
-    payload: ByteArray,
-    expectedContentId: String,
-    expectedOwner: String,
-    expectedGrantee: String,
-  ): EciesContentCrypto.EciesEnvelope? {
-    val raw = payload.toString(Charsets.UTF_8).trim()
-    if (raw.isBlank()) return null
-    val json = runCatching { JSONObject(raw) }.getOrNull() ?: return null
-    if (json.optInt("version", -1) != 1) return null
-
-    val rawContentId = json.optString("contentId", "").trim()
-    if (rawContentId.isEmpty()) return null
-    val payloadContentId = normalizeContentId(rawContentId)
-    if (payloadContentId != expectedContentId) return null
-
-    val payloadOwner = json.optString("owner", "").trim().lowercase()
-    if (payloadOwner.isEmpty() || payloadOwner != expectedOwner) return null
-
-    val payloadGrantee = json.optString("grantee", "").trim().lowercase()
-    if (payloadGrantee.isEmpty() || payloadGrantee != expectedGrantee) return null
-
-    val ephemeralHex = json.optString("ephemeralPub", "").trim()
-    val ivHex = json.optString("iv", "").trim()
-    val ciphertextHex = json.optString("ciphertext", "").trim()
-    if (ephemeralHex.isEmpty() || ivHex.isEmpty() || ciphertextHex.isEmpty()) return null
-
-    val ephemeral = runCatching { P256Utils.hexToBytes(ephemeralHex) }.getOrNull() ?: return null
-    val iv = runCatching { P256Utils.hexToBytes(ivHex) }.getOrNull() ?: return null
-    val ciphertext = runCatching { P256Utils.hexToBytes(ciphertextHex) }.getOrNull() ?: return null
-    if (ephemeral.size != 65 || iv.size != 12 || ciphertext.isEmpty()) return null
-
-    return EciesContentCrypto.EciesEnvelope(
-      ephemeralPub = ephemeral,
-      iv = iv,
-      ciphertext = ciphertext,
-    )
-  }
-
-  private fun fetchResolveBytes(dataitemId: String): ByteArray {
-    val gatewayUrl = "${LoadTurboConfig.DEFAULT_GATEWAY_URL.trimEnd('/')}/resolve/${dataitemId.trim()}"
-    val request = Request.Builder().url(gatewayUrl).get().build()
-    val response = http.newCall(request).execute()
-    if (!response.isSuccessful) {
-      throw IllegalStateException("Failed to fetch payload (HTTP ${response.code}).")
-    }
-    return response.body?.bytes() ?: throw IllegalStateException("Payload is empty.")
-  }
+  ): Boolean = ensureWrappedKeyFromLs3Internal(
+    context = context,
+    contentId = contentId,
+    ownerAddress = ownerAddress,
+    granteeAddress = granteeAddress,
+  )
 
   internal fun fetchResolvePayload(dataitemId: String): ByteArray {
-    return fetchResolveBytes(dataitemId)
-  }
-
-  private fun fetchBlob(pieceCid: String): ByteArray {
-    return fetchResolveBytes(pieceCid)
-  }
-
-  private fun normalizeContentId(raw: String): String {
-    val clean = raw.trim().lowercase().removePrefix("0x")
-    if (clean.isBlank()) return ""
-    return "0x$clean"
-  }
-
-  private fun isUnsupportedAlgo(algo: Int?): Boolean {
-    return algo != null && algo != ContentCryptoConfig.ALGO_AES_GCM_256
-  }
-
-  private fun legacyUploadError(): String {
-    return "Legacy/plaintext upload is not supported. Re-upload encrypted to enable this action."
-  }
-
-  private fun missingWrappedKeyError(): String {
-    return "Missing encrypted key for this track. It may be legacy/plaintext, or this wallet has no key copy."
-  }
-
-  private fun preferredExtension(track: MusicTrack): String {
-    val fromFilename = track.filename.substringAfterLast('.', "").trim().lowercase()
-    return when {
-      fromFilename.isNotBlank() && fromFilename.length <= 10 -> fromFilename
-      else -> "mp3"
-    }
+    return fetchUploadedResolvePayload(dataitemId)
   }
 
 }

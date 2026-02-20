@@ -1401,6 +1401,8 @@ duetRoutes.get('/:id/broadcast', async (c) => {
     let stateVariant = '';
 	    let broadcastMode = '';
 	    let heartbeatTimer = null;
+    let roomLifecycleTimer = null;
+    let roomLifecycleTerminal = false;
 	    let toneContext = null;
     let toneOscillator = null;
     let sharedMediaStream = null;
@@ -1521,6 +1523,52 @@ duetRoutes.get('/:id/broadcast', async (c) => {
 	        clearInterval(heartbeatTimer);
 	        heartbeatTimer = null;
 	      }
+    }
+    function stopRoomLifecycleLoop() {
+      if (roomLifecycleTimer) {
+        clearInterval(roomLifecycleTimer);
+        roomLifecycleTimer = null;
+      }
+    }
+    function setBroadcastControlsDisabled(disabled) {
+      shareBtn.disabled = disabled;
+      startBtn.disabled = disabled;
+      cameraBtn.disabled = disabled;
+      screenVideoBtn.disabled = disabled;
+      toneBtn.disabled = disabled;
+      if (disabled) {
+        stopBtn.disabled = true;
+        stopVideoBtn.disabled = true;
+      } else {
+        refreshVideoButtons();
+      }
+    }
+    async function pollRoomLifecycle() {
+      if (roomLifecycleTerminal) return;
+      try {
+        const res = await fetch('/duet/' + roomId + '/public-info', {
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const body = await res.json().catch(() => ({}));
+        const status = String(body && body.status ? body.status : '').toLowerCase();
+        if (status === 'live') return;
+
+        roomLifecycleTerminal = true;
+        stopRoomLifecycleLoop();
+        await stopBroadcast(true);
+        setState('Room Ended', 'error');
+        setMessage('Room is no longer live. Broadcast was stopped automatically.', true);
+        setError('');
+        setBroadcastControlsDisabled(true);
+      } catch (_) {}
+    }
+    function startRoomLifecycleLoop() {
+      stopRoomLifecycleLoop();
+      roomLifecycleTimer = setInterval(() => {
+        void pollRoomLifecycle();
+      }, HEARTBEAT_INTERVAL_MS);
+      void pollRoomLifecycle();
     }
 	    async function sendHeartbeat(status = 'live', mode = broadcastMode) {
 	      if (!bridgeTicket) return;
@@ -2160,6 +2208,7 @@ duetRoutes.get('/:id/broadcast', async (c) => {
     async function stopBroadcast(silent = false) {
       const previousMode = broadcastMode || undefined;
       stopHeartbeatLoop();
+      stopRoomLifecycleLoop();
       try {
         if (videoTrack && client) {
           try {
@@ -2304,12 +2353,13 @@ duetRoutes.get('/:id/broadcast', async (c) => {
       stopVideoBtn.disabled = true;
       setState('Blocked', 'error');
       setMessage('Agora app is not configured on this worker.', true);
-	    } else {
+    } else {
 	      setState('Ready');
 	      setMessage('Ready. Start App Audio Share, Mic Broadcast, or Camera.');
         clearLocalPreview();
         refreshVideoButtons();
 	      void writeDeviceDiagnostics();
+        startRoomLifecycleLoop();
 	    }
 	  </script>
 </body>

@@ -37,7 +37,7 @@ export const LiveRooms: Story = {
         hostWallet: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
         listenerCount: 128,
         audienceMode: 'free',
-        watchUrl: 'https://voice-control-plane.deletion-backup782.workers.dev/duet/a9f8e9f6-2222-4444-9999-c1b61f730001/watch',
+        watchUrl: 'https://voice-control-plane.example.com/duet/a9f8e9f6-2222-4444-9999-c1b61f730001/watch',
       },
       {
         roomId: 'db9af0f8-2222-4444-9999-c1b61f730002',
@@ -45,7 +45,7 @@ export const LiveRooms: Story = {
         hostWallet: '0x8ba1f109551bD432803012645Ac136ddd64DBA72',
         listenerCount: 42,
         audienceMode: 'ticketed',
-        watchUrl: 'https://voice-control-plane.deletion-backup782.workers.dev/duet/db9af0f8-2222-4444-9999-c1b61f730002/watch',
+        watchUrl: 'https://voice-control-plane.example.com/duet/db9af0f8-2222-4444-9999-c1b61f730002/watch',
       },
     ],
   },
