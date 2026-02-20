@@ -130,6 +130,8 @@ export interface Env {
   TEMPO_OPERATOR_PRIVATE_KEY?: string
   TEMPO_NAME_REGISTRY_V2?: string
   TEMPO_PREMIUM_NAME_STORE_V2?: string
+  NAMES_PRIMARY_NODE?: string
+  NAMES_SECONDARY_NODE?: string
   TEMPO_HEAVEN_NODE?: string
   TEMPO_PIRATE_NODE?: string
   TEMPO_POLICY_SIGNER_PRIVATE_KEY?: string
@@ -175,6 +177,10 @@ export interface Env {
   PRIVY_APP_SECRET?: string
 
   // Self.xyz verification
+  APP_SCOPE?: string               // Generic app scope identifier
+  APP_DISPLAY_NAME?: string        // Generic display name in verification deeplink
+  APP_DEEPLINK_SCHEME?: string     // Custom callback scheme (e.g. appname)
+  APP_NULLIFIER_NAMESPACE?: string // Namespace seed for nullifier derivation
   SELF_SCOPE?: string              // Scope identifier for Self verification
   SELF_ENDPOINT?: string           // Public URL for /api/self/verify (Self relayer calls this)
   SELF_MOCK_PASSPORT?: string      // "true" for testnet, "false" for mainnet

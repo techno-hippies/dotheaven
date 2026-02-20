@@ -72,6 +72,28 @@ function isSelfMockMode(env: Env): boolean {
   return env.SELF_MOCK_PASSPORT === 'true' || env.ENVIRONMENT === 'development'
 }
 
+function resolveSelfEndpoint(env: Env, requestUrl: string): string {
+  const configured = env.SELF_ENDPOINT?.trim()
+  if (configured) return configured
+  return `${new URL(requestUrl).origin}/api/self/verify`
+}
+
+function resolveAppScope(env: Env): string {
+  return (env.APP_SCOPE || env.SELF_SCOPE || 'heaven').trim()
+}
+
+function resolveAppDisplayName(env: Env): string {
+  return (env.APP_DISPLAY_NAME || 'App').trim() || 'App'
+}
+
+function resolveAppDeeplinkScheme(env: Env): string {
+  return (env.APP_DEEPLINK_SCHEME || 'heaven').trim()
+}
+
+function resolveNullifierNamespace(env: Env): string {
+  return (env.APP_NULLIFIER_NAMESPACE || 'heaven-names:v1').trim()
+}
+
 function generateSessionId(): string {
   const bytes = new Uint8Array(16)
   crypto.getRandomValues(bytes)
@@ -170,8 +192,9 @@ async function deriveIdentityNullifierHash(params: {
     const mockRawNullifier = await hashToBytes32(
       `self-mock-nullifier:v1:${userAddress.toLowerCase()}:${attestationId}:${userContextData}`,
     )
-    const scope = (env.SELF_SCOPE || 'heaven').trim().toLowerCase()
-    return hashToBytes32(`heaven-names:v1:${scope}:${mockRawNullifier.toLowerCase()}`)
+    const scope = resolveAppScope(env).toLowerCase()
+    const namespace = resolveNullifierNamespace(env)
+    return hashToBytes32(`${namespace}:${scope}:${mockRawNullifier.toLowerCase()}`)
   }
 
   let rawNullifier = parseSignalAsBytes32(signals[preferredIndex])
@@ -185,14 +208,16 @@ async function deriveIdentityNullifierHash(params: {
 
   if (!rawNullifier || rawNullifier === ZERO_BYTES32) return null
 
-  const scope = (env.SELF_SCOPE || 'heaven').trim().toLowerCase()
-  return hashToBytes32(`heaven-names:v1:${scope}:${rawNullifier.toLowerCase()}`)
+  const scope = resolveAppScope(env).toLowerCase()
+  const namespace = resolveNullifierNamespace(env)
+  return hashToBytes32(`${namespace}:${scope}:${rawNullifier.toLowerCase()}`)
 }
 
 /**
  * Build the Self.xyz universal link for mobile deeplink
  */
 function buildSelfDeeplink(
+  env: Env,
   sessionId: string,
   endpoint: string,
   scope: string,
@@ -201,7 +226,7 @@ function buildSelfDeeplink(
   mockMode: boolean
 ): string {
   const selfApp: SelfAppPayload = {
-    appName: 'Heaven',
+    appName: resolveAppDisplayName(env),
     logoBase64: '',
     endpointType: mockMode ? 'staging_https' : 'https',
     endpoint,
@@ -339,14 +364,15 @@ app.post('/session', async (c) => {
 
   if (existingSession) {
     // Return existing session
-    const scope = c.env.SELF_SCOPE || 'heaven'
-    const endpoint = c.env.SELF_ENDPOINT || 'https://heaven-api.deletion-backup782.workers.dev/api/self/verify'
-    const callbackUrl = `heaven://self/callback?sessionId=${existingSession.session_id}`
+    const scope = resolveAppScope(c.env)
+    const endpoint = resolveSelfEndpoint(c.env, c.req.url)
+    const callbackScheme = resolveAppDeeplinkScheme(c.env)
+    const callbackUrl = `${callbackScheme}://self/callback?sessionId=${existingSession.session_id}`
     const mockMode = isSelfMockMode(c.env)
 
     const response: SelfSessionResponse = {
       sessionId: existingSession.session_id,
-      deeplinkUrl: buildSelfDeeplink(existingSession.session_id, endpoint, scope, callbackUrl, address, mockMode),
+      deeplinkUrl: buildSelfDeeplink(c.env, existingSession.session_id, endpoint, scope, callbackUrl, address, mockMode),
       expiresAt: existingSession.expires_at,
     }
     return c.json(response)
@@ -362,14 +388,15 @@ app.post('/session', async (c) => {
   `).bind(sessionId, address, now, expiresAt).run()
 
   // Build deeplink URL
-  const scope = c.env.SELF_SCOPE || 'heaven'
-  const endpoint = c.env.SELF_ENDPOINT || 'https://heaven-api.deletion-backup782.workers.dev/api/self/verify'
-  const callbackUrl = `heaven://self/callback?sessionId=${sessionId}`
+  const scope = resolveAppScope(c.env)
+  const endpoint = resolveSelfEndpoint(c.env, c.req.url)
+  const callbackScheme = resolveAppDeeplinkScheme(c.env)
+  const callbackUrl = `${callbackScheme}://self/callback?sessionId=${sessionId}`
   const mockMode = isSelfMockMode(c.env)
 
   const response: SelfSessionResponse = {
     sessionId,
-    deeplinkUrl: buildSelfDeeplink(sessionId, endpoint, scope, callbackUrl, address, mockMode),
+    deeplinkUrl: buildSelfDeeplink(c.env, sessionId, endpoint, scope, callbackUrl, address, mockMode),
     expiresAt,
   }
 

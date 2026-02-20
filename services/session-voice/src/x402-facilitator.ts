@@ -82,7 +82,7 @@ async function settleWithFacilitator(
   const paymentPayload = tryParseBase64Json(paymentSignatureRaw) ?? tryParseJson(paymentSignatureRaw)
   if (!paymentPayload) return { ok: false, reason: 'invalid_payment_signature_format' }
 
-  const baseUrl = (env.X402_FACILITATOR_BASE_URL || '').trim().replace(/\/+$/, '')
+  const baseUrl = (env.PAYMENT_FACILITATOR_BASE_URL || env.X402_FACILITATOR_BASE_URL || '').trim().replace(/\/+$/, '')
   if (!baseUrl) return { ok: false, reason: 'facilitator_base_url_not_configured' }
 
   const authToken = (env.X402_FACILITATOR_AUTH_TOKEN || '').trim() || undefined

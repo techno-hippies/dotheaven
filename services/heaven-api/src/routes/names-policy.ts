@@ -15,8 +15,8 @@ type NamesContext = Context<{ Bindings: Env }>
 const DEFAULT_TEMPO_CHAIN_ID = 42431
 const DEFAULT_TEMPO_RPC_URL = 'https://rpc.moderato.tempo.xyz'
 const DEFAULT_TEMPO_REGISTRY_V2 = '0xA111c5cA16752B09fF16B3B8B24BA55a8486aB23'
-const DEFAULT_TEMPO_HEAVEN_NODE = '0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27'
-const DEFAULT_TEMPO_PIRATE_NODE = '0xace9c9c435cf933be3564cdbcf7b7e2faee63e4f39034849eacb82d13f32f02a'
+const DEFAULT_TEMPO_PRIMARY_NODE = '0x8edf6f47e89d05c0e21320161fda1fd1fabd0081a66c959691ea17102e39fb27'
+const DEFAULT_TEMPO_SECONDARY_NODE = '0xace9c9c435cf933be3564cdbcf7b7e2faee63e4f39034849eacb82d13f32f02a'
 
 const DEFAULT_PERMIT_TTL_SECONDS = 180
 const DEFAULT_POW_TTL_SECONDS = 300
@@ -52,8 +52,8 @@ type NamePolicyConfig = {
   rpcUrl: string
   registry: string
   store: string
-  heavenNode: string
-  pirateNode: string
+  primaryNode: string
+  secondaryNode: string
   policySignerPrivateKey: string
   policySignerAddress?: string
   permitTtlSeconds: number
@@ -115,8 +115,8 @@ function randomUint256(): bigint {
 
 function resolveParentNode(tld: string, cfg: NamePolicyConfig): string | null {
   const normalized = tld.trim().toLowerCase()
-  if (normalized === 'heaven') return cfg.heavenNode
-  if (normalized === 'pirate') return cfg.pirateNode
+  if (normalized === 'heaven') return cfg.primaryNode
+  if (normalized === 'pirate') return cfg.secondaryNode
   return null
 }
 
@@ -142,8 +142,8 @@ function getConfig(env: Env): NamePolicyConfig {
     rpcUrl: (env.TEMPO_RPC_URL || DEFAULT_TEMPO_RPC_URL).trim(),
     registry: (env.TEMPO_NAME_REGISTRY_V2 || DEFAULT_TEMPO_REGISTRY_V2).trim(),
     store: (env.TEMPO_PREMIUM_NAME_STORE_V2 || '').trim(),
-    heavenNode: (env.TEMPO_HEAVEN_NODE || DEFAULT_TEMPO_HEAVEN_NODE).trim().toLowerCase(),
-    pirateNode: (env.TEMPO_PIRATE_NODE || DEFAULT_TEMPO_PIRATE_NODE).trim().toLowerCase(),
+    primaryNode: (env.NAMES_PRIMARY_NODE || env.TEMPO_HEAVEN_NODE || DEFAULT_TEMPO_PRIMARY_NODE).trim().toLowerCase(),
+    secondaryNode: (env.NAMES_SECONDARY_NODE || env.TEMPO_PIRATE_NODE || DEFAULT_TEMPO_SECONDARY_NODE).trim().toLowerCase(),
     // Backward-compatible fallback while dedicated policy key is being rolled out.
     policySignerPrivateKey: (env.TEMPO_POLICY_SIGNER_PRIVATE_KEY || env.TEMPO_OPERATOR_PRIVATE_KEY || '').trim(),
     policySignerAddress: (env.TEMPO_POLICY_SIGNER_ADDRESS || '').trim() || undefined,
@@ -158,8 +158,8 @@ function getConfig(env: Env): NamePolicyConfig {
   if (!cfg.rpcUrl) throw new Error('Missing TEMPO_RPC_URL')
   if (!/^0x[a-fA-F0-9]{40}$/.test(cfg.registry)) throw new Error('Invalid TEMPO_NAME_REGISTRY_V2')
   if (!/^0x[a-fA-F0-9]{40}$/.test(cfg.store)) throw new Error('Missing or invalid TEMPO_PREMIUM_NAME_STORE_V2')
-  if (!normalizeBytes32(cfg.heavenNode)) throw new Error('Invalid TEMPO_HEAVEN_NODE')
-  if (!normalizeBytes32(cfg.pirateNode)) throw new Error('Invalid TEMPO_PIRATE_NODE')
+  if (!normalizeBytes32(cfg.primaryNode)) throw new Error('Invalid NAMES_PRIMARY_NODE (or TEMPO_HEAVEN_NODE fallback)')
+  if (!normalizeBytes32(cfg.secondaryNode)) throw new Error('Invalid NAMES_SECONDARY_NODE (or TEMPO_PIRATE_NODE fallback)')
   if (!/^0x[a-fA-F0-9]{64}$/.test(cfg.policySignerPrivateKey)) {
     throw new Error('Missing or invalid TEMPO_POLICY_SIGNER_PRIVATE_KEY (or TEMPO_OPERATOR_PRIVATE_KEY fallback)')
   }

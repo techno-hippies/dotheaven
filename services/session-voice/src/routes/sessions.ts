@@ -199,7 +199,7 @@ async function getParticipant(
 }
 
 function isSessionEscrowMock(env: Env): boolean {
-  return (env.SESSION_ESCROW_MODE ?? 'live') === 'mock'
+  return (env.ESCROW_MODE ?? env.SESSION_ESCROW_MODE ?? 'live') === 'mock'
 }
 
 /** Auth middleware for session endpoints (skip attest) */
