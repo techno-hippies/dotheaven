@@ -10,8 +10,8 @@
  *   (`SELF_MOCK_PASSPORT=true` or development environment).
  *
  * Usage examples:
- *   bun run scripts/test-music-flow.ts
- *   API_BASE=https://api-core.deletion-backup782.workers.dev bun run scripts/test-music-flow.ts
+ *   bun run tests/smoke/music-flow.smoke.ts
+ *   API_BASE=https://api-core.deletion-backup782.workers.dev bun run tests/smoke/music-flow.smoke.ts
  *
  * Optional env:
  *   TEST_USER_ADDRESS=0x...

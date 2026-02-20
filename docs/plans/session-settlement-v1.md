@@ -51,7 +51,7 @@ Implication:
 
 ### 3) Presence/attestation plane (backend)
 
-1. `session-voice` records participant join/leave data.
+1. `voice-control-plane` records participant join/leave data.
 2. Attester computes overlap and outcome.
 3. Attester submits on-chain `attest(...)` with `metricsHash`.
 4. Contract challenge/finalize handles adversarial scenarios.
@@ -66,7 +66,7 @@ Implication:
 
 Current oracle endpoint:
 
-1. `services/session-voice/src/routes/sessions.ts` (`POST /:id/attest`) is the oracle entrypoint today.
+1. `services/voice-control-plane/src/routes/sessions.ts` (`POST /:id/attest`) is the oracle entrypoint today.
 2. It is service-token gated (`x-service-token`) and signs on-chain with `ORACLE_PRIVATE_KEY`.
 3. Join/leave participation data is read from D1 (`room_participants`) for outcome calculation.
 
@@ -107,8 +107,8 @@ Decision policy:
 
 Implementation reference:
 
-1. `services/session-voice/src/routes/sessions.ts` already mirrors contract windows and overlap checks.
-2. `services/session-voice/src/sessions-timing.test.ts` validates no-show and completed windows.
+1. `services/voice-control-plane/src/routes/sessions.ts` already mirrors contract windows and overlap checks.
+2. `services/voice-control-plane/tests/unit/sessions-timing.test.ts` validates no-show and completed windows.
 
 ### Window Miss Handling (hard outcomes)
 

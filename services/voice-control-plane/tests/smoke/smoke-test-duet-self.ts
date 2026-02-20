@@ -2,7 +2,7 @@
  * Smoke test: duet room control plane + real x402 payment flow (facilitator settlement).
  *
  * Usage:
- *   bun src/smoke-test-duet-self.ts
+ *   bun tests/smoke/smoke-test-duet-self.ts
  *
  * Required env:
  *   - DUET_TEST_PAYER_PRIVATE_KEY (or X402_EVM_PRIVATE_KEY / EVM_PRIVATE_KEY / PRIVATE_KEY)

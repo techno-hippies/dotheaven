@@ -308,7 +308,7 @@ This preserves remaining time when users renew early.
 
 ### Phase 1: Control plane and live gate
 
-1. Add `/duet` routes in `services/session-voice`.
+1. Add `/duet` routes in `services/voice-control-plane`.
 2. Add new duet DO state type and handlers.
 3. Implement `POST /:id/enter` as x402-native single endpoint.
 4. Implement Agora viewer token minting path.
@@ -336,10 +336,10 @@ This preserves remaining time when users renew early.
 ## Repo Implementation Map
 
 1. Worker:
-   1. `services/session-voice/src/index.ts`
-   2. `services/session-voice/src/routes/duet.ts` (new)
-   3. `services/session-voice/src/room-do.ts` (extend) or `duet-room-do.ts` (new)
-   4. `services/session-voice/wrangler.toml`
+   1. `services/voice-control-plane/src/index.ts`
+   2. `services/voice-control-plane/src/routes/duet.ts` (new)
+   3. `services/voice-control-plane/src/room-do.ts` (extend) or `duet-room-do.ts` (new)
+   4. `services/voice-control-plane/wrangler.toml`
 2. GPUI:
    1. `apps/desktop/src/chat.rs`
    2. `apps/desktop/src/voice/session.rs`
@@ -381,9 +381,9 @@ This preserves remaining time when users renew early.
    3. audience joins `/duet/:id/watch`
    4. free-room audio flow is working end-to-end
 5. Broadcast page UX was redesigned and deployed:
-   1. source: `services/session-voice/src/routes/duet.ts` (`GET /duet/:id/broadcast`)
+   1. source: `services/voice-control-plane/src/routes/duet.ts` (`GET /duet/:id/broadcast`)
    2. clearer action hierarchy, larger status/readability, microphone diagnostics panel
-   3. deployed at `https://session-voice.deletion-backup782.workers.dev`
+   3. deployed at `https://voice-control-plane.deletion-backup782.workers.dev`
 6. Linux audio routing reliability pass:
    1. helper now creates a remapped virtual microphone source (`jacktrip_duet_input`) from `jacktrip_duet.monitor`
    2. helper no longer changes global default source unless explicitly opted in (`HEAVEN_DUET_SET_DEFAULT_SOURCE=1`)
@@ -415,9 +415,9 @@ This preserves remaining time when users renew early.
    3. `asset_usdc` is pinned to Base Sepolia USDC (`0x036cbd53842c5426634e7929541ec2318f3dcf7e`).
 
 11. Automated no-UI tests exist:
-   1. `services/session-voice/src/duet-room-do.test.ts` covers DO x402 semantics (mock).
-   2. `services/session-voice/src/smoke-test-duet.ts` covers HTTP control-plane + mock 402->pay->retry.
-   3. `services/session-voice/src/smoke-test-duet-self.ts` covers real Base Sepolia USDC settlement via our `/settle` facilitator.
+   1. `services/voice-control-plane/tests/unit/duet-room-do.test.ts` covers DO x402 semantics (mock).
+   2. `services/voice-control-plane/tests/smoke/smoke-test-duet.ts` covers HTTP control-plane + mock 402->pay->retry.
+   3. `services/voice-control-plane/tests/smoke/smoke-test-duet-self.ts` covers real Base Sepolia USDC settlement via our `/settle` facilitator.
 
 ### Known gaps
 
@@ -484,7 +484,7 @@ This preserves remaining time when users renew early.
 
 ## Automated Test Flow (No UI)
 
-From `services/session-voice`:
+From `services/voice-control-plane`:
 
 1. Unit: `npm run test:duet:unit`
 2. Smoke (requires a running worker at `SESSION_VOICE_URL`, default `http://localhost:3338`): `npm run test:duet`

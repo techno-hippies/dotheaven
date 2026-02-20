@@ -4,7 +4,7 @@ import {
   getAttestationWindows,
   isIdempotentAttestationError,
   validateAttestationWindow,
-} from './routes/sessions'
+} from '../../src/routes/sessions'
 
 describe('session attestation timing windows', () => {
   test('no-show window matches contract interval [start+grace, start+grace+duration]', () => {

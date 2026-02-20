@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import type { Env } from './types'
-import { settlePaymentWithFacilitator, type PaymentRequirement } from './x402-facilitator'
+import type { Env } from '../../src/types'
+import { settlePaymentWithFacilitator, type PaymentRequirement } from '../../src/x402-facilitator'
 
 function toBase64Json(value: unknown): string {
   const bytes = new TextEncoder().encode(JSON.stringify(value))

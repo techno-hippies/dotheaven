@@ -8,13 +8,13 @@
  *   4. Host leaving closes room (even with other participants)
  *   5. After host-close, GET /rooms/active no longer shows the room
  *
- * Usage: bun src/smoke-test-visibility.ts
+ * Usage: bun tests/smoke/smoke-test-visibility.ts
  */
 
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 
 const BASE_URL = process.env.SESSION_VOICE_URL || 'http://localhost:3338'
-const D1_DATABASE = process.env.VOICE_CONTROL_PLANE_D1_DATABASE || process.env.D1_DATABASE || 'session-voice'
+const D1_DATABASE = process.env.VOICE_CONTROL_PLANE_D1_DATABASE || process.env.D1_DATABASE || 'voice-control-plane'
 
 const envFile = await Bun.file('.env').text()
 const JWT_SECRET = envFile.match(/^JWT_SECRET=(.+)$/m)?.[1]?.trim()

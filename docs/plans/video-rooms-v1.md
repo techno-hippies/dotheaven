@@ -364,10 +364,10 @@ Rationale:
 
 | File | Change |
 |------|--------|
-| `services/session-voice/src/routes/duet.ts` | Watch page: fix `user-unpublished` to scope video container removal to `mediaType === 'video'` |
-| `services/session-voice/src/routes/duet.ts` | Broadcast page: add camera/screen video publish, preview, device picker, `onended` handlers |
-| `services/session-voice/src/routes/duet.ts` | Watch page: conditional video area visibility, fullscreen button |
-| `services/session-voice/src/smoke-test-duet-broadcast-video.ts` | New: automated video publish/unpublish regression test |
+| `services/voice-control-plane/src/routes/duet.ts` | Watch page: fix `user-unpublished` to scope video container removal to `mediaType === 'video'` |
+| `services/voice-control-plane/src/routes/duet.ts` | Broadcast page: add camera/screen video publish, preview, device picker, `onended` handlers |
+| `services/voice-control-plane/src/routes/duet.ts` | Watch page: conditional video area visibility, fullscreen button |
+| `services/voice-control-plane/tests/smoke/smoke-test-duet-broadcast-video.ts` | New: automated video publish/unpublish regression test |
 
 No DO changes, no x402 changes, no desktop changes. Existing smoke test IDs preserved.
 
@@ -375,9 +375,9 @@ No DO changes, no x402 changes, no desktop changes. Existing smoke test IDs pres
 
 | File | Change |
 |------|--------|
-| `services/session-voice/src/duet-room-do.ts` | Add `audience_media_mode` field to room state |
-| `services/session-voice/src/routes/duet.ts` | Add `POST /guest/start`, `POST /guest/remove`, `GET /guest/broadcast` |
-| `services/session-voice/src/routes/duet.ts` | Watch page: two-performer layout |
+| `services/voice-control-plane/src/duet-room-do.ts` | Add `audience_media_mode` field to room state |
+| `services/voice-control-plane/src/routes/duet.ts` | Add `POST /guest/start`, `POST /guest/remove`, `GET /guest/broadcast` |
+| `services/voice-control-plane/src/routes/duet.ts` | Watch page: two-performer layout |
 
 ## Test Plan
 

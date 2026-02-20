@@ -6,9 +6,12 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "tail": "wrangler tail",
+    "check": "tsc --noEmit",
+    "test:unit": "bun run check",
+    "test:smoke": "bun run tests/smoke/auth-nonce.smoke.ts",
     "db:create": "wrangler d1 create ${VOICE_AGENT_D1_DATABASE:-${D1_DATABASE:-voice-agent}}",
-    "db:migrate": "wrangler d1 execute ${VOICE_AGENT_D1_DATABASE:-${D1_DATABASE:-neodate-voice}} --file=schema.sql",
-    "db:migrate:local": "wrangler d1 execute ${VOICE_AGENT_D1_DATABASE:-${D1_DATABASE:-neodate-voice}} --local --file=schema.sql"
+    "db:migrate": "wrangler d1 execute ${VOICE_AGENT_D1_DATABASE:-${D1_DATABASE:-voice-agent}} --file=schema.sql",
+    "db:migrate:local": "wrangler d1 execute ${VOICE_AGENT_D1_DATABASE:-${D1_DATABASE:-voice-agent}} --local --file=schema.sql"
   },
   "dependencies": {
     "agora-token": "^2.0.3",

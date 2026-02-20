@@ -1,7 +1,7 @@
 /**
  * Smoke test: duet room control plane + x402-style gating flow.
  *
- * Usage: bun src/smoke-test-duet.ts
+ * Usage: bun tests/smoke/smoke-test-duet.ts
  */
 
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'

@@ -4,7 +4,7 @@
  * This script targets an already-live remote room, so no host auth token is needed.
  *
  * Usage:
- *   bun src/smoke-test-duet-self-remote.ts
+ *   bun tests/smoke/smoke-test-duet-self-remote.ts
  *
  * Required env:
  *   - SESSION_VOICE_URL (e.g. https://voice-control-plane....workers.dev)

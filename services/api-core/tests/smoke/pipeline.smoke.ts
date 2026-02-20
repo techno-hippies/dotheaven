@@ -3,10 +3,10 @@
  *
  * Usage:
  *   # First, start the worker in remote mode
- *   cd workers/api && wrangler dev --remote
+ *   cd services/api-core && bun run dev --remote
  *
  *   # Then run this test
- *   bun run scripts/test-pipeline.ts
+ *   bun run tests/smoke/pipeline.smoke.ts
  */
 
 import { readFileSync } from 'fs'

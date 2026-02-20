@@ -4,10 +4,10 @@
  * Starts a local Worker, applies migrations, then runs smoke tests.
  *
  * Usage:
- *   bun src/e2e-local.ts
- *   bun src/e2e-local.ts --full
- *   bun src/e2e-local.ts --duet-onchain
- *   bun src/e2e-local.ts --duet-onchain --serve
+ *   bun tests/e2e/e2e-local.ts
+ *   bun tests/e2e/e2e-local.ts --full
+ *   bun tests/e2e/e2e-local.ts --duet-onchain
+ *   bun tests/e2e/e2e-local.ts --duet-onchain --serve
  *
  * Onchain/self mode:
  * - If X402_FACILITATOR_BASE_URL points at http://127.0.0.1:<LOCAL_FACILITATOR_PORT>,
@@ -23,8 +23,8 @@ const FULL = process.argv.includes("--full");
 const WITH_BROADCAST = process.argv.includes("--with-broadcast");
 const SERVE = process.argv.includes("--serve");
 const SCRIPT_DIR = fileURLToPath(new URL(".", import.meta.url));
-const SERVICE_DIR = resolve(SCRIPT_DIR, "..");
-const D1_DATABASE = (process.env.VOICE_CONTROL_PLANE_D1_DATABASE || process.env.D1_DATABASE || "session-voice").trim();
+const SERVICE_DIR = resolve(SCRIPT_DIR, "..", "..");
+const D1_DATABASE = (process.env.VOICE_CONTROL_PLANE_D1_DATABASE || process.env.D1_DATABASE || "voice-control-plane").trim();
 
 function loadDotEnv(filePath: string): Record<string, string> {
   const env: Record<string, string> = {};
@@ -77,24 +77,24 @@ const facilitatorMode: "mock" | "self" = DUET_ONCHAIN
   : (ENV_FACILITATOR_MODE === "self" ? "self" : "mock");
 
 const CORE_TESTS = [
-  "src/smoke-test.ts",
-  "src/smoke-test-rooms.ts",
-  "src/smoke-test-visibility.ts",
-  "src/smoke-test-duet.ts",
+  "tests/smoke/smoke-test.ts",
+  "tests/smoke/smoke-test-rooms.ts",
+  "tests/smoke/smoke-test-visibility.ts",
+  "tests/smoke/smoke-test-duet.ts",
 ];
 
 const BROADCAST_TESTS = [
-  "src/smoke-test-duet-broadcast.ts",
+  "tests/smoke/smoke-test-duet-broadcast.ts",
 ];
 
 const FULL_TESTS = [
   ...CORE_TESTS,
-  "src/smoke-test-compensate.ts",
-  "src/smoke-test-concurrent.ts",
+  "tests/smoke/smoke-test-compensate.ts",
+  "tests/smoke/smoke-test-concurrent.ts",
 ];
 
 const DUET_SELF_TESTS = [
-  "src/smoke-test-duet-self.ts",
+  "tests/smoke/smoke-test-duet-self.ts",
 ];
 
 const selectedBase = DUET_REAL_ONLY

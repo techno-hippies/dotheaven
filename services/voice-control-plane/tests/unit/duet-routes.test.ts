@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { Hono } from 'hono'
-import { duetRoutes } from './routes/duet'
-import type { Env } from './types'
+import { duetRoutes } from '../../src/routes/duet'
+import type { Env } from '../../src/types'
 
 const HOST_WALLET = '0x1111111111111111111111111111111111111111'
 const GUEST_WALLET = '0x2222222222222222222222222222222222222222'

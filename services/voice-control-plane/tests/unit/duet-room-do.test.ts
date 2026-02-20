@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { DuetRoomDO } from './duet-room-do'
-import type { Env } from './types'
+import { DuetRoomDO } from '../../src/duet-room-do'
+import type { Env } from '../../src/types'
 
 const HOST_WALLET = '0x1111111111111111111111111111111111111111'
 const GUEST_WALLET = '0x2222222222222222222222222222222222222222'

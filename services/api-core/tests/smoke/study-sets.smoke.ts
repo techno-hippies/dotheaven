@@ -10,12 +10,12 @@
  * Usage:
  *   STUDY_SET_TRACK_IDS=0x...,0x...,0x... \
  *   TEST_USER_ADDRESS=0x... \
- *   bun run scripts/test-study-sets.ts
+ *   bun run tests/smoke/study-sets.smoke.ts
  *
  * Alternative case input:
  *   STUDY_SET_SMOKE_CASES='[{"trackId":"0x...","language":"es","version":1}]' \
  *   TEST_USER_ADDRESS=0x... \
- *   bun run scripts/test-study-sets.ts
+ *   bun run tests/smoke/study-sets.smoke.ts
  *
  * Optional env:
  *   API_BASE=http://localhost:8787

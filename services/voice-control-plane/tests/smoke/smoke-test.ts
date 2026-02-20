@@ -5,7 +5,7 @@
  * Uses a random wallet (no real PKP needed — we bypass signature verification
  * by directly inserting a JWT via the JWT_SECRET from .env).
  *
- * Usage: bun src/smoke-test.ts
+ * Usage: bun tests/smoke/smoke-test.ts
  */
 
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
@@ -77,7 +77,7 @@ const key = generatePrivateKey()
 const account = privateKeyToAccount(key)
 const wallet = account.address.toLowerCase()
 
-console.log(`\n═══ Session-Voice v2 Smoke Test ═══`)
+console.log(`\n═══ Voice Control Plane v2 Smoke Test ═══`)
 console.log(`Wallet: ${wallet}`)
 console.log(`Base URL: ${BASE_URL}\n`)
 

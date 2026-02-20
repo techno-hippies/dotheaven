@@ -11,7 +11,7 @@
  * Uses --use-fake-device-for-media-stream so headless Chrome provides a fake camera.
  *
  * Usage:
- *   bun src/smoke-test-duet-broadcast-video.ts
+ *   bun tests/smoke/smoke-test-duet-broadcast-video.ts
  *
  * Env:
  *   - SESSION_VOICE_URL (default http://localhost:3338)

@@ -17,23 +17,30 @@ Capability IDs are the canonical names.
 | `voice-agent` | `voice-agent/` | TypeScript Worker | Worker + D1 |
 | `voice-control-plane` | `voice-control-plane/` | TypeScript Worker | Worker + D1 + Durable Objects + Cron |
 | `graph-stack-local` | `graph-node-tempo/` | Docker stack | none |
-| `chain-indexer` | `tempo-indexer/` | Ponder service | none |
 | `payment-facilitator` | `x402-facilitator-rs/` | Rust service | none |
 
-## Legacy Map
+## Indexing Topology
+- `subgraphs/` (repo root): subgraph source code (schema, mappings, manifest) for protocol data.
+- `services/graph-node-tempo/`: local/self-hosted Graph Node runtime used to serve those subgraphs.
+- In short: `subgraphs/` defines indexers and `graph-node-tempo/` runs subgraphs.
+
+## Retired Worker Script Names
+Deleted from Cloudflare on 2026-02-20 (dev account cleanup). Keep for historical traceability.
+
 - `heaven-api` -> `api-core`
 - `heaven-resolver` -> `metadata-resolver`
 - `heaven-voice` -> `voice-agent`
 - `session-voice` -> `voice-control-plane`
 
 ## Cloudflare Resource Labels
-D1 resources remain on legacy labels for stability; use generic env knobs in scripts.
+D1 resources use capability-based labels (migrated on 2026-02-20).
+Legacy D1 databases (`heaven-api`, `neodate-voice`, `session-voice`) were deleted after cutover.
 
 | Capability | Generic Env Override | Current D1 Label |
 | --- | --- | --- |
-| `api-core` | `API_CORE_D1_DATABASE` | `heaven-api` |
-| `voice-agent` | `VOICE_AGENT_D1_DATABASE` | `neodate-voice` |
-| `voice-control-plane` | `VOICE_CONTROL_PLANE_D1_DATABASE` | `session-voice` |
+| `api-core` | `API_CORE_D1_DATABASE` | `api-core` |
+| `voice-agent` | `VOICE_AGENT_D1_DATABASE` | `voice-agent` |
+| `voice-control-plane` | `VOICE_CONTROL_PLANE_D1_DATABASE` | `voice-control-plane` |
 
 Compatibility fallback:
 - `D1_DATABASE` is still accepted by service scripts.
@@ -46,6 +53,8 @@ Compatibility fallback:
 ## Working Notes
 - Each service owns its own runtime/build/deploy details.
 - Start with local README/CLAUDE files in each service directory.
+- Services-wide test entry points are documented in `services/TESTING.md`.
+- Voice control-plane tiered flow details are documented in `services/voice-control-plane/TESTING.md`.
 
 ## Smoke Check
 Run one dev smoke pass for Cloudflare Workers:

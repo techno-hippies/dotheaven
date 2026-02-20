@@ -3,10 +3,10 @@
  *
  * Usage:
  *   # Start the worker first (use --remote for full Images API support)
- *   cd workers/api && wrangler dev --remote
+ *   cd services/api-core && bun run dev --remote
  *
  *   # In another terminal, run tests
- *   bun run scripts/test-photos.ts
+ *   bun run tests/smoke/photos.smoke.ts
  *
  * Prerequisites:
  *   - Run db:init and db:migrate first
