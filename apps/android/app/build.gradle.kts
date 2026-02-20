@@ -28,9 +28,6 @@ android {
         ?.takeIf { it.isNotBlank() }
         ?.let { "$it$path" }
 
-    val tempoScrobbleApi = projectStringProperty("TEMPO_SCROBBLE_API") ?: ""
-    buildConfigField("String", "TEMPO_SCROBBLE_API", "\"$tempoScrobbleApi\"")
-
     val subgraphBaseUrl = projectStringProperty("SUBGRAPH_BASE_URL")
     val subgraphMusicSocialUrl =
       projectStringProperty("SUBGRAPH_MUSIC_SOCIAL_URL")

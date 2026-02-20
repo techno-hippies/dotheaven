@@ -10,8 +10,8 @@ use alloy_primitives::{keccak256, B256};
 use alloy_sol_types::{sol, SolCall};
 use serde_json::{json, Value};
 
-use crate::shared::rpc::{http_get_json, rpc_json};
-use format::{format_time_ago, sanitize_cover_ref, sanitize_string_field, short_track_label};
+use crate::shared::rpc::rpc_json;
+use format::{format_time_ago, short_track_label};
 
 use super::model::ProfileScrobbleRow;
 
@@ -58,34 +58,6 @@ pub(super) fn fetch_scrobbles_for_user(
     let user_address = user_address.trim().to_ascii_lowercase();
     if user_address.is_empty() {
         return Ok(Vec::new());
-    }
-
-    if let Some(scrobble_api_base) = tempo_scrobble_api_base_url() {
-        match fetch_scrobbles_from_tempo_indexer(&scrobble_api_base, &user_address, max_entries) {
-            Ok(rows) => {
-                if !rows.is_empty() {
-                    log::info!(
-                        "[ProfileFeed] scrobbles source=tempo-indexer base={} user={} rows={}",
-                        scrobble_api_base,
-                        user_address,
-                        rows.len()
-                    );
-                    return Ok(rows);
-                }
-                log::info!(
-                    "[ProfileFeed] scrobbles source=tempo-indexer base={} user={} rows=0 (falling back to onchain)",
-                    scrobble_api_base,
-                    user_address
-                );
-            }
-            Err(err) => {
-                log::warn!(
-                    "[ProfileFeed] tempo indexer fetch failed (base={}): {}; falling back to onchain logs",
-                    scrobble_api_base,
-                    err
-                );
-            }
-        }
     }
 
     let rpc_url = tempo_rpc_url();
@@ -141,76 +113,6 @@ pub(super) fn fetch_scrobbles_for_user(
     Ok(rows)
 }
 
-fn fetch_scrobbles_from_tempo_indexer(
-    base_url: &str,
-    user_address: &str,
-    max_entries: usize,
-) -> Result<Vec<ProfileScrobbleRow>, String> {
-    let limit = max_entries.clamp(1, 200);
-    let url = format!("{}/scrobbles/{}?limit={}", base_url, user_address, limit);
-    let payload = http_get_json(&url)?;
-    let items = payload
-        .get("items")
-        .and_then(Value::as_array)
-        .ok_or_else(|| "tempo indexer response missing items array".to_string())?;
-
-    let mut rows = Vec::with_capacity(items.len());
-    for item in items {
-        let track = item.get("track").unwrap_or(&Value::Null);
-        let track_id = item
-            .get("trackId")
-            .and_then(Value::as_str)
-            .map(|v| v.trim().to_ascii_lowercase())
-            .filter(|v| !v.is_empty());
-        let played_at_sec = parse_u64_json_value(item.get("timestamp"))
-            .or_else(|| parse_u64_json_value(item.get("blockTimestamp")))
-            .unwrap_or(0);
-        let title = sanitize_string_field(
-            track
-                .get("title")
-                .and_then(Value::as_str)
-                .unwrap_or_default(),
-            track_id
-                .as_deref()
-                .map(short_track_label)
-                .as_deref()
-                .unwrap_or("Unknown Track"),
-        );
-        let artist = sanitize_string_field(
-            track
-                .get("artist")
-                .and_then(Value::as_str)
-                .unwrap_or_default(),
-            "Unknown Artist",
-        );
-        let album = sanitize_string_field(
-            track
-                .get("album")
-                .and_then(Value::as_str)
-                .unwrap_or_default(),
-            "",
-        );
-        let cover_cid = sanitize_cover_ref(
-            track
-                .get("coverCid")
-                .and_then(Value::as_str)
-                .unwrap_or_default(),
-        );
-
-        rows.push(ProfileScrobbleRow {
-            track_id,
-            played_at_sec,
-            title,
-            artist,
-            album,
-            cover_cid,
-            played_ago: format_time_ago(played_at_sec),
-        });
-    }
-
-    Ok(rows)
-}
-
 fn tempo_rpc_url() -> String {
     env::var("HEAVEN_TEMPO_RPC_URL")
         .ok()
@@ -221,18 +123,6 @@ fn tempo_rpc_url() -> String {
                 .filter(|v| !v.trim().is_empty())
         })
         .unwrap_or_else(|| DEFAULT_TEMPO_RPC_URL.to_string())
-}
-
-fn tempo_scrobble_api_base_url() -> Option<String> {
-    env::var("HEAVEN_TEMPO_SCROBBLE_API")
-        .ok()
-        .filter(|v| !v.trim().is_empty())
-        .or_else(|| {
-            env::var("TEMPO_SCROBBLE_API")
-                .ok()
-                .filter(|v| !v.trim().is_empty())
-        })
-        .map(|v| v.trim().trim_end_matches('/').to_string())
 }
 
 fn tempo_scrobble_contract() -> String {
@@ -253,16 +143,6 @@ fn parse_hex_u64_quantity(value: &str) -> Result<u64, String> {
         return Ok(0);
     }
     u64::from_str_radix(clean, 16).map_err(|e| format!("invalid hex quantity '{value}': {e}"))
-}
-
-fn parse_u64_json_value(value: Option<&Value>) -> Option<u64> {
-    let value = value?;
-    if let Some(num) = value.as_u64() {
-        return Some(num);
-    }
-    value
-        .as_str()
-        .and_then(|raw| raw.trim().parse::<u64>().ok())
 }
 
 fn parse_abi_word_u64(value: &str) -> Result<u64, String> {

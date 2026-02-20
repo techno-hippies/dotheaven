@@ -24,14 +24,6 @@ JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew :app:compileDebugK
 JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew installDebug
 ```
 
-To point profile scrobble reads at a custom Tempo indexer:
-
-```bash
-JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew \
-  -PTEMPO_SCROBBLE_API=http://<your-host>:42069 \
-  installDebug
-```
-
 Fastest full swap (music-social + profiles + playlists + study-progress) to a local Graph Node:
 
 ```bash
@@ -83,7 +75,6 @@ JAVA_HOME=/home/t42/.local/share/jdks/jdk-17.0.18+8 ./gradlew \
 For USB debugging against a local indexer on your dev machine, you can also use:
 
 ```bash
-adb reverse tcp:42069 tcp:42069
 adb reverse tcp:8000 tcp:8000
 ```
 

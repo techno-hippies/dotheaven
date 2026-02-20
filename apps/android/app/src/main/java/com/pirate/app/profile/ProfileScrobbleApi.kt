@@ -1,6 +1,5 @@
 package com.pirate.app.profile
 
-import com.pirate.app.BuildConfig
 import com.pirate.app.music.CoverRef
 import com.pirate.app.util.tempoMusicSocialSubgraphUrls
 import kotlinx.coroutines.Dispatchers
@@ -22,8 +21,6 @@ data class ScrobbleRow(
 )
 
 object ProfileScrobbleApi {
-  private const val DEBUG_DEFAULT_TEMPO_INDEXER_API_EMULATOR = "http://10.0.2.2:42069"
-  private const val DEBUG_DEFAULT_TEMPO_INDEXER_API_REVERSE = "http://127.0.0.1:42069"
   private val client = OkHttpClient()
   private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
@@ -46,28 +43,8 @@ object ProfileScrobbleApi {
       }
     }
 
-    val tempoIndexerBaseUrls = tempoIndexerBaseUrls()
-    var tempoIndexerError: Throwable? = null
-    for (tempoIndexerBaseUrl in tempoIndexerBaseUrls) {
-      try {
-        val rows = fetchFromTempoIndexer(tempoIndexerBaseUrl, addr, max)
-        if (rows.isNotEmpty()) return@withContext rows
-        sawSuccessfulEmpty = true
-      } catch (error: Throwable) {
-        tempoIndexerError = error
-      }
-    }
-
     if (sawSuccessfulEmpty) return@withContext emptyList()
-
-    if (tempoIndexerError != null && subgraphError != null) {
-      throw IllegalStateException(
-        "Tempo indexer failed: ${tempoIndexerError.message}; subgraph failed: ${subgraphError.message}",
-        subgraphError,
-      )
-    }
     if (subgraphError != null) throw subgraphError
-    if (tempoIndexerError != null) throw tempoIndexerError
     emptyList()
   }
 
@@ -124,62 +101,6 @@ object ProfileScrobbleApi {
 
       rows.add(ScrobbleRow(trackId, timestamp, title, artist, album, coverCid, formatTimeAgo(timestamp, now)))
     }
-    return rows
-  }
-
-  private fun tempoIndexerBaseUrls(): List<String> {
-    val fromBuildConfig = BuildConfig.TEMPO_SCROBBLE_API.trim().removeSuffix("/")
-    val urls = ArrayList<String>(3)
-    if (fromBuildConfig.isNotBlank()) urls.add(fromBuildConfig)
-    if (BuildConfig.DEBUG) {
-      urls.add(DEBUG_DEFAULT_TEMPO_INDEXER_API_REVERSE)
-      urls.add(DEBUG_DEFAULT_TEMPO_INDEXER_API_EMULATOR)
-    }
-    return urls.distinct()
-  }
-
-  private fun fetchFromTempoIndexer(baseUrl: String, userAddress: String, max: Int): List<ScrobbleRow> {
-    val url = "$baseUrl/scrobbles/$userAddress?limit=$max"
-    val req = Request.Builder().url(url).get().build()
-    val items = client.newCall(req).execute().use { res ->
-      if (!res.isSuccessful) throw IllegalStateException("Tempo indexer query failed: ${res.code}")
-      val json = JSONObject(res.body?.string().orEmpty())
-      json.optJSONArray("items")
-    } ?: return emptyList()
-
-    val now = System.currentTimeMillis() / 1000
-    val rows = ArrayList<ScrobbleRow>(items.length())
-    for (i in 0 until items.length()) {
-      val item = items.optJSONObject(i) ?: continue
-      val track = item.optJSONObject("track")
-
-      val trackId = item.optString("trackId", "").trim().ifEmpty { null }
-      val playedAt = item.optLong(
-        "timestamp",
-        item.optLong("blockTimestamp", 0L),
-      )
-      val title = track?.optString("title", "")?.trim().orEmpty()
-        .ifEmpty { trackId?.take(14) ?: "Unknown Track" }
-      val artist = track?.optString("artist", "")?.trim().orEmpty()
-        .ifEmpty { "Unknown Artist" }
-      val album = track?.optString("album", "")?.trim().orEmpty()
-      val coverCid = track?.optString("coverCid", "")?.trim()
-        ?.ifEmpty { null }
-        ?.takeIf { isValidCid(it) }
-
-      rows.add(
-        ScrobbleRow(
-          trackId = trackId,
-          playedAtSec = playedAt,
-          title = title,
-          artist = artist,
-          album = album,
-          coverCid = coverCid,
-          playedAgo = formatTimeAgo(playedAt, now),
-        ),
-      )
-    }
-
     return rows
   }
 

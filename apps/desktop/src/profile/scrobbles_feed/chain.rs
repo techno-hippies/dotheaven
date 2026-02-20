@@ -1,4 +1,5 @@
 use super::*;
+use super::format::{sanitize_cover_ref, sanitize_string_field};
 
 pub(super) fn fetch_scrobbled_events(
     rpc_url: &str,
