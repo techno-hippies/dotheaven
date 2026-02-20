@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       api_base:
-        description: "Heaven API base URL"
+        description: "API Core base URL"
         required: true
-        default: "https://heaven-api.deletion-backup782.workers.dev"
+        default: "https://api-core.deletion-backup782.workers.dev"
       test_user_address:
         description: "User wallet address used for X-User-Address"
         required: true
@@ -55,12 +55,12 @@ jobs:
         with:
           bun-version: "1.3.8"
 
-      - name: Install heaven-api dependencies
-        working-directory: services/heaven-api
+      - name: Install api-core dependencies
+        working-directory: services/api-core
         run: bun install
 
       - name: Run study-set smoke
-        working-directory: services/heaven-api
+        working-directory: services/api-core
         env:
           API_BASE: ${{ inputs.api_base }}
           TEST_USER_ADDRESS: ${{ inputs.test_user_address }}

@@ -1,0 +1,60 @@
+name: Services Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_core_url:
+        description: "API Core base URL"
+        required: false
+        default: "https://api-core.deletion-backup782.workers.dev"
+      metadata_resolver_url:
+        description: "Metadata Resolver base URL"
+        required: false
+        default: "https://metadata-resolver.deletion-backup782.workers.dev"
+      voice_agent_url:
+        description: "Voice Agent base URL"
+        required: false
+        default: "https://voice-agent.deletion-backup782.workers.dev"
+      voice_control_plane_url:
+        description: "Voice Control Plane base URL"
+        required: false
+        default: "https://voice-control-plane.deletion-backup782.workers.dev"
+  workflow_call:
+    inputs:
+      api_core_url:
+        type: string
+        required: false
+      metadata_resolver_url:
+        type: string
+        required: false
+      voice_agent_url:
+        type: string
+        required: false
+      voice_control_plane_url:
+        type: string
+        required: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: services-smoke-${{ github.ref }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.8"
+
+      - name: Run services smoke
+        env:
+          API_CORE_URL: ${{ inputs.api_core_url || vars.API_CORE_URL || 'https://api-core.deletion-backup782.workers.dev' }}
+          METADATA_RESOLVER_URL: ${{ inputs.metadata_resolver_url || vars.METADATA_RESOLVER_URL || 'https://metadata-resolver.deletion-backup782.workers.dev' }}
+          VOICE_AGENT_URL: ${{ inputs.voice_agent_url || vars.VOICE_AGENT_URL || 'https://voice-agent.deletion-backup782.workers.dev' }}
+          VOICE_CONTROL_PLANE_URL: ${{ inputs.voice_control_plane_url || vars.VOICE_CONTROL_PLANE_URL || 'https://voice-control-plane.deletion-backup782.workers.dev' }}
+        run: bun run services:smoke
